@@ -1,0 +1,21 @@
+{
+  "name": "RelationalAI",
+  "description": "RelationalAI semantic models and advanced reasoners",
+  "owner": {
+    "name": "RelationalAI"
+  },
+  "plugins": [
+    {
+      "source": "./",
+      "name": "rai",
+      "description": "RelationalAI semantic models and advanced reasoners",
+      "version": "1.0.0",
+      "author": {
+        "name": "RelationalAI",
+        "url": "https://relational.ai"
+      },
+      "homepage": "https://github.com/RelationalAI/rai-agent-skills",
+      "license": "MIT"
+    }
+  ]
+}
