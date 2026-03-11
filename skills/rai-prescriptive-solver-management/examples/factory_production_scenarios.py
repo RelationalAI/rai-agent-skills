@@ -1,5 +1,5 @@
 # Pattern: partitioned iteration — fresh Problem per factory, populate=False, collect results
-# Key ideas: each partition gets its own Problem to avoid degraded state; where=[filter]
+# Key ideas: each partition gets its own Problem for clean separation; where=[filter]
 # scopes variables to one subset; variable_values().to_df() extracts per-partition results.
 
 from relationalai.semantics import Float, Integer, Model, String, sum
@@ -26,7 +26,7 @@ for factory_name in factory_names:
     # 1. Scope filter — restricts to this factory's products
     this_product = Product.factory.name(factory_name)
 
-    # 2. Fresh Problem — prevents degraded state from prior iteration
+    # 2. Fresh Problem — clean separation per partition
     s = Problem(model, Float)
 
     # 3. solve_for with where= and populate=False

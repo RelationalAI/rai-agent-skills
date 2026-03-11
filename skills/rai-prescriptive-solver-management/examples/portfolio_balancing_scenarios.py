@@ -1,6 +1,6 @@
 # Pattern: inline formulation + fresh Problem per scenario for what-if analysis
 # Key ideas: formulation code placed directly inside scenario loop; fresh Problem
-# avoids degraded state; populate=False keeps scenarios independent.
+# populate=False keeps scenarios independent.
 
 from relationalai.semantics import Float, Integer, Model, String, sum
 from relationalai.semantics.reasoners.prescriptive import Problem
@@ -49,7 +49,7 @@ for scenario_value in SCENARIO_VALUES:
     s.minimize(risk)
 
     s.display()
-    s.solve("highs", time_limit_sec=60, _server_side_import=False)
+    s.solve("highs", time_limit_sec=60)
     s.display_solve_info()
 
     scenario_results.append({

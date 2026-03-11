@@ -99,7 +99,7 @@ reasoners:
 
 data:
   wait_for_stream_sync: true           # wait for streams before queries (default true)
-  data_freshness_mins: 5               # allow queries if data is within N mins (default unset = must be fully synced)
+  data_freshness_mins: 5               # allow queries if data is within N mins (default unset = must be fully synced; max 30240 = 3 weeks)
   query_timeout_mins: 10               # client-side timeout (default unset = no timeout)
   ensure_change_tracking: false        # auto-enable change tracking on tables read (default false; requires OWNERSHIP)
   check_column_types: true             # validate column types on load (default true)
@@ -401,7 +401,7 @@ Use `strict: true` in CI. Use `soft_type_errors: true` only during rapid iterati
 ```yaml
 data:
   wait_for_stream_sync: true      # wait for streams to sync before queries (default: true)
-  data_freshness_mins: 5          # allow queries if data is within N mins (default: unset = fully synced)
+  data_freshness_mins: 5          # allow queries if data is within N mins (default: unset = fully synced; max 30240 = 3 weeks)
   query_timeout_mins: 10          # client-side timeout in minutes (default: unset = no timeout)
   ensure_change_tracking: false   # auto-enable change tracking on tables (requires OWNERSHIP; default: false)
   check_column_types: true        # validate column types on load (default: true — keep enabled in CI)

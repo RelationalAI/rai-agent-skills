@@ -396,8 +396,6 @@ When diagnosing infeasibility or unboundedness, classify root causes using these
 
 ## Solve Execution
 
-**`_server_side_import`** — This is an internal performance flag that will be removed in a future release. Do not include it in formulations, templates, or generated code.
-
 ```python
 # Solver choice depends on problem type and license — see Decision Rules above
 s.solve(solver_name, time_limit_sec=60)
@@ -493,17 +491,9 @@ The following operators are **not supported by any solver backend** and will rai
 
 v1 solve is cloud-based: the Problem serializes variable/constraint/objective data as CSV, uploads to the solver service, which reconstructs the problem in MathOptInterface (MOI) form, dispatches to the selected backend (HiGHS, Gurobi, Ipopt, MiniZinc), and returns results as CSV for import back into the model. There is no local solver — all solve calls require network connectivity to the RAI solver service.
 
-### Degraded Problem state
+### Re-Solve Behavior (1.0.3+)
 
-If `s.solve()` fails after partially writing model data (e.g., network error during result import), the Problem enters a **degraded** state. Once degraded, the Problem instance cannot be reused — any subsequent call raises `RuntimeError`. You must create a new `Problem(model, Float)` and re-register all variables, constraints, and objectives. There is no way to recover a degraded Problem.
-
-```python
-# After a failed solve:
-if s.error:
-    # Cannot reuse s — create a fresh Problem
-    s = Problem(model, Float)
-    # Re-register everything...
-```
+Re-solving the same `Problem` instance is safe. Result import uses `experimental.load_data` with replace semantics — if a second solve's result import fails, previous results remain intact. No degraded state.
 
 ### Warm starting
 
