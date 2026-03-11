@@ -21,7 +21,7 @@ The skills in this repo instruct your agent how to use the `relationalai` Python
 
 ## Prerequisites
 
-The RelaionalAI Native App for Snowflake must be installed in your account by an administrator.
+The RelationalAI Native App for Snowflake must be installed in your account by an administrator.
 - Request access [here](https://app.snowflake.com/marketplace/listing/GZTYZOOIX8H/relationalai-relationalai). 
 - See the [RAI Native App docs](https://docs.relational.ai/manage/install) for details.
 
