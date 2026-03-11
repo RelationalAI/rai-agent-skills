@@ -26,6 +26,16 @@ description: Covers PyRel v1 configuration including raiconfig.yaml, connection 
 
 ---
 
+## Installation
+
+```bash
+pip install relationalai>=1.0.3
+```
+
+Requires Python 3.10+.
+
+---
+
 ## Quick Reference
 
 ```yaml
