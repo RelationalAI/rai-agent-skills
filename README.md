@@ -31,15 +31,14 @@ The `rai_developer` role is needed to execute PyRel programs.
 
 ### Generic
 
-[Vercel's skills CLI](https://github.com/vercel-labs/skills) (requres `npm` v5.2.0+) helps you manage & update skills for most coding agents.
-```bash
- $ npx skills add RelationalAI/rai-agent-skills --skill '*' \
-     --agent claude-code \
-     --agent cortex \
-     --agent codex
-```
+- You or your agent can manually copy the contents of our [skills](skills) folder into your skills folder.
 
-You can also directly copy the `skills/` folder into your coding agent configuration.
+- [Vercel's skills CLI](https://github.com/vercel-labs/skills) (requres `npm` v5.2.0+) helps you manage & update skills for most coding agents.
+```bash
+npx skills add RelationalAI/rai-agent-skills --skill '*'
+# optionally specify an agent
+npx skills add RelationalAI/rai-agent-skills --skill '*' --agent cortex
+```
 
 ### Claude
 Follow [these instructions](https://code.claude.com/docs/en/discover-plugins#add-marketplaces) to point at this repo.
@@ -53,10 +52,14 @@ Example:
 ```
 Restart your session after installing.
 
+![Claude skills](doc/claude.png)
+
 ### Cortex Code
 Follow [these instructions](https://docs.snowflake.com/en/user-guide/cortex-code/extensibility#skills).
 
-In short, clone this repo to your file system then use the `/skill` dialog to add the folder.
+In short, clone this repo to your file system then use the `/skill` dialog to add the [skills](skills) folder.
+
+![Cortex skills](doc/cortex.png)
 
 ### VSCode
 Follow [these instructions](https://code.visualstudio.com/docs/copilot/customization/agent-plugins#_configure-plugin-marketplaces) to point at this repo.
