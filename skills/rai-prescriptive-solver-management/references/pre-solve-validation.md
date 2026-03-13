@@ -1,13 +1,13 @@
 ## Pre-Solve Validation
 
-Run these checks after building the formulation and before calling `s.solve()`. Catching issues here is dramatically cheaper than debugging infeasible or nonsensical solutions after the fact. The checks are ordered by severity — earlier checks catch more fundamental problems.
+Run these checks after building the formulation and before calling `p.solve()`. Catching issues here is dramatically cheaper than debugging infeasible or nonsensical solutions after the fact. The checks are ordered by severity — earlier checks catch more fundamental problems.
 
 ### 1. Entity population — do variables exist?
 
-The most common pre-solve failure: `Variables (0)` in `s.display()`. This means entity creation produced nothing — typically a join mismatch in `.where()` or missing data.
+The most common pre-solve failure: `Variables (0)` in `p.display()`. This means entity creation produced nothing — typically a join mismatch in `.where()` or missing data.
 
 **What to check:**
-- `s.num_variables > 0` — if zero, no solve will produce results
+- `p.num_variables > 0` — if zero, no solve will produce results
 - Variable count matches expectations — e.g., if you have 50 products, expect ~50 product variables
 - For cross-product concepts, verify both source concepts have loaded data
 
@@ -22,8 +22,8 @@ assert len(model.select(Product).to_df()) > 0, "Product concept has no entities"
 assert len(model.select(Route).to_df()) > 0, "Route concept has no entities"
 
 # After formulation, verify variable count
-s.display()
-assert s.num_variables > 0, "No variables created — check entity creation joins"
+p.display()
+assert p.num_variables > 0, "No variables created — check entity creation joins"
 ```
 
 ### 2. Constraint population — are constraints active?
@@ -31,16 +31,16 @@ assert s.num_variables > 0, "No variables created — check entity creation join
 Zero constraints is almost as bad as zero variables. `model.require()` produces empty constraint sets when `.where()` filters match nothing.
 
 **What to check:**
-- `s.num_constraints > 0`
+- `p.num_constraints > 0`
 - Constraint count is proportional to the entities they constrain — e.g., one capacity constraint per facility
 - At least one forcing constraint exists for minimize objectives (a constraint that requires positive variable values, e.g., `sum(x) >= demand`)
 
 ### 3. Objective population — is the objective meaningful?
 
 **What to check:**
-- Exactly one `s.minimize()` or `s.maximize()` call
+- Exactly one `p.minimize()` or `p.maximize()` call
 - Objective expression references at least one decision variable (not just data properties)
-- `s.num_min_objectives + s.num_max_objectives == 1`
+- `p.num_min_objectives + p.num_max_objectives == 1`
 
 ### 4. Data integrity — garbage in, garbage out
 
@@ -69,7 +69,7 @@ if total_demand > total_capacity:
 
 ### 5. Formulation structure — does it make sense?
 
-Use `s.display()` output as the final structural check before solving. See [formulation-display.md](formulation-display.md) for interpreting the output.
+Use `p.display()` output as the final structural check before solving. See [formulation-display.md](formulation-display.md) for interpreting the output.
 
 **Quick sanity checks from display:**
 - All variable types match intent (cont/int/bin)
@@ -80,14 +80,40 @@ Use `s.display()` output as the final structural check before solving. See [form
 ### Pre-solve checklist (copy-paste)
 
 ```python
-# Run after formulation, before s.solve()
-s.display()
-assert s.num_variables > 0, "No variables"
-assert s.num_constraints > 0, "No constraints"
-assert s.num_min_objectives + s.num_max_objectives == 1, "Need exactly one objective"
+# Run after formulation, before p.solve()
+p.display()
+assert p.num_variables > 0, "No variables"
+assert p.num_constraints > 0, "No constraints"
+assert p.num_min_objectives + p.num_max_objectives == 1, "Need exactly one objective"
 # Problem-specific: adjust counts to match your formulation
-# assert s.num_variables == expected_var_count
-# assert s.num_constraints >= expected_constraint_count
+# assert p.num_variables == expected_var_count
+# assert p.num_constraints >= expected_constraint_count
 ```
+
+### 6. Multi-arg Properties (Scenario Concept pattern)
+
+When using the Scenario Concept pattern, decision variables are registered as multi-arg Properties:
+
+```python
+# Single-arg (standard): one variable per entity
+p.solve_for(Stock.x_quantity, type="cont", name=["qty", Stock.index], lower=0)
+
+# Multi-arg (scenario): one variable per (entity, scenario) pair
+x_qty_ref = Float
+p.solve_for(Stock.x_quantity(Scenario, x_qty_ref), type="cont",
+            name=[Scenario.name, "qty", Stock.index], lower=0)
+```
+
+The `(Scenario, x_qty_ref)` binding is a dimension index, not a separate variable. `Stock.x_quantity` IS a fully defined decision variable in this pattern. Constraint expressions reference the variable via the ref name (`x_qty_ref`) with `.where()` bindings:
+
+```python
+# Constraint using scenario-indexed variable
+model.require(
+    (sum(Stock.cost * x_qty_ref).per(Scenario) <= Scenario.budget)
+    .where(Stock.x_quantity(Scenario, x_qty_ref))
+)
+```
+
+Do NOT flag multi-arg Properties as missing linking constraints or undefined variables.
 
 ---
