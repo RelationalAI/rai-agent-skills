@@ -7,7 +7,7 @@ Run these checks after building the formulation and before calling `p.solve()`. 
 The most common pre-solve failure: `Variables (0)` in `p.display()`. This means entity creation produced nothing — typically a join mismatch in `.where()` or missing data.
 
 **What to check:**
-- `p.num_variables > 0` — if zero, no solve will produce results
+- `p.num_variables()` — if zero, no solve will produce results (this is a Relationship; use in `model.require()` or query via `model.select()`)
 - Variable count matches expectations — e.g., if you have 50 products, expect ~50 product variables
 - For cross-product concepts, verify both source concepts have loaded data
 
@@ -21,9 +21,9 @@ The most common pre-solve failure: `Variables (0)` in `p.display()`. This means 
 assert len(model.select(Product).to_df()) > 0, "Product concept has no entities"
 assert len(model.select(Route).to_df()) > 0, "Route concept has no entities"
 
-# After formulation, verify variable count
+# After formulation, verify variable count — engine-side IC fires on next query
+model.require(p.num_variables() > 0)
 p.display()
-assert p.num_variables > 0, "No variables created — check entity creation joins"
 ```
 
 ### 2. Constraint population — are constraints active?
@@ -31,7 +31,7 @@ assert p.num_variables > 0, "No variables created — check entity creation join
 Zero constraints is almost as bad as zero variables. `model.require()` produces empty constraint sets when `.where()` filters match nothing.
 
 **What to check:**
-- `p.num_constraints > 0`
+- `p.num_constraints()` > 0
 - Constraint count is proportional to the entities they constrain — e.g., one capacity constraint per facility
 - At least one forcing constraint exists for minimize objectives (a constraint that requires positive variable values, e.g., `sum(x) >= demand`)
 
@@ -40,7 +40,7 @@ Zero constraints is almost as bad as zero variables. `model.require()` produces 
 **What to check:**
 - Exactly one `p.minimize()` or `p.maximize()` call
 - Objective expression references at least one decision variable (not just data properties)
-- `p.num_min_objectives + p.num_max_objectives == 1`
+- `p.num_min_objectives() + p.num_max_objectives() == 1`
 
 ### 4. Data integrity — garbage in, garbage out
 
@@ -80,14 +80,14 @@ Use `p.display()` output as the final structural check before solving. See [form
 ### Pre-solve checklist (copy-paste)
 
 ```python
-# Run after formulation, before p.solve()
+# Run after formulation, before p.solve() — engine-side ICs fire on the next query
+model.require(p.num_variables() > 0)
+model.require(p.num_constraints() > 0)
+model.require(p.num_min_objectives() + p.num_max_objectives() == 1)
 p.display()
-assert p.num_variables > 0, "No variables"
-assert p.num_constraints > 0, "No constraints"
-assert p.num_min_objectives + p.num_max_objectives == 1, "Need exactly one objective"
-# Problem-specific: adjust counts to match your formulation
-# assert p.num_variables == expected_var_count
-# assert p.num_constraints >= expected_constraint_count
+# Problem-specific: structural checks using count()
+# model.require(p.num_variables() == count(Product))
+# model.require(p.num_constraints() >= count(Facility))
 ```
 
 ### 6. Multi-arg Properties (Scenario Concept pattern)

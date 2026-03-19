@@ -15,26 +15,27 @@ Before solving, inspect the mathematical formulation:
 # Print the full formulation (variables, constraints, objectives)
 p.display()
 
-# Formulation metrics
-s.num_variables        # Total registered variables
-s.num_constraints      # Total constraints
-s.num_min_objectives   # Number of minimize objectives
-s.num_max_objectives   # Number of maximize objectives
+# Formulation metrics — these are Relationships (call with parens)
+# Use in model.require() for engine-side validation, or query via model.select()
+p.num_variables()        # Total registered variables
+p.num_constraints()      # Total constraints
+p.num_min_objectives()   # Number of minimize objectives
+p.num_max_objectives()   # Number of maximize objectives
 ```
 
-Use `s.display()` to verify the formulation looks correct before calling `s.solve()`. Check that variable counts, constraint counts, and objective counts match expectations.
+Use `p.display()` to verify the formulation looks correct before calling `p.solve()`. Check that variable counts, constraint counts, and objective counts match expectations.
 
 ```python
-# Example: diet problem verification
+# Example: diet problem verification — engine-side ICs avoid querying data to the client
+model.require(p.num_variables() == count(Food))
+model.require(p.num_min_objectives() == 1)
+model.require(p.num_constraints() == 2 * count(Nutrient))
 p.display()
-assert s.num_variables == len(food_csv)
-assert s.num_min_objectives == 1
-assert s.num_constraints == 2 * len(nutrient_csv)
 ```
 
 ### Display output structure
 
-`s.display()` prints a structured summary with three sections:
+`p.display()` prints a structured summary with three sections:
 
 ```
 Solver model has:
@@ -76,7 +77,7 @@ The display output is the primary diagnostic tool — it shows the **materialize
 
 | Observed | Likely cause | What to check |
 |----------|-------------|---------------|
-| 0 constraints | `model.require()` or `s.satisfy()` calls produced empty constraint sets — typically a `.where()` that matches nothing | Verify join paths in constraint `.where()` clauses match loaded data |
+| 0 constraints | `model.require()` or `p.satisfy()` calls produced empty constraint sets — typically a `.where()` that matches nothing | Verify join paths in constraint `.where()` clauses match loaded data |
 | Fewer constraints than expected | `.per()` grouping produced fewer groups than expected, or `.where()` filtered out entities | Check that grouping concepts have the expected entity count |
 | Missing forcing constraints | Minimize objective will return trivial zero solution | Verify at least one constraint forces positive activity (demand satisfaction, assignment completeness) |
 
@@ -84,7 +85,7 @@ The display output is the primary diagnostic tool — it shows the **materialize
 
 | Observed | Likely cause | What to check |
 |----------|-------------|---------------|
-| 0 objectives | `s.minimize()` / `s.maximize()` not called, or expression evaluated to empty | Verify objective references at least one decision variable property |
+| 0 objectives | `p.minimize()` / `p.maximize()` not called, or expression evaluated to empty | Verify objective references at least one decision variable property |
 | Objective expression references no variables | Expression uses only data properties, not `solve_for`-registered properties | Cross-check property names in objective against registered variables |
 
 **Expression inspection:** Read the symbolic expressions in the Constraints section to verify:
@@ -92,7 +93,7 @@ The display output is the primary diagnostic tool — it shows the **materialize
 - Join paths connect the right concepts — e.g., `sum(Allocation.x_spend).where(Allocation.channel == Channel)` not `sum(Allocation.x_spend)` globally
 - Coefficient signs are correct — e.g., `cost * qty` not `-cost * qty` for a cost minimization
 
-**Pre-solve vs post-solve:** Always inspect `s.display()` output **before** calling `s.solve()`. After a failed solve (infeasible, unbounded), compare the display output against expected structure using the Problem-Specific Expected Components checklists below.
+**Pre-solve vs post-solve:** Always inspect `p.display()` output **before** calling `p.solve()`. After a failed solve (infeasible, unbounded), compare the display output against expected structure using the Problem-Specific Expected Components checklists below.
 
 ---
 
@@ -102,23 +103,23 @@ The display output is the primary diagnostic tool — it shows the **materialize
 
 Before solving, verify the formulation looks correct:
 
-1. **Variable count** -- does `s.num_variables` match expected? Missing variables often indicate `where=` conditions that filter too aggressively.
-2. **Constraint count** -- does `s.num_constraints` match expected? Fewer constraints may mean `model.require()` or `s.satisfy()` calls are silently producing empty constraint sets.
-3. **Objective count** -- exactly one `s.minimize()` or `s.maximize()` call per Problem.
-4. **Display inspection** -- `s.display()` shows the mathematical formulation. Look for variables that appear disconnected from the objective.
+1. **Variable count** -- does `p.num_variables()` match expected? Missing variables often indicate `where=` conditions that filter too aggressively.
+2. **Constraint count** -- does `p.num_constraints()` match expected? Fewer constraints may mean `model.require()` or `p.satisfy()` calls are silently producing empty constraint sets.
+3. **Objective count** -- exactly one `p.minimize()` or `p.maximize()` call per Problem.
+4. **Display inspection** -- `p.display()` shows the mathematical formulation. Look for variables that appear disconnected from the objective.
 
 ## Problem-Type Verification
 
-After inspecting `s.display()`, compare the formulation against expected structural components for the problem type.
+After inspecting `p.display()`, compare the formulation against expected structural components for the problem type.
 
 **Diagnostic process:**
 1. Identify the problem type from semantic signals (problem statement) and structural signals (variable types, constraint patterns).
-2. Compare `s.display()` counts and expressions against expected components for that type. For the full per-type component checklists (Resource Allocation, Network Flow, Routing, Scheduling, Inventory, Pricing), see `rai-prescriptive-problem-formulation/problem-patterns-and-validation.md` > Problem Type Classification & Structural Checklists.
+2. Compare `p.display()` counts and expressions against expected components for that type. For the full per-type component checklists (Resource Allocation, Network Flow, Routing, Scheduling, Inventory, Pricing), see `rai-prescriptive-problem-formulation/problem-patterns-and-validation.md` > Problem Type Classification & Structural Checklists.
 3. Flag missing components as the likely root cause of solver failure.
 
 ---
 
-## Targeted Inspection with `s.display(part)`
+## Targeted Inspection with `p.display(part)`
 
 Pass the return value of `solve_for()`, `minimize()`, `maximize()`, or `satisfy()` to inspect just that part of the formulation:
 
@@ -134,14 +135,14 @@ Useful for debugging specific parts of a large formulation without printing ever
 
 ---
 
-## `s.printed_model` — Solver Model Text Representation
+## `p.printed_model()` — Solver Model Text Representation
 
-After calling `s.solve()` with `print_format=`, access the text representation via `s.printed_model`:
+After calling `p.solve()` with `print_format=`, access the text representation via `p.printed_model()` (Relationship) or `p.solve_info().printed_model` (Python string):
 
 ```python
 # Get LP format (useful for debugging)
 p.solve("highs", print_format="lp", print_only=True)
-print(s.printed_model)
+print(p.solve_info().printed_model)
 
 # Available formats: "moi" (MOI text), "latex", "mof" (MOI JSON), "lp", "mps", "nl" (AMPL)
 ```
@@ -157,14 +158,14 @@ The same `Problem` instance can be solved multiple times. Constraints accumulate
 ```python
 # First solve
 p.solve("highs", time_limit_sec=60)
-print(p.objective_value)  # Result from solve 1
+print(p.solve_info().objective_value)  # Result from solve 1
 
 # Add more constraints
 p.satisfy(model.require(Route.x_flow >= min_flow))
 
 # Re-solve — previous constraints + new constraint
 p.solve("highs", time_limit_sec=60)
-print(p.objective_value)  # Result from solve 2
+print(p.solve_info().objective_value)  # Result from solve 2
 ```
 
 For different constraint sets (e.g., parametric solving), create a fresh `Problem` per scenario.
