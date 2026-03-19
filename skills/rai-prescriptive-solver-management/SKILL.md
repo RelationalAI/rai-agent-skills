@@ -457,7 +457,7 @@ p.solve("minizinc", solution_limit=10)          # Multiple solutions
 
 # Debugging: get LP format of the solver model
 p.solve("highs", print_format="lp", print_only=True)
-print(s.printed_model)  # Access the text representation
+print(p.solve_info().printed_model)  # Access the text representation
 ```
 
 ### Solver-specific parameters
