@@ -89,13 +89,11 @@ reasoners:
   logic:
     size: HIGHMEM_X64_S
     use_lqp: true
-    auto_suspend_mins: 60
     emit_constraints: false
   predictive:
     size: HIGHMEM_X64_S
   prescriptive:
     size: HIGHMEM_X64_S
-    auto_suspend_mins: 30
 
 data:
   wait_for_stream_sync: true           # wait for streams before queries (default true)
@@ -299,18 +297,19 @@ reasoners:
   logic:
     size: HIGHMEM_X64_S
     use_lqp: true                    # LQP for rule execution (default true)
-    auto_suspend_mins: 60
     emit_constraints: true           # emit constraint reports
     incremental_maintenance: "off"   # "on", "auto", or "off"
     lqp:
       semantics_version: "1"         # opt into hard validation errors
   predictive:
     size: HIGHMEM_X64_S
-    auto_suspend_mins: 60
   prescriptive:
     size: HIGHMEM_X64_S
-    auto_suspend_mins: 30            # prescriptive default is 30
 ```
+
+> **Note:** `auto_suspend_mins` and `await_storage_vacuum` are managed via the CLI only — they are not config fields.
+> - Set auto-suspend after creation: `rai reasoners:alter --type logic --name <name> --auto-suspend-mins <value>`
+> - Set await-storage-vacuum at creation time: `rai reasoners:create --type logic --name <name> --size <size> --await-storage-vacuum`
 
 ### Polling Configuration
 
@@ -334,7 +333,6 @@ cfg = create_config(
             "size": "HIGHMEM_X64_M",
             "use_lqp": True,
             "emit_constraints": True,
-            "auto_suspend_mins": 120,
         },
         "prescriptive": {
             "size": "HIGHMEM_X64_L",

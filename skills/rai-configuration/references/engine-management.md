@@ -28,8 +28,13 @@ r.create_engine(
     name="my_engine",
     type="LOGIC",              # required: "LOGIC", "SOLVER", or "PREDICTIVE"
     size="HIGHMEM_X64_S",      # optional, defaults from config
-    auto_suspend_mins=30,      # optional
 )
+```
+
+To set auto-suspend after creation, use the CLI:
+
+```bash
+rai reasoners:alter --type logic --name my_engine --auto-suspend-mins 30
 ```
 
 ### Delete Engine
@@ -62,7 +67,13 @@ engine_name = r.config.get("engine")
 engine_size = r.config.get("engine_size")
 
 r.delete_engine(engine_name, "LOGIC")
-r.create_engine(engine_name, "LOGIC", size=engine_size, auto_suspend_mins=30)
+r.create_engine(engine_name, "LOGIC", size=engine_size)
+```
+
+To restore auto-suspend settings after recreation, use the CLI:
+
+```bash
+rai reasoners:alter --type logic --name <engine_name> --auto-suspend-mins <value>
 ```
 
 ### Engine Types and Naming
