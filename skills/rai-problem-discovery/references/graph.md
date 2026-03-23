@@ -3,8 +3,11 @@
 - [Graph Implementation Hints](#graph-implementation-hints)
 - [When Graph vs Other Reasoners](#when-graph-vs-other-reasoners)
 - [Graph Construction Patterns](#graph-construction-patterns)
+- [Multi-Graph Awareness](#multi-graph-awareness)
 - [Output Concepts](#output-concepts)
 - [Data Sufficiency Signals](#data-sufficiency-signals)
+- [Graph-Specific Feasibility Criteria](#graph-specific-feasibility-criteria)
+- [Execution Skill Handoff](#execution-skill-handoff)
 <!-- /TOC -->
 
 ## Graph Question Types
@@ -98,12 +101,28 @@ define(graph.Edge.new(src=Business.ref(), dst=Business.ships_to(Business.ref()))
 Nodes are physical locations, edges derived from operational relationships. Suited for centrality, WCC, community detection, bridge analysis.
 ```python
 graph = Graph(model, directed=False, weighted=True, node_concept=Site)
-define(graph.Edge.new(src=site1, dst=site2, weight=site1.shipment_count))
-    .where(Operation.source_site(op, site1), Operation.destination_site(op, site2))
+define(
+    graph.Edge.new(src=site1, dst=site2, weight=site1.shipment_count)
+).where(Operation.source_site(op, site1), Operation.destination_site(op, site2))
 ```
 
 ### Key insight
 The same ontology may need both constructions. "Which suppliers do customers depend on?" uses a **directed entity graph**. "Which warehouses are critical connectors?" uses an **undirected infrastructure graph**. Discovery should identify which perspective fits each question.
+
+---
+
+## Multi-Graph Awareness
+
+A single ontology can yield multiple `Graph` instances, each answering different questions. Discovery should surface ALL viable graph perspectives, not just the first match.
+
+**Example:** A supply chain model with `Business`, `Site`, and `Operation` concepts supports:
+1. **Directed business graph** (`Business` → `Business` via `ships_to`) — for PageRank, reachability, dependency tracing
+2. **Undirected infrastructure graph** (`Site` ↔ `Site` via `Operation`) — for centrality, WCC, bridge detection, community
+3. **Customer co-purchase graph** (if customer/order data exists) — for community detection
+
+Each graph answers fundamentally different questions. When suggesting graph problems, check all potential graph constructions and suggest from each where appropriate.
+
+---
 
 ### How to identify graph potential from ontology
 - Concepts that act as edges (Operation, Route, Connection) with source/destination properties → infrastructure-level graph
@@ -145,3 +164,34 @@ What ontology patterns indicate graph reasoning potential:
 - **Many-to-many relationships**: Membership, collaboration, co-occurrence → dense graph for community detection
 
 **Minimum viable ontology for graph:** At least one concept pair connected by a relationship forming a non-trivial network (more than a simple lookup/dimension table). For centrality/community: 10+ nodes with varied connectivity. For reachability: directed edges with multi-hop paths.
+
+---
+
+## Graph-Specific Feasibility Criteria
+
+Beyond the standard READY / MODEL_GAP / DATA_GAP classification, graph suggestions require additional feasibility checks:
+
+| Criterion | Check | Impact |
+|-----------|-------|--------|
+| **Minimum network density** | Are there enough nodes with varied connectivity? | Centrality on 3 nodes or a complete graph is trivial — all nodes score equally |
+| **Algorithm/direction compatibility** | Does the suggested algorithm work with the graph's directionality? | `louvain()` requires undirected; `reachable()` requires directed. Flag if mismatch. |
+| **Weight availability** | Does the model have numeric edge properties for weighted algorithms? | Weighted centrality/distance needs edge weights — if unavailable, suggest unweighted alternative or flag as MODEL_GAP |
+| **Edge construction feasibility** | Can edges actually be constructed from the ontology relationships? | Intermediary concepts need source/destination properties; co-occurrence needs shared attribute |
+| **Multi-hop path existence** | For reachability/distance: do directed paths span multiple hops? | Single-hop relationships give trivial reachability — need multi-hop chains |
+| **Data volume** | Are there enough entities to produce meaningful graph structure? | < 5 nodes: trivial results. 10-100: good for all algorithms. 100K+: betweenness/similarity may be slow |
+
+When assessing feasibility, include these in the analysis and downgrade to MODEL_GAP or DATA_GAP as appropriate.
+
+---
+
+## Execution Skill Handoff
+
+After selecting a graph suggestion from discovery, the execution workflow uses the `rai-graph-analysis` skill for graph construction, algorithm selection, parameter configuration, and result extraction.
+
+**Discovery** (`rai-problem-discovery` + this reference file) answers: "What graph questions can this data answer?"
+**Execution** (`rai-graph-analysis`) answers: "How do I build the graph, run the algorithm, and extract results?"
+
+The implementation hint from discovery provides the starting point for execution:
+- `algorithm` → maps to `rai-graph-analysis` Algorithm Selection guidance
+- `graph_construction` → maps to `rai-graph-analysis` Graph Construction from Ontology patterns
+- `output_binding` → maps to `rai-graph-analysis` Result Extraction and Binding patterns

@@ -9,6 +9,7 @@
   - [model.union() -- set-style OR combinator](#modelunion----set-style-or-combinator)
   - [| operator -- ordered fallback / if-then-else](#-operator----ordered-fallback--if-then-else)
   - [Entity instance comparison](#entity-instance-comparison)
+  - [Chain.ref() and .alt()](#chainref-and-alt)
 <!-- /TOC -->
 
 ## Expression Rules
@@ -43,9 +44,27 @@ results = df[df["amount"] > 0.001]
 
 ### `.per()` — grouped aggregation
 
-Groups an aggregation by one or more concepts. Multi-key: `sum(X).per(A, B)`. Standalone form: `per(A).sum(X)`.
+Groups an aggregation by one or more concepts. Two equivalent forms:
 
-For applied aggregation patterns, see `querying/SKILL.md`.
+- **Method chaining:** `sum(X).per(A, B)` — grouping declared after the aggregation
+- **Standalone:** `per(A, B).sum(X)` — grouping declared before the aggregation
+
+**Captured `per()` for reuse:** When multiple aggregations share the same grouping keys, capture the standalone `per()` in a variable to avoid repeating the keys:
+
+```python
+# Instead of repeating .per(LineItem.code, LineItem.status) on each aggregation:
+group = per(LineItem.code, LineItem.status)
+result = m.select(
+    LineItem.code, LineItem.status,
+    group.sum(LineItem.amount).alias("total"),
+    group.count(LineItem).alias("cnt"),
+)
+
+# Also works in model.define():
+m.define(LineItem.group_total(group.sum(LineItem.amount)))
+```
+
+For applied aggregation patterns, see `rai-querying`.
 
 ### Combined `.where().per()` for Grouped Aggregation
 
@@ -104,7 +123,7 @@ model.where(model.union(Person.age < 18, Person.age >= 65)).select(Person.name)
 
 ```python
 total = sum(model.union(term_a, term_b, term_c))
-s.minimize(total)
+p.minimize(total)
 ```
 
 Each term may involve different concepts and `.where()` conditions. Required when building multi-component objectives or aggregations that span concept boundaries.
@@ -123,6 +142,8 @@ select(Person.name, rights).to_df()
 ```
 
 **Rule:** All branches in a `union()` must return the same number of values (same "shape").
+
+**Note:** When used inside an outer `select(Person.name, rights)`, entities that match NO branch still appear in the result with `NaN` for the union column. Filter with `.where()` or use `dropna()` if you need only matched rows.
 
 ### `|` operator — ordered fallback / if-then-else
 
@@ -185,12 +206,12 @@ UD = UnmetDemand.ref()
 D = Demand.ref()
 inflow_per_sku = sum(Op.x_flow).where(Op.output_sku == UD.sku).per(UD.sku)
 demand_per_sku = sum(D.quantity).where(D.sku == UD.sku).per(UD.sku)
-s.satisfy(model.require(inflow_per_sku + UD.x_slack >= demand_per_sku).where(UD))
+p.satisfy(model.require(inflow_per_sku + UD.x_slack >= demand_per_sku).where(UD))
 
 # RIGHT: For flow conservation at a site, aggregate inflows and outflows separately:
 inflow = sum(Op.x_flow).where(Op.output_site == Site).per(Site)
 outflow = sum(Op.x_flow).where(Op.source_site == Site).per(Site)
-s.satisfy(model.require(inflow >= outflow).where(Site))
+p.satisfy(model.require(inflow >= outflow).where(Site))
 ```
 
 **Key rule:** If you need to relate entities of the SAME concept (e.g., flow conservation between operations), restructure the constraint to aggregate through a shared dimension (Site, SKU, Period) instead of self-joining.
@@ -223,12 +244,12 @@ These rules apply when generating constraint expressions and objective expressio
 
 ### Expression Format
 
-- **Constraints:** Provide ONLY the constraint condition — the code generator wraps it with `s.satisfy(require(...))`
+- **Constraints:** Provide ONLY the constraint condition — the code generator wraps it with `p.satisfy(require(...))`
   - CORRECT: `sum(DecisionConcept.x_quantity) <= Entity.limit`
-  - WRONG: `s.satisfy(require(sum(DecisionConcept.x_quantity) <= Entity.limit))`
-- **Objectives:** Provide JUST the expression — the code generator wraps it with `s.minimize(...)` or `s.maximize(...)`
+  - WRONG: `p.satisfy(require(sum(DecisionConcept.x_quantity) <= Entity.limit))`
+- **Objectives:** Provide JUST the expression — the code generator wraps it with `p.minimize(...)` or `p.maximize(...)`
   - CORRECT: `sum(Entity.cost * DecisionConcept.x_quantity)`
-  - WRONG: `s.minimize(sum(Entity.cost * DecisionConcept.x_quantity))`
+  - WRONG: `p.minimize(sum(Entity.cost * DecisionConcept.x_quantity))`
 
 ### Operator Rules
 
@@ -335,6 +356,27 @@ model.where(
 
 ```python
 rel["field"]  # Access a named field of a relationship
+```
+
+### Chain.ref() and .alt()
+
+**`Chain.ref()`** — creates an independent occurrence of a chain path. Use when the same multi-hop path must appear twice in a query as two independent traversals (e.g., comparing two different values on the same relationship). Distinct from `Concept.ref()` (which creates a new entity variable):
+
+```python
+# Two independent traversals of the same relationship path
+route_a = Order.ship_via.ref()   # Chain.ref() — same path, independent occurrence
+route_b = Order.ship_via         # original
+where(route_a.cost < route_b.cost).select(...)
+```
+
+**`.alt()`** — creates an inverse traversal from an existing Property without a separate `define()`:
+
+```python
+# Forward: Order -> Customer (from FK)
+Order.ordered_by = model.Relationship(f"{Order} ordered by {Customer}")
+
+# Inverse: Customer -> Orders (automatic from .alt())
+Customer.orders = Order.ordered_by.alt(f"{Customer} has orders {Order}")
 ```
 
 ---

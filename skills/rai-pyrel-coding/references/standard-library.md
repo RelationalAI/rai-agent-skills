@@ -151,7 +151,7 @@ rai.Number.size(38, 4)(0.0)  # Decimal is deprecated — use Number.size(p, s)
 rai.String("VIP").alias("segment")    # String literal in select
 ```
 
-For the `|` default/fallback operator (SQL COALESCE equivalent) and if-then-else chains, see `pyrel_coding/expression-rules.md` > `|` operator.
+For the `|` default/fallback operator (SQL COALESCE equivalent) and if-then-else chains, see `rai-pyrel-coding/expression-rules.md` > `|` operator.
 
 **Python builtins do NOT work on RAI expressions.** These are symbolic, not numeric:
 - `abs()` -- use `math.abs()`

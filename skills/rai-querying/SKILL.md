@@ -10,7 +10,7 @@ description: Covers query construction in PyRel v1 including aggregation, derive
 
 **What:** Query construction — producing actual table output via `select().to_df()`. Covers aggregation, filtering, joins, ordering, and data export in PyRel v1.
 
-**Scope boundary:** A "query" in this skill means code that produces a DataFrame output via `select().to_df()`. Model logic (definitions, computed properties, derived relationships, entity creation) belongs in `pyrel_coding/SKILL.md` — see its Definitions section. **Queries should be simple.** Most logic should live in definitions; queries should primarily select and aggregate values that definitions have already computed. If a query has complex logic, consider extracting it into a definition instead.
+**Scope boundary:** A "query" in this skill means code that produces a DataFrame output via `select().to_df()`. Model logic (definitions, computed properties, derived relationships, entity creation) belongs in `rai-pyrel-coding` — see its Definitions section. **Queries should be simple.** Most logic should live in definitions; queries should primarily select and aggregate values that definitions have already computed. If a query has complex logic, consider extracting it into a definition instead.
 
 **When to use:**
 - Writing queries to extract data from a model (`select`, `where`, `to_df`)
@@ -18,12 +18,12 @@ description: Covers query construction in PyRel v1 including aggregation, derive
 - Filtering and ordering query results (`in_`, `not_`, `union`, `rank`/`top`/`bottom`)
 - Joining across concepts or self-joining with `.ref()` in select contexts
 - Exporting results to Snowflake tables
-- Extracting solution values after a solve (used alongside `rai-prescriptive-results-interpretation/SKILL.md`)
+- Extracting solution values after a solve (used alongside `rai-prescriptive-results-interpretation`)
 
 **When NOT to use:**
-- Defining model logic (concepts, properties, relationships, derived properties via define/where) — see `pyrel_coding/SKILL.md`
-- Solver formulation patterns (variables, constraints, objectives) — see `rai-prescriptive-problem-formulation/SKILL.md`
-- Post-solve interpretation logic (quality assessment, explanation, sensitivity) — see `rai-prescriptive-results-interpretation/SKILL.md`
+- Defining model logic (concepts, properties, relationships, derived properties via define/where) — see `rai-pyrel-coding`
+- Solver formulation patterns (variables, constraints, objectives) — see `rai-prescriptive-problem-formulation`
+- Post-solve interpretation logic (quality assessment, explanation, sensitivity) — see `rai-prescriptive-results-interpretation`
 
 **Overview:** Reference skill. Key lookup areas: Query Basics (where/select/to_df), Aggregation (sum/count/per), Filtering (in_/not_/union), Multi-Concept Joins, Data Export.
 
@@ -91,7 +91,7 @@ Shipment.supplier.inspect()  # Quick check of a relationship's contents
 
 **`distinct(...)`** — deduplicate result rows. Frequently needed with aggregations to prevent validation errors.
 
-**IMPORTANT: Everything must be wrapped inside `distinct()`.** You cannot mix bare expressions with `distinct()` expressions in the same `select()`. Either ALL columns are inside `distinct()`, or none are.
+All columns in a `select()` must be either all inside `distinct()` or all outside — mixing causes a runtime error. Grouped aggregation queries (grouping by a property value, not an entity) require `distinct()` to get one row per group; without it, PyRel returns one row per entity with duplicated aggregation values.
 
 ```python
 from relationalai.semantics import distinct
@@ -107,17 +107,32 @@ model.where(
     )
 )
 
-# CORRECT: distinct with aggregations — all inside distinct()
-model.select(
+# CORRECT: distinct with grouped aggregation — one row per group
+model.where(
+    BadWeatherMoneyLoser(DailyDeployment),
+).select(
     distinct(
-        Product.type.alias("product_type"),
-        aggs.count(Product).per(Product.type).alias("product_count")
+        DailyDeployment.weather_condition.alias("weather"),
+        aggs.count(DailyDeployment).per(DailyDeployment.weather_condition).alias("count"),
+        aggs.avg(DailyDeployment.demand_fulfillment_ratio).per(DailyDeployment.weather_condition).alias("avg_ratio"),
     )
 )
+
+# WRONG — without distinct(), returns one row per entity (duplicated aggregations)
+# model.select(
+#     DailyDeployment.weather_condition.alias("weather"),
+#     aggs.count(DailyDeployment).per(DailyDeployment.weather_condition).alias("count"),
+# ).where(...).to_df()  # Returns N rows instead of grouped rows!
 
 # WRONG: mixing bare select with distinct field — will error
 # model.select(Product.name, distinct(Product.category))  # ← DO NOT DO THIS
 ```
+
+**When to use `distinct()`:**
+- Grouping by a **property value** (e.g., `weather_condition`, `category`): use `distinct()` — without it you get duplicated rows
+- Grouping by an **entity concept** (e.g., `.per(Customer)`): usually not needed, since each entity is already unique
+- Grouping by a **mix of entity and property value** (e.g., `.per(Supplier, Dest.region)`): treat as property-value grouping — use `distinct()`
+- Deduplicating rows from multi-hop joins: use `distinct()`
 
 **`model.select(...)` standalone** — query without conditions:
 
@@ -151,7 +166,7 @@ from relationalai.semantics.std.aggregates import string_join, rank, desc, asc
 # Query: average order value per customer
 aggs.avg(Order.total).per(Customer).alias("avg_order_value")
 
-# WILL RAISE NotImplementedError if used in s.satisfy() or s.minimize/maximize
+# WILL RAISE NotImplementedError if used in p.satisfy() or p.minimize/maximize
 # Solver-supported aggregates: sum, min, max, count only
 ```
 
@@ -244,7 +259,7 @@ In query contexts, you can also use `.where()` on the aggregate for the same eff
 
 ## Derived Concepts and Relationships
 
-> **Note:** These `define()`/`where()` patterns are model logic, not queries. They are included here as a quick reference because they often precede query construction. For the full treatment of definitions — the core of PyRel coding — see `pyrel_coding/SKILL.md` § Definitions.
+> **Note:** These `define()`/`where()` patterns are model logic, not queries. They are included here as a quick reference because they often precede query construction. For the full treatment of definitions — the core of PyRel coding — see `rai-pyrel-coding` § Definitions.
 
 **`model.define(...).where(...)` — derive from conditions:**
 
@@ -286,6 +301,59 @@ model.where(
 ```
 
 For multi-concept joins, reusable query fragments, and Snowflake export patterns, see [joins-and-export.md](references/joins-and-export.md).
+
+---
+
+## Subtype Query Patterns
+
+Subtypes inherit parent properties, but you MUST bind the subtype to its parent and access properties through the PARENT concept. Accessing properties directly on the subtype causes `TyperError`.
+
+```python
+# CORRECT — bind subtype to parent, access properties via parent
+results = model.where(
+    HighChurnRiskCustomer(Customer),
+).select(
+    Customer.full_name.alias("name"),
+    Customer.churn_score.alias("churn_score"),
+).to_df()
+
+# WRONG — accessing properties on subtype causes TyperError
+# results = model.where(HighChurnRiskCustomer).select(
+#     HighChurnRiskCustomer.full_name.alias("name"),  # FAILS!
+# ).to_df()
+```
+
+**Counting subtypes:**
+
+```python
+# CORRECT — count parent concept, filter by subtype binding
+results = model.select(
+    aggs.count(FoodTruck).alias("count"),
+).where(
+    UnderutilizedFoodTruck(FoodTruck),
+).to_df()
+
+# WRONG — counting subtype directly causes TyperError
+# results = model.select(rai.count(UnderutilizedFoodTruck).alias("count")).to_df()
+```
+
+**Boolean relationships as filters (not selectable):**
+
+Boolean relationships (unary flags like `is_event_day`, `is_active`) can ONLY be used as filters in `.where()`. They CANNOT be placed in `select()` with `.alias()`.
+
+```python
+# CORRECT — boolean flag as filter in where()
+results = model.where(
+    DailyDeployment.is_event_day(),
+).select(
+    DailyDeployment.deployment_date.alias("date"),
+).to_df()
+
+# WRONG — boolean relationship in select() causes TyperError
+# results = model.select(DailyDeployment.is_event_day.alias("flag")).to_df()
+```
+
+To project a boolean flag as a column, use the **two-query pandas pattern**: query all entities, query the flagged subset, then merge with `df["flag"] = df["id"].isin(flagged_ids)`.
 
 ---
 
@@ -368,7 +436,7 @@ model.where(
 ).select(Person.name, Person.age).to_df()
 ```
 
-The `|` operator evaluates branches left-to-right and picks the first that succeeds (ordered fallback / if-then-else), while `model.union()` collects ALL matching branches (set union). Use `|` for defaults (`status | "missing"`) and case-when chains; use `model.union()` for multi-term objectives or OR-filtering. For full semantics, CASE-WHEN patterns, and multi-component objective use, see `pyrel_coding/expression-rules.md`.
+The `|` operator evaluates branches left-to-right and picks the first that succeeds (ordered fallback / if-then-else), while `model.union()` collects ALL matching branches (set union). Use `|` for defaults (`status | "missing"`) and case-when chains; use `model.union()` for multi-term objectives or OR-filtering. For full semantics, CASE-WHEN patterns, and multi-component objective use, see `rai-pyrel-coding/expression-rules.md`.
 
 **HAVING equivalent** -- filter on aggregated values by binding the aggregate in `where()`:
 
@@ -412,10 +480,10 @@ model.where(Order.amount > 0).require(Order.customer)
 
 **Requirements fire at `to_df()` / `exec()` time** — not at definition time. There is no `.check()` or `.validate()` method.
 
-**In solver context:** `s.satisfy(model.require(expr))` promotes the requirement to an optimization constraint and removes it from semantic checks. Pass `check=True` to keep it as both:
+**In solver context:** `p.satisfy(model.require(expr))` promotes the requirement to an optimization constraint and removes it from semantic checks. Pass `check=True` to keep it as both:
 
 ```python
-s.satisfy(model.require(supply >= demand), check=True)  # hard constraint + integrity check
+p.satisfy(model.require(supply >= demand), check=True)  # hard constraint + integrity check
 ```
 
 ---
@@ -486,6 +554,9 @@ For detailed introspection patterns (classification, property maps, data inspect
 | Empty DataFrame from query | Missing `define()` for computed values, or `.new()` matched no rows | Verify entities exist and derived values are `define()`d before querying |
 | `ValidationError: Unused variable` | Same concept ref reused in independent aggregation contexts | Use separate named refs (`Customer.ref("t1")`, `Customer.ref("t2")`) |
 | Duplicate rows in aggregation results | Missing `distinct()` wrapper | Wrap `select(distinct(...))` — ALL columns must be inside `distinct()` |
+| Grouped aggregation returns N rows instead of grouped rows | Grouping by a property value without `distinct()` | Use `select(distinct(property.alias(...), agg.per(property).alias(...)))` — see Grouped Aggregation pattern above |
+| Subtype query returns TyperError | Accessing properties directly on subtype (`m.Subtype.prop`) | Bind subtype to parent: `m.where(m.Subtype(m.Parent)).select(m.Parent.prop.alias(...))` |
+| `rai.count(m.SubtypeName)` in bare select fails | Counting subtype directly without parent binding | Use `m.select(rai.count(m.Parent).alias("n")).where(m.Subtype(m.Parent))` |
 | Mixing bare select with distinct | `select(X.name, distinct(X.cat))` — can't mix | Either wrap ALL columns in `distinct()` or none |
 | `.where()` on wrong target | Calling `.where()` directly on a Concept (`Site.where(...)`) | `.where()` goes on aggregations, constraints, definitions, or queries — not on bare concepts |
 | Using standalone `where()`/`select()` with multiple models | `"Multiple Models have been defined."` error | Use `model.where()`/`model.select()` instead of standalone imports |
@@ -504,4 +575,6 @@ For detailed introspection patterns (classification, property maps, data inspect
 
 ## Reference files
 
-- Writing multi-concept joins, reusable query fragments, or exporting to Snowflake? See [joins-and-export.md](references/joins-and-export.md) for join patterns, fragment composition, and Snowflake write-back
+| Reference | Description | File |
+|-----------|-------------|------|
+| Joins & export | Multi-concept joins, reusable query fragments, Snowflake write-back | [joins-and-export.md](references/joins-and-export.md) |

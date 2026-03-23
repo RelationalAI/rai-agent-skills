@@ -15,12 +15,11 @@ description: Covers PyRel v1 configuration including raiconfig.yaml, connection 
 - Configuring Snowflake connections
 - Choosing an authentication method (username/password, JWT, OAuth, PAT, browser)
 - Tuning reasoner engine sizes or solver settings
-- Migrating from v0.13 config (TOML → YAML, removed parameters)
 - Troubleshooting connection or config errors
 
 **When NOT to use:**
-- Model creation or PyRel syntax (concepts, properties, data loading) — see `pyrel_coding/SKILL.md`
-- Solver execution and diagnostics — see `rai-prescriptive-solver-management/SKILL.md`
+- Model creation or PyRel syntax (concepts, properties, data loading) — see `rai-pyrel-coding`
+- Solver execution and diagnostics — see `rai-prescriptive-solver-management`
 
 **Overview:** Reference skill. Key lookup areas: Config File (raiconfig.yaml structure), Connection Setup (Snowflake auth methods), Programmatic Config (create_config), Model Settings, Reasoner Settings (engine sizes, per-reasoner options).
 
@@ -53,10 +52,13 @@ connections:
 
 ```python
 # Programmatic config (no YAML file needed)
-from relationalai.semantics import create_config, Model
+from relationalai.config import create_config
+from relationalai.semantics import Model
 config = create_config(connection_type="snowflake")
 model = Model("my_model", config=config)
 ```
+
+**Verify connectivity:** Run `rai connect` to check the connection before writing model code. Also use it to validate after changing any connection-related configuration.
 
 ---
 
@@ -252,13 +254,6 @@ model = Model("my_model")
 model = Model("my_model", config=cfg)
 ```
 
-### Key Parameters Moved to Config
-
-| v0.13 Code Param | v1 Config Location | Default |
-|---|---|---|
-| `use_lqp=False` | `reasoners.logic.use_lqp` | `true` |
-| `use_pb=True` | Removed entirely | N/A |
-
 ### Model-Level Config Fields
 
 Set in `raiconfig.yaml` under `model:` or pass via `create_config(model={...})`:
@@ -427,14 +422,13 @@ See [engine-management.md](references/engine-management.md) for full API referen
 | `direct_access` with no `direct_access_base_url` | URL is required when `backend: direct_access` | Set `reasoners.direct_access_base_url` or switch to `backend: sql` |
 | `execution.logging: true` produces no output | Python logging must be configured separately | Add `logging.getLogger("relationalai.client.execution").setLevel(logging.INFO)` |
 | Auth fails with `externalbrowser` in CI | Browser auth requires interactive session | Use `jwt` or `username_password` for non-interactive environments |
-| `use_lqp` / `use_pb` on `Model()` | v0.13 parameters no longer accepted | Move `use_lqp` to `reasoners.logic.use_lqp` in config; remove `use_pb` |
-| Both `raiconfig.toml` and `.yaml` present | Toml may take precedence in some code paths during transition | Remove `.toml` or ensure `.yaml` is canonical |
+| Both `raiconfig.toml` and `.yaml` present | Toml may take precedence in some code paths | Remove `.toml` and use `.yaml` as canonical |
 | Engine not provisioned | Reasoner config references an engine size not available on account | Check `reasoners.prescriptive.size` matches available sizes for your platform |
 
 ---
 
-## Migration from v0.13
+## Reference files
 
-Config changes: `raiconfig.toml` → `raiconfig.yaml`. Model creation no longer accepts `use_lqp`, `use_pb`, `strict`, or `connection` — these moved to config or were removed. Solver API changed from `Solver("highs", resources=...)` to `s.solve("highs", ...)`. Import path changed from `reasoners.optimization` to `reasoners.prescriptive`.
-
-See [v013-migration.md](references/v013-migration.md) for side-by-side code examples and a full table of removed parameters.
+| Reference | Description | File |
+|-----------|-------------|------|
+| Engine management | Engine provisioning, sizing, and lifecycle management | [engine-management.md](references/engine-management.md) |

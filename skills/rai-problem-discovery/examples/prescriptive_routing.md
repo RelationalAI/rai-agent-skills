@@ -29,7 +29,7 @@ Source: hero-user-journey/src/hero_user_journey/ (supply chain domain, PyRel v1)
  "scenario_parameter": "excluded_supplier (binary: force flow=0 for that supplier's operations)"}
 ```
 
-### Modeling needs (→ ontology_design, problem_formulation)
+### Modeling needs (→ rai-ontology-design, rai-prescriptive-problem-formulation)
 - Decision concept: `ComponentFlow` defined on `Operation` with `quantity` variable
 - Slack concept: `UnmetComponent` per (SKU, Site) for infeasibility handling
 - Variables: `ComponentFlow.quantity` (continuous, 0 to capacity), `UnmetComponent.quantity` (continuous, >= 0)
@@ -69,7 +69,7 @@ Source: hero-user-journey/src/hero_user_journey/ (supply chain domain, PyRel v1)
                          "min_reliability (hard threshold, exclude suppliers below)"]}
 ```
 
-### Modeling needs (→ ontology_design, problem_formulation)
+### Modeling needs (→ rai-ontology-design, rai-prescriptive-problem-formulation)
 - Decision concept: `SupplyFlow` defined on `Operation` with `quantity` variable
 - Slack concept: `UnmetDemand` per SKU
 - Reliability integration: `Business.reliability_score` as constraint parameter

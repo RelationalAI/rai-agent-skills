@@ -43,22 +43,24 @@ These are the ONLY allowed problem types. Every suggestion must use exactly one 
 
 ## Implementation Hints
 
-For each prescriptive suggestion, provide an implementation hint with these fields:
+For each prescriptive suggestion, provide an implementation hint with these fields. Note: these are internal technical fields used by downstream tools -- the user sees the `statement` and `description` fields, which must use business language.
 
 ### decision_scope
 Identify WHERE decisions are made. Include brief context about the decision structure, not just a bare concept name. Each suggestion should have a distinct scope description -- even if the same concept, describe what different decision is being made.
+- Example: "How much to ship along each transportation route" (not just "Operation")
+- Example: "Which technician handles each maintenance task in each period" (not just "TechnicianMachinePeriod")
 - Check if a relationship already exists before suggesting a cross-product
 - Only use cross-product (X x Y) when no relationship exists between the concepts
 
 ### forcing_requirement
 The most important field. A MINIMIZE objective with no forcing constraint always yields zero -- the solver sets everything to 0 for minimum cost. Identify what real-world requirement forces activity:
-- Demand satisfaction: `sum(x) >= demand`
-- Coverage requirements: each entity must be assigned/served
-- Assignment requirements: each task must be handled
+- Demand satisfaction: "All customer demand must be fulfilled" (`sum(x) >= demand`)
+- Coverage requirements: "Every shift must have at least one worker assigned"
+- Assignment requirements: "Each task must be handled by exactly one resource"
 - Look for Demand/Order/Requirement concepts with quantity fields -- these often define forcing constraints
 
 ### objective_property
-Which model property to optimize. Should reference an actual property name from the ontology.
+Which model property to optimize. Should reference an actual property name from the ontology, but describe it naturally in the statement: "transportation cost per unit" rather than "OPERATION.COST_PER_UNIT".
 
 ### Gap identification (prescriptive-specific)
 

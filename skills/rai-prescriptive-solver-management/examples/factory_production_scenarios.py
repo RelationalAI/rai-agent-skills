@@ -48,13 +48,16 @@ for factory_name in factory_names:
     p.solve("highs", time_limit_sec=60)
 
     # 6. Collect results — variable_values() works even with populate=False
+    si = p.solve_info()
     var_df = p.variable_values().to_df()
-    scenario_results.append({
-        "factory": factory_name,
-        "status": str(p.termination_status),
-        "profit": p.objective_value,
-        "plan": var_df[var_df["value"] > 0.001],
-    })
+    scenario_results.append(
+        {
+            "factory": factory_name,
+            "status": si.termination_status,
+            "profit": si.objective_value,
+            "plan": var_df[var_df["value"] > 0.001],
+        }
+    )
 
 # 7. Summary across all partitions
 for r in scenario_results:

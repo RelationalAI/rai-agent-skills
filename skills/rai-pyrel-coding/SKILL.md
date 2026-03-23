@@ -19,10 +19,10 @@ description: Covers PyRel v1 language syntax including imports, type system, con
 - Understanding expression rules (`.where()` targets, `.per()` grouping, operators)
 
 **When NOT to use:**
-- Ontology modeling decisions (when to create a concept vs property, gap classification) — see `ontology_design/SKILL.md`
-- Query construction (select, aggregation, filtering, joins) — see `querying/SKILL.md`
-- Solver formulation (variables, constraints, objectives) — see `rai-prescriptive-problem-formulation/SKILL.md`
-- Connection and config setup — see `configuration/SKILL.md`
+- Ontology modeling decisions (when to create a concept vs property, gap classification) — see `rai-ontology-design`
+- Query construction (select, aggregation, filtering, joins) — see `rai-querying`
+- Solver formulation (variables, constraints, objectives) — see `rai-prescriptive-problem-formulation`
+- Connection and config setup — see `rai-configuration`
 
 **Overview:** Reference skill. Key lookup areas: Imports, Model Patterns, Type System, Concepts/Properties/Relationships, Data Loading, References and Aliasing, Standard Library (math/strings/dates), Expression Rules.
 
@@ -34,10 +34,9 @@ description: Covers PyRel v1 language syntax including imports, type system, con
 # Imports
 from relationalai.semantics import (
     Model, Float, Integer, String, Date, DateTime,
-    where, select, define, require, data, Table, distinct,
+    count, sum, min, max, avg, per, distinct,
 )
 from relationalai.semantics import Number  # Always use Number.size(p,s) — bare Number causes inference issues
-from relationalai.semantics.std import aggregates as aggs  # aggs.sum, aggs.count, etc.
 from relationalai.semantics.reasoners.prescriptive import Problem
 
 # Model + concepts
@@ -57,8 +56,8 @@ result = model.where(Product.cost > 10).select(Product.id, Product.cost).to_df()
 # Solver
 p = Problem(model, Float)
 p.solve_for(Product.x_qty, type="cont", lower=0, name=["qty", Product.id])
-p.satisfy(model.require(aggs.sum(Product.x_qty) <= 100))
-p.minimize(aggs.sum(Product.cost * Product.x_qty))
+p.satisfy(model.require(sum(Product.x_qty) <= 100))
+p.minimize(sum(Product.cost * Product.x_qty))
 p.solve("highs")
 ```
 
@@ -78,47 +77,34 @@ from relationalai.semantics import (
     Model,                              # Model creation
     Float, Integer, String, Date,       # Type references
     DateTime, Number,                   # DateTime for timestamps, Number.size(p,s) for decimals
-    sum, count, max, min, avg,          # Aggregation (shadows Python builtins)
+    sum, count, max, min, avg,          # Aggregation — shadows Python builtins (see note below)
     per, where, select, define,         # Query/definition functions
     require,                            # Constraint creation (also model.require)
-    data, Table, distinct,              # Data loading, Snowflake tables, dedup
+    data, distinct,                     # Data loading, dedup
 )
 
-# Reasoner-specific imports (load as needed for the reasoner in use)
+# Reasoner-specific imports
 from relationalai.semantics.reasoners.prescriptive import (
     Problem,
     all_different, implies, special_ordered_set_type_1, special_ordered_set_type_2,
 )
-
-# per() function — alternative to method chaining for aggregation grouping
-from relationalai.semantics import per
-# per(Edge.source).sum(Edge.flow)  ≡  sum(Edge.flow).per(Edge.source)
 from relationalai.semantics.reasoners.graph import Graph
 
 # Standard library
 from relationalai.semantics import std
-from relationalai.semantics.std.datetime import datetime       # datetime.year(), datetime.month(), etc.
+from relationalai.semantics.std.datetime import datetime       # datetime.year(), .month(), etc. — shadows Python datetime
 from relationalai.semantics.std import datetime as dt           # dt.date.period_days(), dt.datetime.to_date()
 from relationalai.semantics.std import math                     # math.abs()
 from relationalai.semantics.std.strings import string, concat   # string conversion, concatenation
 from relationalai.semantics.std import strings                  # full string library
 from relationalai.semantics.std import re                       # regex module (v1)
-```
 
-**Builtin shadowing:** `sum`, `count`, `max`, `min`, `datetime` from `relationalai.semantics` shadow Python builtins. When both are needed, import aggregates separately or use a module alias:
-
-```python
-from relationalai.semantics.std.aggregates import sum, count, max, min, avg
-# Or use a module alias to keep Python builtins available:
-from relationalai.semantics.std import aggregates as aggs
-# Then use: aggs.sum, aggs.count, aggs.max, aggs.min, aggs.avg
-
-# datetime shadowing — RAI's datetime != Python's datetime
-from relationalai.semantics.std.datetime import datetime       # RAI datetime functions
+# Builtin shadowing — when you need both RAI and Python builtins, use a module alias:
+from relationalai.semantics.std import aggregates as aggs       # aggs.sum, aggs.count, aggs.max, aggs.min
 import datetime as py_datetime                                  # Python stdlib datetime
 ```
 
-**Long import lines:** LLMs frequently generate overly long single-line imports that break linters. Split imports across multiple lines or use the module alias pattern (`import relationalai.semantics as rai`) to keep lines manageable.
+**Long import lines:** Split across multiple lines with `()` or use `import relationalai.semantics as rai` to keep lines manageable.
 
 ---
 
@@ -128,13 +114,9 @@ import datetime as py_datetime                                  # Python stdlib 
 model = Model("my_model")
 ```
 
-**Accepted parameters:** `name` (str), `config` (Config), `exclude_core` (bool), `is_library` (bool).
-- No `connection=`, `session=`, `strict=`, `use_lqp=`, or `use_pb=` — these are v0.13 artifacts or moved to config.
-- Optional: `Model("name", config=cfg)` for explicit config. Without `config`, auto-discovers `raiconfig.yaml`.
-- Use `time_ns()` suffix only when creating throwaway/ephemeral models in automated pipelines where name collisions are possible: `Model(f"problem_{time_ns()}")`. For normal use, a plain string name is preferred.
-- Shorthand for repeated use: `Concept, Property = model.Concept, model.Property`.
+**Accepted parameters:** `name` (str), `config` (Config), `exclude_core` (bool), `is_library` (bool). Without `config`, auto-discovers `raiconfig.yaml`. Use `time_ns()` suffix only for throwaway models in automated pipelines. Shorthand: `Concept, Property = model.Concept, model.Property`.
 
-**Prefer `model.define()`/`model.where()`/`model.select()` over standalone forms.** The standalone `define()`, `where()`, `select()` are convenience wrappers that only work when exactly one Model exists in the process. With two or more models, they raise `"Multiple Models have been defined."` All pyrel examples and modeler exports use the model method form. Generated code should always use `model.define(...)`, `model.where(...)`, `model.select(...)`.
+**Always use `model.define()`/`model.where()`/`model.select()`** — standalone `define()`, `where()`, `select()` fail when multiple Models exist (`"Multiple Models have been defined."`). Generated code should always use the model method form.
 
 ---
 
@@ -156,17 +138,15 @@ Types are imported objects, not strings. Used in Property f-strings and as type 
 
 **Deprecated alias:** `decimal` is a deprecated alias for `Number` — do not use it. Use `Number.size(p, s)` instead.
 
-**v0.13 to v1 change:** `{cost:float}` (lowercase string) becomes `{Float:cost}` (type-first f-string).
-
 ---
 
 ## Properties and Relationships — When to Use Which
 
-The distinction is **NOT** about value types vs concepts. It is about **functional dependency (multiplicity)**.
+The choice is about **multiplicity** — whether the association is many-to-one or many-to-many. Both support any arity (unary, binary, ternary+).
 
-**Property** enforces a functional dependency (uniqueness constraint) — the input fields uniquely determine the output. This means each unique combination of inputs maps to **at most one** output value (there may be no value). Use Property when the association is **single-valued** (functional).
+**Property** — functional dependency (uniqueness constraint). Inputs uniquely determine the output (at most one value). Use for **many-to-one**. Provides performance benefits and enforces the constraint.
 
-**Relationship** has no uniqueness constraint — zero, one, or many outputs per input. Use Relationship when the association is **multi-valued** or when you want to allow multiple associations.
+**Relationship** — no uniqueness constraint (zero, one, or many outputs per input). Use for **many-to-many**. More flexible when cardinality is uncertain, but prefer establishing multiplicity.
 
 | Pattern | Use Property | Use Relationship |
 |---------|-------------|-----------------|
@@ -174,10 +154,10 @@ The distinction is **NOT** about value types vs concepts. It is about **function
 | Concept → Concept (functional, e.g. FK) | `Order` placed by exactly one `Customer` | — |
 | Concept → Concept (multi-valued) | — | `Parent` has many `Child` |
 | Availability/membership (many-to-many) | — | `Worker` available for `Shift` |
-| Multiarity with value output | `Food` contains `Nutrient` in `Float:qty` | — |
-| Association where cardinality is uncertain | — | Use Relationship to be safe |
-
-**Key principle:** The choice is about multiplicity, not about whether the output is a primitive or a concept. A concept-to-concept FK that is truly functional (each order has exactly one customer) CAN be a Property. However, when in doubt about data cardinality, prefer Relationship — it avoids `FDError` if the data turns out to be non-functional.
+| Unary flag (functional) | `Order` is rush order | — |
+| Ternary with FD | `Food` contains `Nutrient` in `Float:qty` | — |
+| Ternary without FD | — | `Food` contains `Nutrient` (many-to-many) |
+| Association where cardinality is uncertain | — | Use Relationship — but prefer establishing multiplicity |
 
 ---
 
@@ -194,6 +174,10 @@ Product = model.Concept("Product")
 
 # Subtype (inherits parent properties)
 ActiveOrder = model.Concept("ActiveOrder", extends=[Order])
+# Populate subtype membership with model.define():
+model.define(ActiveOrder(Order)).where(Order.total > 75)
+# Query through parent properties:
+model.select(ActiveOrder.id, ActiveOrder.total)
 
 # Extending a primitive type (no identify_by needed — identity comes from the primitive)
 PositiveInt = model.Concept("PositiveInt", extends=[Integer])
@@ -211,17 +195,15 @@ PositiveInt = model.Concept("PositiveInt", extends=[Integer])
 
 ## Properties
 
-Properties use f-strings with type references. The type comes BEFORE the field name: `{Type:field}`. Use Property for **value-type attributes** — associating a concept with a primitive value.
+Properties use f-strings with type references. The type comes BEFORE the field name: `{Type:field}`. Use Property for **many-to-one (functional) associations** — scalar attributes, functional concept-to-concept FKs, and N-ary associations with a functional dependency.
 
 ```python
-# Value properties (concept → primitive) — the primary use of Property
+# Scalar value properties (concept → primitive)
 Food.cost = model.Property(f"{Food} has {Float:cost}")
 Worker.name = model.Property(f"{Worker} has {String:name}")
-Product.demand = model.Property(f"{Product} has {Integer:demand}")
 
-# Computed or derived value properties
-Food.amount = model.Property(f"{Food} has {Float:amount}")
-Edge.flow = model.Property(f"{Edge} has {Float:flow}")
+# Functional FK property (concept → concept, many-to-one)
+Order.customer = model.Property(f"{Order} placed by {Customer:customer}")
 
 # Multiarity property with value output (inputs uniquely determine the Float output)
 Food.contains = model.Property(f"{Food} contains {Nutrient} in {Float:qty}")
@@ -229,36 +211,17 @@ Food.contains = model.Property(f"{Food} contains {Nutrient} in {Float:qty}")
 
 **Canonical syntax (v1):** `model.Property(f"{Food} has {Float:cost}")` — f-string with type objects interpolated. Always use this form.
 
-**Property name vs madlib verb:** The property name is the field name (before the colon in the f-string slot), NOT the verb/preposition in the natural language:
-- `f"{Product} is produced by {Factory}"` — property name is implicit (the Factory reference)
-- `f"{Food} contains {Nutrient} in {Float:qty}"` — property name for the float is `qty`, NOT `contains` or `in`
+**Property name vs madlib verb:** The property name is the f-string field name (e.g., `qty` in `{Float:qty}`), not the verb (`contains`, `in`).
 
-**Multi-argument (multiarity) properties:**
+**Multi-argument (multiarity) properties:** Field names required when the same type appears multiple times to disambiguate inputs.
 
 ```python
-# Binary property with value (e.g., covariance matrix)
-# Field names required when the same type appears multiple times — disambiguates inputs
-Stock.covar = model.Property(f"{Stock:stock1} and {Stock:stock2} have {Float:covar}")
-
-# Ternary property (e.g., nutrient content per food)
-Food.contains = model.Property(f"{Food} contains {Nutrient} in {Float:qty}")
-
-# Time-indexed property
-FreightGroup.inv = model.Property(f"{FreightGroup} on day {Integer:t} has {Float:inv}")
-
-# Multi-concept property (concept + concept + value)
-Worker.assignment = model.Property(f"{Worker} has {Shift} if {Integer:assigned}")
+Stock.covar = model.Property(f"{Stock:stock1} and {Stock:stock2} have {Float:covar}")       # Binary (same-type disambiguation)
+FreightGroup.inv = model.Property(f"{FreightGroup} on day {Integer:t} has {Float:inv}")      # Time-indexed
+Worker.assignment = model.Property(f"{Worker} has {Shift} if {Integer:assigned}")             # Multi-concept
 ```
 
-**Scalar / standalone properties** (use only primitive concepts like Integer, Float — no user-defined concepts):
-
-```python
-# Scalar variable or global property
-bin_tl = model.Property(f"departure day {Integer:t} has {Float:bin_tl}")
-
-# Concept-free cell grid
-cell = model.Property(f"cell {Integer:i} {Integer:j} is {Integer:x}")
-```
+**Scalar / standalone properties** (primitives only, no user-defined concepts): `bin_tl = model.Property(f"departure day {Integer:t} has {Float:bin_tl}")`
 
 ---
 
@@ -288,39 +251,11 @@ p.solve_for(y, name="y", lower=-100.0, upper=5.0, start=0.0)
 p.minimize((1 - x) ** 2 + 100 * (y - x**2) ** 2)
 ```
 
-**Global counts/values:** For simple cases, assign directly to a Python variable:
+**Global counts/values:** Assign to a Python variable (`NODE_COUNT = count(Node)`). Use a model Relationship only when the value must be available in downstream `define()` rules or solver expressions: `model.define(node_count(count(Node)))`.
 
-```python
-NODE_COUNT = count(Node)
-```
+**Bracket access:** Use `rel["field"]` to access named roles. See References and Aliasing section below.
 
-Use a model Relationship only when the value must be available in downstream `define()` rules or solver expressions:
-
-```python
-node_count = model.Relationship(f"node count is {Integer}")
-model.define(node_count(count(Node)))
-```
-
-**Bracket access for relationship attributes:** Use `rel["field"]` to access named roles. See References and Aliasing section below.
-
-**`Chain.ref()` — independent occurrence of a chain path.** When you need the same multi-hop path to appear twice in a query as two independent traversals (e.g., comparing two different values on the same relationship), call `.ref()` on the chain. This is distinct from `Concept.ref()` (which creates a new entity variable):
-
-```python
-# Two independent traversals of the same relationship path
-route_a = Order.ship_via.ref()   # Chain.ref() — same path, independent occurrence
-route_b = Order.ship_via         # original
-where(route_a.cost < route_b.cost).select(...)
-```
-
-**`.alt()` for inverse relationships:** Create an inverse traversal from an existing Property without a separate `define()`:
-
-```python
-# Forward: Order -> Customer (from FK)
-Order.ordered_by = model.Relationship(f"{Order} ordered by {Customer}")
-
-# Inverse: Customer -> Orders (automatic from .alt())
-Customer.orders = Order.ordered_by.alt(f"{Customer} has orders {Order}")
-```
+**`Chain.ref()` and `.alt()`:** For independent chain traversals and inverse relationships, see [expression-rules.md](references/expression-rules.md#chain-ref-and-alt).
 
 ---
 
@@ -338,9 +273,10 @@ model.define(Order.total(Order.quantity * Order.unit_price))
 model.define(Shipment.is_delayed()).where(Shipment.delay_days > 0)
 
 # Derived relationship — named subset
+# NOTE: aggregation needs an explicit join through the relationship
 high_value = model.Relationship(f"High Value: {Customer}")
 model.define(high_value(Customer)).where(
-    aggs.sum(Order.total).per(Customer) > 10000
+    aggs.sum(Order.total).where(Order.customer(Customer)).per(Customer) > 10000
 )
 
 # Entity creation from relationships
@@ -367,7 +303,7 @@ model.define(Order.priority_label("low")).where(Order.total <= 1000)
 
 ## Data Loading Patterns
 
-API reference for loading data into models. For strategy guidance (when to use each pattern, authoritative vs joinable sources, schema-to-ontology workflow), refer to ontology design principles: define the domain model first, then connect it to physical data; distinguish authoritative sources (where the concept's PK lives) from joinable sources (FK references).
+API reference for loading data into models. For strategy guidance (authoritative vs joinable sources, schema-to-ontology workflow), see `rai-ontology-design`.
 
 ### Core APIs
 
@@ -395,14 +331,14 @@ model.define(food := Food.new(name=food_data.name), food.cost(food_data.cost))
 ### Snowflake tables
 
 ```python
-schema = Table("DB.SCHEMA.TABLE").to_schema(exclude=["internal_col"])
+schema = model.Table("DB.SCHEMA.TABLE").to_schema(exclude=["internal_col"])
 model.define(Concept.new(schema))
 ```
 
-**Column renaming:** `to_schema()` does not support `rename`. To map differently-named columns, use explicit property assignment instead of `to_schema()`:
+**Column renaming:** `to_schema()` does not support `rename`. Use explicit property assignment:
 
 ```python
-src = Table("DB.SCHEMA.TABLE")
+src = model.Table("DB.SCHEMA.TABLE")
 model.define(concept := Concept.new(key=src.SRC_COL), concept.target_prop(src.OTHER_COL))
 ```
 
@@ -479,9 +415,7 @@ def solve(model):
     ...
 ```
 
-**Exception:** Function-scoped models (`Model(f"problem_{time_ns()}")`) are appropriate only in automated pipelines or tests that create multiple ephemeral models where name collisions are possible.
-
-**Template examples:** See `../rai-prescriptive-problem-formulation/examples/diet.py` for minimal linear optimization, `../rai-prescriptive-problem-formulation/examples/shift_assignment.py` for binary assignment, `../rai-prescriptive-problem-formulation/examples/portfolio_balancing.py` for pairwise expressions.
+**Template examples:** See `rai-prescriptive-problem-formulation` examples: `diet.py` (linear optimization), `shift_assignment.py` (binary assignment), `portfolio_balancing.py` (pairwise expressions).
 
 ---
 ## RAI Expression Syntax
@@ -504,11 +438,15 @@ RAI expressions do not support Python's boolean keywords (`and`, `or`, `not`, `i
 Property definitions use Python f-strings where the braces invoke `__format__()` on concept/type objects to resolve internal IDs.
 
 ```python
-# Correct — braces call Float.__format__("cost"), resolving the concept ID
+# Correct — braces call Float.__format__("x_flow"), resolving the concept ID
 Shipment.x_flow = model.Property(f'{Shipment} has {Float:x_flow}')
 
 # Wrong — escaped braces produce a plain string, causing [Unknown Concept] at solve
 Shipment.x_flow = model.Property(f'{{Shipment}} has {{Float:x_flow}}')
+
+# Also wrong for decision variables — {{name:type}} shorthand creates Number(38,14),
+# which solve_for() rejects. Always use {Type:name} for properties passed to solve_for().
+Shipment.x_flow = model.Property(f'{Shipment} has {{x_flow:float}}')  # Number(38,14), not Float
 ```
 
 ---
@@ -517,12 +455,12 @@ Shipment.x_flow = model.Property(f'{{Shipment}} has {{Float:x_flow}}')
 
 | Mistake | Cause | Fix |
 |---------|-------|-----|
-| Using `with model.rule():` context manager | v0.13 syntax; v1 has no context managers | Use direct calls: `model.define(...)`, `model.require(...)` |
+| Using `with model.rule():` context manager | Not supported; no context managers | Use direct calls: `model.define(...)`, `model.require(...)` |
 | Division by zero in expressions | Not caught at definition time | Guard with `.where(Entity.input > 0)` |
 | `UninitializedPropertyException` on property chain | Property chain through cross-product concept (e.g., `ProductStoreWeek.week.week_num`) | Store values directly as properties on the cross-product concept |
 | "Uninitialized properties" on `where().define()` | Declarative filtering by relationship equality on cross-products | Use loop pattern for relationship-based filtering; use declarative for primitive equality |
 | Redundant `model.Property()` for identity field | `identify_by` already auto-creates the property | Remove the duplicate `model.Property()` declaration |
-| `FDError: Found non-unique values` | Property received two different values for same key set | Switch to `Relationship` (many-to-many), fix overlapping rules, or check ternary key ordering |
+| `FDError: Found non-unique values` | Property received two different values for same key set | Establish actual multiplicity — switch to `Relationship` if truly many-to-many, fix overlapping rules, or fix data quality if it should be many-to-one |
 | Empty DataFrame from queries | Missing `define()` call, wrong concept type, or missing data | Verify entities exist and computed values are `define()`d before querying |
 | `TypeMismatch` error | Comparing concepts of different types via `==` | Ensure both sides are the same concept type; value types prevent cross-type joins |
 | Duplicate column name on Snowflake export | Case-insensitive column name collision (`LongShort` vs `longshort`) | Use distinct uppercase names for all `.alias()` values |
@@ -532,39 +470,13 @@ Shipment.x_flow = model.Property(f'{{Shipment}} has {{Float:x_flow}}')
 | Long import lines breaking linters | LLMs generate 100+ char single-line imports | Split across multiple lines with `()` or use module alias (`import relationalai.semantics as rai`) |
 | Using bare `Number` without `.size()` | Causes type inference issues at runtime | Always use `Number.size(p, s)` (e.g., `Number.size(38, 4)`) |
 | Relationship declared but has no data | `model.Relationship(...)` without a corresponding `model.define()` data binding | Relationship has NO DATA at runtime — any `.where()` join on it returns zero matches. Add `model.define(From.rel(To)).where(...)` to populate it from data. |
-
-### Fix patterns for common pitfalls
-
-**Division guard:**
-
-```python
-efficiency = (Entity.output / Entity.input).where(Entity.input > 0)
-```
-
-**Cross-product with relationship filtering — use loops, not declarative:**
-
-```python
-# MAY FAIL: Uninitialized properties
-model.where(P.pwl_id == S.pwl_id).define(SegAlloc.new(placement=P, segment=S))
-
-# SAFE: Loop pattern for relationship-based filtering
-for placement in placement_objs:
-    for segment in segment_objs:
-        if segment.pwl_curve == placement.pwl_curve:
-            model.define(SegAlloc.new(placement=placement, segment=segment))
-```
-
-**Rule:** If filtering by relationship equality, use loops. If filtering by primitive equality (`.id == .parent_id`), use declarative.
+| Using `~` for negations | Causes `TypeError: bad operand type for unary ~: 'Expression'` | Always use `model.not_(expr)`
+| Using aggregates without model.distinct() | Causes duplicate rows in output | use `model.select(model.distinct(expr))` around all columns |
+| Incorrect datetimes for inline data | Causes query errors or empty result sets | use eg `df["date"] = pd.to_datetime(df["date"]).dt.date` |
+| Entity-valued Property for concept-to-concept FK | Some model files use `model.Property(f"{Order} placed by {Customer:customer}")` for FKs | Recommended when the FK is many-to-one (each Order has exactly one Customer) — provides performance benefits and enforces the functional constraint. Use `model.Relationship()` only if the association is truly many-to-many or cardinality is uncertain |
+| Dynamic model loading loses module-level concepts | Using `importlib.util` to load a model file — concepts defined as module variables aren't on the model object | After loading, iterate module attributes and `setattr(model, name, obj)` for each `rai.Concept` instance |
 
 For detailed `.where()` targets, `.per()` scoping, and operator precedence rules, see [expression-rules.md](references/expression-rules.md).
-
-**Property chain fix — store directly on cross-product concept:**
-
-```python
-# MAY FAIL: ProductStoreWeek.week.week_num
-# SAFE:
-ProductStoreWeek.week_num = model.Property(f"{ProductStoreWeek} has {Integer:week_num}")
-```
 
 ---
 
@@ -574,11 +486,13 @@ ProductStoreWeek.week_num = model.Property(f"{ProductStoreWeek} has {Integer:wee
 |---|---|---|
 | Multiarity properties + refs | Binding multiple Float.ref() in `.where()`, pairwise week comparison | [examples/retail_markdown_code.py](examples/retail_markdown_code.py) |
 | Standalone Property + union | Property not attached to concept, `model.union()` for multi-component objective, segment self-join | [examples/supply_chain_transport_code.py](examples/supply_chain_transport_code.py) |
-| Starter example | Customer segmentation example from docs | [examples/customer_segmentation.py](examples/customer_segmentation.py) |
 
 ---
 
 ## Reference files
 
-- Writing `.where()`, `.per()`, or aggregation expressions? See [expression-rules.md](references/expression-rules.md) for valid targets, scoping rules, and operator precedence
-- Need `rai_abs()`, string functions, date arithmetic, or other stdlib? See [standard-library.md](references/standard-library.md) for the complete function reference
+| Reference | Description | File |
+|-----------|-------------|------|
+| Expression rules | `.where()`, `.per()`, aggregation targets, scoping rules, operator precedence | [expression-rules.md](references/expression-rules.md) |
+| Data loading | Primitive binding, FK/entity reference binding, `to_schema()` rules, unary flags, optional vs required columns | [data-loading.md](references/data-loading.md) |
+| Standard library | `rai_abs()`, string functions, date arithmetic, complete function reference | [standard-library.md](references/standard-library.md) |

@@ -13,22 +13,22 @@ description: Covers solver lifecycle including problem type classification, solv
 **When to use:**
 - Choosing which solver to use for a problem (HiGHS vs Gurobi vs MiniZinc vs Ipopt)
 - Setting up Problem and Solver instances
-- Inspecting formulation before solving (s.display(), variable/constraint counts)
+- Inspecting formulation before solving (p.display(), variable/constraint counts)
 - Tuning solver parameters (time limits, MIP gap, presolve)
 - Diagnosing solver failures (infeasible, unbounded, slow convergence)
 - Understanding numerical stability issues or Big-M sizing
 - Running parametric/scenario solves
 
 **When NOT to use:**
-- Variable/constraint/objective formulation patterns — see `rai-prescriptive-problem-formulation/SKILL.md`
-- Post-solve solution extraction or interpretation — see `rai-prescriptive-results-interpretation/SKILL.md`
-- PyRel syntax (imports, types, properties) — see `pyrel_coding/SKILL.md`
+- Variable/constraint/objective formulation patterns — see `rai-prescriptive-problem-formulation`
+- Post-solve solution extraction or interpretation — see `rai-prescriptive-results-interpretation`
+- PyRel syntax (imports, types, properties) — see `rai-pyrel-coding`
 
 **Overview:**
 1. Classify the problem type (LP / MILP / QP / NLP / CSP)
 2. Select a solver (decision rules based on variable types and nonlinearity)
 3. Create Problem and Solver instances
-4. Validate formulation pre-solve (s.display(), count checks)
+4. Validate formulation pre-solve (p.display(), count checks)
 5. Execute solve (parameters, time limits, warm starting)
 6. Diagnose issues if solve fails or produces poor results
 
@@ -37,9 +37,7 @@ description: Covers solver lifecycle including problem type classification, solv
 ## Quick Reference
 
 ```python
-from relationalai.semantics import Model, Float, Integer
-from relationalai.semantics import where, select, define, require
-from relationalai.semantics.std import aggregates as aggs
+from relationalai.semantics import Float, Integer, Model, sum
 from relationalai.semantics.reasoners.prescriptive import Problem
 
 # 1. Create Problem (Float for LP/MILP/NLP, Integer for CP)
@@ -50,25 +48,26 @@ p.solve_for(Route.x_flow, type="cont", lower=0, upper=Route.capacity,
             name=["flow", Route.origin, Route.dest])
 p.solve_for(Facility.x_open, type="bin", name=["open", Facility.id])
 
-# 3. Add constraints (model.require inside s.satisfy)
-p.satisfy(model.require(aggs.sum(Route.x_flow).per(Customer) >= Customer.demand))
+# 3. Add constraints (model.require inside p.satisfy)
+p.satisfy(model.require(sum(Route.x_flow).per(Customer) >= Customer.demand))
 p.satisfy(model.require(Route.x_flow <= Route.capacity * Facility.x_open))
 
 # 4. Set objective (exactly one minimize or maximize)
-p.minimize(aggs.sum(Route.cost * Route.x_flow))
+p.minimize(sum(Route.cost * Route.x_flow))
 
 # 5. Pre-solve check — always inspect before solving
 p.display()
-assert s.num_variables > 0, "No variables created"
-assert s.num_constraints > 0, "No constraints created"
+model.require(p.num_variables() > 0)
+model.require(p.num_constraints() > 0)
 
 # 6. Solve — solver choice depends on problem type and user license
 #    See "Solver Selection" section for decision rules
 p.solve(solver_name, time_limit_sec=120)
-p.display_solve_info()
+model.require(p.termination_status() == "OPTIMAL")
+p.solve_info().display()
 # Solvers: "highs" (LP/MILP, open-source), "gurobi" (LP/MILP/QP/QCP, license required),
 #          "minizinc" (CP, open-source), "ipopt" (NLP, open-source)
-# Check: p.termination_status → "optimal" | "infeasible" | "unbounded" | "time_limit"
+# Check: p.termination_status() → "OPTIMAL" | "INFEASIBLE" | "DUAL_INFEASIBLE" | "TIME_LIMIT"
 ```
 
 ---
@@ -171,7 +170,7 @@ Each binary variable can double the search space. Tight bounds on integers reduc
 
 ### Problem Initialization
 
-In v1, pass the solver name as a string directly to `s.solve()` — no separate `Solver` object needed. `Problem` initialization uses type references, not strings:
+In v1, pass the solver name as a string directly to `p.solve()` — no separate `Solver` object needed. `Problem` initialization uses type references, not strings:
 
 ```python
 from relationalai.semantics import Float, Integer
@@ -285,7 +284,7 @@ Arguments: `(index_expression, variable_expression)` where `index` defines the o
 
 ## Formulation Display
 
-Use `s.display()` to inspect variables, objectives, and constraints before solving. Check `s.num_variables`, `s.num_constraints`, and `s.num_min_objectives` / `s.num_max_objectives` against expectations. Use `s.display(part)` for targeted inspection of a single variable group or constraint. Use `s.printed_model` (with `print_format=` on `s.solve()`) to get LP/MPS/LaTeX text representations. The same `Problem` can be re-solved multiple times — constraints accumulate across calls.
+Use `p.display()` to inspect variables, objectives, and constraints before solving. Check `p.num_variables()`, `p.num_constraints()`, and `p.num_min_objectives()` / `p.num_max_objectives()` against expectations (these are Relationships — use in `model.require()` or `model.select()`). Use `p.display(part)` for targeted inspection of a single variable group or constraint. Use `p.printed_model()` (Relationship, with `print_format=` on `p.solve()`) to get LP/MPS/LaTeX text representations. The same `Problem` can be re-solved multiple times — constraints accumulate across calls.
 
 See [formulation-display.md](references/formulation-display.md) for display output structure, diagnostic tables, and targeted inspection patterns.
 
@@ -293,14 +292,14 @@ See [formulation-display.md](references/formulation-display.md) for display outp
 
 ## Pre-Solve Validation
 
-Run five checks before calling `s.solve()`: (1) entity population — `s.num_variables > 0`; (2) constraint population — `s.num_constraints > 0` with at least one forcing constraint; (3) objective — exactly one `minimize`/`maximize`; (4) data integrity — no nulls, no negatives in costs/capacities, total capacity >= total demand; (5) formulation structure via `s.display()`.
+Run five checks before calling `p.solve()`: (1) entity population — `p.num_variables() > 0`; (2) constraint population — `p.num_constraints() > 0` with at least one forcing constraint; (3) objective — exactly one `minimize`/`maximize`; (4) data integrity — no nulls, no negatives in costs/capacities, total capacity >= total demand; (5) formulation structure via `p.display()`.
 
 ```python
 # Minimum pre-solve checklist
 p.display()
-assert s.num_variables > 0, "No variables"
-assert s.num_constraints > 0, "No constraints"
-assert s.num_min_objectives + s.num_max_objectives == 1, "Need exactly one objective"
+model.require(p.num_variables() > 0)
+model.require(p.num_constraints() > 0)
+model.require(p.num_min_objectives() + p.num_max_objectives() == 1)
 ```
 
 See [pre-solve-validation.md](references/pre-solve-validation.md) for full checks, diagnostic queries, and data integrity patterns.
@@ -400,21 +399,34 @@ When diagnosing infeasibility or unboundedness, classify root causes using these
 # Solver choice depends on problem type and license — see Decision Rules above
 p.solve(solver_name, time_limit_sec=60)
 
-# Post-solve summary
-p.display_solve_info()
+# Post-solve: engine-side status check + Python-side summary
+model.require(p.termination_status() == "OPTIMAL")
+p.solve_info().display()
 ```
 
-**Termination status:** `s.termination_status` returns `optimal`, `infeasible`, `unbounded`, or `time_limit`. `optimal` means the best feasible solution was found; `infeasible` means no solution satisfies all constraints; `unbounded` means the objective can improve without limit (missing bounds); `time_limit` means a feasible but possibly suboptimal solution was found within the time allowed.
+**Termination status:** `p.termination_status()` (Relationship) returns a MOI `TerminationStatusCode` string. Common values: `"OPTIMAL"`, `"INFEASIBLE"`, `"DUAL_INFEASIBLE"` (unbounded), `"LOCALLY_SOLVED"` (NLP), `"TIME_LIMIT"`, `"SOLUTION_LIMIT"`. Use in `model.require()` for engine-side checks. For Python-side access: `si = p.solve_info()` then `si.termination_status`.
 
-**Debugging failed solves:** After a non-optimal solve, check `s.error` for the solver-level error message — often more informative than the Python exception:
+**Debugging failed solves:** After a non-optimal solve, check `p.error()` (Relationship) or `si.error` (Python tuple) for the solver-level error message:
 
 ```python
 p.solve("highs", time_limit_sec=60)
-if p.termination_status != "optimal":
-    print(s.error)  # Solver-level error details
+si = p.solve_info()
+if si.termination_status != "OPTIMAL":
+    print(si.error)  # Solver-level error details
 ```
 
-**Checking solver version:** Use `s.solver_version` after any solve to see the exact version that ran. Do not hardcode version numbers — they change with solver service updates.
+**Checking solver version:** Use `p.solve_info().solver_version` after any solve to see the exact version that ran. Do not hardcode version numbers — they change with solver service updates.
+
+**Post-solve constraint verification:** `p.verify(*fragments)` temporarily installs constraint ICs, triggers a query to evaluate them, and removes them. Useful for checking that the solver's solution satisfies constraints — particularly for exact solvers (HiGHS MIP, MiniZinc):
+
+```python
+coverage_ic = model.where(...).require(...)
+p.satisfy(coverage_ic)
+p.solve("minizinc", time_limit_sec=60)
+p.verify(coverage_ic)  # Warns if any constraint is violated
+```
+
+`verify()` checks `termination_status` first — warns and returns early for non-successful solves. ICs are cleaned up in a `finally` block even on exceptions.
 
 For verifying what the solver actually sees before solving, see [formulation-display.md](references/formulation-display.md).
 
@@ -441,7 +453,7 @@ p.solve("minizinc", solution_limit=10)          # Multiple solutions
 
 # Debugging: get LP format of the solver model
 p.solve("highs", print_format="lp", print_only=True)
-print(s.printed_model)  # Access the text representation
+print(p.solve_info().printed_model)  # Access the text representation
 ```
 
 ### Solver-specific parameters
@@ -565,9 +577,9 @@ for excluded in [None, "SupplierC", "SupplierB"]:
     p = Problem(model, Float)
     if excluded:
         active = Order.supplier.name != excluded
-        p.solve_for(Order.x_qty, where=[active], populate=False, ...)
+        p.solve_for(Order.x_qty, where=[active], populate=False)
     else:
-        p.solve_for(Order.x_qty, populate=False, ...)
+        p.solve_for(Order.x_qty, populate=False)
     p.maximize(...)
     p.solve("highs", time_limit_sec=60)
     # variable_values().to_df() for per-iteration results
@@ -584,13 +596,14 @@ for excluded in [None, "SupplierC", "SupplierB"]:
 
 | Mistake | Cause | Fix |
 |---------|-------|-----|
-| Constraint has no decision variable | `s.satisfy(model.require(Operation.cost >= 0.01))` is a data assertion | Constraints must reference `solve_for`-registered properties |
-| Cannot remove a constraint | Every `s.satisfy()` call accumulates | Create a new `Problem` for different constraint sets |
+| Constraint has no decision variable | `p.satisfy(model.require(Operation.cost >= 0.01))` is a data assertion | Constraints must reference `solve_for`-registered properties |
+| Cannot remove a constraint | Every `p.satisfy()` call accumulates | Create a new `Problem` for different constraint sets |
 | Binary variable has no effect | Defined but not linked to quantities via big-M or capacity | Add `flow <= capacity * x_open` style linking constraints |
 | Disconnected objective | Objective references variables with no constraints | Solver sets variables to bound values; add meaningful constraints |
 | Wrong aggregation scope | `sum(X).per(Y)` where Y not joined to X | Add explicit relationship join in `.where()` |
 | Big-M too loose → slow solve | Using arbitrary `999999` | Use tightest data-driven bound (`M = capacity`) |
 | Numerical issues | Coefficients differing by >1e6 | Rescale data to similar magnitudes |
+| `p.termination_status == "OPTIMAL"` is always False | Missing parens — `p.termination_status` returns a bound method, not a string | Use `p.termination_status()` (with parens) in `model.require()`, or `p.solve_info().termination_status` for Python-side |
 
 Post-solve diagnosis (trivial all-zero solutions, infeasibility root causes, quality assessment) is covered in the `solution_interpretation` skill.
 
@@ -622,12 +635,6 @@ When entity creation produces ZERO entities (cross-product or filtered concept h
 
 ---
 
-## Migration from v0.13
-
-Key v0.13 to v1 migration changes: `SolverModel(model, "cont")` becomes `Problem(model, Float)`; `Solver("highs", resources=...)` / `s.solve(solver, ...)` becomes `s.solve("highs", ...)` (pass string directly); `s.variable_values().to_df()` still works (returns `name`/`value` columns), and `model.select()` also works for richer queries; `s.print()` becomes `s.display()` with optional `display(part)` for targeted inspection; `mip_rel_gap` becomes first-class `relative_gap_tolerance`; `solution_limit` is now first-class (not solver-specific); import path changes from `reasoners.optimization` to `reasoners.prescriptive`; `raiconfig.yaml` replaces TOML config.
-
----
-
 ## Examples
 
 | Pattern | Description | File |
@@ -639,6 +646,8 @@ Key v0.13 to v1 migration changes: `SolverModel(model, "cont")` becomes `Problem
 
 ## Reference files
 
-- Debugging numerical instability or formulating MIP problems (big-M, indicator constraints)? See [numerical-and-mip.md](references/numerical-and-mip.md) for numerical stability categories and MIP formulation techniques
-- Understanding `s.display()` output or verifying what the solver actually sees? See [formulation-display.md](references/formulation-display.md) for display output structure and how to read it
-- Pre-solve validation details (entity population checks, data integrity queries, copy-paste checklist)? See [pre-solve-validation.md](references/pre-solve-validation.md)
+| Reference | Description | File |
+|-----------|-------------|------|
+| Numerical stability & MIP | Numerical stability categories, big-M, indicator constraints | [numerical-and-mip.md](references/numerical-and-mip.md) |
+| Formulation display | `p.display()` output structure and how to read it | [formulation-display.md](references/formulation-display.md) |
+| Pre-solve validation | Entity population checks, data integrity queries, copy-paste checklist | [pre-solve-validation.md](references/pre-solve-validation.md) |

@@ -1,17 +1,12 @@
 ---
 name: rai-health-skill
-description: >
-  Diagnose the health of a RelationalAI reasoner engine and recommend concrete remediation actions.
-  Use this skill whenever the user asks about reasoner health, engine status, capacity utilization,
-  performance degradation, query timeouts, queuing, or any question starting with "why is my reasoner..."
-  or "what should I do with my engine...". Also trigger for capacity planning decisions, scaling
-  (up or down), interpreting observability metrics from the RAI Native App, setting up observability
-  views, or granting access to observability data. This is a Preview feature.
+description: Guides diagnosis of RAI engine performance issues and recommends remediation. Use when an engine is slow, unresponsive, or needs scaling.
 ---
+<!-- v1-STABLE -->
 
 ## Summary
 
-**What**: A process skill for setting up RAI observability, reading the three core reasoner metrics
+**What:** A process skill for setting up RAI observability, reading the three core reasoner metrics
 (memory, CPU, demand), interpreting utilization patterns, and prescribing the correct remediation action.
 
 **When to use:**
@@ -25,7 +20,7 @@ description: >
 **When NOT to use:**
 - Writing PyRel models or query logic → see `rai-pyrel-coding`
 - Configuring authentication or initial RAI setup → see `rai-configuration`
-- Managing solver optimization problems → see `rai_solver_management`
+- Managing solver optimization problems → see `rai-prescriptive-solver-management`
 
 **Overview (process steps):**
 1. Verify observability is set up (events view registered and healthy)
@@ -222,8 +217,8 @@ Cost scales with: event volume × time range × query complexity.
 
 ## Common Pitfalls
 
-| Issue | Cause | Fix |
-|-------|-------|-----|
+| Mistake | Cause | Fix |
+|---------|-------|-----|
 | No data in metric views | Events view not registered or setup incomplete | Run `CHECK_EVENTS_VIEW_STATUS()`; complete setup if needed |
 | Registration fails: "CHANGE_TRACKING" error | Change tracking not enabled on view or event table | Add `CHANGE_TRACKING = TRUE` to view definition and underlying table |
 | Registration fails: "A view is already registered" | Prior view still bound | Call `UNREGISTER_EVENTS_VIEW()` first, then re-register |
@@ -234,8 +229,9 @@ Cost scales with: event volume × time range × query complexity.
 
 ---
 
-## References
+## Reference files
 
-- Full 5-step observability setup: `references/setup-guide.md`
-- All metric view schemas: `references/metric-schemas.md`
-- Official docs: https://docs.relational.ai/manage/observability/
+| Reference | Description | File |
+|-----------|-------------|------|
+| Setup guide | Full 6-step observability setup | [setup-guide.md](references/setup-guide.md) |
+| Metric schemas | All metric view schemas | [metric-schemas.md](references/metric-schemas.md) |

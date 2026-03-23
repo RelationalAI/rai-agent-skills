@@ -29,7 +29,7 @@ Source: hero-user-journey/src/hero_user_journey/ (supply chain domain, PyRel v1)
  "temporal_column": "fiscal_quarter", "prediction_horizon": "next quarter"}
 ```
 
-### Modeling needs (→ ontology_design)
+### Modeling needs (→ rai-ontology-design)
 - Map `DelayPrediction` table as a concept if not already in the model
 - Establish relationship: `DelayPrediction.supplier` → `Supplier` (via business_id FK)
 - Properties: `predicted_delay_prob` (Float), `risk_tier` (String), `confidence` (Float)

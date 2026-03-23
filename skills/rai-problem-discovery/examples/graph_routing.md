@@ -25,7 +25,7 @@ Source: hero-user-journey/src/hero_user_journey/ (supply chain domain, PyRel v1)
  "output_binding": "(node, centrality_score)"}
 ```
 
-### Modeling needs (→ ontology_design)
+### Modeling needs (→ rai-ontology-design)
 - Graph construction: undirected `SiteDependencyGraph` with Site as nodes, Operation as edges
 - Derived properties: `count_is_source` / `count_is_destination` for edge weights
 - PyRel: `Graph(model, directed=False, weighted=True, node_concept=Site)`
@@ -61,7 +61,7 @@ Source: hero-user-journey/src/hero_user_journey/ (supply chain domain, PyRel v1)
  "output_binding": "(supplier, customer) reachable pairs"}
 ```
 
-### Modeling needs (→ ontology_design)
+### Modeling needs (→ rai-ontology-design)
 - Graph construction: directed `BusinessGraph` with Business as nodes, `ships_to` as edges
 - Derived relationship: `Business.ships_to` from Shipment (supplier_business → customer_business)
 - Target concept: `is_high_value_customer` filter (TYPE='BUYER' AND value_tier='HIGH')
@@ -99,7 +99,7 @@ Source: hero-user-journey/src/hero_user_journey/ (supply chain domain, PyRel v1)
  "output_binding": "(source_supplier, affected_customer) reachable pairs"}
 ```
 
-### Modeling needs (→ ontology_design)
+### Modeling needs (→ rai-ontology-design)
 - Same `BusinessGraph` as upstream reachability — no additional graph construction needed
 - Join path to SKU: `customer.receives_shipment.SKU` for product impact
 - Join path to quantities: `Shipment.quantity` for volume at risk

@@ -2,7 +2,8 @@
 # Key ideas: .alias() renames columns; sum/count with .per() for grouped aggregation;
 # .where() filters rows; .to_df() materializes as pandas DataFrame.
 
-from relationalai.semantics import Float, Integer, Model, String, count, sum
+from relationalai.semantics import Float, Integer, Model, String, distinct
+from relationalai.semantics.std import aggregates as aggs
 
 model = Model("supply_chain")
 
@@ -41,8 +42,8 @@ def shipments_per_site():
     """Count and total quantity of shipments per origin site."""
     return model.select(
         Site.name.alias("site"),
-        count(Shipment).per(Site).alias("shipment_count"),
-        sum(Shipment.quantity).per(Site).alias("total_quantity"),
+        aggs.count(Shipment).per(Site).alias("shipment_count"),
+        aggs.sum(Shipment.quantity).per(Site).alias("total_quantity"),
     ).where(
         Shipment.origin(Site),
     ).to_df()
@@ -52,11 +53,14 @@ def shipments_per_site():
 def supplier_delays_by_region():
     """Average delay per supplier, filtered to a specific region."""
     Dest = Site.ref()
+    # distinct() required: grouping key includes Dest.region (property value, not entity)
     return model.select(
-        Business.name.alias("supplier"),
-        Dest.region.alias("dest_region"),
-        count(Shipment).per(Business, Dest.region).alias("shipment_count"),
-        sum(Shipment.delay_days).per(Business, Dest.region).alias("total_delay"),
+        distinct(
+            Business.name.alias("supplier"),
+            Dest.region.alias("dest_region"),
+            aggs.count(Shipment).per(Business, Dest.region).alias("shipment_count"),
+            aggs.sum(Shipment.delay_days).per(Business, Dest.region).alias("total_delay"),
+        )
     ).where(
         Shipment.supplier(Business),
         Shipment.destination(Dest),
@@ -72,7 +76,7 @@ def site_to_site_flows():
     return model.select(
         Origin.name.alias("origin"),
         Dest.name.alias("destination"),
-        sum(Shipment.quantity).per(Origin, Dest).alias("total_flow"),
+        aggs.sum(Shipment.quantity).per(Origin, Dest).alias("total_flow"),
     ).where(
         Shipment.origin(Origin),
         Shipment.destination(Dest),

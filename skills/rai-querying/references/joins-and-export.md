@@ -27,7 +27,7 @@ model.where(
 )
 
 # Self-join via .ref()
-Alt := Edge.ref()
+Alt = Edge.ref()
 model.where(Edge.source == Alt.source, Alt.cost < Edge.cost).select(
     Edge.id.alias("edge"), (Edge.cost - Alt.cost).alias("savings")
 )
@@ -149,7 +149,7 @@ Export query results to external tables using `Model.Table()` + `.into()` + `.ex
 ### Table Reference
 
 `Model.Table(name, schema={})` creates a lightweight handle for an external table (e.g., a Snowflake table or view). Two uses:
-1. **As row source** — load data into concepts via `Table.to_schema()` (see `ontology_design/SKILL.md`)
+1. **As row source** — load data into concepts via `Table.to_schema()` (see `rai-ontology-design`)
 2. **As export target** — write query results via `Fragment.into(table).exec()`
 
 ```python

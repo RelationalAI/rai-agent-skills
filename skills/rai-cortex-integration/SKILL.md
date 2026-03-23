@@ -1,10 +1,10 @@
 ---
 name: rai-cortex-integration
-description: Covers deploying RelationalAI models as Snowflake Cortex Agents which can be used for Snowflake Intelligence.
+description: Covers deploying RAI models as Snowflake Cortex Agents for Snowflake Intelligence. Use when deploying a model as a Cortex Agent or configuring Snowflake Intelligence.
 ---
 
 # Snowflake Intelligence Integration
-<!-- PREVIEW -->
+<!-- v1-STABLE -->
 
 ## Summary
 
@@ -21,7 +21,7 @@ description: Covers deploying RelationalAI models as Snowflake Cortex Agents whi
 **When NOT to use:**
 - Defining model logic (concepts, properties, relationships) — see `rai-pyrel-coding/SKILL.md`
 - Designing ontologies or data models — see `rai-ontology-design/SKILL.md`
-- Writing queries for local use (not deployment) — see `rai-querying/SKILL.md`
+- Writing queries for local use (not deployment) — see `rai-querying`
 
 **Primary output:** A deployment script with CLI subcommands (`deploy`, `update`, `status`, `chat`, `teardown`) that manages the full agent lifecycle. See [examples/deploy.py](examples/deploy.py) for the reference implementation.
 

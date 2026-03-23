@@ -1,14 +1,53 @@
 ---
 name: rai-onboarding
-description: Starting point for RelationalAI(RAI) knowledge graphs, semantic models, advanced reasoners (logic, graph, prescriptive), and decision intelligence running natively in Snowflake. Use this RAI skill first
+description: Guides first-time RelationalAI (RAI) setup end-to-end — install, connect to Snowflake, validate, and run a starter program. Use when starting a new RAI project or environment.
 ---
 
 # RelationalAI
+<!-- v1-STABLE -->
 Build AI that is aligned to your business, grounded in your semantic model, and powered by the advanced reasoners of the RelationalAI decision intelligence platform. Learn more at [relational.ai](https://relational.ai)
 
 This skill refers to the [relationalai Python package](https://pypi.org/project/relationalai) aka PyRel. Ensure the package is installed in your environment.
 
 This allows you to write PyRel programs and use the `rai` CLI tool.
+
+## Summary
+
+**What:** Guides first-time setup of the RelationalAI platform — installing the Python package, connecting to Snowflake, validating the environment, and running a starter program.
+
+**When to use:**
+- User is setting up RelationalAI for the first time
+- User needs help installing the `relationalai` Python package or configuring the Snowflake connection
+- User asks "how do I get started with RAI?" or "how do I connect to my Snowflake account?"
+- User wants to run their first PyRel program
+
+**When NOT to use:**
+- Writing PyRel models or queries — see `rai-pyrel-coding`
+- Designing ontology structure — see `rai-ontology-design`
+- Configuring engines, profiles, or advanced settings — see `rai-configuration`
+- Discovering analytical use cases for an existing model — see `rai-problem-discovery`
+
+---
+
+## Quick Reference
+
+| Step | Action | Key Command |
+|------|--------|-------------|
+| 1 | Install package | `pip install relationalai` or `uv add relationalai` |
+| 2 | Establish connection | Use existing Snowflake/DBT config or `rai init` |
+| 3 | Validate connection | `rai connect` (check MFA) |
+| 4 | Create sample program | Use inline data or user's domain |
+| 5 | Propose next steps | Adapt to real data, enhance sample, or use [project templates](https://docs.relational.ai/build/templates) |
+
+---
+
+## Prerequisites
+
+The RelationalAI Native App for Snowflake must be installed in your account by an administrator.
+- Request access [here](https://app.snowflake.com/marketplace/listing/GZTYZOOIX8H/relationalai-relationalai). 
+- See the [RAI Native App docs](https://docs.relational.ai/manage/install) for details.
+
+The `rai_developer` role is needed to execute PyRel programs.
 
 ## Contact
 - support@relational.ai
@@ -56,7 +95,15 @@ Propose either
 2) enhance the sample with more sophisticated segmentation semantics, or to support different types of analysis.
 3) share the [project templates](https://docs.relational.ai/build/templates) link and invite the user to choose one.
 
+## Common Pitfalls
+
+| Mistake                                           | Cause                                                                    | Fix                                                                 |
+|---------------------------------------------------|--------------------------------------------------------------------------|---------------------------------------------------------------------|
+| Errors about RelationalAI Native App not existing | Either the NA hasn't been installed, or the user is using the wrong role | ensure the current role has usage or rai_developer role |
+
+---
+
 ## Important Skills
-- `pyrel-coding`: Write PyRel (use always)
-- `ontology-design`: Design PyRel models (use for modeling complicated domains & use cases)
-- `problem-discovery`: Design PyRel solutions (use for building full-scale intelligent apps)
+- `rai-pyrel-coding`: Write PyRel (use always)
+- `rai-ontology-design`: Design PyRel models (use for modeling complicated domains & use cases)
+- `rai-problem-discovery`: Design PyRel solutions (use for building full-scale intelligent apps)

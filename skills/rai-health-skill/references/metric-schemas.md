@@ -118,19 +118,5 @@ WHERE REASONER_NAME = 'my_reasoner'
 ```
 
 ### Combined All-Metrics Join
-```sql
-SELECT
-  m.REASONER_NAME,
-  m.TIMESTAMP,
-  m.MEMORY_UTILIZATION,
-  c.CPU_UTILIZATION,
-  d.DEMAND,
-  d.REASONER_CAPACITY
-FROM relationalai.observability_preview.logic_reasoner__memory_utilization m
-JOIN relationalai.observability_preview.logic_reasoner__cpu_utilization c
-  ON m.REASONER_ID = c.REASONER_ID AND m.TIMESTAMP = c.TIMESTAMP
-JOIN relationalai.observability_preview.logic_reasoner__demand d
-  ON m.REASONER_ID = d.REASONER_ID AND m.TIMESTAMP = d.TIMESTAMP
-WHERE m.TIMESTAMP >= DATEADD(hour, -1, CURRENT_TIMESTAMP())
-ORDER BY m.TIMESTAMP DESC;
-```
+
+See the Quick Reference section in [SKILL.md](../SKILL.md#quick-reference) for the combined three-metric join query.

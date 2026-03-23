@@ -1,9 +1,6 @@
 ---
 name: rai-problem-discovery
-description: Discovers problems and questions an ontology model can answer. Classifies
-  by reasoner type (prescriptive, graph, predictive, rules). Assesses data feasibility.
-  Supports multi-reasoner chaining. Use when suggesting problems, analyzing a user's
-  problem statement, or determining which reasoner workflow to follow.
+description: Guides exploration of what problems an RAI ontology can solve, classifies each by reasoner type, and assesses data readiness. Use before choosing a reasoner workflow or when scoping what to build next.
 ---
 
 # Problem Discovery
@@ -21,11 +18,11 @@ description: Discovers problems and questions an ontology model can answer. Clas
 - Assessing data feasibility before committing to a workflow
 
 **When NOT to use:**
-- Formulating optimization variables, constraints, objectives — see `rai-prescriptive-problem-formulation/SKILL.md`
-- PyRel syntax and coding patterns — see `pyrel_coding/SKILL.md`
-- Ontology modeling or enrichment — see `ontology_design/SKILL.md`
-- Solver execution and diagnostics — see `rai-prescriptive-solver-management/SKILL.md`
-- Post-solve interpretation — see `rai-prescriptive-results-interpretation/SKILL.md`
+- Formulating optimization variables, constraints, objectives — see `rai-prescriptive-problem-formulation`
+- PyRel syntax and coding patterns — see `rai-pyrel-coding`
+- Ontology modeling or enrichment — see `rai-ontology-design`
+- Solver execution and diagnostics — see `rai-prescriptive-solver-management`
+- Post-solve interpretation — see `rai-prescriptive-results-interpretation`
 
 **Overview:**
 1. Analyze the ontology to identify what the data can support
@@ -34,6 +31,23 @@ description: Discovers problems and questions an ontology model can answer. Clas
 4. Assess feasibility (READY / MODEL_GAP / DATA_GAP)
 5. Present ranked suggestions to the user
 6. Route the selected problem to the appropriate reasoner workflow
+
+---
+
+## Quick Reference
+
+| Signal in Ontology | Reasoner | Question Pattern |
+|--------------------|----------|-----------------|
+| Constrained resources, costs, capacities | **Prescriptive** | "What should we do?" — allocate, schedule, route |
+| Network topology, graph structure | **Graph** | "What patterns exist?" — centrality, clusters, paths |
+| Temporal data, features, historical outcomes | **Predictive** | "What will happen?" — forecast, classify |
+| Threshold/status fields, business rules | **Rules** | "Is this valid?" — compliance, classification |
+
+| Feasibility | Meaning | Next Step |
+|-------------|---------|-----------|
+| **READY** | All data in model | Proceed to reasoner workflow |
+| **MODEL_GAP** | Data in schema, not mapped | Enrich ontology first |
+| **DATA_GAP** | Data doesn't exist | Blocks the problem |
 
 ---
 
@@ -53,7 +67,11 @@ Problem discovery is the analyst's springboard into data-driven reasoning. The o
 ### Your role
 
 - Analyze the ontology to surface opportunities grounded in actual data
-- Write the `statement` field as a business question the analyst can evaluate ("Allocate inventory across warehouses to minimize stockouts"), not a technical formulation
+- Write the `statement` field as a business question the analyst can evaluate -- not a technical formulation
+  - GOOD: "Allocate inventory across warehouses to minimize stockouts while staying within budget"
+  - GOOD: "Schedule technicians to maintenance tasks to minimize downtime and balance workload"
+  - BAD: "Minimize sum(OPERATION.COST_PER_UNIT * OPERATION.X_FLOW) subject to SITE.CAPACITY"
+  - BAD: "Optimize Shipment.quantity across Operation edges"
 - Maintain full technical specificity in `implementation_hint` fields -- these drive downstream workflow and must reference actual concept/property names
 - For each suggestion, distinguish what's ready to pursue, what needs model enrichment (auto-fixable), and what needs new data (blocks the problem)
 - Suggest problems across reasoner types when the data supports it -- don't default to only one type
@@ -160,7 +178,7 @@ Each layer makes the next more powerful. Discovery should convey this progressio
 Shared across all reasoners. Classify each suggestion's data readiness:
 
 - **READY**: All required data is in the model. Can proceed directly to the reasoner workflow.
-- **MODEL_GAP**: Data exists in the schema (tables/columns) but isn't mapped to the model. Auto-fixable via `enrich_ontology`. Each gap MUST reference a specific `source_table` and `source_column`.
+- **MODEL_GAP**: Data exists in the schema (tables/columns) but isn't mapped to the model. Auto-fixable via `enrich_ontology`. Each gap should reference a specific `source_table` and `source_column` — without these, the enrichment tool cannot generate the correct `define()` rule.
 - **DATA_GAP**: Required data doesn't exist in any table. Blocks the problem. Include only if the domain has very limited potential -- flag what data would be needed.
 
 **Order suggestions by feasibility:** READY first, then MODEL_GAP. Prefer suggestions that can proceed without manual data collection.
@@ -305,98 +323,89 @@ After the user selects a problem, route to the appropriate reasoner workflow bas
 
 ### Suggestion output schema
 
-<!-- TODO: When graph/predictive reasoners go live, add `reasoners` field to the
-     suggestion JSON returned by `llm_suggest_problem_statements`.
+Each suggestion includes a `reasoners` field — an ordered list specifying the execution sequence. Single-reasoner problems have one entry; chained problems list stages in order.
 
-     Current schema (prescriptive-only):
-       { statement, problem_type, feasibility, implementation_hint: {
-           decision_scope, forcing_requirement, objective_property }, ... }
+```json
+{
+  "statement": "Identify which warehouses are critical connectors in the supply network",
+  "reasoners": ["graph"],
+  "feasibility": "READY",
+  "implementation_hint": {
+    "algorithm": "eigenvector_centrality",
+    "graph_construction": {
+      "node_concept": "Site",
+      "directed": false,
+      "weighted": true,
+      "edge_definition": "Operation linking source_site to output_site"
+    },
+    "output_binding": "(node, centrality_score)"
+  }
+}
+```
 
-     Target schema (multi-reasoner):
-       { statement, reasoners: ["graph", "prescriptive"],
-         feasibility, implementation_hint: { ... per-reasoner fields ... }, ... }
+**Implementation hint fields vary by reasoner:**
 
-     The `reasoners` field is an ordered list — execution sequence for chains.
-     Single-reasoner problems have one entry; chained problems list stages in order.
+| Reasoner | Fields |
+|----------|--------|
+| **prescriptive** | `decision_scope`, `forcing_requirement`, `objective_property`, `decision_variable`, `scenario_parameter` |
+| **graph** | `algorithm`, `graph_construction` (`node_concept`, `directed`, `weighted`, `edge_definition`), `target_filter`, `output_binding` |
+| **rules** | `rule_type`, `source_concept`, `condition_properties`, `join_path`, `threshold`, `output_type`, `output_property`, `downstream_use` |
+| **predictive** | `type`, `mode` (`pre_computed` or `rai_predictive`), `target_concept`, `target_property`, `feature_properties`, `output_concept`, `pre_computed_table` |
 
-     Implementation hint fields vary by reasoner:
-       prescriptive: decision_scope, forcing_requirement, objective_property,
-                     decision_variable, scenario_parameter
-       graph:        algorithm, graph_construction (node_concept, directed, weighted,
-                     edge_definition), target_filter, output_binding
-       predictive:   type, mode (pre_computed|rai_predictive), target_concept,
-                     target_property, feature_properties, output_concept,
-                     pre_computed_table
-       rules:        rule_type, source_concept, condition_properties, threshold,
-                     output_property
+**For chained problems**, use a `stages` array in `implementation_hint`:
 
-     For chained problems, use a `stages` array:
-       implementation_hint: { stages: [
-         { reasoner: "graph", algorithm: "eigenvector_centrality", ... },
-         { reasoner: "prescriptive", decision_scope: "...", ... }
-       ]}
-
-     Changes needed:
-       1. llm_assistant.py — update RESPONSE FORMAT in llm_suggest_problem_statements
-          prompt to include `reasoners` field and per-reasoner hint schemas
-       2. mcp_server.py — update tool_suggest_problem_statements output formatting
-          to display reasoner type (not just problem_type)
-       3. app.py — update suggestion display to show reasoner badge and note
-          which reasoners are actionable vs planned
--->
+```json
+{
+  "statement": "Identify critical supply nodes, then optimize allocation weighted by importance",
+  "reasoners": ["graph", "prescriptive"],
+  "feasibility": "READY",
+  "implementation_hint": {
+    "stages": [
+      {
+        "reasoner": "graph",
+        "algorithm": "eigenvector_centrality",
+        "graph_construction": { "node_concept": "Site", "directed": false, "weighted": true },
+        "output_binding": "Site.centrality_score"
+      },
+      {
+        "reasoner": "prescriptive",
+        "decision_scope": "Site.allocation_quantity",
+        "objective_property": "maximize weighted_allocation (centrality_score * quantity)"
+      }
+    ]
+  }
+}
+```
 
 ### Reasoner workflows
 
 | Reasoner | Workflow | Status |
 |----------|----------|--------|
 | **prescriptive** | `suggest_variables` -> `suggest_constraints` -> `suggest_objective` -> `validate_formulation` -> `solve_problem` | LIVE |
-| **graph** | `configure_graph` -> `run_algorithm` -> `interpret_results` | PLANNED |
+| **graph** | `suggest_graph_analysis` -> `configure_graph` -> `run_graph_algorithm` -> results | LIVE |
+| **rules** | `suggest_rules` -> `define_rules` -> `evaluate_rules` -> results | LIVE |
 | **predictive** | `define_features` -> `configure_model` -> `train` -> `evaluate` | PLANNED |
-| **rules** | `define_rules` -> `validate_rules` -> `apply` -> `review_results` | PLANNED |
 
 ### add_to_formulation routing
 
-<!-- TODO: When graph/predictive reasoners go live, update `add_to_formulation`
-     (mcp_server.py) to inspect the `reasoners` field and route accordingly.
+`add_to_formulation` inspects the selected problem's `reasoners` field and routes to the appropriate workflow:
 
-     Current behavior:
-       add_to_formulation(problem_index=N) always routes to prescriptive workflow
-       (suggest_variables -> suggest_constraints -> suggest_objective)
+**Single-reasoner routing:**
+- `["prescriptive"]` → `suggest_variables` -> `suggest_constraints` -> `suggest_objective` -> `validate_formulation` -> `solve_problem`
+- `["graph"]` → `suggest_graph_analysis` -> `configure_graph` -> `run_graph_algorithm` -> results
+- `["rules"]` → `suggest_rules` -> `define_rules` -> `evaluate_rules` -> results
 
-     Target behavior:
-       add_to_formulation inspects selected problem's `reasoners` field:
+**Chained routing** (execute stages sequentially):
+- `["graph", "prescriptive"]` →
+  - Stage 1: `configure_graph` -> `run_graph_algorithm` -> results
+  - Bridge: `enrich_ontology` (add graph outputs as model properties)
+  - Stage 2: `suggest_variables` -> ... -> `solve_problem`
+- `["rules", "prescriptive"]` →
+  - Stage 1: `define_rules` -> `evaluate_rules` -> results
+  - Bridge: rule outputs become constraint filters for optimization
+  - Stage 2: `suggest_variables` -> ... -> `solve_problem`
 
-       Single-reasoner routing:
-         ["prescriptive"] -> suggest_variables -> suggest_constraints ->
-                             suggest_objective -> validate -> solve
-         ["graph"]        -> configure_graph -> run_algorithm -> interpret_results
-         ["predictive"]   -> define_features -> configure_model -> train -> evaluate
-         ["rules"]        -> define_rules -> validate_rules -> apply -> review
-
-       Chained routing (execute stages sequentially):
-         ["graph", "prescriptive"] ->
-           Stage 1: configure_graph -> run_algorithm -> interpret_results
-           Bridge:  enrich_ontology (add graph output as model properties)
-           Stage 2: suggest_variables -> ... -> solve_problem
-
-         ["predictive", "prescriptive"] ->
-           Stage 1: query/generate predictions
-           Bridge:  enrich_ontology (add prediction output as model properties)
-           Stage 2: suggest_variables -> ... -> solve_problem
-
-       Each stage should be independently valuable — if Stage 2 fails,
-       Stage 1 results are still useful.
-
-     Changes needed:
-       1. mcp_server.py — add_to_formulation reads `reasoners` from selected
-          problem, returns next-step guidance per reasoner type
-       2. FormulationState (utils/mcp_session.py) — track active_reasoner and
-          chain_stage for multi-stage problems
-       3. MCP tool descriptions — update workflow instructions docstring to
-          include graph/predictive paths
-       4. Streamlit app.py — update post-selection flow to show reasoner-appropriate
-          next steps (not always "suggest_variables")
--->
+Each stage is independently valuable — if Stage 2 fails, Stage 1 results are still useful.
 
 For chained problems, complete each stage in order. After Stage N completes, enrich the model with its output if needed, then proceed to Stage N+1.
 
@@ -404,24 +413,34 @@ For chained problems, complete each stage in order. After Stage N completes, enr
 
 ## Common Pitfalls
 
-| Pitfall | Fix |
-|---------|-----|
-| Suggesting problems with no data backing | Use READY/MODEL_GAP/DATA_GAP classification; verify data exists before suggesting |
-| All suggestions are the same reasoner type | Check ontology for graph structure, temporal features, rule patterns -- not just optimization |
-| Chained problem with unclear handoff | Each stage must define inputs and outputs explicitly |
-| Missing forcing requirement (prescriptive) | See `prescriptive.md` for forcing constraint and implementation hint guidance |
-| All suggestions cluster in one domain | Spread across distinct business domains present in concept names |
-| Confusing model gaps with reasoner-layer constructs | Decision variables, predictions, graph metrics have no source table -- they're not model gaps |
-| Suggesting DATA_GAP problems as top choices | Order by feasibility: READY first, MODEL_GAP second, DATA_GAP only if domain is very narrow |
+| Mistake | Cause | Fix |
+|---------|-------|-----|
+| Suggesting problems with no data backing | Skipping feasibility check before proposing | Use READY/MODEL_GAP/DATA_GAP classification; verify data exists before suggesting |
+| All suggestions are the same reasoner type | Only considering optimization use cases | Check ontology for graph structure, temporal features, rule patterns -- not just optimization |
+| Chained problem with unclear handoff | Missing interface specification between stages | Each stage must define inputs and outputs explicitly |
+| Missing forcing requirement (prescriptive) | Overlooking mandatory constraint in prescriptive problems | See `prescriptive.md` for forcing constraint and implementation hint guidance |
+| All suggestions cluster in one domain | Not surveying the full concept space | Spread across distinct business domains present in concept names |
+| Confusing model gaps with reasoner-layer constructs | Treating computed outputs as missing data | Decision variables, predictions, graph metrics have no source table -- they're not model gaps |
+| Suggesting DATA_GAP problems as top choices | Prioritizing novelty over feasibility | Order by feasibility: READY first, MODEL_GAP second, DATA_GAP only if domain is very narrow |
 
 ---
 
 ## Reference files
 
-Each reasoner type has a dedicated reference with problem types, implementation hints, and feasibility criteria:
+| Reference | Description | File |
+|-----------|-------------|------|
+| Prescriptive | Optimization problems — minimize cost, maximize coverage, scheduling | [prescriptive.md](references/prescriptive.md) |
+| Graph | Graph analytics — centrality, community detection, shortest path | [graph.md](references/graph.md) |
+| Predictive | Predictive modeling — forecasting, classification, anomaly detection | [predictive.md](references/predictive.md) |
+| Rules | Business rules — compliance, validation, classification from known facts | [rules.md](references/rules.md) |
 
-- Optimization problems (minimize cost, maximize coverage, scheduling)? See [prescriptive.md](references/prescriptive.md)
-- Graph analytics (centrality, community detection, shortest path)? See [graph.md](references/graph.md)
-- Predictive modeling (forecasting, classification, anomaly detection)? See [predictive.md](references/predictive.md)
-- Business rules (compliance, validation, classification from known facts)? See [rules.md](references/rules.md)
-- For discovery scenario walkthroughs, see [examples/](examples/)
+---
+
+## Examples
+
+| Pattern | Description | File |
+|---------|-------------|------|
+| Prescriptive routing | Discovery scenario walkthrough for optimization problems | [prescriptive_routing.md](examples/prescriptive_routing.md) |
+| Graph routing | Discovery scenario walkthrough for graph analytics | [graph_routing.md](examples/graph_routing.md) |
+| Predictive routing | Discovery scenario walkthrough for predictive modeling | [predictive_routing.md](examples/predictive_routing.md) |
+| Chained routing | Discovery scenario walkthrough for multi-reasoner pipelines | [chained_routing.md](examples/chained_routing.md) |
