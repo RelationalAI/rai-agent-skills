@@ -456,6 +456,7 @@ Shipment.x_flow = model.Property(f'{Shipment} has {{x_flow:float}}')  # Number(3
 | Mistake | Cause | Fix |
 |---------|-------|-----|
 | Using `with model.rule():` context manager | Not supported; no context managers | Use direct calls: `model.define(...)`, `model.require(...)` |
+| `model.define()` or `model.require()` in a Python loop | Creates separate rules per iteration instead of one declarative rule. PyRel detects this (same call site threshold >50) and warns. | Use declarative patterns: `model.data(df)` + `.to_schema()` for data, vectorized `.where().define()` for constraints. See examples below. |
 | Division by zero in expressions | Not caught at definition time | Guard with `.where(Entity.input > 0)` |
 | `UninitializedPropertyException` on property chain | Property chain through cross-product concept (e.g., `ProductStoreWeek.week.week_num`) | Store values directly as properties on the cross-product concept |
 | "Uninitialized properties" on `where().define()` | Declarative filtering by relationship equality on cross-products | Use loop pattern for relationship-based filtering; use declarative for primitive equality |
@@ -475,6 +476,28 @@ Shipment.x_flow = model.Property(f'{Shipment} has {{x_flow:float}}')  # Number(3
 | Incorrect datetimes for inline data | Causes query errors or empty result sets | use eg `df["date"] = pd.to_datetime(df["date"]).dt.date` |
 | Entity-valued Property for concept-to-concept FK | Some model files use `model.Property(f"{Order} placed by {Customer:customer}")` for FKs | Recommended when the FK is many-to-one (each Order has exactly one Customer) — provides performance benefits and enforces the functional constraint. Use `model.Relationship()` only if the association is truly many-to-many or cardinality is uncertain |
 | Dynamic model loading loses module-level concepts | Using `importlib.util` to load a model file — concepts defined as module variables aren't on the model object | After loading, iterate module attributes and `setattr(model, name, obj)` for each `rai.Concept` instance |
+
+### Avoid Python loops around `model.define()` / `model.require()`
+
+PyRel is declarative — one `define()` call handles all matching entities. Python loops that call `define()` per row create separate rules per iteration, which is slow and triggers a PyRel warning (threshold: 50 calls from the same call site).
+
+```python
+# BAD: Python loop creates N separate rules
+for _, row in df.iterrows():
+    model.define(Product.new(name=row["name"], cost=row["cost"]))
+
+# GOOD: One declarative call handles all rows
+product_data = model.data(df)
+model.define(Product.new(product_data.to_schema()))
+
+# BAD: Loop to add constraints per entity
+for limit in capacity_limits:
+    model.where(Site.id == limit["id"]).define(Site.max_capacity(limit["cap"]))
+
+# GOOD: Load limits as data, join declaratively
+limits = model.data(capacity_limits_df)
+model.define(Site.filter_by(id=limits.id).max_capacity(limits.cap))
+```
 
 For detailed `.where()` targets, `.per()` scoping, and operator precedence rules, see [expression-rules.md](references/expression-rules.md).
 

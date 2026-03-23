@@ -506,6 +506,7 @@ model.define(Customer.total_spend(total))
 | Rule silently skips entities | Condition property is missing for those entities | Check for missing data with `model.not_(property)`; add presence flag |
 | Aggregation-based rule gives wrong counts | Missing `.per()` or wrong `.where()` scope | Validate contributing rows with `model.select()` before defining the rule |
 | Classification + aggregation: `FDError` | Overlapping ranges when aggregate values land on boundary | Use strict `<` on one boundary, `>=` on the other |
+| `define()` in a Python loop | Defining rules per entity in a for loop instead of declaratively | Use `model.data()` + `.where().define()`. See `rai-pyrel-coding` Common Pitfalls for before/after examples |
 
 For general PyRel pitfalls (type mismatches, aggregation scoping, join expansion, missing data,
 f-string syntax, `rai` function availability, subtype limitations, boolean negation), see
