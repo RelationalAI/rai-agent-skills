@@ -1,11 +1,13 @@
 # Pattern: Reachability analysis on a directed supply chain graph.
-# Key ideas: edge_concept for directed unweighted graph; three reachability modes:
+# Key ideas: edge_concept for directed unweighted graph; four reachability modes:
 #   1. reachable(full=True) — all-pairs reachability
 #   2. reachable(to=target) — upstream: who can reach the target?
 #   3. reachable(from_=target) — downstream: who does the target reach?
+#   4. reachable + ontology join — downstream reach enriched with non-graph relationships
 # Target filtering via model.Relationship + define (hero-journey Q5/Q6 pattern).
 
 from relationalai.semantics import Integer, Model, String, where, define, data, distinct
+from relationalai.semantics.std import aggregates as aggs
 from relationalai.semantics.reasoners.graph import Graph
 
 model = Model("reachability_supply_chain")
@@ -15,6 +17,12 @@ model = Model("reachability_supply_chain")
 Facility = model.Concept("Facility", identify_by={"id": Integer})
 Facility.name = model.Property(f"{Facility} has name {String:name}")
 Facility.facility_type = model.Property(f"{Facility} has type {String:facility_type}")
+
+# Product concept — for enriching graph results with non-graph relationships
+Product = model.Concept("Product", identify_by={"id": Integer})
+Product.name = model.Property(f"{Product} has name {String:name}")
+Product.quantity = model.Property(f"{Product} has quantity {Integer:quantity}")
+Product.facility = model.Relationship(f"{Product} produced at {Facility}")
 
 # SupplyLink as edge concept (proven pattern from official templates)
 SupplyLink = model.Concept(
@@ -37,6 +45,21 @@ facility_data = data([
     {"id": 9, "name": "West Coast DC", "facility_type": "distributor"},
 ])
 define(Facility.new(facility_data.to_schema()))
+
+product_data = data([
+    {"id": 1, "name": "Engine Block", "quantity": 500, "facility_id": 5},
+    {"id": 2, "name": "Steel Frame",  "quantity": 300, "facility_id": 6},
+    {"id": 3, "name": "Vehicle",      "quantity": 200, "facility_id": 7},
+    {"id": 4, "name": "Bumper Kit",   "quantity": 150, "facility_id": 6},
+])
+define(
+    Product.new(
+        id=product_data.id,
+        name=product_data.name,
+        quantity=product_data.quantity,
+        facility=Facility.filter_by(id=product_data.facility_id),
+    )
+)
 
 link_data = data([
     {"src_id": 1, "dst_id": 3},  # Iron Mine -> Steel Mill
@@ -152,3 +175,37 @@ if len(non_self) > 0:
     )
     print("\nDownstream Reach per Facility")
     print(reach_counts.to_string(index=False))
+
+# --- Mode 4: Graph results joined with non-graph ontology relationships ---
+# "If Steel Mill goes offline, which products (and how many units) are at risk?"
+# Combines downstream reachability with Product data in a single query.
+# Key pattern: where() clause mixes graph result (reachable_from) with ontology
+# relationship (Product.facility) to enrich graph output with domain context.
+
+downstream = graph.Node.ref()
+impact_df = (
+    where(
+        reachable_from(target_mill, downstream),
+        Product.facility(downstream),          # join: reachable facility has products
+    )
+    .select(distinct(
+        downstream.name.alias("facility"),
+        downstream.facility_type.alias("type"),
+        Product.name.alias("product_at_risk"),
+        aggs.sum(Product.quantity).per(downstream, Product).alias("units_at_risk"),
+    ))
+    .to_df()
+)
+# Exclude the target itself
+impact_df = impact_df[impact_df["facility"] != "Steel Mill"]
+
+print(f"\nProduct impact if Steel Mill goes offline:")
+if impact_df.empty:
+    print("  No product impact found.")
+else:
+    for facility in sorted(impact_df["facility"].unique()):
+        fac_df = impact_df[impact_df["facility"] == facility]
+        fac_type = fac_df["type"].iloc[0]
+        print(f"\n  {facility} ({fac_type}):")
+        for _, row in fac_df.iterrows():
+            print(f"    - {row['product_at_risk']}: {int(row['units_at_risk']):,} units at risk")

@@ -2,9 +2,10 @@
 # Key ideas: weakly_connected_component() for cluster identification;
 # extends=[] to define Bridge as a derived subconcept of Site;
 # cross-region relationship detection via where() conditions;
+# cross-region connection analysis (which regions each bridge links to);
 # betweenness_centrality() for structural bottleneck ranking.
 
-from relationalai.semantics import Float, Integer, Model, String, select, distinct
+from relationalai.semantics import Float, Integer, Model, String, select, distinct, where
 from relationalai.semantics.reasoners.graph import Graph
 
 model = Model("bridge_detection")
@@ -83,9 +84,8 @@ model.where(
 )
 
 # --- Step 1: WCC to identify connected components ---
-
-from relationalai.semantics import where
-from relationalai.semantics.std import aggregates as aggs
+# Uses relation-based query pattern with inline per-component aggregation
+# to get membership and component sizes in a single query.
 
 graph.Node.component_id = graph.weakly_connected_component()
 
@@ -93,6 +93,7 @@ component_df = (
     model.select(
         graph.Node.id.alias("site_id"),
         graph.Node.name.alias("name"),
+        graph.Node.region.alias("region"),
         graph.Node.component_id.alias("component"),
     )
     .to_df()
@@ -106,9 +107,9 @@ print(f"\nNumber of components: {num_components}")
 if num_components == 1:
     print("Network is fully connected (single component)")
 
-# --- Step 2: Bridge concept query ---
+# --- Step 2: Bridge concept query with connected regions ---
+# Query bridges — Bridge extends Site, so all Site properties are available.
 
-# Query bridges — Bridge extends Site, so all Site properties are available
 bridge_df = (
     select(distinct(
         Bridge.id.alias("bridge_site_id"),
@@ -118,10 +119,31 @@ bridge_df = (
     .to_df()
 )
 
+# Derive which regions each bridge connects to by joining bridge list with link data.
+import pandas as pd
+link_df = (
+    select(Link.id.alias("link_id"),
+           Link.site_a.id.alias("a_id"), Link.site_a.region.alias("a_region"),
+           Link.site_b.id.alias("b_id"), Link.site_b.region.alias("b_region"))
+    .to_df()
+)
+bridge_ids = set(bridge_df["bridge_site_id"])
+connects_rows = []
+for _, lk in link_df.iterrows():
+    if lk["a_region"] != lk["b_region"]:
+        if lk["a_id"] in bridge_ids:
+            connects_rows.append({"bridge_site_id": lk["a_id"], "connects_to": lk["b_region"]})
+        if lk["b_id"] in bridge_ids:
+            connects_rows.append({"bridge_site_id": lk["b_id"], "connects_to": lk["a_region"]})
+connects_df = pd.DataFrame(connects_rows).drop_duplicates() if connects_rows else pd.DataFrame(columns=["bridge_site_id", "connects_to"])
+
 print("\nBridge Sites (cross-region connectors)")
 if len(bridge_df) > 0:
-    for _, row in bridge_df.iterrows():
-        print(f"  {row['bridge_site_name']} (id={row['bridge_site_id']}, region={row['bridge_region']})")
+    for _, row in bridge_df.sort_values("bridge_site_id").iterrows():
+        bid = row["bridge_site_id"]
+        regions = connects_df[connects_df["bridge_site_id"] == bid]["connects_to"]
+        connects = ", ".join(sorted(regions.unique())) if len(regions) > 0 else "none"
+        print(f"  {row['bridge_site_name']} (id={bid}, region={row['bridge_region']}) -> connects to: {connects}")
 else:
     print("  No bridge sites found")
 

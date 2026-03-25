@@ -5,6 +5,7 @@
 - [Creating Concept Entities from Graph Outputs](#creating-concept-entities-from-graph-outputs)
 - [Type Handling](#type-handling)
 - [Filtering and Aggregating Results](#filtering-and-aggregating-results)
+- [Combining Graph Results with Ontology Joins](#combining-graph-results-with-ontology-joins)
 - [Result Validation](#result-validation)
 <!-- /TOC -->
 
@@ -284,6 +285,49 @@ reach_counts = (
     .to_df()
 )
 ```
+
+### Combining graph results with ontology joins
+
+Graph algorithm results can be joined with non-graph ontology relationships in a single `where()` clause. This is the key pattern for enriching graph output with domain context — e.g., "which facilities are reachable AND what products do they produce?"
+
+```python
+# Downstream reachability enriched with Product data in one query
+downstream = graph.Node.ref()
+impact_df = (
+    where(
+        reachable_from(target, downstream),       # graph result
+        Product.facility(downstream),              # ontology join: facility has products
+    )
+    .select(distinct(
+        downstream.name.alias("facility"),
+        Product.name.alias("product_at_risk"),
+        aggregates.sum(Product.quantity).per(downstream, Product).alias("units_at_risk"),
+    ))
+    .to_df()
+)
+```
+
+The pattern works with any algorithm output. For centrality:
+
+```python
+# Top-central nodes enriched with their department info
+node, score = graph.Node.ref("n"), Float.ref("s")
+df = (
+    where(
+        graph.eigenvector_centrality()(node, score),
+        node.department,                           # ontology join
+        score > 0.5,                               # threshold filter
+    )
+    .select(
+        node.name.alias("name"),
+        node.department.name.alias("dept"),
+        score.alias("centrality"),
+    )
+    .to_df()
+)
+```
+
+**When to use:** Whenever the graph answer alone isn't enough — you need to cross-reference reachable/central/community nodes with their products, orders, SKUs, or other domain relationships to answer the real business question.
 
 ---
 
