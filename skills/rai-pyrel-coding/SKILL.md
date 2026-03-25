@@ -13,7 +13,7 @@ description: Covers PyRel v1 language syntax including imports, type system, con
 **When to use:**
 - Writing or reviewing PyRel model code
 - Need the correct import path, type syntax, or property declaration pattern
-- Debugging a syntax error or `UninitializedPropertyException`
+- Debugging a syntax error, `UninitializedPropertyException`, or empty/unexpected query results
 - Checking what standard library functions are available (math, strings, dates)
 - Looking up data loading patterns (CSV, Snowflake, FK resolution)
 - Understanding expression rules (`.where()` targets, `.per()` grouping, operators)
@@ -52,6 +52,9 @@ model.define(Product.new(model.data(df).to_schema()))
 
 # Query — prefer model.where/model.select for multi-model safety
 result = model.where(Product.cost > 10).select(Product.id, Product.cost).to_df()
+
+# Debugging — inspect prints data to stdout
+Product.cost.inspect()
 
 # Solver
 p = Problem(model, Float)
@@ -297,7 +300,20 @@ model.define(Order.priority_label("low")).where(Order.total <= 1000)
 
 ## Enums
 
-`model.Enum` creates a concept-backed Python enum whose members are usable as concept literals in `where()` and `define()`. Use instead of bare string comparisons when values are a fixed controlled vocabulary. See [expression-rules.md](references/expression-rules.md#enums) for full syntax and examples.
+`model.Enum` creates a concept-backed Python enum whose members are usable as concept literals in `where()` and `define()`. Use instead of bare string comparisons when values are a fixed controlled vocabulary.
+
+```python
+# Class-style:
+class Priority(model.Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+
+# Functional form:
+Priority = model.Enum("Priority", ["low", "medium", "high"])
+```
+
+Note: `Enum` is accessed via `model.Enum`, not imported standalone. See [expression-rules.md](references/expression-rules.md#enums) for full syntax and examples.
 
 ---
 
@@ -431,7 +447,7 @@ RAI expressions do not support Python's boolean keywords (`and`, `or`, `not`, `i
 | `not x_assigned` | `not_(x_assigned)` |
 | `if condition else fallback` | `value \| fallback` (ordered fallback), or `.where(condition)` on the constraint |
 
-**`|` vs `model.union()`:** The `|` operator is an ordered fallback (picks the first branch that succeeds — if-then-else semantics). `model.union()` is set OR (collects ALL matching branches). Use `|` for defaults and case-when chains; use `model.union()` for multi-term objectives or OR-filtering.
+**`|` vs `model.union()`:** The `|` operator is an ordered fallback (picks the first branch that succeeds — if-then-else semantics). `model.union()` is set OR (collects ALL matching branches). Use `|` for defaults and case-when chains; use `model.union()` for multi-term objectives or OR-filtering. The `|` operator creates a `Match` object (importable from `relationalai.semantics`) — nested matches are flattened: `(a | b) | c` == `a | b | c`.
 
 ### Property Definition F-Strings
 
@@ -456,6 +472,7 @@ Shipment.x_flow = model.Property(f'{Shipment} has {{x_flow:float}}')  # Number(3
 | Mistake | Cause | Fix |
 |---------|-------|-----|
 | Using `with model.rule():` context manager | Not supported; no context managers | Use direct calls: `model.define(...)`, `model.require(...)` |
+| `model.define()` or `model.require()` in a Python loop | Creates separate rules per iteration instead of one declarative rule. PyRel detects this (same call site threshold >50) and warns. | Use declarative patterns: `model.data(df)` + `.to_schema()` for data, vectorized `.where().define()` for constraints. See examples below. |
 | Division by zero in expressions | Not caught at definition time | Guard with `.where(Entity.input > 0)` |
 | `UninitializedPropertyException` on property chain | Property chain through cross-product concept (e.g., `ProductStoreWeek.week.week_num`) | Store values directly as properties on the cross-product concept |
 | "Uninitialized properties" on `where().define()` | Declarative filtering by relationship equality on cross-products | Use loop pattern for relationship-based filtering; use declarative for primitive equality |
@@ -475,8 +492,65 @@ Shipment.x_flow = model.Property(f'{Shipment} has {{x_flow:float}}')  # Number(3
 | Incorrect datetimes for inline data | Causes query errors or empty result sets | use eg `df["date"] = pd.to_datetime(df["date"]).dt.date` |
 | Entity-valued Property for concept-to-concept FK | Some model files use `model.Property(f"{Order} placed by {Customer:customer}")` for FKs | Recommended when the FK is many-to-one (each Order has exactly one Customer) — provides performance benefits and enforces the functional constraint. Use `model.Relationship()` only if the association is truly many-to-many or cardinality is uncertain |
 | Dynamic model loading loses module-level concepts | Using `importlib.util` to load a model file — concepts defined as module variables aren't on the model object | After loading, iterate module attributes and `setattr(model, name, obj)` for each `rai.Concept` instance |
+| Typo creates silent empty property | `Customer.nmae` (typo) silently creates an empty property via implicit property creation — no error | `create_config(model={"implicit_properties": False})` or set `implicit_properties: false` under `model:` in raiconfig.yaml |
+
+### Avoid Python loops around `model.define()` / `model.require()`
+
+PyRel is declarative — one `define()` call handles all matching entities. Python loops that call `define()` per row create separate rules per iteration, which is slow and triggers a PyRel warning (threshold: 50 calls from the same call site).
+
+```python
+# BAD: Python loop creates N separate rules
+for _, row in df.iterrows():
+    model.define(Product.new(name=row["name"], cost=row["cost"]))
+
+# GOOD: One declarative call handles all rows
+product_data = model.data(df)
+model.define(Product.new(product_data.to_schema()))
+
+# BAD: Loop to add constraints per entity
+for limit in capacity_limits:
+    model.where(Site.id == limit["id"]).define(Site.max_capacity(limit["cap"]))
+
+# GOOD: Load limits as data, join declaratively
+limits = model.data(capacity_limits_df)
+model.define(Site.filter_by(id=limits.id).max_capacity(limits.cap))
+```
 
 For detailed `.where()` targets, `.per()` scoping, and operator precedence rules, see [expression-rules.md](references/expression-rules.md).
+
+---
+
+## Debugging Empty or Unexpected Results
+
+When a query returns an empty DataFrame or wrong values, work through these checks in order (cheapest/highest-yield first):
+
+1. **Check for typos (implicit properties):**
+   Typos silently create empty properties (see pitfall table above). Quick test:
+   set `implicit_properties: false` in raiconfig.yaml and re-run — any typo will error.
+
+2. **Check type alignment:**
+   `.where(Order.id == "123")` returns empty when `id` is Integer — no error.
+   Fix: use matching type (`.where(Order.id == 123)`).
+   Use `.inspect()` to see actual values and infer types.
+   Also check datetime columns: pandas Timestamps don't match Date properties —
+   convert with `df["col"] = pd.to_datetime(df["col"]).dt.date`.
+
+3. **Check join paths:**
+   Does the relationship used in `.where()` have a `model.define()` populating it?
+   Test: `Concept.rel.inspect()` — if empty, add a `model.define()` rule to populate it.
+
+4. **Check entity counts:**
+   ```python
+   model.select(count(Customer)).to_df()
+   ```
+   If 0: data not loaded. Check table path and `model.define()` rules.
+
+5. **Isolate where conditions:**
+   ```python
+   model.where(A).select(X).to_df()            # works?
+   model.where(A, B).select(X).to_df()         # still works?
+   model.where(A, B, C).select(X).to_df()      # empty? → C is the culprit
+   ```
 
 ---
 

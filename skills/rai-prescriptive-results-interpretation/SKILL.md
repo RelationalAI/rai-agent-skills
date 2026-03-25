@@ -238,16 +238,7 @@ Constraints defined over concepts automatically apply to new data added between 
 
 ### Post-solve constraint verification
 
-`p.verify(*fragments)` checks that the solver's solution satisfies constraints. Temporarily installs constraint ICs, triggers a query, and removes them. Particularly useful for exact solvers (HiGHS MIP, MiniZinc):
-
-```python
-coverage_ic = model.where(...).require(...)
-p.satisfy(coverage_ic)
-p.solve("minizinc", time_limit_sec=60)
-p.verify(coverage_ic)  # Raises if any constraint is violated
-```
-
-`verify()` checks `termination_status` first — warns and returns early for non-successful solves (accepts OPTIMAL, LOCALLY_SOLVED, SOLUTION_LIMIT). ICs are cleaned up in a `finally` block even on exceptions.
+`p.verify(*fragments)` checks that the solver's solution satisfies constraints post-solve. Particularly useful for exact solvers (HiGHS MIP, MiniZinc). See `rai-prescriptive-solver-management` for full `verify()` documentation and examples.
 
 ### Scenario / parametric solving
 
@@ -332,7 +323,7 @@ Compilation or solver errors prevented a solution.
 
 ### Re-Solve Behavior (1.0.3+)
 
-Re-solving the same `Problem` instance is safe. Result import uses `experimental.load_data` with replace semantics — previous results remain intact if a subsequent solve fails.
+Re-solving the same `Problem` instance is safe (replace semantics). See `rai-prescriptive-solver-management` for details.
 
 ---
 

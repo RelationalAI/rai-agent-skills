@@ -81,15 +81,13 @@ outgoing_edges = graph.outdegree()
 
 # --- Query results ---
 
-from relationalai.semantics import where
-
 facility = graph.Node.ref("facility")
 centr_score = Float.ref("centr_score")
 in_edges = Integer.ref("in_edges")
 out_edges = Integer.ref("out_edges")
 
 results = (
-    where(
+    model.where(
         degree_centrality(facility, centr_score),
         incoming_edges(facility, in_edges),
         outgoing_edges(facility, out_edges),

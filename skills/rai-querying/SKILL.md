@@ -480,10 +480,10 @@ model.where(Order.amount > 0).require(Order.customer)
 
 **Requirements fire at `to_df()` / `exec()` time** — not at definition time. There is no `.check()` or `.validate()` method.
 
-**In solver context:** `p.satisfy(model.require(expr))` promotes the requirement to an optimization constraint and removes it from semantic checks. Pass `check=True` to keep it as both:
+**In solver context:** `p.satisfy(model.require(expr))` promotes the requirement to a solver constraint:
 
 ```python
-p.satisfy(model.require(supply >= demand), check=True)  # hard constraint + integrity check
+p.satisfy(model.require(supply >= demand))  # hard constraint in the solver
 ```
 
 ---

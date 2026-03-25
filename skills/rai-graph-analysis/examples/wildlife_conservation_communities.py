@@ -3,7 +3,7 @@
 # to find communities and hub organizations; Int128Array casting for community labels.
 # Based on: RelationalAI/templates/v1/wildlife-conservation-network
 
-from relationalai.semantics import Model, String, Integer, Float, where
+from relationalai.semantics import Model, String, Integer, Float
 from relationalai.semantics.reasoners.graph import Graph
 
 model = Model("wildlife_conservation")
@@ -81,7 +81,7 @@ centr_score = Float.ref("centr_score")
 partner_count = Integer.ref("partner_count")
 
 results = (
-    where(
+    model.where(
         louvain_communities(org, community_id),
         degree_centrality(org, centr_score),
         degree(org, partner_count),

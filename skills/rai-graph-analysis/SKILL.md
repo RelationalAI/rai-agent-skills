@@ -59,7 +59,7 @@ from relationalai.semantics.std import aggregates, floats
 model = Model("my_model")
 ```
 
-**Note:** `where`, `define`, and `data` can be used as standalone functions (imported from `relationalai.semantics`) or as `model.where()`, `model.define()`, `model.data()` methods. Both are equivalent. The standalone form is the style used in official RAI templates.
+**Note:** `where`, `define`, and `data` are available as standalone imports and as `model.where()`, `model.define()`, `model.data()` methods. Both are equivalent for single-model scripts. Use the `model.*` form when multiple Models exist — standalone functions fail with `"Multiple Models have been defined."`. See `rai-pyrel-coding` for data loading patterns with `model.data()`.
 
 ### Graph constructor
 

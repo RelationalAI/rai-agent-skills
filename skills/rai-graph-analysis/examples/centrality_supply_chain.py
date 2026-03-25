@@ -75,12 +75,10 @@ graph.Node.centrality_score = graph.eigenvector_centrality()
 # --- Extract and display results ---
 # Query via the algorithm relation (works whether or not node_concept is set)
 
-from relationalai.semantics import where
-
 node = graph.Node.ref("node")
 score = Float.ref("score")
 centrality_df = (
-    where(graph.eigenvector_centrality()(node, score))
+    model.where(graph.eigenvector_centrality()(node, score))
     .select(
         node.id.alias("site_id"),
         node.name.alias("site_name"),

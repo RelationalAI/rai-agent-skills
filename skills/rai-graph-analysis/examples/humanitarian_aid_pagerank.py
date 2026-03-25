@@ -4,7 +4,7 @@
 # directed=True for supply flow direction.
 # Based on: RelationalAI/templates/v1/humanitarian-aid-supply-chain
 
-from relationalai.semantics import Model, String, Integer, Float, where
+from relationalai.semantics import Model, String, Integer, Float
 from relationalai.semantics.reasoners.graph import Graph
 
 model = Model("humanitarian_aid_supply_chain")
@@ -90,7 +90,7 @@ pr_score = Float.ref("pr_score")
 dc_score = Float.ref("dc_score")
 
 results = (
-    where(
+    model.where(
         pagerank(point, pr_score),
         degree_centrality(point, dc_score),
     )

@@ -35,6 +35,27 @@ description: Formulates optimization problems from ontology models covering deci
 
 ---
 
+## Quick Reference — Problem API
+
+```python
+from relationalai.semantics.reasoners.prescriptive import Problem
+
+p = Problem(model, Float)
+```
+
+| Method | Signature | Purpose |
+|--------|-----------|---------|
+| `solve_for` | `(expr, where=, populate=True, name=, type=, lower=, upper=, start=)` | Declare decision variable. `type`: `"cont"`, `"int"`, `"bin"` |
+| `satisfy` | `(expr, name=)` | Add constraint |
+| `minimize` | `(expr, name=)` | Set minimization objective |
+| `maximize` | `(expr, name=)` | Set maximization objective |
+| `solve` | `(solver, time_limit_sec=, ...)` | Execute solve. Solvers: `"highs"`, `"minizinc"`, `"ipopt"`, `"gurobi"` |
+| `verify` | `(*fragments)` | Post-solve constraint verification |
+| `variable_values` | `(multiple=False)` | Extract solution values as Fragment |
+| `display` | `(part=)` | Print formulation summary |
+
+---
+
 ## Formulation Workflow
 
 After a problem is selected (from problem discovery) and the ontology is enriched (if needed), build the formulation in this order:
@@ -283,6 +304,7 @@ It is a GOAL (objective) if:
 | Big-M too loose -> slow solve | Using arbitrary `999999` instead of data-driven bound | Use `M = capacity` or `M = max_demand` from entity properties |
 | Missing forcing requirement | MINIMIZE objective with no forcing constraint yields zero | Always identify what real-world requirement forces positive activity |
 | Constraint references unwired relationship | Relationship declared but no `define()` data binding | Verify all relationships in `.where()` joins have `define()` rules. Unwired relationships cause TyperError or silently match zero entities. |
+| `p.satisfy()` or `model.define()` in a Python loop | Defining constraints per entity in a for loop instead of declaratively | Use vectorized `.where().define()` or `p.satisfy()` with `.per()`. See `rai-pyrel-coding` Common Pitfalls for before/after examples |
 
 ### Unwired Relationships
 
@@ -362,7 +384,7 @@ If local variable aliases are defined (e.g., `Al -> Allocation.ref()`), then `Al
 
 ### V1 Aggregation Patterns
 
-Structure: `sum(X.prop).where(filter).per(grouping)`
+Structure: `sum(X.prop).where(filter).per(grouping)` (for full `.per()` semantics, see `rai-querying`)
 - `.where()` on sum: FILTERS which items are aggregated
 - `.per()` on sum: GROUPS the aggregation (one value per group)
 - `.where()` on require(): ITERATES (one constraint per entity)
@@ -376,128 +398,6 @@ Python variables holding expressions (e.g., `total = sum(...)`) are valid — do
 ### Python Variables in Constraints
 
 Code uses Python variables for intermediate expressions. If an identifier is assigned before use, it's VALID.
-
----
-
-## Formulation Validation Rules
-
-### Issue Severity
-
-Maps to the Semantic Validation Checks in problem-patterns-and-validation.md:
-- **critical**: REQUIRED check violations — will cause runtime errors or solve failures (checks 1-6)
-- **warning**: RECOMMENDED check violations — may cause suboptimal solutions (checks 7-10)
-- **info**: INFORMATIONAL findings — suggestions for improvement (checks 11-13)
-
-### Issue Categories
-
-| Category | Check | Severity |
-|----------|-------|----------|
-| `invalid_reference` | References to non-existent concepts or properties | critical |
-| `variable_usage` | Variables not used in constraints/objective | critical |
-| `concept_definition_reference` | Dynamically created concepts reference non-existent base concepts | critical |
-| `data_coverage` | Variable bounds/limits reference properties not in schema | critical |
-| `constraint_conflict` | Logically contradictory constraints | critical |
-| `missing_iteration_entity` | Per-entity constraint missing `.per()` on sum and/or `iteration_entity` | critical |
-| `goal_alignment` | Formulation does not match user's stated goals | warning |
-| `constraints` | Missing or incomplete constraints | warning |
-| `objective` | Objective misalignment with stated goal | warning |
-| `bounds` | Unrealistic or improperly specified bounds | warning |
-| `coherence` | Logical inconsistencies between components | info |
-| `problem_size` | Tractability concerns | info |
-| `data_availability` | Missing data for goals | info |
-
-### fix_action Guidelines
-
-- Include fix_action for critical and warning issues when a concrete fix can be automated
-- Only include fix_action for critical and warning issues — info-level issues and vague recommendations should not have fix_actions, since attempting to auto-fix them produces low-quality or harmful changes
-- For each fix type, include ONLY the relevant definition object:
-  - `add_variable` / `create_concept`: include `variable_definition` with all variable fields
-  - `add_constraint`: include `constraint_definition` with name, expression, optional filter, optional iteration_entity
-  - `modify_constraint`: include `constraint_definition` with fields to update, use `target` for constraint name. Use this to fix missing `.per()`: update expression to include `.per(Entity)` on aggregations.
-  - `modify_variable`: include `variable_definition` with fields to update, use `target` for variable name. Use this to fix entity_creation logic, bounds, or other variable definition issues.
-  - `add_iteration_entity`: include `iteration_entity` (the concept name), use `target` for constraint name
-  - `modify_objective`: include `objective_definition` with type and expression
-  - `remove_item`: include `item_type` ("variable" or "constraint") and use `target` for the name
-
-### False Positive Prevention
-
-These patterns are valid and should not be flagged as issues:
-
-- **Syntax and "undefined" names** — RAI handles syntax validation at compile time. Flagging syntax issues here produces false positives.
-- **Aliases and constants** — Check LOCAL VARIABLE ALIASES and CONSTANTS sections before flagging anything as undefined. If `Al = Allocation.ref()` is defined, then `Al.quantity` is valid. If `MULTIPLIER = 2.0` is defined, it's defined. RAI catches truly undefined names at compile time.
-- **`iteration_entity` with `.per()`** — When `iteration_entity` is set, code_gen automatically adds `.per(iteration_entity)` to sums. Missing `.per()` with a set iteration_entity is not an issue.
-- **Relationship-based `.per()`** — `.per(Concept.relationship)` is equivalent to `.per(Entity)` when the relationship returns that Entity type. Treat them as interchangeable.
-- **Correctly formulated constraints** — When analysis concludes a constraint is correctly formulated, accept it rather than flagging as "missing_iteration_entity".
-- **Concept name matching** — Use bare concept names (e.g., `Site`, `SKU`) matching EXACT names from the model context. A property name matching a concept name (e.g., `.site` and `Site`) is a valid Relationship returning the target concept.
-- **Variables inside aggregations** — Expressions containing `sum()`, `select()`, or `where()` use variables within them, even if not visible in the top-level expression string.
-- **Computed vs decision properties** — Only flag decision variables (from `solve_for()`) as unused, not computed properties.
-- **Trust reasonable formulations** — If the formulation looks reasonable, it probably is. Only flag issues with clear evidence of error.
-
-### Variable Usage Rules
-
-- A variable used only in constraints (not in objective) is valid — constraints give the variable meaning
-- A variable used only in the objective (not in constraints) is valid — it contributes to the optimization goal
-- Only flag as "unused" if a variable appears in neither constraints nor objective
-- Check constraints before concluding a variable is unused based on objective absence — the PRE-ANALYSIS section shows variable usage counts
-
----
-
-## Pre-Solve Fix Patterns
-
-### Aggregation Scope Binding
-
-When writing `.per(A)`, ONLY reference `A` or `A.relationship.property` in `.where()` — NEVER standalone concepts.
-- **WRONG:** `.where(X == OtherConcept.property).per(A)` — OtherConcept is unbound
-- **RIGHT:** `.where(X == A.relationship_to_other.property).per(A)` — navigate from A
-
-Check MODEL RELATIONSHIPS for valid paths.
-
-### Fix: trivial_solution_risk (Missing Forcing Constraint)
-
-A MINIMIZE objective needs a constraint that FORCES positive activity.
-- Pattern: `sum(<Decision>.x_<var>).where(<join_condition>).per(<Entity>) >= <Entity>.<required>`
-- Decision variable attributes use `x_` prefix; data properties (requirements, capacities) do NOT
-- Look for: demand/requirement entities, quantity properties from model context
-
-### Fix: Join Path Issues (DO THIS FIRST)
-
-If an existing constraint has a broken join, DO NOT add aggregate workarounds like `sum(X) >= 0.5 * sum(Y)`.
-Instead, FIX THE ACTUAL JOIN by finding the correct path through MODEL RELATIONSHIPS:
-1. Identify what the join should match on (location, SKU, entity ID, etc.)
-2. Find the path FROM the decision concept TO the matching property
-3. Find the path FROM the requirement concept TO the same property
-4. Both paths must lead to the SAME underlying data type
-
-Example fix: If `Flow.destination == Customer.site` doesn't match because Customer is unbound:
-- Check MODEL RELATIONSHIPS for how to reach Customer from Flow or Demand
-- Likely fix: `Flow.destination == Demand.customer.site` (navigate from Demand to its customer)
-
-### Fix: missing_conservation (Disconnected Extended Concepts)
-
-Two extended_concept concepts sharing a base entity need a LINKING constraint.
-- Pattern: `sum(<ConceptA>.x_<qty>).per(<SharedEntity>) == sum(<ConceptB>.x_<qty>).per(<SharedEntity>)`
-- Decision variable attributes use `x_` prefix; base entity properties do NOT
-- Look for: shared relationships between the concepts (same location, product, time)
-
-### Fix: undeclared_variable_reference
-
-Two strategies (prefer B when semantically equivalent):
-- **Strategy A (add_variable):** Add the base model x_ property as a decision variable. Only use when the x_ property is genuinely needed as a separate decision from existing variables.
-- **Strategy B (modify_constraint — PREFERRED):** Rewrite the constraint/objective to use an already-defined variable instead. This is preferred when the defined variable serves the same semantic role.
-
-### Key Syntax Rules for Fixes
-
-- Expression should be JUST the condition — do NOT include `require()` wrapper
-- The code generator will automatically wrap with `p.satisfy(require(...))`
-- Use `sum(<Concept>.<property>).per(<GroupConcept>)` for per-entity requirements
-- Use ACTUAL concept/property names from the formulation
-
-### Fixes MUST Reference Decision Variables
-
-- Look at the VARIABLES section to identify decision variables
-- Every fix constraint MUST include at least one variable from that section
-- NEVER suggest constraints on data-only properties (costs, capacities, etc.)
-- Data validation is not a solver constraint — if data is bad, the fix is outside optimization
 
 ---
 

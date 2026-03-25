@@ -256,6 +256,17 @@ model.define(
 )
 ```
 
+#### List of tuples with `columns=`
+
+When data is naturally columnar (e.g., parameter grids), use tuples with explicit column names:
+
+```python
+src = model.data([("Alice", 30), ("Bob", 25)], columns=["name", "age"])
+model.define(c := Customer.new(name=src.name), c.age(src.age))
+```
+
+Without `columns=`, integer labels are used (`col0`, `col1`, etc.).
+
 #### pandas DataFrame
 
 For `DateTime` properties, use `pd.to_datetime()` to ensure columns have `datetime64` dtype. For `Date` properties, keep Python `date` objects as-is — do **not** convert with `pd.to_datetime()`, which produces `datetime64` and causes a `TyperError`.

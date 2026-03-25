@@ -303,8 +303,8 @@ reasoners:
 ```
 
 > **Note:** `auto_suspend_mins` and `await_storage_vacuum` are managed via the CLI only — they are not config fields.
-> - Set auto-suspend after creation: `rai reasoners:alter --type logic --name <name> --auto-suspend-mins <value>`
-> - Set await-storage-vacuum at creation time: `rai reasoners:create --type logic --name <name> --size <size> --await-storage-vacuum`
+> - Set auto-suspend after creation: `rai reasoners:alter --type Logic --name <name> --auto-suspend-mins <value>`
+> - Set await-storage-vacuum at creation time: `rai reasoners:create --type Logic --name <name> --size <size> --await-storage-vacuum`
 
 ### Polling Configuration
 
@@ -407,7 +407,25 @@ data:
 
 ## Engine Management
 
-Use the `Resources` class to list, create, delete, resume, and suspend engines. Each engine has a name and a type (`LOGIC`, `SOLVER`, or `PREDICTIVE`). A typical deployment has both a LOGIC and a SOLVER engine under the same name — they are independent.
+### CLI (`rai reasoners:*`)
+
+All commands accept `--type` (`Logic` / `Prescriptive` / `Predictive`) and `--name`. Both are optional — interactive prompts fill missing values.
+
+| Command | Purpose |
+|---------|---------|
+| `rai reasoners:create --type Logic --name <name> --size <size>` | Create a reasoner |
+| `rai reasoners:delete --type Logic --name <name>` | Delete a reasoner |
+| `rai reasoners:suspend --type Logic --name <name>` | Suspend (stop billing) |
+| `rai reasoners:resume --type Logic --name <name>` | Resume a suspended reasoner |
+| `rai reasoners:list` | List all reasoners (filterable by `--type`, `--name`, `--size`, `--state`) |
+| `rai reasoners:get --type Logic --name <name>` | Get details for one reasoner |
+| `rai reasoners:alter --type Logic --name <name> --auto-suspend-mins <N>` | Change settings |
+
+**Resize pattern:** No in-place resize — delete and recreate: `suspend` → `delete` → `create` with new size.
+
+### Python API (`Resources`)
+
+Use the `Resources` class to list, create, delete, resume, and suspend engines programmatically. Each engine has a name and a type (`LOGIC`, `SOLVER`, or `PREDICTIVE`). Note: `SOLVER` in the Python API corresponds to `Prescriptive` in the CLI. A typical deployment has both a LOGIC and a SOLVER engine under the same name — they are independent.
 
 See [engine-management.md](references/engine-management.md) for full API reference, engine states, and the delete-and-recreate pattern.
 

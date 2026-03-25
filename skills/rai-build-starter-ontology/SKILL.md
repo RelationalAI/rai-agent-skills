@@ -35,7 +35,7 @@ description: Walks through building a first RAI ontology from Snowflake tables o
 
 ## Instructions
 
-**Required dependency:** `rai-ontology-design` is the authority for all design decisions. This skill is the workflow. Use `rai-pyrel-coding` for syntax and `rai-pyrel-coding` [data-loading.md](../rai-pyrel-coding/references/data-loading.md) for data binding patterns.
+**Required dependency:** `rai-ontology-design` is the authority for all design decisions. This skill is the workflow. Use `rai-pyrel-coding` for syntax and [data-loading.md](../rai-pyrel-coding/references/data-loading.md) for data binding patterns.
 
 Start from the business domain — what concepts exist, what questions must the model answer — then find data mappings. Domain-first modeling produces better models than table-to-concept mapping.
 
@@ -183,7 +183,7 @@ model/
 
 ### Step 7 — Validate with queries
 
-Create a `main.py` that imports the model and runs a query for each question from Step 1. Fix any import errors or empty results before considering the starter ontology complete.
+Create a `main.py` that imports the model and runs a query for each question from Step 1. Fix any import errors or empty results before considering the starter ontology complete. For query syntax, see `rai-querying`.
 
 ---
 

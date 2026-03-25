@@ -83,8 +83,8 @@ Run this command to validate the basic configuration works:
 
 ### Step 4. Create a sample
 Offer to create a small sample program using inline data.
-Check if the user has a domain or analytical use case they want to see the sample in. Otherwise set up a generic use case for customer segmentation using graph analysis (see the example in the `pyrel-coding` skill).
-Reference the `pyrel-coding` skill.
+Check if the user has a domain or analytical use case they want to see the sample in. Otherwise set up a generic use case for customer segmentation using graph analysis (see `rai-graph-analysis` examples).
+Reference the `pyrel-coding` skill for syntax and `rai-graph-analysis` for graph patterns.
 Ensure the sample runs and the user can see the output.
 Offer to explain the different components of the program.
 

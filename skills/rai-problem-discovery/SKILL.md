@@ -194,31 +194,9 @@ If the schema shows NO unmapped columns, there are no model_gaps — all suggest
 
 ### Gap identification rules
 
-Check the schema info provided in the prompt context:
+Model gaps are ONLY for data in the schema but not in the model. Decision variables, cross-products, and computed expressions are NOT model gaps (formulation layer). Check "Available for enrichment" columns in schema info. Each gap must specify `source_table` and `source_column`.
 
-**If there are "Available for PROPERTY enrichment" or "Available for RELATIONSHIP enrichment" columns:**
-- Property gaps (gap_type="property") -- unmapped scalar columns (costs, capacities, quantities). Each must specify `source_table` and `source_column`.
-- Relationship gaps (gap_type="relationship") -- unmapped FK columns (typically ending in _ID). Each must specify `source_table` and `source_column`.
-
-**Business parameters the user provides** (budget, threshold, target %):
-- These are parameter_gap -- informational only, doesn't change feasibility classification. The user supplies these at solve time.
-
-**If the schema shows NO unmapped columns (everything is "Already in model"):**
-- There are no model_gaps. All suggestions should be READY.
-- Decision variables, extended concepts, and cross-product relationships are formulation constructs -- they are NOT model_gaps.
-
-**What is NOT a model gap:**
-- Decision variables (e.g., quantity_to_allocate) -- created during formulation
-- Extended/cross-product concepts (e.g., Worker x Shift) -- created during formulation
-- Computed properties (e.g., total_cost = qty * unit_cost) -- defined as expressions
-- Predictions, graph metrics, derived classifications -- created by reasoner output
-
-**The boundary:** If a proposed enrichment has no source table, it belongs to the reasoner workflow (formulation layer, prediction pipeline, etc.), not the base model.
-
-| Layer | Examples | Has source table? |
-|-------|----------|-------------------|
-| **Base model** | Customer, Site, Order with properties from schema | Yes -- loaded from data |
-| **Reasoner workflow** | allocation_qty, predicted_demand, centrality_score, compliance_flag | No -- created by reasoner |
+For full gap classification rules (property vs relationship gaps, boundary between base model and reasoner workflow), see `rai-ontology-design` § Model Gap Identification.
 
 ---
 
@@ -377,37 +355,7 @@ Each suggestion includes a `reasoners` field — an ordered list specifying the 
 }
 ```
 
-### Reasoner workflows
-
-| Reasoner | Workflow | Status |
-|----------|----------|--------|
-| **prescriptive** | `suggest_variables` -> `suggest_constraints` -> `suggest_objective` -> `validate_formulation` -> `solve_problem` | LIVE |
-| **graph** | `suggest_graph_analysis` -> `configure_graph` -> `run_graph_algorithm` -> results | LIVE |
-| **rules** | `suggest_rules` -> `define_rules` -> `evaluate_rules` -> results | LIVE |
-| **predictive** | `define_features` -> `configure_model` -> `train` -> `evaluate` | PLANNED |
-
-### add_to_formulation routing
-
-`add_to_formulation` inspects the selected problem's `reasoners` field and routes to the appropriate workflow:
-
-**Single-reasoner routing:**
-- `["prescriptive"]` → `suggest_variables` -> `suggest_constraints` -> `suggest_objective` -> `validate_formulation` -> `solve_problem`
-- `["graph"]` → `suggest_graph_analysis` -> `configure_graph` -> `run_graph_algorithm` -> results
-- `["rules"]` → `suggest_rules` -> `define_rules` -> `evaluate_rules` -> results
-
-**Chained routing** (execute stages sequentially):
-- `["graph", "prescriptive"]` →
-  - Stage 1: `configure_graph` -> `run_graph_algorithm` -> results
-  - Bridge: `enrich_ontology` (add graph outputs as model properties)
-  - Stage 2: `suggest_variables` -> ... -> `solve_problem`
-- `["rules", "prescriptive"]` →
-  - Stage 1: `define_rules` -> `evaluate_rules` -> results
-  - Bridge: rule outputs become constraint filters for optimization
-  - Stage 2: `suggest_variables` -> ... -> `solve_problem`
-
-Each stage is independently valuable — if Stage 2 fails, Stage 1 results are still useful.
-
-For chained problems, complete each stage in order. After Stage N completes, enrich the model with its output if needed, then proceed to Stage N+1.
+After discovery, use the appropriate formulation skill for the chosen reasoner type.
 
 ---
 

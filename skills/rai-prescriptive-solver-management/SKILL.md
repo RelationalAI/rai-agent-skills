@@ -534,9 +534,12 @@ When the same problem structure is solved with different parameter values (budge
 service levels), model scenarios as a first-class Concept. One solve handles all scenarios:
 
 ```python
+# Assumes: Stock = model.Concept("Stock", identify_by={"index": Integer})
+# with Stock.returns (Float) and Stock data already loaded.
+
 # Scenario with parameter data
-Scenario = Concept("Scenario", identify_by={"name": String})
-Scenario.min_return = Property(f"{Scenario} has {Float:min_return}")
+Scenario = model.Concept("Scenario", identify_by={"name": String})
+Scenario.min_return = model.Property(f"{Scenario} has {Float:min_return}")
 scenario_data = model.data(
     [("conservative", 10), ("moderate", 20), ("aggressive", 30)],
     columns=["name", "min_return"],
@@ -544,7 +547,7 @@ scenario_data = model.data(
 model.define(Scenario.new(scenario_data.to_schema()))
 
 # Decision variable indexed by Scenario
-Stock.x_quantity = Property(f"{Stock} in {Scenario} has {Float:quantity}")
+Stock.x_quantity = model.Property(f"{Stock} in {Scenario} has {Float:quantity}")
 x_qty = Float.ref()
 
 # Constraint references Scenario property
@@ -555,10 +558,11 @@ return_ok = model.where(
 )
 
 # Single solve — all scenarios simultaneously
+# For portfolio risk (QP objective), see PyRel example/prescriptive/portfolio/
 p = Problem(model, Float)
 p.solve_for(Stock.x_quantity(Scenario, x_qty), name=[Scenario.name, "qty", Stock.index])
 p.satisfy(return_ok)
-p.minimize(sum(risk))
+p.minimize(sum(Stock.x_quantity))
 p.solve("highs", time_limit_sec=60)
 
 # Results: query with scenario filter

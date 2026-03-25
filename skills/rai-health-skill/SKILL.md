@@ -136,9 +136,9 @@ GROUP BY REASONER_NAME, REASONER_CAPACITY;
 
 **Action:** Upgrade reasoner size. No in-place resize exists — delete and recreate.
 ```bash
-rai engine suspend --engine <name>
-rai engine delete  --engine <name>
-rai engine create  --engine <name> --size <larger-size>
+rai reasoners:suspend --type Logic --name <name>
+rai reasoners:delete  --type Logic --name <name>
+rai reasoners:create  --type Logic --name <name> --size <larger-size>
 ```
 
 ---
@@ -167,9 +167,9 @@ action required.
 
 **Action:** Downgrade to a smaller reasoner — you are paying for unused capacity.
 ```bash
-rai engine suspend --engine <name>
-rai engine delete  --engine <name>
-rai engine create  --engine <name> --size <smaller-size>
+rai reasoners:suspend --type Logic --name <name>
+rai reasoners:delete  --type Logic --name <name>
+rai reasoners:create  --type Logic --name <name> --size <smaller-size>
 ```
 
 ---
@@ -179,7 +179,7 @@ rai engine create  --engine <name> --size <smaller-size>
 
 **Action:** Suspend the reasoner or reduce its `auto_suspend` threshold to stop billing for idle time.
 ```bash
-rai engine suspend --engine <name>
+rai reasoners:suspend --type Logic --name <name>
 ```
 
 ---

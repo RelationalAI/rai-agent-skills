@@ -423,13 +423,17 @@ Rule outputs (boolean flags, derived values, classifications) feed other reasone
 Order.is_compliant = model.Relationship(f"{Order} is compliant")
 model.where(Order.customer(Customer), Order.amount <= Customer.credit_limit).define(Order.is_compliant())
 
-# Optimization scoped to compliant orders via .where() filter
-x = p.variable("assign", over=Order, bounds=(0, 1), variable_type="integer").where(Order.is_compliant())
+# Decision variable scoped to compliant orders only
+Order.x_assign = model.Property(f"{Order} has {Float:x_assign}")
+
+# from relationalai.semantics.reasoners.prescriptive import Problem
+p = Problem(model, Float)
+p.solve_for(Order.x_assign, type="bin", where=[Order.is_compliant()])
 
 # Derived value as objective weight
 Customer.ltv = model.Property(f"{Customer} has {Float:ltv}")
 model.define(Customer.ltv(aggregates.sum(Order.amount).per(Customer).where(Order.customer(Customer))))
-p.maximize(aggregates.sum(x * Customer.ltv))
+p.maximize(aggregates.sum(Order.x_assign * Customer.ltv).where(Order.customer(Customer)))
 ```
 
 ### Graph → Rules
@@ -506,6 +510,7 @@ model.define(Customer.total_spend(total))
 | Rule silently skips entities | Condition property is missing for those entities | Check for missing data with `model.not_(property)`; add presence flag |
 | Aggregation-based rule gives wrong counts | Missing `.per()` or wrong `.where()` scope | Validate contributing rows with `model.select()` before defining the rule |
 | Classification + aggregation: `FDError` | Overlapping ranges when aggregate values land on boundary | Use strict `<` on one boundary, `>=` on the other |
+| `define()` in a Python loop | Defining rules per entity in a for loop instead of declaratively | Use `model.data()` + `.where().define()`. See `rai-pyrel-coding` Common Pitfalls for before/after examples |
 
 For general PyRel pitfalls (type mismatches, aggregation scoping, join expansion, missing data,
 f-string syntax, `rai` function availability, subtype limitations, boolean negation), see

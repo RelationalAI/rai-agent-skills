@@ -6,7 +6,7 @@
 #   4. reachable + ontology join — downstream reach enriched with non-graph relationships
 # Target filtering via model.Relationship + define (hero-journey Q5/Q6 pattern).
 
-from relationalai.semantics import Integer, Model, String, where, define, data, distinct
+from relationalai.semantics import Integer, Model, String, distinct
 from relationalai.semantics.std import aggregates as aggs
 from relationalai.semantics.reasoners.graph import Graph
 
@@ -33,26 +33,28 @@ SupplyLink = model.Concept(
 # --- Sample data: directed supply chain ---
 # Raw material suppliers -> processors -> assemblers -> distributors
 
-facility_data = data([
-    {"id": 1, "name": "Iron Mine", "facility_type": "raw_material"},
-    {"id": 2, "name": "Coal Mine", "facility_type": "raw_material"},
-    {"id": 3, "name": "Steel Mill", "facility_type": "processor"},
-    {"id": 4, "name": "Plastics Plant", "facility_type": "processor"},
-    {"id": 5, "name": "Engine Factory", "facility_type": "assembler"},
-    {"id": 6, "name": "Body Shop", "facility_type": "assembler"},
-    {"id": 7, "name": "Final Assembly", "facility_type": "assembler"},
-    {"id": 8, "name": "East Coast DC", "facility_type": "distributor"},
-    {"id": 9, "name": "West Coast DC", "facility_type": "distributor"},
-])
-define(Facility.new(facility_data.to_schema()))
+facility_data = model.data(
+    [
+        {"id": 1, "name": "Iron Mine", "facility_type": "raw_material"},
+        {"id": 2, "name": "Coal Mine", "facility_type": "raw_material"},
+        {"id": 3, "name": "Steel Mill", "facility_type": "processor"},
+        {"id": 4, "name": "Plastics Plant", "facility_type": "processor"},
+        {"id": 5, "name": "Engine Factory", "facility_type": "assembler"},
+        {"id": 6, "name": "Body Shop", "facility_type": "assembler"},
+        {"id": 7, "name": "Final Assembly", "facility_type": "assembler"},
+        {"id": 8, "name": "East Coast DC", "facility_type": "distributor"},
+        {"id": 9, "name": "West Coast DC", "facility_type": "distributor"},
+    ]
+)
+model.define(Facility.new(facility_data.to_schema()))
 
-product_data = data([
+product_data = model.data([
     {"id": 1, "name": "Engine Block", "quantity": 500, "facility_id": 5},
     {"id": 2, "name": "Steel Frame",  "quantity": 300, "facility_id": 6},
     {"id": 3, "name": "Vehicle",      "quantity": 200, "facility_id": 7},
     {"id": 4, "name": "Bumper Kit",   "quantity": 150, "facility_id": 6},
 ])
-define(
+model.define(
     Product.new(
         id=product_data.id,
         name=product_data.name,
@@ -61,7 +63,7 @@ define(
     )
 )
 
-link_data = data([
+link_data = model.data([
     {"src_id": 1, "dst_id": 3},  # Iron Mine -> Steel Mill
     {"src_id": 2, "dst_id": 3},  # Coal Mine -> Steel Mill
     {"src_id": 3, "dst_id": 5},  # Steel Mill -> Engine Factory
@@ -73,7 +75,7 @@ link_data = data([
     {"src_id": 7, "dst_id": 9},  # Final Assembly -> West Coast DC
 ])
 f_from, f_to = Facility.ref("from_facility"), Facility.ref("to_facility")
-define(
+model.define(
     SupplyLink.new(
         from_facility=f_from.filter_by(id=link_data.src_id),
         to_facility=f_to.filter_by(id=link_data.dst_id),
@@ -101,7 +103,7 @@ reachable = graph.reachable(full=True)
 
 src, dst = graph.Node.ref("s"), graph.Node.ref("d")
 all_reachable_df = (
-    where(reachable(src, dst))
+    model.where(reachable(src, dst))
     .select(
         src.id.alias("from_id"),
         src.name.alias("from_name"),
@@ -119,13 +121,13 @@ print(all_reachable_df.to_string(index=False))
 # Define a target relationship, then query who can reach it.
 
 target_dc = model.Relationship(f"Target DC: {Facility}")
-define(target_dc(Facility)).where(Facility.name == "East Coast DC")
+model.define(target_dc(Facility)).where(Facility.name == "East Coast DC")
 
 reachable_to = graph.reachable(to=target_dc)
 
 upstream_node = graph.Node.ref()
 upstream_df = (
-    where(
+    model.where(
         reachable_to(upstream_node, target_dc),
         upstream_node.facility_type == "raw_material",
     )
@@ -143,13 +145,13 @@ print(upstream_df.to_string(index=False))
 # "If Steel Mill goes offline, what is affected?"
 
 target_mill = model.Relationship(f"Target Mill: {Facility}")
-define(target_mill(Facility)).where(Facility.name == "Steel Mill")
+model.define(target_mill(Facility)).where(Facility.name == "Steel Mill")
 
 reachable_from = graph.reachable(from_=target_mill)
 
 downstream_node = graph.Node.ref()
 downstream_df = (
-    where(reachable_from(target_mill, downstream_node))
+    model.where(reachable_from(target_mill, downstream_node))
     .select(distinct(
         downstream_node.name.alias("affected_facility"),
         downstream_node.facility_type.alias("type"),
@@ -184,7 +186,7 @@ if len(non_self) > 0:
 
 downstream = graph.Node.ref()
 impact_df = (
-    where(
+    model.where(
         reachable_from(target_mill, downstream),
         Product.facility(downstream),          # join: reachable facility has products
     )

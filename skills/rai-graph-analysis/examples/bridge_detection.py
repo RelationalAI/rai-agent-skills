@@ -5,7 +5,7 @@
 # cross-region connection analysis (which regions each bridge links to);
 # betweenness_centrality() for structural bottleneck ranking.
 
-from relationalai.semantics import Float, Integer, Model, String, select, distinct, where
+from relationalai.semantics import Float, Integer, Model, String, distinct
 from relationalai.semantics.reasoners.graph import Graph
 
 model = Model("bridge_detection")
@@ -79,9 +79,7 @@ sa, sb = Site.ref(), Site.ref()
 model.where(
     link.site_a(sa),
     link.site_b(sb),
-).define(
-    graph.Edge.new(src=sa, dst=sb)
-)
+).define(graph.Edge.new(src=sa, dst=sb))
 
 # --- Step 1: WCC to identify connected components ---
 # Uses relation-based query pattern with inline per-component aggregation
@@ -110,21 +108,20 @@ if num_components == 1:
 # --- Step 2: Bridge concept query with connected regions ---
 # Query bridges — Bridge extends Site, so all Site properties are available.
 
-bridge_df = (
-    select(distinct(
+bridge_df = model.select(
+    distinct(
         Bridge.id.alias("bridge_site_id"),
         Bridge.name.alias("bridge_site_name"),
         Bridge.region.alias("bridge_region"),
-    ))
-    .to_df()
-)
+    )
+).to_df()
 
 # Derive which regions each bridge connects to by joining bridge list with link data.
 import pandas as pd
 link_df = (
-    select(Link.id.alias("link_id"),
-           Link.site_a.id.alias("a_id"), Link.site_a.region.alias("a_region"),
-           Link.site_b.id.alias("b_id"), Link.site_b.region.alias("b_region"))
+    model.select(Link.id.alias("link_id"),
+                 Link.site_a.id.alias("a_id"), Link.site_a.region.alias("a_region"),
+                 Link.site_b.id.alias("b_id"), Link.site_b.region.alias("b_region"))
     .to_df()
 )
 bridge_ids = set(bridge_df["bridge_site_id"])
@@ -154,7 +151,7 @@ betweenness = graph.betweenness_centrality()
 node2 = graph.Node.ref("n2")
 btwn_score = Float.ref("btwn")
 betweenness_df = (
-    where(betweenness(node2, btwn_score))
+    model.where(betweenness(node2, btwn_score))
     .select(
         node2.id.alias("site_id"),
         node2.name.alias("name"),
