@@ -1,8 +1,11 @@
 # Pattern: Reachability analysis on a directed supply chain graph.
-# Key ideas: edge_concept for directed unweighted graph; reachable(full=True) for
-# all-pairs reachability; pandas post-processing for upstream/downstream filtering.
+# Key ideas: edge_concept for directed unweighted graph; three reachability modes:
+#   1. reachable(full=True) — all-pairs reachability
+#   2. reachable(to=target) — upstream: who can reach the target?
+#   3. reachable(from_=target) — downstream: who does the target reach?
+# Target filtering via model.Relationship + define (hero-journey Q5/Q6 pattern).
 
-from relationalai.semantics import Integer, Model, String, where, define, data
+from relationalai.semantics import Integer, Model, String, where, define, data, distinct
 from relationalai.semantics.reasoners.graph import Graph
 
 model = Model("reachability_supply_chain")
@@ -66,12 +69,10 @@ graph = Graph(
     edge_dst_relationship=SupplyLink.to_facility,
 )
 
-# --- Validate graph ---
-
 graph.num_nodes().inspect()
 graph.num_edges().inspect()
 
-# --- Full reachability (all pairs) ---
+# --- Mode 1: Full reachability (all pairs) ---
 
 reachable = graph.reachable(full=True)
 
@@ -90,27 +91,56 @@ all_reachable_df = (
 print("All reachable pairs in the supply chain:")
 print(all_reachable_df.to_string(index=False))
 
-# --- Filter to downstream from Steel Mill ---
+# --- Mode 2: Parameterized upstream — reachable(to=target) ---
+# "Which raw materials does East Coast DC depend on?"
+# Define a target relationship, then query who can reach it.
 
-steel_mill_id = 3
-downstream = all_reachable_df[all_reachable_df["from_id"] == steel_mill_id]
-# Exclude self-reachability
-downstream = downstream[downstream["to_id"] != steel_mill_id]
-print(f"\nDownstream impact of Steel Mill disruption:")
-print(f"  {len(downstream)} facilities affected")
-if len(downstream) > 0:
-    print(downstream[["to_id", "to_name"]].to_string(index=False))
+target_dc = model.Relationship(f"Target DC: {Facility}")
+define(target_dc(Facility)).where(Facility.name == "East Coast DC")
 
-# --- Filter to upstream of Steel Mill ---
+reachable_to = graph.reachable(to=target_dc)
 
-upstream = all_reachable_df[all_reachable_df["to_id"] == steel_mill_id]
-upstream = upstream[upstream["from_id"] != steel_mill_id]
-print(f"\nUpstream dependencies of Steel Mill:")
-print(f"  {len(upstream)} supplier facilities")
-if len(upstream) > 0:
-    print(upstream[["from_id", "from_name"]].to_string(index=False))
+upstream_node = graph.Node.ref()
+upstream_df = (
+    where(
+        reachable_to(upstream_node, target_dc),
+        upstream_node.facility_type == "raw_material",
+    )
+    .select(
+        upstream_node.name.alias("supplier_name"),
+        upstream_node.facility_type.alias("type"),
+    )
+    .to_df()
+)
 
-# --- Per-facility downstream reach count (excluding self) ---
+print(f"\nUpstream raw material suppliers for East Coast DC:")
+print(upstream_df.to_string(index=False))
+
+# --- Mode 3: Parameterized downstream — reachable(from_=target) ---
+# "If Steel Mill goes offline, what is affected?"
+
+target_mill = model.Relationship(f"Target Mill: {Facility}")
+define(target_mill(Facility)).where(Facility.name == "Steel Mill")
+
+reachable_from = graph.reachable(from_=target_mill)
+
+downstream_node = graph.Node.ref()
+downstream_df = (
+    where(reachable_from(target_mill, downstream_node))
+    .select(distinct(
+        downstream_node.name.alias("affected_facility"),
+        downstream_node.facility_type.alias("type"),
+    ))
+    .to_df()
+)
+# Exclude the target itself
+downstream_df = downstream_df[downstream_df["affected_facility"] != "Steel Mill"]
+
+print(f"\nDownstream impact if Steel Mill goes offline:")
+print(f"  {len(downstream_df)} facilities affected")
+print(downstream_df.to_string(index=False))
+
+# --- Per-facility downstream reach count ---
 
 non_self = all_reachable_df[all_reachable_df["from_id"] != all_reachable_df["to_id"]]
 if len(non_self) > 0:

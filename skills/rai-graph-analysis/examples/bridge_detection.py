@@ -1,11 +1,11 @@
-# Pattern: WCC-based bridge node identification in an infrastructure network.
-# Key ideas: weakly_connected_component() to label components; bridge nodes
-# connect different components when edges are removed; comparison of component
-# membership across edge endpoints.
+# Pattern: WCC + Bridge concept for identifying critical network connectors.
+# Key ideas: weakly_connected_component() for cluster identification;
+# extends=[] to define Bridge as a derived subconcept of Site;
+# cross-region relationship detection via where() conditions;
+# betweenness_centrality() for structural bottleneck ranking.
 
-from relationalai.semantics import Float, Integer, Model, String
+from relationalai.semantics import Float, Integer, Model, String, select, distinct
 from relationalai.semantics.reasoners.graph import Graph
-from relationalai.semantics.std import aggregates
 
 model = Model("bridge_detection")
 
@@ -20,8 +20,7 @@ Link.bandwidth = model.Property(f"{Link} has bandwidth {Integer:bandwidth}")
 Link.site_a = model.Relationship(f"{Link} connects {Site}")
 Link.site_b = model.Relationship(f"{Link} connects to {Site}")
 
-# --- Sample data: network with a bridge node ---
-# Region A (sites 1-3) connected to Region B (sites 5-7) only through site 4
+# --- Sample data: network with bridge nodes between regions ---
 
 site_data = model.data([
     {"id": 1, "name": "Alpha-1", "region": "A"},
@@ -39,7 +38,7 @@ link_data = model.data([
     {"id": 1, "a_id": 1, "b_id": 2, "bandwidth": 100},
     {"id": 2, "a_id": 2, "b_id": 3, "bandwidth": 80},
     {"id": 3, "a_id": 1, "b_id": 3, "bandwidth": 90},
-    # Bridge: Region A ↔ Region B only through site 4
+    # Bridge: Region A <-> Region B only through site 4
     {"id": 4, "a_id": 3, "b_id": 4, "bandwidth": 50},
     {"id": 5, "a_id": 4, "b_id": 5, "bandwidth": 60},
     # Region B internal links
@@ -56,8 +55,21 @@ model.define(
     )
 )
 
-# --- Graph construction: undirected unweighted infrastructure ---
-# betweenness_centrality() does not support weighted graphs
+# --- Derived concept: Bridge (extends Site) ---
+# A bridge site has links that cross region boundaries.
+# Uses extends=[] to make Bridge a subconcept of Site — inherits all Site properties.
+
+site1, site2 = Site.ref(), Site.ref()
+link_ref = Link.ref()
+
+Bridge = model.Concept("Bridge", extends=[Site])
+model.define(Bridge(site1)).where(
+    link_ref.site_a(site1),
+    link_ref.site_b(site2),
+    site1.region != site2.region,
+)
+
+# --- Graph construction: undirected unweighted ---
 
 graph = Graph(model, directed=False, weighted=False, node_concept=Site)
 
@@ -73,10 +85,10 @@ model.where(
 # --- Step 1: WCC to identify connected components ---
 
 from relationalai.semantics import where
+from relationalai.semantics.std import aggregates as aggs
 
 graph.Node.component_id = graph.weakly_connected_component()
 
-# Query WCC results — assign to Node then select
 component_df = (
     model.select(
         graph.Node.id.alias("site_id"),
@@ -85,7 +97,6 @@ component_df = (
     )
     .to_df()
 )
-# WCC component IDs are hash-based identifiers — use as-is for grouping
 
 print("Connected Components")
 print(component_df.to_string(index=False))
@@ -95,7 +106,26 @@ print(f"\nNumber of components: {num_components}")
 if num_components == 1:
     print("Network is fully connected (single component)")
 
-# --- Step 2: Betweenness centrality to find bridge candidates ---
+# --- Step 2: Bridge concept query ---
+
+# Query bridges — Bridge extends Site, so all Site properties are available
+bridge_df = (
+    select(distinct(
+        Bridge.id.alias("bridge_site_id"),
+        Bridge.name.alias("bridge_site_name"),
+        Bridge.region.alias("bridge_region"),
+    ))
+    .to_df()
+)
+
+print("\nBridge Sites (cross-region connectors)")
+if len(bridge_df) > 0:
+    for _, row in bridge_df.iterrows():
+        print(f"  {row['bridge_site_name']} (id={row['bridge_site_id']}, region={row['bridge_region']})")
+else:
+    print("  No bridge sites found")
+
+# --- Step 3: Betweenness centrality for structural ranking ---
 
 betweenness = graph.betweenness_centrality()
 
@@ -114,13 +144,8 @@ betweenness_df = (
     .reset_index(drop=True)
 )
 
-print("\nBetweenness Centrality (bridge candidates)")
+print("\nBetweenness Centrality (structural ranking)")
 print(betweenness_df.to_string(index=False))
-
-# --- Step 3: Identify bridge nodes ---
-# Bridge nodes have high betweenness relative to their degree.
-# In this network, Bridge-Hub (site 4) should have the highest betweenness
-# because ALL cross-region paths go through it.
 
 top_bridge = betweenness_df.iloc[0]
 print(f"\nMost critical bridge node: {top_bridge['name']}")
