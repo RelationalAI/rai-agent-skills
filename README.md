@@ -43,6 +43,8 @@ npx skills add RelationalAI/rai-agent-skills --skill '*' --agent cortex
 ### Claude
 Follow [these instructions](https://code.claude.com/docs/en/discover-plugins#add-marketplaces) to point at this repo.
 
+Also see this quick [video](https://www.loom.com/share/a78519cfa60149158779cb9925a44a1b) for an overview.
+
 Example:
 ```
 /plugin marketplace add RelationalAI/rai-agent-skills
