@@ -162,6 +162,35 @@ Validate the proposed design against source data before coding:
 | Concept grounding | Every concept maps to an authoritative source |
 | Orthogonality | No two concepts represent the same entity set |
 
+#### Type validation against Snowflake schema
+
+Verify that every property's RAI type matches its Snowflake source column. Use this mapping:
+
+| Snowflake type | RAI type | Notes |
+|---|---|---|
+| VARCHAR, TEXT, STRING | `String` | |
+| NUMBER with scale > 0 (e.g., NUMBER(18,2)) | `Float` | Check `NUMERIC_SCALE` in INFORMATION_SCHEMA |
+| NUMBER, INT, INTEGER (scale = 0) | `Integer` | |
+| FLOAT, DOUBLE, REAL | `Float` | |
+| DATE | `Date` | |
+| TIMESTAMP_NTZ, TIMESTAMP_LTZ, TIMESTAMP | `DateTime` | |
+| BOOLEAN | Unary `Relationship` | Do not use `Property`; see Common Pitfalls |
+
+Run this query to pull actual column types for comparison:
+
+```sql
+SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, NUMERIC_PRECISION, NUMERIC_SCALE
+FROM <database>.INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_SCHEMA = '<schema>'
+  AND TABLE_NAME IN ('<table1>', '<table2>')
+ORDER BY TABLE_NAME, ORDINAL_POSITION;
+```
+
+**Common mismatches to check:**
+- **DATE vs TEXT** — Snowflake dates that were stored as TEXT in CSV exports will appear as VARCHAR. Use `String` in RAI and convert later, or cast in the source view.
+- **NUMBER precision** — A column typed `NUMBER(38,0)` is an integer, but `NUMBER(18,4)` is a float. Always check `NUMERIC_SCALE`; if scale > 0, use `Float`.
+- **BOOLEAN** — RAI has no boolean property type. Model boolean columns as unary `Relationship(f"... is <flag>")`.
+
 ---
 
 ### Step 6 — Generate code
@@ -183,7 +212,45 @@ model/
 
 ### Step 7 — Validate with queries
 
-Create a `main.py` that imports the model and runs a query for each question from Step 1. Fix any import errors or empty results before considering the starter ontology complete. For query syntax, see `rai-querying`.
+Create a `main.py` that imports the model and validates data loaded correctly before answering scoped questions. Fix any import errors or empty results before considering the starter ontology complete. For query syntax, see `rai-querying`.
+
+> **Note:** Import aggregates with `from relationalai.semantics.std import aggregates`.
+
+**7a — Count instances per concept** to confirm data binding loaded rows:
+
+```python
+from relationalai.semantics.std import aggregates
+
+df = model.select(aggregates.count(MyConcept).alias("count")).to_df()
+print(df)
+# Expect: count matches source table row count. Zero means data binding failed.
+```
+
+**7b — Verify relationships** to confirm FK joins resolved:
+
+```python
+df = model.select(
+    ConceptA.id.alias("a_id"),
+    ConceptB.id.alias("b_id"),
+).where(
+    ConceptA.my_relationship(ConceptB)
+).to_df()
+print(f"Linked pairs: {len(df)}")
+# Expect: non-empty results. Empty means the FK join didn't match.
+```
+
+**7c — Answer scoped questions** from Step 1:
+
+```python
+df = model.select(
+    MyConcept.id.alias("id"),
+    MyConcept.some_property.alias("value"),
+).where(
+    MyConcept.some_property > threshold
+).to_df()
+print(df)
+# Each scoped question from Step 1 should be answerable with a query like this.
+```
 
 ---
 

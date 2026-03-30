@@ -89,12 +89,15 @@ connections:
 reasoners:
   backend: sql                         # "sql" (default) or "direct_access"
   logic:
-    size: HIGHMEM_X64_S
+    name: team_logic                   # optional; identifier for this reasoner
+    size: HIGHMEM_X64_S                # used when creating the reasoner
     use_lqp: true
     emit_constraints: false
   predictive:
+    name: team_predictive              # optional
     size: HIGHMEM_X64_S
   prescriptive:
+    name: team_prescriptive            # optional
     size: HIGHMEM_X64_S
 
 data:
@@ -290,17 +293,22 @@ reasoners:
 ```yaml
 reasoners:
   logic:
-    size: HIGHMEM_X64_S
+    name: team_logic                 # optional; if named reasoner exists, PyRel uses it as-is (ignores size)
+    size: HIGHMEM_X64_S              # used only when auto-creating (name set but reasoner doesn't exist)
     use_lqp: true                    # LQP for rule execution (default true)
     emit_constraints: true           # emit constraint reports
-    incremental_maintenance: "off"   # "on", "auto", or "off"
+    incremental_maintenance: "off"   # "off" (default), "auto", or "all"
     lqp:
       semantics_version: "1"         # opt into hard validation errors
   predictive:
+    name: team_predictive            # optional
     size: HIGHMEM_X64_S
   prescriptive:
+    name: team_prescriptive          # optional
     size: HIGHMEM_X64_S
 ```
+
+> **Reasoner name/size behavior:** If `name` and `size` are both set and the named reasoner doesn't exist, PyRel creates it with the configured size. If the named reasoner already exists, PyRel uses it as-is and does not resize it. If the reasoner is later deleted and re-created automatically, it uses the default size (`HIGHMEM_X64_S`), not the previously configured size.
 
 > **Note:** `auto_suspend_mins` and `await_storage_vacuum` are managed via the CLI only — they are not config fields.
 > - Set auto-suspend after creation: `rai reasoners:alter --type Logic --name <name> --auto-suspend-mins <value>`

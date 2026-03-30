@@ -305,6 +305,7 @@ It is a GOAL (objective) if:
 | Missing forcing requirement | MINIMIZE objective with no forcing constraint yields zero | Always identify what real-world requirement forces positive activity |
 | Constraint references unwired relationship | Relationship declared but no `define()` data binding | Verify all relationships in `.where()` joins have `define()` rules. Unwired relationships cause TyperError or silently match zero entities. |
 | `p.satisfy()` or `model.define()` in a Python loop | Defining constraints per entity in a for loop instead of declaratively | Use vectorized `.where().define()` or `p.satisfy()` with `.per()`. See `rai-pyrel-coding` Common Pitfalls for before/after examples |
+| `Duplicate relationship` / `FDError` on re-solve | Solving multiple scenarios with `populate=True` (default) writes conflicting results to the graph | Use `populate=False` + `p.variable_values().to_df()` to extract results. Create a fresh `Problem` per scenario. See Re-Solve Behavior section. |
 
 ### Unwired Relationships
 
@@ -454,6 +455,25 @@ List elements are joined with underscores. Use entity identifiers (IDs, names) i
 
 Re-solving the same `Problem` instance is safe. Result import uses `experimental.load_data` with replace semantics — previous results remain intact if a subsequent solve fails. The inline formulation pattern (fresh `Problem` per scenario loop iteration) is still useful for clean separation of scenarios, but is no longer required for error recovery.
 
+> **Multi-scenario re-solve pattern:**
+> When solving multiple scenarios in a loop (e.g., varying parameters, what-if analysis), create a **fresh `Problem` per iteration**, use `populate=False` on `solve_for`, and extract results via `variable_values().to_df()`. This avoids `Duplicate relationship` / `FDError` caused by writing conflicting results back to the graph on each iteration.
+>
+> ```python
+> results = []
+> for scenario in scenarios:
+>     p = Problem(model, Float)               # fresh Problem each iteration
+>     p.solve_for(Entity.x_var, populate=False, ...)
+>     p.satisfy(...)
+>     p.minimize(...)
+>     p.solve(solver, ...)
+>     df = p.variable_values().to_df()        # extract without populating graph
+>     df["scenario"] = scenario
+>     results.append(df)
+> all_results = pd.concat(results)
+> ```
+>
+> See [examples/factory_production.py](examples/factory_production.py) for a complete working example of this pattern.
+
 ### PyRel is additive — nothing can be removed or modified in-place
 
 PyRel's model and problem APIs are **append-only**. Every call to `model.define()`, `model.Property()`, `model.Concept()`, `p.solve_for()`, `p.satisfy()`, `p.minimize()`/`p.maximize()` **adds** to the model or problem. There is no API to remove, replace, or modify any existing element.
@@ -480,3 +500,4 @@ PyRel's model and problem APIs are **append-only**. Every call to `model.define(
 | Constraint formulation | Forcing, capacity, balance, linking, `.where()` scoping, parameter derivation | [constraint-formulation.md](references/constraint-formulation.md) |
 | Objective formulation | Direction, multi-component, penalty terms, scenario formulation | [objective-formulation.md](references/objective-formulation.md) |
 | Problem patterns & validation | Common patterns (assignment, flow, knapsack) and the validation checklist | [problem-patterns-and-validation.md](references/problem-patterns-and-validation.md) |
+| Global constraints | `all_different`, `implies`, SOS1/SOS2 syntax, solver requirements, CP vs MIP guide | [global-constraints.md](references/global-constraints.md) |

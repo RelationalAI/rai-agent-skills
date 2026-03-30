@@ -107,6 +107,13 @@ graph = Graph(
 | **Similarity** | `jaccard_similarity()`, `cosine_similarity()`, `adamic_adar()`, `preferential_attachment()` | `(node1, node2, score)` | Entity comparison, link prediction |
 | **Clustering** | `local_clustering_coefficient()`, `average_clustering_coefficient()`, `triangle_count()`, `triangle()`, `unique_triangle()` | `(node, value)` or `(n1, n2, n3)` | Local density, tightness |
 
+**Key compatibility constraints:**
+- `betweenness_centrality()` -- cannot use with `weighted=True`
+- `louvain()` -- cannot use with `directed=True` (use `infomap()` for directed graphs)
+- `reachable()` -- cannot use with `directed=False` (requires directed graph)
+- `local_clustering_coefficient()` -- cannot use with `directed=True` (requires undirected)
+- `triangle_count()` / `triangle()` -- cannot use with `directed=True` (requires undirected)
+
 ---
 
 ## Graph Analysis Workflow
@@ -273,6 +280,16 @@ Start from the question, not the algorithm name:
 - `reachable()` requires `directed=True`
 - `local_clustering_coefficient()` and `triangle_count()` require `directed=False`
 - `pagerank()` works on undirected but is most meaningful on directed
+
+**Pre-flight compatibility check:** Before proceeding to Step 4, verify your chosen algorithm is compatible with your graph's directed/weighted settings.
+
+| Algorithm | Cannot use with |
+|-----------|----------------|
+| `betweenness_centrality()` | `weighted=True` |
+| `louvain()` | `directed=True` (use `infomap()` for directed) |
+| `reachable()` | `directed=False` (requires directed graph) |
+| `local_clustering_coefficient()` | `directed=True` (requires undirected) |
+| `triangle_count()` / `triangle()` | `directed=True` (requires undirected) |
 
 For per-algorithm deep dives (parameters, output shapes, interpretation, compatibility matrix), see [algorithm-selection.md](references/algorithm-selection.md).
 
