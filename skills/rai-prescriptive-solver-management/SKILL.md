@@ -477,7 +477,7 @@ Two patterns for exploring how solutions change under different assumptions:
 
 **Decision rule:** Only parameter values change -> Scenario Concept. Entities or constraint structure change -> Loop + where=.
 
-For full patterns, code examples, and a decision matrix, see [scenario-analysis.md](references/scenario-analysis.md).
+For full patterns, code examples, and a decision matrix, see [scenario-analysis.md](../rai-prescriptive-problem-formulation/references/scenario-analysis.md).
 
 ---
 
@@ -544,4 +544,4 @@ When entity creation produces ZERO entities (cross-product or filtered concept h
 | Numerical stability & MIP | Numerical stability categories, big-M, indicator constraints | [numerical-and-mip.md](references/numerical-and-mip.md) |
 | Formulation display | `p.display()` output structure and how to read it | [formulation-display.md](references/formulation-display.md) |
 | Pre-solve validation | Entity population checks, data integrity queries, copy-paste checklist | [pre-solve-validation.md](references/pre-solve-validation.md) |
-| Scenario analysis | Scenario Concept vs Loop + where= patterns, decision matrix, code examples | [scenario-analysis.md](references/scenario-analysis.md) |
+| Scenario analysis | Scenario Concept vs Loop + where= patterns, decision matrix, code examples | [scenario-analysis.md](../rai-prescriptive-problem-formulation/references/scenario-analysis.md) |

@@ -501,3 +501,4 @@ PyRel's model and problem APIs are **append-only**. Every call to `model.define(
 | Objective formulation | Direction, multi-component, penalty terms, scenario formulation | [objective-formulation.md](references/objective-formulation.md) |
 | Problem patterns & validation | Common patterns (assignment, flow, knapsack) and the validation checklist | [problem-patterns-and-validation.md](references/problem-patterns-and-validation.md) |
 | Global constraints | `all_different`, `implies`, SOS1/SOS2 syntax, solver requirements, CP vs MIP guide | [global-constraints.md](references/global-constraints.md) |
+| Scenario analysis | Scenario Concept vs Loop + where= patterns, decision matrix, code examples | [scenario-analysis.md](references/scenario-analysis.md) |
