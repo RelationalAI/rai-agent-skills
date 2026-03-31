@@ -306,6 +306,33 @@ reasoners:
 > - Set auto-suspend after creation: `rai reasoners:alter --type Logic --name <name> --auto-suspend-mins <value>`
 > - Set await-storage-vacuum at creation time: `rai reasoners:create --type Logic --name <name> --size <size> --await-storage-vacuum`
 
+### Solver Settings (Gurobi)
+
+Gurobi requires three Snowflake objects and a named prescriptive engine:
+
+1. **Snowflake secret** holding the Gurobi license key (e.g., `SOLVERS.SECRETS.GUROBI_LICENSE`)
+2. **External access integration** allowing the engine to reach the Gurobi license server (e.g., `gurobi_integration`)
+3. **A named prescriptive engine** — without `name`, PyRel uses an anonymous engine that does not receive the solver settings
+
+```yaml
+reasoners:
+  prescriptive:
+    name: my_prescriptive_engine    # required for Gurobi — must reference an existing engine
+    size: HIGHMEM_X64_S
+    settings:
+      gurobi:
+        enabled: true
+        license_secret_name: solvers.secrets.gurobi_license
+        external_access_integration: gurobi_integration
+```
+
+If `p.solve("gurobi")` returns `Solver 'gurobi' is not enabled or not properly configured`, check:
+- The `name` field is set and the engine exists (`rai reasoners:list --type Prescriptive`)
+- The secret exists (`SHOW SECRETS IN SCHEMA SOLVERS.SECRETS`)
+- The integration exists and is enabled (`DESCRIBE INTEGRATION gurobi_integration`)
+
+For solver selection guidance, see `rai-prescriptive-solver-management`.
+
 ### Polling Configuration
 
 Controls how aggressively the client polls for long-running operations:
