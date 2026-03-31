@@ -23,7 +23,7 @@ Comprehensive reference for binding source data to concepts. Covers all three da
 | FLOAT, DOUBLE | `Float` |
 | DATE | `Date` |
 | TIMESTAMP_NTZ, TIMESTAMP | `DateTime` |
-| BOOLEAN | Unary `Relationship` (not boolean property) |
+| BOOLEAN | `Boolean` property, or unary `Relationship` for flag-style |
 
 ---
 

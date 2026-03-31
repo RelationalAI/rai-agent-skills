@@ -205,6 +205,41 @@ Run these checks on every rule before considering it complete:
 | Type alignment | Condition compares same types | Zero matches from silent type mismatch |
 | Aggregation scoped | `.per()` present when aggregating across entities | Single global result instead of per-entity |
 
+#### Exhaustiveness validation
+
+For classification rules that should cover every entity, run an exhaustiveness check to find unclassified entities:
+
+```python
+# Find entities with no assigned classification
+unclassified = model.select(
+    Entity.id.alias("id"),
+).where(
+    model.not_(Entity.classification)
+).to_df()
+```
+
+If unclassified entities exist, diagnose WHY they were missed by inspecting the condition property values:
+
+```python
+model.select(
+    Entity.id.alias("id"),
+    (Entity.score | "MISSING").alias("score"),
+).where(
+    model.not_(Entity.classification)
+).to_df()
+```
+
+Common causes of incomplete coverage:
+- **NaN/NULL values** — entities with missing condition properties silently fail all comparisons, so no rule branch matches
+- **Boundary gaps** — e.g., conditions `>= 100` and `< 50` leave the range 50-99 uncovered
+- **Type mismatches** — comparing a `String` property to an `Integer` threshold silently fails (zero matches, no error)
+
+Fix with a catch-all rule for missing values:
+
+```python
+model.where(model.not_(Entity.score)).define(Entity.classification("unknown"))
+```
+
 ### Step 6: Connect to Downstream
 
 Rules produce derived properties that downstream consumers can query or chain:

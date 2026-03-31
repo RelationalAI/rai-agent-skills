@@ -73,6 +73,34 @@ A single engine name (e.g., `prescriptive_assistant`) typically has **two** engi
 
 These are independent — deleting one does not affect the other.
 
+### `connect_sync()` Client API
+
+The newer `connect_sync()` client provides typed methods for reasoner management alongside the `Resources` class:
+
+```python
+from relationalai.client import connect_sync
+
+with connect_sync() as client:
+    # Create a reasoner (blocks until READY)
+    client.reasoners.create_ready(
+        "Logic", "my_reasoner",
+        reasoner_size="HIGHMEM_X64_S",
+        auto_suspend_mins=60,
+    )
+
+    # List, get, suspend, resume, delete
+    client.reasoners.list()
+    client.reasoners.get("Logic", "my_reasoner")
+    client.reasoners.suspend("Logic", "my_reasoner")
+    client.reasoners.resume_ready("Logic", "my_reasoner")
+    client.reasoners.delete("Logic", "my_reasoner")
+
+    # Job monitoring
+    jobs = client.jobs.list("Logic", name="my_reasoner")
+    job = client.jobs.get("Logic", "<job_id>")
+    client.jobs.cancel("Logic", "<job_id>")
+```
+
 ### Warm Reasoners
 
 Warm reasoners are pre-provisioned reasoners kept running and ready to accept jobs immediately, eliminating cold-start latency. When a user creates or resumes a reasoner and a warm instance is available for the requested size, the system assigns the warm reasoner instead of provisioning a new one.

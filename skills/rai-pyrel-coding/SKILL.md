@@ -141,6 +141,8 @@ Types are imported objects, not strings. Used in Property f-strings and as type 
 
 **Deprecated alias:** `decimal` is a deprecated alias for `Number` — do not use it. Use `Number.size(p, s)` instead.
 
+**Snowflake type alignment:** When loading from Snowflake tables, the property type must match the column's actual data type. Verify with `DESCRIBE TABLE` or `INFORMATION_SCHEMA.COLUMNS`. See [rai-ontology-design](../rai-ontology-design/SKILL.md) for the full mapping table and [rai-build-starter-ontology](../rai-build-starter-ontology/SKILL.md) for the validation workflow.
+
 ---
 
 ## Properties and Relationships — When to Use Which

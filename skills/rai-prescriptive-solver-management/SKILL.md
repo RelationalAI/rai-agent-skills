@@ -70,6 +70,28 @@ p.solve_info().display()
 # Check: p.termination_status() → "OPTIMAL" | "INFEASIBLE" | "DUAL_INFEASIBLE" | "TIME_LIMIT"
 ```
 
+### Post-Solve API
+
+`p.solve()` returns `None` -- do NOT assign its return value. Access solve results through separate methods:
+
+- **Status summary:** `p.solve_info().display()` prints a human-readable solve summary.
+- **Status properties:** `p.solve_info().termination_status` (str), `p.solve_info().objective_value` (float).
+- **Solution values:** `p.variable_values().to_df()` returns a DataFrame of all decision variable values.
+
+```python
+# CORRECT usage
+p.solve("highs", time_limit_sec=60)
+
+si = p.solve_info()
+si.display()                    # Print status summary
+print(si.termination_status)    # "OPTIMAL", "INFEASIBLE", etc.
+print(si.objective_value)       # Objective function value
+
+df = p.variable_values().to_df()  # Solution as DataFrame
+```
+
+> **Warning:** `result = p.solve(...); result.status` fails because `solve()` returns `None` regardless of solver. Accessing any attribute on `None` raises `AttributeError`. Always call `p.solve()` on its own line, then use `p.solve_info()` and `p.variable_values()` separately.
+
 ---
 
 ## Problem Type Classification
@@ -191,94 +213,16 @@ p.solve("ipopt", time_limit_sec=60)    # NLP (open-source)
 
 ## Global Constraints
 
-Global constraints provide high-level combinatorial structure that solvers can exploit for efficient propagation. Import from the prescriptive reasoner:
+Global constraints (`all_different`, `implies`, SOS1, SOS2) provide solver-exploitable combinatorial structure. Each has specific solver requirements:
 
-```python
-from relationalai.semantics.reasoners.prescriptive import all_different, implies, special_ordered_set_type_1, special_ordered_set_type_2
-```
+| Constraint | Requires | Alternatives |
+|---|---|---|
+| `all_different` | MiniZinc | O(n^2) pairwise inequalities in MIP |
+| `implies` | Gurobi or MiniZinc | Big-M reformulation for HiGHS |
+| `special_ordered_set_type_1` | Gurobi | Binary variables + sum constraints |
+| `special_ordered_set_type_2` | Gurobi | Binary segment selection variables |
 
-### `all_different` — pairwise distinct values
-
-**Requires MiniZinc.** Not supported by HiGHS, Gurobi, or Ipopt. MiniZinc exploits `all_different` natively with arc consistency propagation.
-
-Requires all variables in the group to take pairwise distinct values. Returns an `Aggregate` — use `.per()` for grouping.
-
-```python
-# Sudoku: all different per row, per column, per box
-p.satisfy(
-    model.require(
-        all_different(x).per(i),                              # each row
-        all_different(x).per(j),                              # each column
-        all_different(x).per((i - 1) // side, (j - 1) // side),  # each box
-    ).where(cell(i, j, x))
-)
-```
-
-### `implies` — logical implication
-
-**Requires Gurobi** (indicator constraints) **or MiniZinc.** HiGHS does not support indicator constraints — use Big-M reformulation instead (see [numerical-and-mip.md](references/numerical-and-mip.md) > Logical implication in MIP).
-
-Creates `left => right` constraint. Returns an `Expression` (not an Aggregate — no `.per()`).
-
-```python
-# If x = 1, then y must = 1
-p.satisfy(model.require(implies(x == 1, y == 1)))
-
-# If facility is open, production must be positive
-p.satisfy(model.require(implies(Facility.x_open == 1, Facility.x_production >= 1)))
-```
-
-### `special_ordered_set_type_1` — SOS1 at most one non-zero
-
-**Requires Gurobi.** HiGHS and MiniZinc do not support SOS constraints. For HiGHS, reformulate using explicit binary variables and sum constraints instead.
-
-At most one variable in the set can be non-zero. Used for selecting exactly one option from a group.
-
-```python
-# At most one facility in a region can be open
-p.satisfy(model.require(special_ordered_set_type_1(Facility.index, Facility.x_open).per(Region)))
-```
-
-Arguments: `(index_expression, variable_expression)` where `index` defines the ordering.
-
-### `special_ordered_set_type_2` — SOS2 for piecewise linear
-
-**Requires Gurobi.** HiGHS and MiniZinc do not support SOS constraints. For HiGHS, reformulate piecewise-linear functions using explicit binary variables for segment selection.
-
-At most 2 variables can be non-zero, and they must be consecutive in the given order. Used for piecewise-linear approximations.
-
-```python
-# PWL: at most 2 consecutive weights non-zero
-p.satisfy(model.require(special_ordered_set_type_2(Point.i, Point.w)))
-```
-
-Arguments: `(index_expression, variable_expression)` where `index` defines the ordering.
-
-### CP vs MIP Decision Guide
-
-**When to prefer MiniZinc (CP):**
-- Pure combinatorial / constraint satisfaction (Sudoku, N-Queens, scheduling)
-- Heavy use of `all_different` — CP exploits it natively with arc consistency; MIP decomposes into O(n^2) pairwise inequalities
-- Complex precedence / sequencing with many logical implications
-- Finding ANY feasible solution matters more than proving optimality
-- All variables are integer — no continuous relaxation benefit
-
-**When to prefer HiGHS/Gurobi (MIP):**
-- Mix of continuous and integer variables (allocation, flow, portfolio)
-- LP relaxation provides useful quality metrics (gap, dual values, sensitivity)
-- Need dual values or reduced costs for sensitivity analysis
-- Large-scale problems where LP relaxation tightness drives performance
-- Quadratic objectives (convex QP) — HiGHS supports convex QP objectives; MiniZinc does not
-
-**When to prefer Ipopt (NLP):**
-- Continuous nonlinear objectives or constraints (no integer variables)
-- Local optimality is acceptable (Ipopt finds local optima, not global)
-- Smooth differentiable functions only
-
-**Performance rules of thumb:**
-- CP scales well with tight logical constraints but poorly with loose continuous bounds
-- MIP scales well when LP relaxation is tight (small integrality gap)
-- For problems with both `all_different` and continuous variables, try MIP first — the continuous structure usually dominates
+For syntax, code examples, and a CP vs MIP decision guide, see [global-constraints.md](../rai-prescriptive-problem-formulation/references/global-constraints.md).
 
 ---
 
@@ -528,81 +472,12 @@ p.solve("ipopt", log_to_console=True)
 
 Two patterns for exploring how solutions change under different assumptions:
 
-**Pattern 1: Scenario Concept — parameter variations (preferred)**
+- **Scenario Concept** — parameter variations (budget, demand, thresholds) solved in a single solve. Results live in the ontology.
+- **Loop + where= filter** — entity exclusion or partitioned sub-problems. Each iteration is independent. Use `populate=False` + `variable_values().to_df()`.
 
-When the same problem structure is solved with different parameter values (budget, demand,
-service levels), model scenarios as a first-class Concept. One solve handles all scenarios:
+**Decision rule:** Only parameter values change -> Scenario Concept. Entities or constraint structure change -> Loop + where=.
 
-```python
-# Assumes: Stock = model.Concept("Stock", identify_by={"index": Integer})
-# with Stock.returns (Float) and Stock data already loaded.
-
-# Scenario with parameter data
-Scenario = model.Concept("Scenario", identify_by={"name": String})
-Scenario.min_return = model.Property(f"{Scenario} has {Float:min_return}")
-scenario_data = model.data(
-    [("conservative", 10), ("moderate", 20), ("aggressive", 30)],
-    columns=["name", "min_return"],
-)
-model.define(Scenario.new(scenario_data.to_schema()))
-
-# Decision variable indexed by Scenario
-Stock.x_quantity = model.Property(f"{Stock} in {Scenario} has {Float:quantity}")
-x_qty = Float.ref()
-
-# Constraint references Scenario property
-return_ok = model.where(
-    Stock.x_quantity(Scenario, x_qty),
-).require(
-    sum(x_qty * Stock.returns).per(Scenario) >= Scenario.min_return
-)
-
-# Single solve — all scenarios simultaneously
-# For portfolio risk (QP objective), see PyRel example/prescriptive/portfolio/
-p = Problem(model, Float)
-p.solve_for(Stock.x_quantity(Scenario, x_qty), name=[Scenario.name, "qty", Stock.index])
-p.satisfy(return_ok)
-p.minimize(sum(Stock.x_quantity))
-p.solve("highs", time_limit_sec=60)
-
-# Results: query with scenario filter
-model.select(Scenario.name, Stock.index, Stock.x_quantity).where(
-    Stock.x_quantity(Scenario, x_qty), x_qty > 0.001
-).inspect()
-```
-
-**Pattern 2: Loop + where= filter — entity selection/exclusion**
-
-When different entity subsets are tested (exclude a supplier, solve per region),
-loop with `where=[]` scoping. Each iteration is an independent sub-problem:
-
-```python
-for excluded in [None, "SupplierC", "SupplierB"]:
-    p = Problem(model, Float)
-    if excluded:
-        active = Order.supplier.name != excluded
-        p.solve_for(Order.x_qty, where=[active], populate=False)
-    else:
-        p.solve_for(Order.x_qty, populate=False)
-    p.maximize(...)
-    p.solve("highs", time_limit_sec=60)
-    # variable_values().to_df() for per-iteration results
-```
-
-**When to use which:**
-
-| Criterion | Scenario Concept | Loop + where= |
-|-----------|-----------------|---------------|
-| What varies | Parameter values (budget, demand, thresholds) | Which entities participate (exclude supplier, solve per factory) |
-| Problem structure | Same constraints, same entities, different parameter values | Constraints or entity sets change between scenarios |
-| Number of solves | One (all scenarios simultaneously) | One per scenario |
-| Where results live | **In the ontology** — queryable via `model.select()`, composable with other model queries, available for downstream derived properties | In Python DataFrames via `variable_values().to_df()` — outside the model |
-| Problem size | Cross-product of entities × scenarios (can be large) | Each sub-problem is small and independent |
-
-**Decision rule:**
-- Only parameter values change → **Scenario Concept**. Results are part of the ontology, which is the key advantage — they can be queried, joined, and composed like any other model data.
-- Entities are added/removed or constraint structure changes → **Loop + where=**. Required when the problem graph itself differs between scenarios (e.g., removing a supplier changes which SupplyOrders exist).
-- Independent partitions (per-factory, per-region) → **Loop + where=**. Each partition is a separate problem with no cross-partition coupling.
+For full patterns, code examples, and a decision matrix, see [scenario-analysis.md](../rai-prescriptive-problem-formulation/references/scenario-analysis.md).
 
 ---
 
@@ -618,6 +493,7 @@ for excluded in [None, "SupplierC", "SupplierB"]:
 | Big-M too loose → slow solve | Using arbitrary `999999` | Use tightest data-driven bound (`M = capacity`) |
 | Numerical issues | Coefficients differing by >1e6 | Rescale data to similar magnitudes |
 | `p.termination_status == "OPTIMAL"` is always False | Missing parens — `p.termination_status` returns a bound method, not a string | Use `p.termination_status()` (with parens) in `model.require()`, or `p.solve_info().termination_status` for Python-side |
+| `AttributeError` on `p.solve()` return value | Assigning `result = p.solve()` and accessing `result.status` | `p.solve()` returns `None`. Use `p.solve_info()` for status, `p.variable_values().to_df()` for values |
 
 Post-solve diagnosis (trivial all-zero solutions, infeasibility root causes, quality assessment) is covered in `rai-prescriptive-results-interpretation`.
 
@@ -668,3 +544,4 @@ When entity creation produces ZERO entities (cross-product or filtered concept h
 | Numerical stability & MIP | Numerical stability categories, big-M, indicator constraints | [numerical-and-mip.md](references/numerical-and-mip.md) |
 | Formulation display | `p.display()` output structure and how to read it | [formulation-display.md](references/formulation-display.md) |
 | Pre-solve validation | Entity population checks, data integrity queries, copy-paste checklist | [pre-solve-validation.md](references/pre-solve-validation.md) |
+| Scenario analysis | Scenario Concept vs Loop + where= patterns, decision matrix, code examples | [scenario-analysis.md](../rai-prescriptive-problem-formulation/references/scenario-analysis.md) |

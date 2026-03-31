@@ -166,6 +166,38 @@ Validate the proposed design against source data before coding:
 | Concept grounding | Every concept maps to an authoritative source |
 | Orthogonality | No two concepts represent the same entity set |
 
+#### Type validation against Snowflake schema
+
+Verify that every property's RAI type matches its Snowflake source column. Use this mapping:
+
+| Snowflake type | RAI type | Notes |
+|---|---|---|
+| VARCHAR, TEXT, STRING | `String` | |
+| NUMBER with scale > 0 (e.g., NUMBER(18,2)) | `Float` | Check `NUMERIC_SCALE` in INFORMATION_SCHEMA |
+| NUMBER, INT, INTEGER (scale = 0) | `Integer` | |
+| FLOAT, DOUBLE, REAL | `Float` | |
+| DATE | `Date` | |
+| TIMESTAMP_NTZ, TIMESTAMP_LTZ, TIMESTAMP | `DateTime` | |
+| BOOLEAN | `Boolean` property, or unary `Relationship` for flag-style patterns | |
+
+Run this query to pull actual column types for comparison:
+
+```sql
+SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, NUMERIC_PRECISION, NUMERIC_SCALE
+FROM <database>.INFORMATION_SCHEMA.COLUMNS
+WHERE TABLE_SCHEMA = '<schema>'
+  AND TABLE_NAME IN ('<table1>', '<table2>')
+ORDER BY TABLE_NAME, ORDINAL_POSITION;
+```
+
+Always run this query before writing property declarations. A type mismatch between the RAI property and the Snowflake column causes a `TyperError` at query time with no indication of which property failed.
+
+**Common mismatches to check:**
+- **DATE vs TEXT** — Columns with date-like names (`signup_date`, `created_at`) may be stored as TEXT in Snowflake, especially when loaded from CSV. Check the actual type; use `String` if the column is TEXT.
+- **NUMBER precision** — A column typed `NUMBER(38,0)` is an integer, but `NUMBER(18,4)` is a float. Always check `NUMERIC_SCALE`; if scale > 0, use `Float`.
+- **BOOLEAN** — Model as `Boolean` property or unary `Relationship(f"... is <flag>")`. Both work; prefer `Relationship` when the flag semantics read naturally (e.g., "Order is urgent").
+- **Numeric IDs** — A column named `CREDIT_CARD_NUMBER` or `PHONE` may be NUMBER, not TEXT. Let the schema dictate the type, not the name.
+
 ---
 
 ### Step 6 — Generate code
@@ -187,7 +219,45 @@ model/
 
 ### Step 7 — Validate with queries
 
-Create a `main.py` that imports the model and runs a query for each question from Step 1. Fix any import errors or empty results before considering the starter ontology complete. For query syntax, see `rai-querying`.
+Create a `main.py` that imports the model and validates data loaded correctly before answering scoped questions. Fix any import errors or empty results before considering the starter ontology complete. For query syntax, see `rai-querying`.
+
+> **Note:** Import aggregates with `from relationalai.semantics.std import aggregates`.
+
+**7a — Count instances per concept** to confirm data binding loaded rows:
+
+```python
+from relationalai.semantics.std import aggregates
+
+df = model.select(aggregates.count(MyConcept).alias("count")).to_df()
+print(df)
+# Expect: count matches source table row count. Zero means data binding failed.
+```
+
+**7b — Verify relationships** to confirm FK joins resolved:
+
+```python
+df = model.select(
+    ConceptA.id.alias("a_id"),
+    ConceptB.id.alias("b_id"),
+).where(
+    ConceptA.my_relationship(ConceptB)
+).to_df()
+print(f"Linked pairs: {len(df)}")
+# Expect: non-empty results. Empty means the FK join didn't match.
+```
+
+**7c — Answer scoped questions** from Step 1:
+
+```python
+df = model.select(
+    MyConcept.id.alias("id"),
+    MyConcept.some_property.alias("value"),
+).where(
+    MyConcept.some_property > threshold
+).to_df()
+print(df)
+# Each scoped question from Step 1 should be answerable with a query like this.
+```
 
 ---
 

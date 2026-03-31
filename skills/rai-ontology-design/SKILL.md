@@ -285,7 +285,7 @@ For guidance on producing a descriptive inventory of a model and classifying unm
 
 ### Loading and binding data to the model 
 
-**Snowflake type mapping:**
+**Snowflake type mapping** (see also [rai-build-starter-ontology](../rai-build-starter-ontology/SKILL.md) for the full validation workflow):
 
 | Snowflake type | RAI base type |
 |---|---|
@@ -295,7 +295,9 @@ For guidance on producing a descriptive inventory of a model and classifying unm
 | FLOAT, DOUBLE | `Float` |
 | DATE | `Date` |
 | TIMESTAMP_NTZ, TIMESTAMP | `DateTime` |
-| BOOLEAN | Unary `Relationship` (not boolean property) |
+| BOOLEAN | `Boolean` property, or unary `Relationship` for flag-style |
+
+Always verify column types against `INFORMATION_SCHEMA.COLUMNS` before writing property declarations. A mismatch causes a `TyperError` at query time with no detail about which property failed. Let the schema dictate the type, not the column name.
 
 **Load data** using `model.define(C.new(id=TABLE.key))`, **bind properties and relationships** using `model.define(...).where(...)`. For complete data loading API reference (CSV, Snowflake, `filter_by`, `model.where`, required vs optional columns, boolean flags), see `rai-pyrel-coding` [data-loading.md](../rai-pyrel-coding/references/data-loading.md). For a minimal worked example, see [examples/jaffle.py](examples/jaffle.py).
 
