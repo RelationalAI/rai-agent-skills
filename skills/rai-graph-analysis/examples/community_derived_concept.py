@@ -1,13 +1,14 @@
-# Pattern: Louvain community detection on a customer co-purchase graph.
-# Key ideas: co-occurrence graph via shared product purchases; id < guard for
-# deduplication; community labels turned into segment concept entities;
-# per-segment aggregation for value analysis.
+# Pattern: Louvain community detection with community labels turned into ontology entities.
+# Key ideas: co-occurrence graph via shared attribute; id < guard for deduplication;
+# community labels become a derived Segment concept; hub identification per community
+# via degree centrality; per-segment value aggregation.
+# Merged from: community_detection_customers + wildlife_conservation_communities examples
 
 from relationalai.semantics import Float, Integer, Model, String, distinct
 from relationalai.semantics.reasoners.graph import Graph
 from relationalai.semantics.std import aggregates
 
-model = Model("customer_community_detection")
+model = Model("community_derived_concept")
 
 # --- Ontology ---
 
@@ -24,6 +25,7 @@ Order.amount = model.Property(f"{Order} has amount {Float:amount}")
 Order.customer = model.Relationship(f"{Order} placed by {Customer}")
 Order.product = model.Relationship(f"{Order} contains {Product}")
 
+# Derived concept: community labels become ontology entities
 CustomerSegment = model.Concept("CustomerSegment", identify_by={"id": Integer})
 Customer.segment = model.Relationship(f"{Customer} belongs to {CustomerSegment}")
 
@@ -94,9 +96,10 @@ model.where(
     )
 )
 
-# --- Run Louvain community detection ---
+# --- Run Louvain community detection + degree centrality ---
 
 graph.Node.community_label = graph.louvain()
+degree_centrality = graph.degree_centrality()
 
 # --- Turn community labels into segment entities ---
 
@@ -106,23 +109,38 @@ model.where(graph.Node == Customer).define(
     Customer.segment(CustomerSegment.filter_by(id=graph.Node.community_label))
 )
 
-# --- Query: customer-segment assignments ---
+# --- Query: customer-segment assignments with hub identification ---
+
+node = graph.Node.ref("node")
+dc_score = Float.ref("dc_score")
 
 membership_df = (
-    model.where(Customer.segment(CustomerSegment))
+    model.where(
+        Customer.segment(CustomerSegment),
+        degree_centrality(node, dc_score),
+        node == Customer,
+    )
     .select(
         Customer.id.alias("customer_id"),
         Customer.name.alias("name"),
         Customer.region.alias("region"),
         CustomerSegment.id.alias("segment_id"),
+        dc_score.alias("degree_centrality"),
     )
     .to_df()
-    .sort_values(["segment_id", "customer_id"])
+    .sort_values(["segment_id", "degree_centrality"], ascending=[True, False])
 )
 membership_df["segment_id"] = membership_df["segment_id"].astype(int)
 
-print("Customer -> Segment Assignments")
+print("Customer -> Segment Assignments (with degree centrality)")
 print(membership_df.to_string(index=False))
+
+# Hub identification per community
+for seg_id in sorted(membership_df["segment_id"].unique()):
+    seg_df = membership_df[membership_df["segment_id"] == seg_id]
+    hub = seg_df.iloc[0]  # highest centrality after sort
+    print(f"\nSegment {seg_id}: hub = {hub['name']} (centrality={hub['degree_centrality']:.4f})")
+    print(f"  Members: {', '.join(seg_df['name'].tolist())}")
 
 # --- Query: per-segment value analysis ---
 

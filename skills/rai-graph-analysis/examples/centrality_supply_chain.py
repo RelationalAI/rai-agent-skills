@@ -4,7 +4,7 @@
 
 from relationalai.semantics import Float, Integer, Model, String
 from relationalai.semantics.reasoners.graph import Graph
-from relationalai.semantics.std import aggregates
+from relationalai.semantics.std import aggregates, floats
 
 model = Model("supply_chain_centrality")
 
@@ -63,27 +63,23 @@ model.where(
     op.source_site(site1),
     op.output_site(site2),
 ).define(
-    graph.Edge.new(src=site1, dst=site2, weight=op.shipment_count)
+    graph.Edge.new(src=site1, dst=site2, weight=floats.float(op.shipment_count))
 )
 
-# --- Run eigenvector centrality ---
-# When node_concept=Site, graph.Node IS Site — assigning to graph.Node
-# makes the property available directly on Site.
+# --- Run eigenvector centrality and bind to concept ---
+# When node_concept=Site, assigning to graph.Node creates the property on Site.
+# The property is immediately queryable on Site — no separate model.Property() needed.
 
 graph.Node.centrality_score = graph.eigenvector_centrality()
 
 # --- Extract and display results ---
-# Query via the algorithm relation (works whether or not node_concept is set)
 
-node = graph.Node.ref("node")
-score = Float.ref("score")
 centrality_df = (
-    model.where(graph.eigenvector_centrality()(node, score))
-    .select(
-        node.id.alias("site_id"),
-        node.name.alias("site_name"),
-        node.site_type.alias("type"),
-        score.alias("centrality"),
+    model.select(
+        Site.id.alias("site_id"),
+        Site.name.alias("site_name"),
+        Site.site_type.alias("type"),
+        Site.centrality_score.alias("centrality"),
     )
     .to_df()
     .sort_values("centrality", ascending=False)

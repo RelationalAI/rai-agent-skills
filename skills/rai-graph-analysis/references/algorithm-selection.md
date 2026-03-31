@@ -290,9 +290,33 @@ connected = graph.is_connected()
 
 ## Reachability
 
+### `reachable(full=True)`
+
+**What it computes:** All-pairs transitive closure — every `(source, target)` pair where source can reach target via directed paths. Returns the complete dependency map of the graph.
+
+**When to use:**
+- "What are all transitive dependencies across the entire network?"
+- BOM analysis, full dependency mapping, transitive closure
+- When you need the complete picture before filtering to specific questions
+
+**Requirements:** `directed=True` — reachability is only meaningful on directed graphs.
+
+```python
+reachable = graph.reachable(full=True)
+
+src, dst = graph.Node.ref("s"), graph.Node.ref("d")
+df = (
+    model.where(reachable(src, dst))
+    .select(src.id.alias("from_id"), dst.id.alias("to_id"))
+    .to_df()
+)
+```
+
+**Output:** `(source, target)` pairs — all transitively reachable node pairs in the graph.
+
 ### `reachable(from_=X)` and `reachable(to=X)`
 
-**What it computes:** All node pairs where one can reach the other via directed paths.
+**What it computes:** Parameterized reachability — all nodes reachable from or to a specific target.
 
 **When to use:**
 - `reachable(from_=X)` — "If X goes offline, what's affected downstream?"

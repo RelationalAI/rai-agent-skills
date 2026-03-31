@@ -39,7 +39,7 @@ description: Graph algorithm selection and execution on PyRel v1 models. Covers 
 - Business rule authoring (validation, classification, alerting) — see `rai-rules-authoring`
 
 **Overview (process steps):**
-1. Identify network structure in the ontology (node concepts, edge relationships, directedness)
+1. Start from the question — identify which concepts are nodes and which relationships are edges
 2. Choose a graph construction pattern (entity-level, infrastructure-level, hierarchy, bridge table)
 3. Select the algorithm that answers the question (centrality, community, reachability, etc.)
 4. Configure parameters (directed, weighted, aggregator, algorithm-specific)
@@ -102,7 +102,7 @@ graph = Graph(
 | **Centrality** | `eigenvector_centrality()`, `betweenness_centrality()`, `degree_centrality()`, `pagerank()` | `(node, score)` | Importance, influence, bottlenecks |
 | **Community** | `louvain()`, `infomap()`, `label_propagation()` | `(node, label)` | Natural groupings, clusters |
 | **Components** | `weakly_connected_component()`, `is_connected()` | `(node, component_id)` or scalar | Fragmentation, isolation |
-| **Reachability** | `reachable(from_=X)`, `reachable(to=X)` | `(source, target)` pairs | Dependency tracing, impact analysis |
+| **Reachability** | `reachable(full=True)`, `reachable(from_=X)`, `reachable(to=X)` | `(source, target)` pairs | Dependency tracing, impact analysis |
 | **Distance** | `distance()`, `diameter_range()` | `(start, end, length)` | Shortest paths, network diameter |
 | **Similarity** | `jaccard_similarity()`, `cosine_similarity()`, `adamic_adar()`, `preferential_attachment()` | `(node1, node2, score)` | Entity comparison, link prediction |
 | **Clustering** | `local_clustering_coefficient()`, `average_clustering_coefficient()`, `triangle_count()`, `triangle()`, `unique_triangle()` | `(node, value)` or `(n1, n2, n3)` | Local density, tightness |
@@ -126,28 +126,52 @@ Before writing any graph or enrichment code, read the existing model file to und
 2. **Coding conventions** — check how the existing model references table columns (casing, naming patterns) and follow the same style. The model file is the source of truth for conventions, not external metadata tools.
 3. **What's already wired** — identify which relationships and properties exist vs. what needs enrichment. Only enrich what's missing.
 
-### Step 1: Identify Network Structure
+### Step 1: Identify Nodes and Edges from the Question
 
-Before building a graph, identify what forms the network in the ontology:
+Start from the question, not the ontology. The question determines which concepts become nodes and which relationships become edges.
 
-| Ontology Pattern | Graph Interpretation |
-|-----------------|---------------------|
-| Direct entity-to-entity relationship (`Business.ships_to(Business)`) | Entity-level graph — entities are nodes, relationships are edges |
-| Intermediary concept with source/destination (`Operation` linking `Site` to `Site`) | Infrastructure graph — locations are nodes, operations form edges |
-| Parent-child hierarchy (`Category` → `Subcategory`) | DAG — suitable for reachability and tree traversal |
-| Many-to-many via bridge table (`Student` ↔ `Course` via `Enrollment`) | Dense graph — suitable for community detection |
-| Self-referencing (`Component.assembly(Component)`) | Recursive graph — BOM/dependency structures |
+**Process:**
+1. **State the question clearly** — what structural property of the data are you trying to understand?
+2. **Identify the nodes** — the entities the question is *about*. Ask: "What are the actors/objects I want to rank, group, or trace?"
+3. **Identify the edges** — the connections that define the network *for this question*. Ask: "What relationship or interaction links these entities in a way that's relevant to the question?"
+4. **Determine directionality** — does the direction of the connection matter? Flow, dependency, and causality → directed. Structural proximity, similarity, and co-membership → undirected.
 
-**Key insight:** A single ontology can support multiple graph constructions. "Which suppliers are most critical?" uses a directed entity graph. "Which warehouses are central connectors?" uses an undirected infrastructure graph. The question determines which construction to use.
+**Key principle:** A single ontology can support multiple graph constructions. Different questions about the same data lead to different node/edge choices. The question always comes first — the ontology is the source of available structure, not the driver.
+
+**Recognizing edge sources in the ontology:**
+
+Once you know what nodes and edges you need, scan the ontology for these structural signals to find them:
+
+| Ontology Signal | What to Look For | How It Becomes Edges |
+|-----------------|-----------------|---------------------|
+| **Direct relationship** | Concept A has a relationship to Concept B (or to itself) | The relationship itself is an edge — use `Edge.new(src=a, dst=b)` |
+| **Intermediary concept** | A concept C with two relationships pointing to the same node type (e.g., `source` and `destination` both referencing Concept A) | Each instance of C becomes an edge between the two endpoints — use `Edge.new()` or `edge_concept` |
+| **Shared attribute** | Two instances of Concept A both relate to the same instance of Concept B (e.g., two users sharing an address, two customers ordering the same product) | Co-occurrence — entities sharing an attribute are connected. Requires `id <` guard to prevent duplicates |
+| **Parent-child** | A concept with a relationship to its own type named `parent`, `contains`, `reports_to`, or similar hierarchical terms | Directed edges from parent to child — use for reachability and tree traversal |
+| **Self-referencing** | A concept with a relationship back to itself (e.g., `subcomponent`, `depends_on`, `follows`) | Instance-to-instance edges within one concept — may contain cycles |
+| **Multi-concept co-occurrence** | Multiple distinct attributes shared between entities (e.g., shared address OR shared phone OR shared email) | Each shared attribute type creates edges — combine in a single graph for richer connectivity |
+
+**Tip:** When the ontology has an interaction concept with source/destination relationships and edge-relevant properties (volume, weight, intensity), prefer `edge_concept` over manual `Edge.new()` — it's more concise and ensures every instance is included.
 
 ### Step 2: Choose Construction Pattern
 
-See [graph-construction.md](references/graph-construction.md) for detailed patterns. The main decision axes:
+Map the ontology signal you identified in Step 1 to a construction pattern and decide how to implement it:
 
-1. **What are the nodes?** — The concept whose instances form graph vertices
-2. **What are the edges?** — Direct relationship or derived from intermediary concept
-3. **Directed or undirected?** — Directed for flow/dependency, undirected for structural analysis
-4. **Weighted or unweighted?** — Weighted when edge properties (cost, volume, distance) matter
+| Ontology Signal (from Step 1) | Construction Pattern | Edge Method | Example |
+|-------------------------------|---------------------|-------------|---------|
+| Direct relationship | Entity-level | `Edge.new(src=a, dst=b)` | [Graph Construction from Ontology](#graph-construction-from-ontology) |
+| Intermediary concept | Infrastructure-level | `Edge.new()` from intermediary, or `edge_concept` if concept has src/dst/weight | [centrality_supply_chain.py](examples/centrality_supply_chain.py), [edge_concept_pagerank.py](examples/edge_concept_pagerank.py) |
+| Shared attribute | Co-occurrence | `Edge.new()` with `id <` guard | [community_derived_concept.py](examples/community_derived_concept.py) |
+| Multi-concept co-occurrence | Multi-attribute co-occurrence | Multiple `Edge.new()` calls (one per shared attribute) | [graph_rules_integration.py](examples/graph_rules_integration.py) |
+| Parent-child / Self-referencing | Hierarchy or recursive | `Edge.new(src=parent, dst=child)` | [graph-construction.md](references/graph-construction.md) |
+
+Then decide the remaining axes:
+
+1. **Directed or undirected?** — Directed for flow/dependency, undirected for structural analysis
+2. **Weighted or unweighted?** — Weighted when edge properties (cost, volume, distance) matter for the question
+3. **`Edge.new()` or `edge_concept`?** — Prefer `edge_concept` when the interaction is already modeled as a concept with src/dst relationships
+
+See [graph-construction.md](references/graph-construction.md) for detailed patterns including filtered edges, multi-graph, and weight construction.
 
 ### Step 3: Select Algorithm
 
@@ -158,7 +182,8 @@ Match the question to the algorithm family:
 | "Who/what is most important/influential?" | Centrality | Choose variant by importance type (see below) |
 | "What natural groups exist?" | Community | Requires undirected for Louvain; infomap handles directed |
 | "Is the network fragmented?" | Components | WCC for undirected; SCC future |
-| "What depends on X? / What does X affect?" | Reachability | Requires directed graph |
+| "What are all transitive dependencies?" | Reachability | `reachable(full=True)` for all-pairs closure |
+| "What depends on X? / What does X affect?" | Reachability | `reachable(from_=X)` / `reachable(to=X)` — requires directed |
 | "How far apart are X and Y?" | Distance | Supports weighted (non-negative) |
 | "Which entities are most similar?" | Similarity | Based on shared neighborhoods |
 | "How tightly connected are local regions?" | Clustering | Triangle-based metrics |
@@ -270,6 +295,7 @@ Start from the question, not the algorithm name:
 | "Which nodes receive the most flow?" | Centrality | `pagerank()` (directed networks) |
 | "What natural groups exist?" | Community | `louvain()` (undirected) or `infomap()` (directed) |
 | "Is the network fragmented?" | Components | `weakly_connected_component()` |
+| "What are all transitive dependencies?" | Reachability | `reachable(full=True)` — all-pairs transitive closure |
 | "What depends on X?" | Reachability | `reachable(from_=X)` / `reachable(to=X)` — **requires directed** |
 | "How far apart are X and Y?" | Distance | `distance()` — supports weighted (non-negative) |
 | "Which entities are most similar?" | Similarity | `jaccard_similarity()` — **warning: O(n^2) output** |
@@ -306,7 +332,7 @@ For per-algorithm deep dives (parameters, output shapes, interpretation, compati
 | `aggregator` | `"sum"` | **Only supported value.** Collapses multi-edges by summing weights. Also works on unweighted graphs to collapse duplicates. |
 | `node_concept` | Concept | Which concept forms nodes. Required with `edge_concept`. Optional otherwise (inferred from edges). |
 
-**Algorithm-specific:** `reachable(from_=X)` / `reachable(to=X)` for directional reachability. `pagerank(damping=0.85)` — default 0.85 is standard.
+**Algorithm-specific:** `reachable(full=True)` for all-pairs reachability; `reachable(from_=X)` / `reachable(to=X)` for directional reachability. `pagerank(damping=0.85)` — default 0.85 is standard.
 
 ---
 
@@ -324,6 +350,18 @@ model.where(graph.Node == Site).define(Site.centrality_score(graph.Node.centrali
 
 # 3. Query as DataFrame
 df = model.select(Site.id, Site.centrality_score).to_df().sort_values("centrality_score", ascending=False)
+```
+
+### Shorthand: assign to graph.Node with `node_concept`
+
+When `node_concept` is set (e.g., `node_concept=User`), `graph.Node` IS the concept — assigning to `graph.Node` directly creates the property on the concept without a separate binding step:
+
+```python
+# graph.Node IS User when node_concept=User — property is automatically available on User
+graph.Node.community = graph.weakly_connected_component()
+
+# Query directly via User — no explicit binding needed
+df = model.select(User.name, User.community).to_df()
 ```
 
 ### Community labels → concept entities
@@ -394,22 +432,16 @@ model.where(Site.centrality_score < 0.1).define(Site.is_at_risk())
 
 ## Examples
 
-### Basic patterns (inline data, Edge.new())
+Each example targets a distinct combination of edge construction, topology, algorithm, and result pattern.
 
-| Pattern | Description | File |
-|---------|-------------|------|
-| Centrality | Eigenvector centrality on supply chain — infrastructure-level undirected weighted graph | [centrality_supply_chain.py](examples/centrality_supply_chain.py) |
-| Community | Louvain on customer co-purchase graph — shared-attribute edge construction with `id <` guard | [community_detection_customers.py](examples/community_detection_customers.py) |
-| Reachability | Upstream/downstream impact analysis — directed entity-level graph with `reachable()` | [reachability_impact_analysis.py](examples/reachability_impact_analysis.py) |
-| Bridge Detection | Betweenness centrality + WCC for bridge nodes — undirected infrastructure network | [bridge_detection.py](examples/bridge_detection.py) |
-
-### Real-world patterns (edge_concept, computed weights)
-
-| Pattern | Description | File |
-|---------|-------------|------|
-| Disease Outbreak | Directed weighted graph with `edge_concept` + computed risk weight; degree centrality + indegree/outdegree | [disease_outbreak_centrality.py](examples/disease_outbreak_centrality.py) |
-| Humanitarian Aid | PageRank + degree centrality on directed weighted supply chain; strategic hub categorization | [humanitarian_aid_pagerank.py](examples/humanitarian_aid_pagerank.py) |
-| Wildlife Conservation | Louvain community detection on undirected `edge_concept` graph; hub identification per community | [wildlife_conservation_communities.py](examples/wildlife_conservation_communities.py) |
+| Primary Pattern | Construction | Topology | Algorithms | Result Pattern | File |
+|----------------|-------------|----------|------------|----------------|------|
+| Infrastructure `Edge.new()` | Intermediary concept (Operation) creates edges | Undirected, weighted | Eigenvector centrality | Simple property binding | [centrality_supply_chain.py](examples/centrality_supply_chain.py) |
+| Co-occurrence `Edge.new()` | Shared-attribute edges with `id <` guard | Undirected, unweighted | WCC + betweenness | Hybrid risk: graph metric + domain attribute | [co_occurrence_clustering.py](examples/co_occurrence_clustering.py) |
+| `edge_concept` + computed weight | Interaction concept as edges, multi-factor weight | Directed, weighted | PageRank + degree centrality | Multi-algorithm classification | [edge_concept_pagerank.py](examples/edge_concept_pagerank.py) |
+| Directed reachability | `edge_concept` for dependency chain | Directed, unweighted | Reachability (4 modes) + betweenness | Graph + ontology enrichment | [reachability_impact_analysis.py](examples/reachability_impact_analysis.py) |
+| Louvain → derived concept | Co-occurrence edges, community labels become entities | Undirected, weighted | Louvain + degree centrality | Community → concept + hub-per-community | [community_derived_concept.py](examples/community_derived_concept.py) |
+| Graph + rules combo | Multi-concept co-occurrence (shared address/phone/email) | Undirected, unweighted | WCC | Layered Relationship flags on graph results | [graph_rules_integration.py](examples/graph_rules_integration.py) |
 
 ---
 
