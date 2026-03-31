@@ -174,7 +174,7 @@ Verify that every property's RAI type matches its Snowflake source column. Use t
 | FLOAT, DOUBLE, REAL | `Float` | |
 | DATE | `Date` | |
 | TIMESTAMP_NTZ, TIMESTAMP_LTZ, TIMESTAMP | `DateTime` | |
-| BOOLEAN | Unary `Relationship` | Do not use `Property`; see Common Pitfalls |
+| BOOLEAN | `Boolean` property, or unary `Relationship` for flag-style patterns | |
 
 Run this query to pull actual column types for comparison:
 
@@ -186,10 +186,13 @@ WHERE TABLE_SCHEMA = '<schema>'
 ORDER BY TABLE_NAME, ORDINAL_POSITION;
 ```
 
+Always run this query before writing property declarations. A type mismatch between the RAI property and the Snowflake column causes a `TyperError` at query time with no indication of which property failed.
+
 **Common mismatches to check:**
-- **DATE vs TEXT** — Snowflake dates that were stored as TEXT in CSV exports will appear as VARCHAR. Use `String` in RAI and convert later, or cast in the source view.
+- **DATE vs TEXT** — Columns with date-like names (`signup_date`, `created_at`) may be stored as TEXT in Snowflake, especially when loaded from CSV. Check the actual type; use `String` if the column is TEXT.
 - **NUMBER precision** — A column typed `NUMBER(38,0)` is an integer, but `NUMBER(18,4)` is a float. Always check `NUMERIC_SCALE`; if scale > 0, use `Float`.
-- **BOOLEAN** — RAI has no boolean property type. Model boolean columns as unary `Relationship(f"... is <flag>")`.
+- **BOOLEAN** — Model as `Boolean` property or unary `Relationship(f"... is <flag>")`. Both work; prefer `Relationship` when the flag semantics read naturally (e.g., "Order is urgent").
+- **Numeric IDs** — A column named `CREDIT_CARD_NUMBER` or `PHONE` may be NUMBER, not TEXT. Let the schema dictate the type, not the name.
 
 ---
 
