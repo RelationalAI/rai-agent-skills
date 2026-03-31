@@ -25,11 +25,12 @@ description: Interprets optimization solver output including solution extraction
 - Query syntax (select, aggregation, joins) — see `rai-querying`
 
 **Overview:**
-1. Check termination status
-2. Extract solution values (query decision variable properties)
-3. Assess solution quality (trivial solution detection, reasonableness checks)
-4. Explain results to stakeholders (what was decided, why, business impact)
-5. Run sensitivity analysis (parameter sweeps, what-if scenarios)
+1. Recall the optimization goal captured in the problem's variables and objective — what decisions were being made, and what should success look like?
+2. Check termination status
+3. Extract solution values (query decision variable properties)
+4. Assess solution quality against the original goal (trivial solution detection, reasonableness checks)
+5. Explain results to stakeholders (what was decided, why, business impact)
+6. Run sensitivity analysis (parameter sweeps, what-if scenarios)
 
 ---
 
@@ -37,18 +38,19 @@ description: Interprets optimization solver output including solution extraction
 
 After a solve completes, interpret results in this order:
 
-1. **Check status** (Status Interpretation) — Is the solve OPTIMAL, INFEASIBLE, DUAL_INFEASIBLE, or TIME_LIMIT?
+1. **Recall the goal** — Before inspecting solver output, review what the formulation was trying to achieve: what decisions were being made, what objective was set, and what constraints were imposed. This context is essential for judging whether results are meaningful or trivial — an OPTIMAL status means nothing if the solution doesn't address the original intent.
+2. **Check status** (Status Interpretation) — Is the solve OPTIMAL, INFEASIBLE, DUAL_INFEASIBLE, or TIME_LIMIT?
    - If INFEASIBLE, DUAL_INFEASIBLE, or any error status: stop, diagnose root cause (Diagnosis Checklist), do not present results
    - If TIME_LIMIT with large gap (>10%): flag uncertainty, consider increasing time or simplifying
-2. **Assess quality** (Quality Assessment) — Is the solution meaningful or trivially empty?
+3. **Assess quality** (Quality Assessment) — Is the solution meaningful or trivially empty?
    - Check non-zero ratio, objective value plausibility, variable distribution
    - If trivial (all zeros, all at bounds): diagnose and fix before presenting
-3. **Extract and filter** — Remove noise from raw solver output
+4. **Extract and filter** — Remove noise from raw solver output
    - Filter near-zero values (< 0.5 for binary, < 1e-6 for continuous)
    - Group by decision concept, map back to business entities
-4. **Explain to stakeholders** (Result Explanation Guide) — Translate math to business language
+5. **Explain to stakeholders** (Result Explanation Guide) — Translate math to business language
    - Problem context → decisions made → key drivers → quality → business impact → next steps
-5. **Explore what-if** (Sensitivity Analysis) — What happens if assumptions change?
+6. **Explore what-if** (Sensitivity Analysis) — What happens if assumptions change?
    - Identify critical parameters (uncertain, controllable, high-impact)
    - Present as scenario comparison tables
 

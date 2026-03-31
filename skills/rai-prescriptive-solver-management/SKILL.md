@@ -25,12 +25,13 @@ description: Covers solver lifecycle including problem type classification, solv
 - PyRel syntax (imports, types, properties) — see `rai-pyrel-coding`
 
 **Overview:**
-1. Classify the problem type (LP / MILP / QP / NLP / CSP)
-2. Select a solver (decision rules based on variable types and nonlinearity)
-3. Create Problem and Solver instances
-4. Validate formulation pre-solve (p.display(), count checks)
-5. Execute solve (parameters, time limits, warm starting)
-6. Diagnose solver-level issues (crashes, numerical instability, performance)
+1. Understand the optimization goal — what decisions are being made, what does success look like?
+2. Classify the problem type (LP / MILP / QP / NLP / CSP)
+3. Select a solver (decision rules based on variable types, nonlinearity, and license availability)
+4. Create Problem and Solver instances
+5. Validate formulation pre-solve (p.display(), count checks)
+6. Execute solve (parameters, time limits, warm starting)
+7. Diagnose solver-level issues (crashes, numerical instability, performance)
 
 ---
 
@@ -91,6 +92,16 @@ df = p.variable_values().to_df()  # Solution as DataFrame
 ```
 
 > **Warning:** `result = p.solve(...); result.status` fails because `solve()` returns `None` regardless of solver. Accessing any attribute on `None` raises `AttributeError`. Always call `p.solve()` on its own line, then use `p.solve_info()` and `p.variable_values()` separately.
+
+---
+
+## Read the Formulation
+
+Before classifying or configuring, read the existing formulation (built in `rai-prescriptive-problem-formulation`) to extract solver-relevant characteristics:
+
+1. **Variable types** — Are there integer or binary variables? (determines solver compatibility)
+2. **Objective direction** — Minimize or maximize? Is feasibility the primary concern or optimality? (determines parameter tuning)
+3. **Problem structure** — Are there nonlinear terms? How many entities and constraints? (determines solver choice and time limits)
 
 ---
 
