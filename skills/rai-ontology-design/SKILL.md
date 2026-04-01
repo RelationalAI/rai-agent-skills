@@ -354,14 +354,23 @@ This pattern is common in modeler exports where a single `BUSINESS` table contai
 
 ## Layering Principles
 
+### When to split into layers
+
+A single file is fine for starter ontologies and small projects. Split into a package when:
+- Multiple reasoners (solver + graph) share the same base model
+- Derived/computed logic is reused across 2+ applications
+- The file exceeds ~300 lines and has distinct data-loading vs. business-logic sections
+
 ### Layer Responsibilities
 
-Structure models in three layers with one-way dependencies: **core → computed → apps**.
+When splitting, structure models in three layers with one-way dependencies: **core → computed → apps**.
+
+> **Constraint:** The package directory name and the `Model(...)` variable name must differ. If `model = Model("my_project")`, the package cannot be called `model/`. Python resolves `import model.core` to the directory, shadowing the variable. Use a domain-specific directory name (e.g., `sc_model/`, `fraud_model/`).
 
 | Layer | Purpose | Contains | Avoids |
 |-------|---------|----------|--------|
-| **Core** (`model/core/`) | Physical-to-semantic translation | Concept declarations, properties bound to source columns, structural FK relationships | Aggregations, derivations, business rules |
-| **Computed** (`model/computed/`) | Reusable business logic | Derived properties, segmentations, calculated metrics, entity subtypes | Application-specific filters or one-off calculations |
+| **Core** (`<name>/core.py`) | Physical-to-semantic translation | Concept declarations, properties bound to source columns, structural FK relationships | Aggregations, derivations, business rules |
+| **Computed** (`<name>/computed.py`) | Reusable business logic | Derived properties, segmentations, calculated metrics, entity subtypes | Application-specific filters or one-off calculations |
 | **Application** (`apps/`) | Feature delivery | Queries, aggregations, parameterized reports, optimization | Redefining concepts or business rules |
 
 **Decision rule:** Raw source data mapping → Core. Reused across 2+ apps or fundamental business semantics → Computed. Everything else → Application.

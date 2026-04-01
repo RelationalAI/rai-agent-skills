@@ -202,24 +202,21 @@ Always run this query before writing property declarations. A type mismatch betw
 
 ### Step 6 — Generate code
 
-Follow conventions in `rai-pyrel-coding` and `rai-ontology-design`. Organize the model as a package:
+Follow conventions in `rai-pyrel-coding` and `rai-ontology-design`. Put everything in a single file named after the domain:
 
 ```
-model/
-├── __init__.py      # imports all submodules in dependency order
-├── core.py          # model, source tables, concepts, properties, relationships, data binding
-├── computed.py      # derived metrics, computed properties, subtypes (optional)
+<domain>.py     # e.g., supply_chain.py, fraud.py, inventory.py
 ```
 
-- `core.py` — `Model`, source table references, concepts, properties, relationships, and data bindings.
-- `computed.py` — imports from `core.py`, adds derived metrics and subtypes. Only needed when scoped questions require values not directly in source data. See `rai-ontology-design` § Layering Principles.
-- `__init__.py` — imports submodules in dependency order.
+A single file is easiest to iterate on. When the model grows (multiple reasoners, derived layers, shared computed logic), split into a package — see `rai-ontology-design` § Layering Principles.
+
+> **If you do split into a package:** Never name the directory `model/` if your `Model` variable is also called `model`. Python resolves `import model.xxx` to the directory, shadowing the variable. Use a domain-specific name (e.g., `sc_model/`, `fraud_model/`).
 
 ---
 
 ### Step 7 — Validate with queries
 
-Create a `main.py` that imports the model and validates data loaded correctly before answering scoped questions. Fix any import errors or empty results before considering the starter ontology complete. For query syntax, see `rai-querying`.
+Add validation queries to the bottom of your `<domain>.py` file to confirm data loaded correctly before answering scoped questions. Fix any import errors or empty results before considering the starter ontology complete. For query syntax, see `rai-querying`.
 
 > **Note:** Import aggregates with `from relationalai.semantics.std import aggregates`.
 

@@ -496,6 +496,7 @@ Shipment.x_flow = model.Property(f'{Shipment} has {{x_flow:float}}')  # Number(3
 | Dynamic model loading loses module-level concepts | Using `importlib.util` to load a model file — concepts defined as module variables aren't on the model object | After loading, iterate module attributes and `setattr(model, name, obj)` for each `rai.Concept` instance |
 | Standalone script can't see base model data | New script creates `Model("same name")` but doesn't import the base model module — concept definitions and `define()` rules aren't in scope | Import the base model (e.g., `from base_model import model, Concept`) so all definitions execute in the same session |
 | Typo creates silent empty property | `Customer.nmae` (typo) silently creates an empty property via implicit property creation — no error | `create_config(model={"implicit_properties": False})` or set `implicit_properties: false` under `model:` in raiconfig.yaml |
+| `TypeError: model argument must be a Model, but is a module` | Package directory named `model/` shadows the `model` variable after `import model.submodule` | Rename the package directory to something other than `model` (e.g., `sc_model/`, `fraud_model/`) |
 
 ### Avoid Python loops around `model.define()` / `model.require()`
 
