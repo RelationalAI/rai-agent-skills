@@ -1,5 +1,7 @@
 <!-- TOC -->
 - [Optimization Problem Types](#optimization-problem-types)
+- [Multi-Objective Detection](#multi-objective-detection)
+- [Scenario Detection](#scenario-detection)
 - [Implementation Hints](#implementation-hints)
 - [Structural Checklists](#structural-checklists)
   - [Resource Allocation](#resource-allocation)
@@ -38,6 +40,82 @@ These are the ONLY allowed problem types. Every suggestion must use exactly one 
 - Scheduling/Assignment: `../rai-prescriptive-problem-formulation/examples/shift_assignment.py`, `../rai-prescriptive-problem-formulation/examples/sprint_scheduling.py`, `../rai-prescriptive-problem-formulation/examples/hospital_staffing.py`, `../rai-prescriptive-problem-formulation/examples/machine_maintenance.py`
 - Resource Allocation (multi-period): `../rai-prescriptive-problem-formulation/examples/demand_planning_temporal.py`
 - Pricing: `../rai-prescriptive-problem-formulation/examples/retail_markdown.py`
+
+---
+
+## Multi-Objective Detection
+
+Detect when a prescriptive problem has competing objectives that warrant a Pareto frontier rather than a single-point solution.
+
+**Structural test:** If improving objective A naturally worsens B under the same constraints, they are in tension → flag for multi-objective. If both can improve simultaneously → not competing → combine into single objective.
+
+**Explicit signals (user intent):**
+- The user states two distinct goals with different directions (minimize one, maximize another)
+- The user asks about tradeoffs, frontiers, or the cost of improving one metric
+- The user wants to compare operating points rather than get a single answer
+
+**Implicit signals (problem structure):**
+- Penalty term bundling two concerns: `minimize(cost + PENALTY * unmet)` → cost and service are competing
+- Constraint that represents a goal: `return >= 15%` → could be an objective to explore, not a fixed bound
+- Two goals mentioned separately, even if the user hasn't framed them as competing
+
+**Common tension patterns:**
+
+| Primary | Secondary | Tension |
+|---------|-----------|---------|
+| Cost | Performance/quality/coverage | Improving coverage requires more expensive options |
+| Risk | Return | Higher return requires riskier allocations |
+| Speed/throughput | Fairness/balance | Maximizing throughput concentrates on best performers |
+| Quantity | Quality | Producing more dilutes quality given fixed resources |
+
+**Routing:** Set `competing_objectives` in the prescriptive implementation hint:
+
+```json
+"competing_objectives": {
+  "primary": "minimize cost",
+  "secondary": "maximize coverage",
+  "tension": "improving coverage requires more expensive routes"
+}
+```
+
+This signals `rai-prescriptive-problem-formulation` to use the epsilon constraint approach (see its `multi-objective-formulation.md`) rather than defaulting to a single objective with the secondary as a fixed constraint.
+
+---
+
+## Scenario Detection
+
+Detect when a prescriptive problem should explore how the solution changes under different parameter assumptions.
+
+**Structural test:** If a key constraint parameter could plausibly take different values and the user would benefit from seeing how the solution shifts → flag for scenario analysis.
+
+**Explicit signals (user intent):**
+- The user asks what happens under different conditions (budget levels, demand forecasts, capacity limits)
+- The user wants to compare solutions across parameter levels
+- The user frames the problem around uncertainty or planning for multiple cases
+
+**Implicit signals (problem structure):**
+- A key constraint parameter (budget, demand, capacity, service level) is a single fixed value but represents uncertainty or a choice the user hasn't committed to
+- Multiple values already present in the data for a parameter (e.g., regional budgets, seasonal demand)
+- The optimal decision likely changes meaningfully across plausible parameter ranges
+
+**Which pattern to flag:**
+
+| Situation | Pattern | Why |
+|-----------|---------|-----|
+| Parameters vary but problem structure stays the same | Scenario Concept (one solve, all scenarios) | Budget, demand, threshold levels — same variables and constraints |
+| Entity subsets change between scenarios | Loop + where= (separate solve per scenario) | Remove a supplier, solve per region — problem structure differs |
+
+**Routing:** Set `scenario_parameter` in the prescriptive implementation hint:
+
+```json
+"scenario_parameter": {
+  "parameter": "budget",
+  "values": "varies across regions or levels",
+  "pattern": "scenario_concept"
+}
+```
+
+This signals `rai-prescriptive-problem-formulation` to use scenario analysis (see its `scenario-analysis.md`) rather than solving for a single fixed parameter value.
 
 ---
 

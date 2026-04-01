@@ -476,3 +476,12 @@ Quick reference for validation use:
 **Note:** Multi-period is an attribute, not a type. A multi-period problem adds time-indexed variables and balance constraints linking periods to whichever base type applies.
 
 ---
+
+## Multi-Objective Validation
+
+When a formulation has two objectives (via epsilon constraint loop), validate:
+
+1. **Objectives are in tension**: improving one worsens the other under the same constraints. Test: solve each independently — if both can be optimal simultaneously, they don't need bi-objective treatment (combine into one).
+2. **Secondary expressible as constraint**: the secondary objective expression can be wrapped in `model.require(expr >= eps)` or `model.require(expr <= eps)`.
+3. **Scale compatibility**: if objectives are on very different scales, the epsilon range may be skewed. Consider normalizing (rates per unit rather than absolutes).
+4. **Both objectives reference at least one decision variable**: otherwise one objective is constant and the "tradeoff" is trivial.
