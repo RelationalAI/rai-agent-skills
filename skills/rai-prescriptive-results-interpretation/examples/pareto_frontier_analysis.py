@@ -77,11 +77,14 @@ if len(marginal_rates) >= 2:
             max_jump = jump
             knee_idx = i + 1
 
-    knee_pt = pareto_points[knee_idx]  # type: ignore[index]
-    print(f"\nKnee: Point {knee_idx + 1} ({knee_pt['label']}) — "
-          f"marginal cost jumps {max_jump:.1f}x beyond this point")
-    print(f"  {secondary_name}: {knee_pt['secondary']:.2f}")
-    print(f"  {primary_name}: {knee_pt['primary']:.2f}")
+    if knee_idx is not None:
+        knee_pt = pareto_points[knee_idx]
+        print(f"\nKnee: Point {knee_idx + 1} ({knee_pt['label']}) — "
+              f"marginal cost jumps {max_jump:.1f}x beyond this point")
+        print(f"  {secondary_name}: {knee_pt['secondary']:.2f}")
+        print(f"  {primary_name}: {knee_pt['primary']:.2f}")
+    else:
+        print("\nKnee: not detected (flat frontier — marginal rates do not accelerate)")
 
 # =============================================================================
 # 3. ALLOCATION SHIFTS + REGIME DETECTION
