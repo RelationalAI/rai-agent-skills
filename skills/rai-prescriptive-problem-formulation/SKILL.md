@@ -99,6 +99,15 @@ Can we reduce complexity without losing correctness?
 - Objective terms for goals; constraints for hard requirements
 - Group-level constraints over pairwise/granular combinations
 
+### Step 6: Present, React, Refine
+Is the formulation complete — including constraints the user couldn't articulate upfront?
+- Solve and present the result to the user (see Constraint Elicitation > Post-Solve: Iterative Refinement)
+- Use the result as an elicitation tool to surface latent preferences
+- Disambiguate rejections into constraint types, add them, re-solve
+- Repeat until the user accepts or feasibility pressure forces prioritization
+
+Steps 1-5 produce the best formulation you can build from what the user has told you. Step 6 discovers what they couldn't tell you until they saw a concrete result. Most real-world formulations require at least one pass through Step 6.
+
 For detailed patterns for each step, see [variable-formulation.md](references/variable-formulation.md), [constraint-formulation.md](references/constraint-formulation.md), and [objective-formulation.md](references/objective-formulation.md).
 
 ---
@@ -129,7 +138,13 @@ When presenting variables, constraints, and objectives to the user, describe the
 
 Code snippets in `solver_registration`, `expression`, and `entity_creation` fields remain technical (valid PyRel). But every field the user reads should sound like a business analyst wrote it, not a database query.
 
-### Eliciting Constraints from Business Users
+---
+
+## Constraint Elicitation
+
+Constraints are rarely handed to you complete. They emerge through two complementary phases: asking the right questions before solving, and using results to surface preferences the user couldn't articulate in the abstract. This section covers user-facing elicitation techniques. For model-structural constraint discovery (boundary probes, structural probes, multi-concept probes), see [constraint-formulation.md](references/constraint-formulation.md) > Constraint Discovery Patterns.
+
+### Pre-Solve: From Business Language to Constraints
 
 Non-OR users rarely describe their problem in terms of "constraints" and "objectives." Use these diagnostic questions to surface the formulation elements:
 
@@ -143,7 +158,7 @@ Non-OR users rarely describe their problem in terms of "constraints" and "object
 
 **Technique:** Start with "What makes a solution unacceptable?" — this reliably surfaces hard constraints. Then ask "What would make one acceptable solution better than another?" — this surfaces objective terms.
 
-### Business Constraint Disambiguation
+#### Disambiguating Business Language
 
 Common business phrases are ambiguous between constraint and objective. Always clarify before formulating.
 
@@ -156,6 +171,56 @@ Common business phrases are ambiguous between constraint and objective. Always c
 | "Don't use more than 3 suppliers" | Hard cardinality: `sum(use[s]) <= 3` | Minimize number of active suppliers |
 
 **Decision rule:** If violating it makes the solution invalid or unacceptable → **constraint**. If it is a preference or "nice to have" → **objective term**. When unclear, default to soft (objective) and ask the user: "If the optimizer found a solution that violates this but saves 20% on cost, would that be acceptable?"
+
+### Post-Solve: Iterative Refinement
+
+Pre-solve elicitation has a fundamental limit: users cannot always articulate preferences until they see a concrete result that violates them. "No constraints" often means "I can't think of any right now," not "anything goes." Preferences may be real but latent — only surfaceable through confrontation with a specific proposal.
+
+**Principle: Use results as an elicitation tool.** The first solve with minimal constraints is diagnostic, not prescriptive — its purpose is to provoke reactions that reveal the real formulation. This is Step 6 of the Formulation Workflow.
+
+**The refinement loop:**
+
+1. Solve with current constraints (initially minimal)
+2. Present the result, highlighting aspects most likely to provoke a reaction
+3. Ask targeted reaction questions to surface latent preferences
+4. When the user rejects an aspect, disambiguate what type of constraint it implies
+5. Add the constraint, re-solve, repeat until the user accepts
+
+**Skill routing within the loop:** Steps 1 and 5 involve solving — use `rai-prescriptive-solver-management` for solver execution. If the result is technically wrong (infeasible, all-zero, solver error), route to `rai-prescriptive-results-interpretation` for diagnosis — it will route back here once the issue is classified as a missing constraint or incomplete formulation. This skill governs steps 2-4: the result is *optimal and technically valid*, but the user's reaction reveals the formulation is incomplete.
+
+**Presenting results to surface latent preferences:**
+
+Don't just show optimal values. Frame them to make implicit preferences visible:
+- **Highlight large shifts from status quo** — users often have unstated change-aversion. Showing the magnitude of change surfaces comfort thresholds on rate of change, not just absolute levels.
+- **Anchor to domain norms** — reference what peers, industry standards, or historical ranges look like. This calibrates the user's reaction and surfaces social or organizational bounds they haven't stated.
+- **Show the trade-off cost** — when a value looks extreme, present what relaxing it would cost in the objective. This distinguishes hard constraints ("no, regardless of cost") from soft preferences ("well, if it saves that much...").
+- **Flag boundary solutions** — when the solver pushes a variable to its bound (zero, maximum), call it out explicitly. Boundary solutions frequently violate unstated preferences.
+
+**Post-solve reaction questions:**
+
+| Question | What it surfaces |
+|----------|-----------------|
+| "Does anything in this result feel wrong or surprising?" | Latent hard constraints |
+| "Which value would you change first?" | The tightest latent preference |
+| "Would you be comfortable acting on this / presenting this?" | Social, organizational, or reputational constraints beyond personal preference |
+| "If this were the only feasible solution, would you change your requirements?" | Whether the discomfort is a hard constraint or a negotiable preference |
+
+**Disambiguating the rejection:**
+
+When a user rejects an aspect of the result, the rejection is ambiguous. Before adding a constraint, determine:
+- **Absolute bound vs. change bound** — "too much X" could mean X exceeds an absolute comfort level, or that the jump from the current state is too large. These are different constraints with different formulations.
+- **Hard constraint vs. soft preference** — test with: "If violating this saved [meaningful amount] on [objective], would that change your answer?" Hard constraints survive this test; soft preferences don't — and should become objective penalty terms instead.
+- **Specific vs. vague** — if the rejection is vague ("this seems aggressive"), probe which dimension: concentration, deviation from current, absolute level, or something else entirely. Each maps to a different constraint type.
+
+**When to stop iterating:**
+- The user accepts the result — explicitly, or by shifting to implementation questions. If the user accepts on the first pass, Step 6 is done; do not probe for objections that aren't there.
+- The user provides a specific value ("just cap it at 10%") — take the bound directly, no need to run the disambiguation protocol.
+- Changes between iterations become marginal
+- The user starts making trade-offs between constraints — this signals the efficient frontier has been found and the remaining decisions are genuinely preferential
+
+**Feasibility pressure:** If repeated rejections shrink the feasible region toward infeasibility, pause and present the tension explicitly: these preferences conflict, and the user must prioritize. This is itself a form of constraint elicitation — forcing a ranking among competing bounds.
+
+**Documenting the trail:** Keep a running log of each constraint added and the user reaction that motivated it. This captures the "why" behind bounds that would otherwise look arbitrary in the final formulation — valuable for model maintenance and stakeholder review.
 
 ---
 

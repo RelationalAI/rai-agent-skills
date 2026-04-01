@@ -20,7 +20,7 @@ description: Interprets optimization solver output including solution extraction
 - Running sensitivity / what-if analysis
 
 **When NOT to use:**
-- Designing or fixing the formulation itself (adding constraints, changing variables) — see `rai-prescriptive-problem-formulation`
+- Designing or fixing the formulation itself (adding constraints, changing variables) — see `rai-prescriptive-problem-formulation`. In particular, if the result is OPTIMAL and technically valid but the user rejects it on preference grounds ("that's too much X", "I don't like this allocation"), this indicates latent constraints, not a solver or formulation bug — route to `rai-prescriptive-problem-formulation` > Constraint Elicitation > Post-Solve: Iterative Refinement.
 - Solver configuration, parameter tuning, or solver-level failures — see `rai-prescriptive-solver-management`
 - Query syntax (select, aggregation, joins) — see `rai-querying`
 
