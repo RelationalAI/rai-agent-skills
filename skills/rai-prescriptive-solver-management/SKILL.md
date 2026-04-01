@@ -191,34 +191,7 @@ Use these rules in order to pick a solver. **Gurobi outperforms open-source solv
 | Discrete + constraint satisfaction (CSP) | MiniZinc | MiniZinc |
 | Need multiple solutions | MiniZinc (best) | MiniZinc |
 
-### Problem Size Guidelines
-
-| Size | Variables | Constraints | Notes |
-|------|-----------|-------------|-------|
-| Small | < 1,000 | < 1,000 | Any formulation usually tractable |
-| Medium | 1K - 100K | 1K - 100K | Formulation quality matters |
-| Large | > 100K | > 100K | May need decomposition |
-
-Each binary variable can double the search space. Tight bounds on integers reduce branching. Always ask: is integer truly required, or is rounding acceptable?
-
-### Problem Initialization
-
-In v1, pass the solver name as a string directly to `p.solve()` — no separate `Solver` object needed. `Problem` initialization uses type references, not strings:
-
-```python
-from relationalai.semantics import Float, Integer
-
-p = Problem(model, Float)    # LP, NLP, MIP with continuous relaxation
-p = Problem(model, Integer)  # Pure integer / constraint programming
-
-# Solver choice depends on problem type AND user license:
-p.solve("highs", time_limit_sec=60)    # LP/MIP (open-source)
-p.solve("gurobi", time_limit_sec=60)   # LP/MIP/QP/QCP (license required)
-p.solve("minizinc", time_limit_sec=60) # CP (open-source)
-p.solve("ipopt", time_limit_sec=60)    # NLP (open-source)
-```
-
-**Do not default to any single solver.** Always select based on the problem type (see Decision Rules above) and confirm the user has the required license (Gurobi is commercial). The second argument (`Float` or `Integer`) sets the default numeric type. Variables can override with `type="bin"`, `type="int"`, or `type="cont"` in `solve_for()`.
+Problem size guidelines (small/medium/large thresholds) and `Problem` initialization patterns (`Problem(model, Float)` vs `Integer`, solver string names) are in [solver-details.md](references/solver-details.md). Always select solver based on problem type and confirm license availability.
 
 ---
 
@@ -263,35 +236,11 @@ See [pre-solve-validation.md](references/pre-solve-validation.md) for full check
 
 ## Common Compilation Errors
 
-### Entity reference error
-**Error:** "Source X.y is an entity reference to Z, not a scalar value"
+**Entity reference error** ("Source X.y is an entity reference to Z, not a scalar value"): The entity_creation copies an entity reference where a scalar is expected. Fix by removing the property or using `.id` to extract scalar. Must update BOTH concept_definition AND entity_creation together.
 
-The entity_creation is copying an entity reference where a scalar is expected. You must update BOTH concept_definition AND entity_creation together.
+**Zero entities** ("Variables (0)" in formulation display): The entity_creation produced no entities — likely a join mismatch, non-existent concept reference, or over-filtering. Verify join conditions match actual data.
 
-**Option A (simpler — remove the problematic property):** Remove the property from concept_definition and entity_creation entirely. Only keep properties needed for optimization.
-
-**Option B (if you need the ID for constraints):** In concept_definition, keep Property with string type. In entity_creation, use `.id` to extract scalar: `sku_id=Demand.sku.id`.
-
-### Type mismatch
-**Error:** "declared as 'int' but source is DATE"
-
-Property type doesn't match source column type. Fix: change the property type to match (DATE columns should use `:str` or `:date`).
-
-### Undefined concept/property
-**Error:** "Concept X not found"
-
-Referenced concept doesn't exist in base model. Fix: use correct concept name from available concepts, or create via concept_definition.
-
-### Zero entities created
-**Symptom:** "Variables (0)" in formulation display
-
-The entity_creation expression produced no entities — likely a join mismatch. Fix: verify join conditions match actual data relationships.
-
-### Simplest Fix Principle
-
-If a property is causing entity reference errors and isn't needed for the optimization constraints/objective, just REMOVE IT from both concept_definition and entity_creation. Generate a fix_action with type "modify_variable" targeting the affected variable definition, including BOTH corrected concept_definition AND entity_creation.
-
-For numerical stability categories and MIP formulation techniques (big-M, indicator constraints), see [numerical-and-mip.md](references/numerical-and-mip.md).
+For full diagnostic patterns (type mismatch, undefined concept, entity creation taxonomy, simplest fix principle), see [compilation-errors.md](references/compilation-errors.md). For numerical stability categories and MIP formulation techniques (big-M, indicator constraints), see [numerical-and-mip.md](references/numerical-and-mip.md).
 
 ---
 
@@ -321,30 +270,7 @@ The objective can go to +/-infinity. This is NOT about conflicting constraints �
 
 **Fix strategies:** Add bounds or constraints — add upper bounds to variables, add capacity limits, fix penalty term structure.
 
-### Root Cause Taxonomy
-
-When diagnosing infeasibility or unboundedness, classify root causes using these named codes:
-
-| Root Cause Code | Status | Description |
-|----------------|--------|-------------|
-| `unbounded_variable` | DUAL_INFEASIBLE | A variable can grow without limit, driving objective to infinity |
-| `missing_upper_bound` | DUAL_INFEASIBLE | Variable has no upper bound and objective incentivizes increasing it |
-| `penalty_structure` | DUAL_INFEASIBLE | Penalty term can go negative (e.g., `100 * (demand - fulfilled)` when fulfilled > demand) |
-| `constraint_conflict` | INFEASIBLE | Two or more constraints cannot be satisfied simultaneously |
-| `capacity_mismatch` | INFEASIBLE | Total demand exceeds total capacity — no feasible allocation exists |
-
-**Fix action types:**
-
-| Action | When to Use |
-|--------|-------------|
-| `add_constraint` | Missing bounds or linking constraints; add capacity limits, conservation |
-| `remove_constraint` | Conflicting or over-specified constraint causing infeasibility |
-| `relax_constraint` | Constraint too tight — change `==` to `<=`/`>=`, widen bounds, add slack |
-| `modify_variable` | Variable needs bounds adjusted, type changed, or expression corrected |
-
-**Status-specific fix direction:**
-- **DUAL_INFEASIBLE (unbounded):** Add bounds and constraints to LIMIT unbounded variables
-- **INFEASIBLE:** Remove or relax constraints to WIDEN the feasible region
+For root cause codes (`unbounded_variable`, `missing_upper_bound`, `penalty_structure`, `constraint_conflict`, `capacity_mismatch`), fix action types, and status-specific fix direction, see [diagnostic-taxonomy.md](references/diagnostic-taxonomy.md).
 
 ---
 
@@ -411,84 +337,13 @@ p.solve("highs", print_format="lp", print_only=True)
 print(p.solve_info().printed_model)  # Access the text representation
 ```
 
-### Solver-specific parameters
-
-Any additional keyword arguments are passed as raw solver-specific options. A warning is emitted when these are used (they may not be portable). Values must be `int`, `float`, `str`, or `bool`.
-
-```python
-# HiGHS-specific
-p.solve("highs", time_limit_sec=120, presolve="on", threads=4)
-
-# Gurobi-specific (note: CamelCase parameter names)
-p.solve("gurobi", time_limit_sec=120, MIPFocus=1, Presolve=2, Threads=0)
-
-# Ipopt-specific
-p.solve("ipopt", time_limit_sec=60, max_iter=1000, tol=1e-8, mu_strategy="adaptive")
-```
-
-**Key solver-specific parameters:**
-
-| Solver | Parameter | Type | Description |
-|--------|-----------|------|-------------|
-| HiGHS | `presolve` | str | `"choose"`, `"on"`, `"off"` |
-| HiGHS | `threads` | int | Number of threads |
-| Gurobi | `MIPFocus` | int | 0=balanced, 1=feasibility, 2=optimality, 3=bound |
-| Gurobi | `Presolve` | int | 0=off, 1=conservative, 2=aggressive |
-| Gurobi | `Threads` | int | 0=auto |
-| Ipopt | `max_iter` | int | Maximum iterations |
-| Ipopt | `tol` | float | Convergence tolerance (e.g., 1e-8) |
-| Ipopt | `mu_strategy` | str | Barrier strategy (`"monotone"`, `"adaptive"`) |
-
-**Prefer first-class parameters** over solver-specific equivalents: use `time_limit_sec` (not HiGHS `time_limit` or Gurobi `TimeLimit`), `relative_gap_tolerance` (not `mip_rel_gap` or `MIPGap`), `solution_limit` (not MiniZinc-specific kwargs).
-
-**When to tune parameters:**
-- Solver hits time limit → increase `time_limit_sec`, or tighten formulation first
-- MIP gap too wide → tighten `relative_gap_tolerance` (costs more time)
-- Solver struggles to find any feasible solution → `MIPFocus=1` (Gurobi), or relax constraints
-- Large LP is slow → try `presolve="on"`, increase `threads`
-- NLP converges to poor local optimum → try different `start=` values, adjust `mu_strategy`
+Solver-specific parameters (HiGHS, Gurobi, Ipopt kwargs), tuning guidance, cloud pipeline details, re-solve behavior, warm starting, and scenario analysis patterns are in [solver-parameters.md](references/solver-parameters.md).
 
 ### Unsupported operators
 
 The following operators are **not supported by any solver backend** and will raise errors if used in solver expressions: `%` (modulo), `//` (floor division), `floor`, `ceil`, `trunc`, `round`. Note: `//` works on concrete data and property-constant combinations (e.g., `Player.p // group_size`), but fails when **both operands are decision variables**. There is no `if_then_else` operator in the prescriptive library — use `implies()` (Gurobi/MiniZinc) or Big-M reformulation (HiGHS) for conditional logic. Use piecewise-linear approximations or reformulations for unsupported operators.
 
 > **See also:** Full operator/construct compatibility table by solver → `numerical-and-mip.md` > Operator and Construct Compatibility by Solver. Reformulation techniques (Big-M linearization, McCormick envelopes, epigraph, SOS2) → `numerical-and-mip.md` > Reformulation Techniques for Solver Compatibility.
-
-### Cloud-based solve pipeline
-
-v1 solve is cloud-based: the Problem serializes variable/constraint/objective data as CSV, uploads to the solver service, which reconstructs the problem in MathOptInterface (MOI) form, dispatches to the selected backend (HiGHS, Gurobi, Ipopt, MiniZinc), and returns results as CSV for import back into the model. There is no local solver — all solve calls require network connectivity to the RAI solver service.
-
-### Re-Solve Behavior (1.0.3+)
-
-Re-solving the same `Problem` instance is safe. Result import uses `experimental.load_data` with replace semantics — if a second solve's result import fails, previous results remain intact. No degraded state.
-
-### Warm starting
-
-For nonlinear solvers like Ipopt, provide initial values via the `start=` parameter in `solve_for()` to guide convergence toward a good local optimum:
-
-```python
-# Standalone variable with warm start (Rosenbrock example)
-x = model.Relationship(f"{Float:x}")
-y = model.Relationship(f"{Float:y}")
-p.solve_for(x, name="x", lower=-100.0, upper=5.0, start=0.0)
-p.solve_for(y, name="y", lower=-100.0, upper=5.0, start=0.0)
-p.minimize((1 - x) ** 2 + 100 * (y - x**2) ** 2)
-p.solve("ipopt", log_to_console=True)
-# termination_status: "LOCALLY_SOLVED" (Ipopt finds local optima, not global)
-```
-
-**Standalone (concept-free) variables** use `model.Relationship(f"{Float:name}")` instead of `model.Property`. This pattern is for scalar optimization variables not attached to any concept (e.g., Rosenbrock, single-variable NLP). For concept-attached variables, use `model.Property` as usual.
-
-### Scenario analysis (what-if)
-
-Two patterns for exploring how solutions change under different assumptions:
-
-- **Scenario Concept** — parameter variations (budget, demand, thresholds) solved in a single solve. Results live in the ontology.
-- **Loop + where= filter** — entity exclusion or partitioned sub-problems. Each iteration is independent. Use `populate=False` + `variable_values().to_df()`.
-
-**Decision rule:** Only parameter values change -> Scenario Concept. Entities or constraint structure change -> Loop + where=.
-
-For full patterns, code examples, and a decision matrix, see [scenario-analysis.md](../rai-prescriptive-problem-formulation/references/scenario-analysis.md).
 
 ---
 
@@ -507,32 +362,6 @@ For full patterns, code examples, and a decision matrix, see [scenario-analysis.
 | `AttributeError` on `p.solve()` return value | Assigning `result = p.solve()` and accessing `result.status` | `p.solve()` returns `None`. Use `p.solve_info()` for status, `p.variable_values().to_df()` for values |
 
 Post-solve diagnosis (trivial all-zero solutions, infeasibility root causes, quality assessment) is covered in `rai-prescriptive-results-interpretation`.
-
-## Entity Creation Diagnosis
-
-When entity creation produces ZERO entities (cross-product or filtered concept has no instances), diagnose using this taxonomy:
-
-**1. Non-existent concept reference:** The `entity_creation` uses a concept name that doesn't exist in the model.
-- Look for typos or incorrect concept names (e.g., references "Stock2" when only "Stock" exists)
-- Check against the AVAILABLE CONCEPTS list
-
-**2. Join condition mismatch:** The `.where()` condition matches nothing.
-- Check if relationship paths are valid in the model
-- Check if property values actually exist in data (e.g., filtering by a status that has no matching rows)
-
-**3. Missing relationship:** The `concept_definition` creates relationships that don't connect to data.
-- Verify relationship targets exist and have entities loaded
-- Check if the relationship is defined in the model schema
-
-**4. Over-filtering:** The `.where()` clause is too restrictive.
-- Multiple filter conditions that together match nothing
-- Each condition alone might match rows, but the intersection is empty
-
-**Fix requirements:**
-- Use ONLY concepts from the available concepts list
-- Reference actual relationships and properties from the model context
-- The fix must produce entities (join/filter must match some data)
-- Prefer relaxing filters over completely restructuring the entity creation
 
 ---
 
@@ -556,3 +385,7 @@ When entity creation produces ZERO entities (cross-product or filtered concept h
 | Formulation display | `p.display()` output structure and how to read it | [formulation-display.md](references/formulation-display.md) |
 | Pre-solve validation | Entity population checks, data integrity queries, copy-paste checklist | [pre-solve-validation.md](references/pre-solve-validation.md) |
 | Scenario analysis | Scenario Concept vs Loop + where= patterns, decision matrix, code examples | [scenario-analysis.md](../rai-prescriptive-problem-formulation/references/scenario-analysis.md) |
+| Solver details | Problem size guidelines, Problem initialization patterns | [solver-details.md](references/solver-details.md) |
+| Compilation errors | Entity reference errors, type mismatch, zero entities, fix taxonomy | [compilation-errors.md](references/compilation-errors.md) |
+| Diagnostic taxonomy | Root cause codes, fix action types, status-specific fix direction | [diagnostic-taxonomy.md](references/diagnostic-taxonomy.md) |
+| Solver parameters | Solver-specific kwargs, tuning, cloud pipeline, warm starting, scenario analysis | [solver-parameters.md](references/solver-parameters.md) |

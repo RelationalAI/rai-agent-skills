@@ -3,6 +3,7 @@
 - [Testing Approaches](#testing-approaches)
 - [Debugging Common Failures](#debugging-common-failures)
 - [Classification Completeness Verification](#classification-completeness-verification)
+- [Exhaustiveness Validation](#exhaustiveness-validation)
 <!-- /TOC -->
 
 ## Validation Checklist
@@ -153,4 +154,41 @@ from relationalai.semantics.std import aggregates
 tier_count = aggregates.count(Entity.tier_check).per(Entity)
 overlaps = model.where(tier_count > 1).select(Entity.id).to_df()
 assert len(overlaps) == 0, f"Overlapping conditions for: {overlaps['id'].tolist()}"
+```
+
+---
+
+## Exhaustiveness Validation
+
+For classification rules that should cover every entity, run an exhaustiveness check to find unclassified entities:
+
+```python
+# Find entities with no assigned classification
+unclassified = model.select(
+    Entity.id.alias("id"),
+).where(
+    model.not_(Entity.classification)
+).to_df()
+```
+
+If unclassified entities exist, diagnose WHY they were missed by inspecting the condition property values:
+
+```python
+model.select(
+    Entity.id.alias("id"),
+    (Entity.score | "MISSING").alias("score"),
+).where(
+    model.not_(Entity.classification)
+).to_df()
+```
+
+Common causes of incomplete coverage:
+- **NaN/NULL values** — entities with missing condition properties silently fail all comparisons, so no rule branch matches
+- **Boundary gaps** — e.g., conditions `>= 100` and `< 50` leave the range 50-99 uncovered
+- **Type mismatches** — comparing a `String` property to an `Integer` threshold silently fails (zero matches, no error)
+
+Fix with a catch-all rule for missing values:
+
+```python
+model.where(model.not_(Entity.score)).define(Entity.classification("unknown"))
 ```

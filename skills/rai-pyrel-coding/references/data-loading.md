@@ -7,6 +7,8 @@
   - [Boolean Columns from Source Data](#boolean-columns-from-source-data)
   - [Date and DateTime Columns](#date-and-datetime-columns)
   - [Optional vs Required Columns](#optional-vs-required-columns)
+  - [Multiarity Property Loading](#multiarity-property-loading)
+  - [Programmatic Entity Creation](#programmatic-entity-creation)
 <!-- /TOC -->
 
 ## Data Loading Patterns
@@ -308,4 +310,27 @@ To make columns optional, bind them separately:
 model.define(Region.new(id=src.R_REGIONKEY))
 model.define(Region.filter_by(id=src.R_REGIONKEY).name(src.R_NAME))
 model.define(Region.filter_by(id=src.R_REGIONKEY).comment(src.R_COMMENT))
+```
+
+---
+
+### Multiarity Property Loading
+
+Load multiarity properties (e.g., nutrient content per food) by iterating over the arity dimension:
+
+```python
+for nu in nutrient_csv.name:
+    model.define(food.contains(Nutrient, getattr(food_data, nu))).where(Nutrient.name == nu)
+```
+
+---
+
+### Programmatic Entity Creation
+
+Create entities from ranges, inline values, or derived data:
+
+```python
+model.define(Queen.new(row=std.common.range(n)))           # Range-based
+model.define(sf := Factory.new(name="steel_factory"), sf.avail(40.0))  # Inline
+model.define(Node.new(v=Edge.i))                            # Derived from existing data
 ```

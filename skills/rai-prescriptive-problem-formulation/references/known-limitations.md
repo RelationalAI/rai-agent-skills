@@ -1,0 +1,41 @@
+# Known Limitations (Secondary)
+
+Additional known limitations for the prescriptive problem formulation skill. For critical limitations (`model.union()` and PyRel additive semantics), see the main skill.md.
+
+---
+
+## Constraint naming with lists
+
+Name constraints with list expressions for readable debug output:
+
+```python
+p.satisfy(model.require(
+    Edge.x_flow <= Edge.capacity
+), name=["capacity", Edge.i, Edge.j])
+# Produces names like: "capacity_1_3", "capacity_2_5"
+```
+
+List elements are joined with underscores. Use entity identifiers (IDs, names) in the list for per-entity constraint names.
+
+## Re-Solve Behavior (1.0.3+)
+
+Re-solving the same `Problem` instance is safe. Result import uses `experimental.load_data` with replace semantics — previous results remain intact if a subsequent solve fails. The inline formulation pattern (fresh `Problem` per scenario loop iteration) is still useful for clean separation of scenarios, but is no longer required for error recovery.
+
+> **Multi-scenario re-solve pattern:**
+> When solving multiple scenarios in a loop (e.g., varying parameters, what-if analysis), create a **fresh `Problem` per iteration**, use `populate=False` on `solve_for`, and extract results via `variable_values().to_df()`. This avoids `Duplicate relationship` / `FDError` caused by writing conflicting results back to the graph on each iteration.
+>
+> ```python
+> results = []
+> for scenario in scenarios:
+>     p = Problem(model, Float)               # fresh Problem each iteration
+>     p.solve_for(Entity.x_var, populate=False, ...)
+>     p.satisfy(...)
+>     p.minimize(...)
+>     p.solve(solver, ...)
+>     df = p.variable_values().to_df()        # extract without populating graph
+>     df["scenario"] = scenario
+>     results.append(df)
+> all_results = pd.concat(results)
+> ```
+>
+> See [examples/factory_production.py](../examples/factory_production.py) for a complete working example of this pattern.

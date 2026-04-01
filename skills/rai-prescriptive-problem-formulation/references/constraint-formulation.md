@@ -399,6 +399,30 @@ p.satisfy(model.require(x_qty_tra == FreightGroup.inv_start * y_bin_tra).where(
 x_weight <= tl_cap * y_bin_tl     # x_weight <= 999999 * y_bin_tl
 ```
 
+---
+
+## Unwired Relationships (Detailed)
+
+A declared `model.Relationship()` without a corresponding `model.define()` rule has NO DATA at solve time. The relationship exists in the schema but has zero bindings.
+
+**Symptoms:**
+- `TyperError` during solve ("type inference" or "type could not be determined")
+- Constraints silently match zero entities (empty joins)
+- `.per(Concept)` aggregations return nothing
+
+**Check:** For every relationship in a constraint `.where()` clause, verify a `model.define()` rule populates it. If no define rule exists, the relationship is unwired — do not use it in constraints.
+
+**Example:**
+```python
+# WRONG: constraint uses unwired relationship (no define() rule)
+sum(Operation.x_flow).where(Operation.transformation == Site).per(Site) >= Site.demand
+
+# CORRECT: use a relationship with define() data binding, or join via shared identity properties
+Op = Operation.ref()
+UD = UnmetDemand.ref()
+sum(Op.x_flow).where(Op.output_sku == UD.sku).per(UD.sku)
+```
+
 ### Historical comparison / tolerance band constraints
 
 Constrain current decisions to stay within a percentage band of historical values. Always paired (upper AND lower), and both sides must use the same `.per()` dimensions.
