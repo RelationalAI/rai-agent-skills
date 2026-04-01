@@ -421,15 +421,9 @@ Decision makers need to understand not just what the solution recommends, but wh
 
 Frame every explanation in terms the decision maker already knows — their suppliers, their warehouses, their customers — not constraint indices or dual values.
 
-### Translating Shadow Prices
+### Translating Shadow Prices (Dual Values)
 
-Shadow prices (dual values) tell you the marginal value of relaxing a constraint by one unit. Translate them as:
-
-| Technical | Business Language |
-|-----------|-------------------|
-| "Shadow price of capacity constraint at Site A = $50" | "Adding one more unit of capacity at Site A would save $50 in total cost." |
-| "Shadow price of budget constraint = 0.12" | "Each additional dollar of budget would generate $0.12 in objective improvement." |
-| "Shadow price = 0 (non-binding)" | "This constraint has slack -- relaxing it would not change the solution." |
+Shadow prices tell you the marginal value of relaxing a constraint. For the translation table and business-language framing, see [references/sensitivity-analysis.md](references/sensitivity-analysis.md).
 
 ### Sensitivity Framing
 
@@ -447,6 +441,8 @@ Sensitivity analysis answers: "What happens if our assumptions change?" Present 
 Scenarios should be treated as a default post-solve step, not an optional advanced feature. After every solve, proactively suggest 1-2 scenario variations based on binding constraints and parameter sensitivity.
 
 **Strategic vs. operational context:** For strategic (one-time planning) decisions, Pareto frontiers showing the tradeoff surface are preferred — stakeholders choose from the frontier. For operational (recurring) decisions, weighted objectives with tunable weights are more practical — set once, run daily. Detect which context applies and frame scenario results accordingly.
+
+**Pareto frontier / efficient frontier results:** When results come from an epsilon constraint loop (bi-objective optimization), each point on the frontier is a complete, valid solution — no point is strictly better than another. Explain to the user: "Each point represents a different balance between your two goals. The knee is where further improvement in one goal starts costing significantly more in the other." For the full analysis structure (tradeoff table, marginal rate analysis, knee detection, allocation shifts, regime characterization) and how to present results as a menu of operating points, see [references/sensitivity-analysis.md](references/sensitivity-analysis.md).
 
 Parameter types: **numeric** (range with step), **entity** (select/exclude specific entities), **categorical** (discrete named options). A parameter is **critical** if small changes cause different facilities/assets to be selected, >5% objective change per 10% parameter variation, or constraint status flips.
 
@@ -486,6 +482,7 @@ Use this after every solve to ensure result quality:
 |---|---|---|
 | Scenario Concept results | Results in ontology via `model.select(Scenario.name, ...)`, per-scenario aggregation, comparison queries | [examples/portfolio_scenario_concept_results.py](examples/portfolio_scenario_concept_results.py) |
 | Loop-based results | `variable_values().to_df()`, `solve_info().display()`, status/objective access, scenario comparison table | [examples/portfolio_results.py](examples/portfolio_results.py) |
+| Pareto frontier analysis | Tradeoff table, marginal rates + knee detection, allocation shifts + regime detection, ASCII frontier visualization | [examples/pareto_frontier_analysis.py](examples/pareto_frontier_analysis.py) |
 
 ---
 

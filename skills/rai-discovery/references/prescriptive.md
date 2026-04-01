@@ -1,5 +1,6 @@
 <!-- TOC -->
 - [Optimization Problem Types](#optimization-problem-types)
+- [Multi-Objective Signals](#multi-objective-signals)
 - [Implementation Hints](#implementation-hints)
 - [Structural Checklists](#structural-checklists)
   - [Resource Allocation](#resource-allocation)
@@ -38,6 +39,33 @@ These are the ONLY allowed problem types. Every suggestion must use exactly one 
 - Scheduling/Assignment: `../rai-prescriptive-problem-formulation/examples/shift_assignment.py`, `../rai-prescriptive-problem-formulation/examples/sprint_scheduling.py`, `../rai-prescriptive-problem-formulation/examples/hospital_staffing.py`, `../rai-prescriptive-problem-formulation/examples/machine_maintenance.py`
 - Resource Allocation (multi-period): `../rai-prescriptive-problem-formulation/examples/demand_planning_temporal.py`
 - Pricing: `../rai-prescriptive-problem-formulation/examples/retail_markdown.py`
+
+---
+
+## Multi-Objective Signals
+
+Detect when a prescriptive problem has competing objectives — either explicitly stated or implicitly present in the formulation.
+
+**Explicit signals (user language):**
+- "minimize X AND maximize Y" / "optimize both X and Y"
+- "tradeoff between X and Y" / "balance X and Y"
+- "what's the cost of improving Y?"
+- "explore the frontier" / "find all efficient solutions"
+
+**Implicit signals (formulation structure):**
+- Penalty term bundling two concerns: `minimize(cost + PENALTY * unmet)` → cost and service are competing
+- Constraint that represents a goal: `return >= 15%` → could be an objective to explore, not a fixed bound
+- Two goals mentioned separately in conversation, even if user hasn't connected them as competing
+
+**Tension heuristics** (objectives that typically compete):
+- Cost vs performance/quality/coverage
+- Risk vs return
+- Speed/throughput vs fairness/balance
+- Quantity vs quality
+
+**Test**: If improving objective A naturally worsens B under the same constraints → in tension → route to multi-objective formulation. If both can improve simultaneously → not competing → combine into single objective.
+
+Route to `rai-prescriptive-problem-formulation` with multi-objective hint.
 
 ---
 

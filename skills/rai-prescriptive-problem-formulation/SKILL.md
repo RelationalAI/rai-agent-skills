@@ -79,11 +79,13 @@ What rules must the solution satisfy?
 - Add flow conservation if the model has network structure
 - Derive parameters from data ranges, not arbitrary values (Parameter Derivation from Data)
 
-### Step 3: Define Objective
+### Step 3: Define Objective(s)
 What are we optimizing?
 - Start with user's stated goal — map business language to minimize/maximize (Objective Context Integration)
 - Reference defined variables and data properties in the expression
 - Check for trivial solution risk: "If all variables = 0, are all constraints satisfied?" If yes, Step 2 needs a forcing constraint.
+- **Competing objectives?** If the formulation has a penalty term bundling two concerns (cost + penalty×slack), or a constraint that represents a competing goal (return ≥ threshold), consider whether the user wants to explore the tradeoff rather than fix a single point. See [multi-objective-formulation.md](references/multi-objective-formulation.md) for the epsilon constraint approach.
+- **Parameter sensitivity?** If key constraints use fixed values that could vary (budget, demand, service level), consider scenario analysis to show how the solution changes. See [scenario-analysis.md](references/scenario-analysis.md).
 
 ### Step 4: Validate
 Is the formulation complete and correct?
@@ -338,6 +340,7 @@ prod_cost = ProdCapacity.production_cost * sum(x_prod).per(ProdCapacity).where(
 - **`name=[]` must NOT traverse relationships** — use identity fields (e.g., `ProdCapacity.site_id`) not `ProdCapacity.site.name` (causes FD violation)
 - **Cross-concept joins need distinct attribute names** — if two concepts both have `site_id` as `identify_by`, rename one (e.g., `wk_site_id`) to avoid ambiguity
 - **Only one objective supported** — HiGHS rejects multiple `minimize()`/`maximize()` calls
+- **Bi-objective via epsilon constraint**: To optimize two competing objectives, use the epsilon constraint loop — convert the secondary objective to a parameterized constraint and sweep it across the feasible range. Each iteration is a standard single-objective Problem. See [multi-objective-formulation.md](references/multi-objective-formulation.md).
 
 For constraint naming with lists and re-solve behavior (multi-scenario patterns), see [known-limitations.md](references/known-limitations.md).
 
@@ -370,6 +373,7 @@ PyRel's model and problem APIs are **append-only**. Every call to `model.define(
 | Global constraints | `all_different`, `implies`, SOS1/SOS2 syntax, solver requirements, CP vs MIP guide | [global-constraints.md](references/global-constraints.md) |
 | Scenario analysis | Scenario Concept vs Loop + where= patterns, decision matrix, code examples | [scenario-analysis.md](references/scenario-analysis.md) |
 | Formulation simplification | Static vs dynamic parameters, goals vs constraints, grouped constraints, over-specification | [formulation-simplification.md](references/formulation-simplification.md) |
+| Multi-objective formulation | Approach selection, epsilon constraint method, tension heuristics, pitfalls | [multi-objective-formulation.md](references/multi-objective-formulation.md) |
 | Examples index | All example problems with patterns demonstrated | [examples-index.md](references/examples-index.md) |
 | Formulation analysis context | Naming conventions, alias handling, expression parsing, aggregation patterns for review | [formulation-analysis-context.md](references/formulation-analysis-context.md) |
 | Known limitations (secondary) | Constraint naming with lists, re-solve behavior | [known-limitations.md](references/known-limitations.md) |

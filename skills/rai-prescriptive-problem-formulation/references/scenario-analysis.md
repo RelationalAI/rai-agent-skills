@@ -76,3 +76,17 @@ for excluded in [None, "SupplierC", "SupplierB"]:
 - Only parameter values change -> **Scenario Concept**. Results are part of the ontology, which is the key advantage — they can be queried, joined, and composed like any other model data.
 - Entities are added/removed or constraint structure changes -> **Loop + where=**. Required when the problem graph itself differs between scenarios (e.g., removing a supplier changes which entities exist).
 - Independent partitions (per-factory, per-region) -> **Loop + where=**. Each partition is a separate problem with no cross-partition coupling.
+
+## Pattern 3: Epsilon Constraint Loop (Bi-Objective)
+
+When two objectives compete, the epsilon constraint loop sweeps the secondary objective's bound across the feasible range. Each iteration is a standard single-objective problem with one extra constraint — same Loop + `populate=False` infrastructure as Pattern 2.
+
+Can combine with Scenario Concept: place Scenario Concept inside the epsilon loop so each epsilon solve handles all parameter scenarios simultaneously (N solves, not N x M).
+
+| Criterion | Scenario Concept (Pattern 1) | Loop + where= (Pattern 2) | Epsilon Constraint (Pattern 3) |
+|-----------|-----------------|---------------|------|
+| What varies | Parameter values | Entity subsets | Secondary objective bound |
+| Number of solves | One | One per scenario | One per epsilon point |
+| Use case | What-if on parameters | Entity exclusion/partition | Tradeoff frontier between competing objectives |
+
+For the full epsilon constraint method (anchor solves, direction handling, loop pattern, pitfalls), see [multi-objective-formulation.md](multi-objective-formulation.md).

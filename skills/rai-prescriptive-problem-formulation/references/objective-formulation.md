@@ -91,6 +91,12 @@ Only one `p.minimize()` or `p.maximize()` per problem. For multiple goals:
 
 **Important:** When using multipliers to express priority (e.g., `w1 * Obj1 + Obj2` where `w1 >> 1`), assess whether the multiplier creates a range where the lower-priority term has no influence on the solution. 100x between similar-scale objectives is typically fine; flag when the combined range pushes the secondary term below solver tolerance influence.
 
+### Bi-objective: Epsilon Constraint via Loop
+
+When two objectives are genuinely competing (improving one worsens the other), the epsilon constraint method traces the full tradeoff frontier. Pick one as primary (optimize it), convert the other to a parameterized constraint, and sweep across the feasible range in a loop.
+
+Uses the same Loop + `populate=False` pattern as scenario analysis Pattern 2. For approach selection, direction handling, anchor solves, epsilon spacing, and pitfalls, see [multi-objective-formulation.md](multi-objective-formulation.md).
+
 ### Common objective misalignments
 
 Before finalizing the objective, check for these misalignments:
