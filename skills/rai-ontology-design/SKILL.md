@@ -11,15 +11,16 @@ description: Covers RAI domain modeling decisions including concepts, relationsh
 **What:** Domain modeling decisions — concepts, relationships, properties, data mapping, model composition, and model enrichment for optimization.
 
 **When to use:**
-- Building an ontology from source data (tables/schema)
-- Deciding whether something should be a concept vs. a property
+- **As design authority** — consulted by `rai-build-starter-ontology` during greenfield builds for concept, relationship, and property design decisions
+- **Enriching an existing model** — adding properties, relationships, or subtypes to a model that already loads and queries
+- **Reviewing or evolving a model** — assessing model gaps, examining ontology inventories, applying advanced patterns
+- **Working with modeler exports** — understanding and extending models exported from the RAI modeler (latest or legacy format)
 - Mapping schema columns to model properties and relationships
 - Assessing model gaps for optimization (READY / MODEL_GAP / DATA_GAP)
-- Reviewing or enriching a modeler-exported model
 - Designing cross-product decision concepts for optimization
-- Understanding the modeler export format (latest: top-level model + Sources class; legacy: initialize() + Concepts/BASE_SCHEMA)
 
 **When NOT to use:**
+- Building a first ontology from scratch — start with `rai-build-starter-ontology`, which uses this skill as its design authority
 - PyRel syntax reference (imports, types, f-string patterns, stdlib) — see `rai-pyrel-coding`
 - Optimization formulation (variables, constraints, objectives) — see `rai-prescriptive-problem-formulation`
 - Query construction (select, aggregation, joins) — see `rai-querying`
@@ -51,13 +52,11 @@ description: Covers RAI domain modeling decisions including concepts, relationsh
 
 ---
 
-## Ontology Design Workflow
+## Design Decision Sequence
 
-**Interaction mode:** Before starting, ask the user which mode they prefer:
-- **Guided** — present your proposed design decisions at each phase and confirm before proceeding. Best when the user has domain context or nuances to share along the way.
-- **One-shot** — produce the best result you can in a single pass. Best when the user wants speed and will review/iterate after.
+These are the design decisions that underlie any ontology, whether built from scratch via `rai-build-starter-ontology` or evolved incrementally. They are listed in dependency order — each phase depends on the one before it. For a complete greenfield build workflow, use `rai-build-starter-ontology`.
 
-When building an ontology, start from the business domain -- what concepts exist, what questions must the model answer -- then find data mappings. Domain-first modeling produces better models than table-to-concept mapping because user intent drives concept selection rather than table structure. Think through these phases in order. This is not a pipeline to execute step-by-step -- it is the order in which decisions should be considered, since each phase depends on the one before it.
+Start from the business domain — what concepts exist, what questions must the model answer — then find data mappings. Domain-first modeling produces better models than table-to-concept mapping because user intent drives concept selection rather than table structure.
 
 0. **Scope first (for new models)** -- Define 1-3 concrete questions the model must answer and explicitly list what is out of scope. Keep the first version to ~10-15 must-have properties. A tight scope keeps the model small enough to implement and validate without rework. Example:
 
@@ -433,6 +432,8 @@ For concrete examples of what enrichment looks like in practice, see [enrichment
 
 ## Enrichment Workflow
 
+**Prerequisite:** The model must already load and query successfully. If no model exists yet, use `rai-build-starter-ontology` first.
+
 After problem selection, if feasibility is MODEL_GAP, enrich the ontology before formulation:
 
 1. **Identify what the problem needs** — from the problem's `implementation_hint` and `model_gap_fixes`
@@ -475,6 +476,9 @@ For detailed enrichment patterns, property vs relationship mapping, and source c
 | Machine maintenance | CSV data, cross-product decision concepts, constrained cartesian via `.where()`, `.ref()` derived properties, generated Period concept | [examples/machines.py](examples/machines.py) |
 | Telco network | Large-scale (14 tables, 12+ concepts), unary flags, bidirectional inverses, self-referential caller/callee, walrus operator binding | [examples/telco.py](examples/telco.py) |
 | Engineering analytics | Multi-schema sources (4 domains), individual Properties, boolean flags as unary Relationships, cross-system linking (GitHub↔PM) | [examples/engineering_analytics.py](examples/engineering_analytics.py) |
+| Financial services | Binary/pairwise property (Stock.covar), `.ref()` for same-type binding, holdings junction, portfolio domain | [examples/financial_services.py](examples/financial_services.py) |
+| Inventory enrichment | Auxiliary schema loading, composite key enrichment, filter_by for cross-schema binding | [examples/enrichment_mapping.py](examples/enrichment_mapping.py) |
+| Modeler export (legacy) | Legacy `initialize()` format, `_Concept` prefix, `Property("{...}")` strings, standalone `define()`, `.where()` binding | [examples/modeler_legacy_export.py](examples/modeler_legacy_export.py) |
 
 ---
 
@@ -482,5 +486,6 @@ For detailed enrichment patterns, property vs relationship mapping, and source c
 
 - Adding properties or relationships to a base model for optimization? See [enrichment-patterns.md](references/enrichment-patterns.md) for when enrichment is needed, property vs relationship mapping, and source column requirements
 - Working with enum concepts, cross-product patterns, or advanced modeling? See [categorization-and-advanced.md](references/categorization-and-advanced.md) for categorization patterns and cross-product decision concepts
+- Advanced modeling patterns (value types, ternary properties, inverse relationships, role naming, same-type references, scenario modeling)? See [advanced-modeling.md](references/advanced-modeling.md)
 - Working with a modeler-exported model or composing model layers? See [modeler-and-composition.md](references/modeler-and-composition.md) for the latest export format (Sources class, all Relationship, filter_by), legacy format (initialize(), BASE_SCHEMA), and layered model composition
 - Producing a model inventory or classifying unmapped data? See [examination-guidance.md](references/examination-guidance.md) for description principles and unmapped data classification

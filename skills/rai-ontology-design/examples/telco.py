@@ -1,5 +1,8 @@
 """Telco Network — Large-scale model, 14 source tables, unary flags, self-referential.
 
+NOTE: Large-scale reference (14 tables, 12+ concepts) showing unary flags, bidirectional
+inverses, and role-named self-references — advanced patterns beyond the starter build.
+
 Patterns: Large-scale modeling (14 tables, 12+ concepts), walrus operator for
 compact binding, unary flags from status/boolean columns, bidirectional
 relationships with explicit inverses, self-referential relationships

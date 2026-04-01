@@ -1,5 +1,8 @@
 """Engineering Analytics — Multi-schema, individual Properties, cross-system linking.
 
+NOTE: Multi-schema (4 domains), cross-system linking (GitHub↔PM), and domain-prefixed
+concept names — design patterns for enterprise-scale modeling beyond the starter build.
+
 Patterns: Multi-schema sources (4 organizational domains), many concepts with
 simple identity, Property for all scalar attributes (not bundled Relationships),
 Relationship for cross-system links (GitHub <-> project management),

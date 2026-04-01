@@ -1,5 +1,8 @@
 """Machine Maintenance — CSV data, cross-product concepts, derived properties.
 
+NOTE: Demonstrates cross-product decision concepts and constrained cartesian joins —
+advanced patterns for optimization modeling beyond the starter build.
+
 Patterns: CSV data loading, generated concepts (Period), compound identity,
 cross-product decision concepts (constrained via .where()), .ref() for
 derived properties, conditional binary flags.

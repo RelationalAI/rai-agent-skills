@@ -1,3 +1,5 @@
+# NOTE: Includes ternary Property for PWL segments and derived Campaign concept —
+# design patterns beyond the starter build (see rai-build-starter-ontology examples).
 # Pattern: base model ontology with Sources class, Concepts, Properties, Relationships
 # Key ideas: Sources nested class for table bindings; filter_by resolves FKs; ternary
 # Property (PWL for Segment has Float); walrus := in entity creation; .alias() for inverse.

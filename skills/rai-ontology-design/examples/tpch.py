@@ -1,3 +1,5 @@
+# NOTE: Extends beyond the starter build (see rai-build-starter-ontology examples)
+# with derived metrics (revenue, late delivery) and layered composition on the base model.
 # Pattern: supply chain — geographic hierarchy, compound identity, derived metrics
 # Key ideas: Region → Nation → Supplier/Customer forms a multi-level hierarchy;
 # PartSupply uses compound identity for a natural many-to-many junction;

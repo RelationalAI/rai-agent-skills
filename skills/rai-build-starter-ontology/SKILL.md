@@ -86,7 +86,7 @@ session.sql("""
 
 #### Analysis
 
-Analyze source data per `rai-ontology-design` § Source Table Analysis. Note:
+Analyze source data per `rai-ontology-design` § Design Decision Sequence, step 1 (Analyze sources). Note:
 - `_ID` suffixes (likely PKs), columns matching other tables' PKs (likely FKs)
 - `IS_`/`HAS_` prefixes (boolean flags), repeated string categories (enums)
 - Soft-joins (shared codes or categories across tables)
@@ -273,3 +273,18 @@ print(df)
 | "Object does not exist" on valid table | Snowflake role lacks access | Check `SELECT CURRENT_ROLE()` and `SHOW GRANTS ON <object>` |
 | Model won't load or sync | Engine not running or misconfigured connection | See `rai-configuration` and `rai-health-skill` |
 | Skipping scope | Starting from tables instead of questions | Complete Step 1 before Step 2 |
+
+---
+
+## What's Next
+
+After your starter ontology validates and queries correctly, the typical next steps are:
+
+**Build starter ontology → Discover problems (`rai-discovery`) → Enrich model (`rai-ontology-design`) → Formulate (`rai-prescriptive-problem-formulation` or `rai-graph-analysis`)**
+
+| Step | Skill | What it does |
+|------|-------|-------------|
+| 1. Discover what problems your model can answer | `rai-discovery` | Surfaces questions by reasoner type (prescriptive, graph, rules, predictive) and assesses data readiness |
+| 2. Enrich the model for a selected problem | `rai-ontology-design` § Enrichment Workflow | Adds properties and relationships from unmapped source columns needed by the problem |
+| 3. Identify and fill model gaps | `rai-ontology-design` § Model Gap Identification | Classifies gaps as READY / MODEL_GAP / DATA_GAP and prescribes fixes |
+| 4. Add advanced patterns (as needed) | `rai-ontology-design` § reference files | Subtypes, enums, time-indexed properties, hierarchies, cross-product concepts, model composition |
