@@ -62,9 +62,12 @@ for i, pt in enumerate(pareto_points):
 # =============================================================================
 # Knee is NOT where the absolute rate is highest (that's always the last point).
 # Knee is where the rate of change accelerates — rates[i+1] / rates[i] is maximized.
+# NOTE: This assumes marginal rates are increasing (typical for minimize-primary /
+# maximize-secondary). If rates are decreasing (e.g., maximize-primary / minimize-secondary),
+# invert the ratio: rates[i] / rates[i+1].
+knee_idx = None
 if len(marginal_rates) >= 2:
     max_jump = 0
-    knee_idx = 1
     for i in range(len(marginal_rates) - 1):
         if marginal_rates[i] > 1e-6:
             jump = marginal_rates[i+1] / marginal_rates[i]
@@ -74,7 +77,7 @@ if len(marginal_rates) >= 2:
             max_jump = jump
             knee_idx = i + 1
 
-    knee_pt = pareto_points[knee_idx]
+    knee_pt = pareto_points[knee_idx]  # type: ignore[index]
     print(f"\nKnee: Point {knee_idx + 1} ({knee_pt['label']}) — "
           f"marginal cost jumps {max_jump:.1f}x beyond this point")
     print(f"  {secondary_name}: {knee_pt['secondary']:.2f}")
@@ -128,7 +131,7 @@ for i, (x, y) in enumerate(zip(secondaries, primaries)):
         grid[row][col] = "A"    # first anchor
     elif i == len(pareto_points) - 1:
         grid[row][col] = "B"    # second anchor
-    elif "knee_idx" in dir() and i == knee_idx:
+    elif knee_idx is not None and i == knee_idx:
         grid[row][col] = "K"    # knee
     else:
         grid[row][col] = "*"

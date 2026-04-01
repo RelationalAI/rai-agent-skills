@@ -109,6 +109,8 @@ Each suggestion must be tagged with one or more reasoner types. Use these signal
 - "What will happen / what category?" → predictive
 - "Is this correct / does this comply?" → rules
 - If a question spans two categories, consider a multi-reasoner chain
+- **Competing objectives?** If the problem has two measurable goals in tension (improving one worsens the other) — flag `competing_objectives` in the prescriptive hint. See `prescriptive.md` § Multi-Objective Detection for the checklist.
+- **Parameter variations?** If a key constraint parameter could plausibly vary and the user would benefit from comparing solutions across levels — flag `scenario_parameter` in the prescriptive hint. See `prescriptive.md` § Scenario Detection for the checklist.
 
 For detailed question types, classification signals, and structural checklists per reasoner, see the reasoner-specific reference files: `prescriptive.md`, `graph.md`, `predictive.md`, `rules.md`.
 
@@ -346,7 +348,7 @@ Each suggestion includes a `reasoners` field — an ordered list specifying the 
 
 | Reasoner | Fields |
 |----------|--------|
-| **prescriptive** | `decision_scope`, `forcing_requirement`, `objective_property`, `decision_variable`, `scenario_parameter` |
+| **prescriptive** | `decision_scope`, `forcing_requirement`, `objective_property`, `decision_variable`, `scenario_parameter`, `competing_objectives` |
 | **graph** | `algorithm`, `graph_construction` (`node_concept`, `directed`, `weighted`, `edge_definition`), `target_filter`, `output_binding` |
 | **rules** | `rule_type`, `source_concept`, `condition_properties`, `join_path`, `threshold`, `output_type`, `output_property`, `downstream_use` |
 | **predictive** | `type`, `mode` (`pre_computed` or `rai_predictive`), `target_concept`, `target_property`, `feature_properties`, `output_concept`, `pre_computed_table` |

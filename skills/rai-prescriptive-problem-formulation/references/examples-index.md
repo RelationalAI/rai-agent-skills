@@ -15,7 +15,6 @@
 | Hospital staffing | Overtime hinge variable + skill-filtered aggregation + unmet demand penalty | [examples/hospital_staffing.py](../examples/hospital_staffing.py) |
 | Sprint scheduling | Epoch filtering pipeline + skill-constrained assignment domain + weighted completion | [examples/sprint_scheduling.py](../examples/sprint_scheduling.py) |
 | Demand planning (temporal) | Multi-period flow conservation with time-indexed multiarity variables + model.union() objective | [examples/demand_planning_temporal.py](../examples/demand_planning_temporal.py) |
-| Vehicle scheduling | Fixed-charge vehicle usage with big-M linking to binary assignments | [examples/vehicle_scheduling.py](../examples/vehicle_scheduling.py) |
 | Grid interconnection | Capacity expansion — two coupled binary decision sets sharing a resource constraint + budget knapsack | [examples/grid_interconnection.py](../examples/grid_interconnection.py) |
 | Ad spend allocation | Semi-continuous variables via binary activation indicator + per-campaign and global budget | [examples/ad_spend_allocation.py](../examples/ad_spend_allocation.py) |
 | N-queens (Integer) | Pairwise inequality constraints with `.ref()`, `Problem(model, Integer)`, MiniZinc | [examples/n_queens.py](../examples/n_queens.py) |

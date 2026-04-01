@@ -23,13 +23,13 @@ showing the tradeoff between them.
 
 ## Approach Selection
 
-Match user language to the right method:
+Match the problem structure to the right method:
 
-| User says | Method | Why |
+| Situation | Method | Why |
 |-----------|--------|-----|
-| "minimize X AND maximize Y" / "tradeoff" / "frontier" | Epsilon constraint loop | Two competing goals, need tradeoff curve |
-| "minimize X, Y must be at least Z" / explicit bound | Primary + threshold (existing) | Secondary has a known bound |
-| "70% weight on X, 30% on Y" / explicit weights | Weighted sum (existing) | User provides weights |
+| Two goals in tension, user wants to see the tradeoff | Epsilon constraint loop | Produces Pareto frontier showing the full tradeoff curve |
+| Secondary objective has a known acceptable bound | Primary + threshold (existing) | No need to explore — bound is fixed |
+| User provides explicit weights for combining objectives | Weighted sum (existing) | Single-objective with weighted combination |
 
 ## Recognizing Competing Objectives (Tension Heuristics)
 
@@ -96,17 +96,22 @@ Without anchors, epsilon values may be non-binding (wasted solves) or infeasible
 
 ```python
 pareto = []
+consecutive_infeasible = 0
 for eps in epsilon_values:
     p = Problem(model, Float)
     p.solve_for(..., populate=False)      # fresh Problem each iteration
     p.satisfy(original_constraints)
-    p.satisfy(require(secondary >= eps))   # epsilon constraint
+    p.satisfy(model.require(secondary >= eps))   # epsilon constraint
     p.minimize(primary_objective)
     p.solve(solver, time_limit_sec=60)
 
     si = p.solve_info()
-    if si.termination_status != "OPTIMAL":
-        break  # past feasible range, stop sweep
+    if si.termination_status not in ("OPTIMAL", "LOCALLY_SOLVED"):
+        consecutive_infeasible += 1
+        if consecutive_infeasible >= 2:
+            break  # two consecutive infeasible — past feasible range
+        continue  # skip this point but try the next (non-convex gaps)
+    consecutive_infeasible = 0
 
     pareto.append({
         "eps": eps,
@@ -148,12 +153,35 @@ Pareto point, evaluate the secondary expression on the `variable_values` DataFra
 import builtins  # RAI `sum` shadows Python's built-in
 
 def evaluate_secondary(var_df, entity_data):
+    """Compute secondary objective from variable values and entity coefficients.
+
+    entity_data maps variable names (as they appear in var_df) to the secondary
+    objective coefficient for that variable. Build this BEFORE the loop from model data.
+    """
     total = 0.0
     for _, row in var_df.iterrows():
         name, val = str(row.iloc[0]), float(row.iloc[1])
-        # map variable name back to entity, multiply by secondary coefficient
-        total += entity_data.get(name, 0) * val
+        if name not in entity_data:
+            raise KeyError(f"Variable '{name}' not found in entity_data — "
+                           "check that name= pattern in solve_for matches the keys")
+        total += entity_data[name] * val
     return total
+```
+
+**Building `entity_data`**: Variable names follow the `name=` pattern from `solve_for()`.
+If `name=["qty", Scenario.name, Stock.index]`, variable names are `"qty_budget_500_1"`,
+`"qty_budget_500_2"`, etc. Build the mapping to match:
+
+```python
+# Build entity_data keyed by the same name pattern used in solve_for
+stock_df = model.select(Stock.index, Stock.returns).to_df()
+stock_returns = dict(zip(stock_df["index"], stock_df["returns"]))
+
+# For scenario-indexed variables, build per-scenario mappings
+entity_data = {}
+for scenario_name in ["budget_500", "budget_1000", "budget_2000"]:
+    for idx, ret in stock_returns.items():
+        entity_data[f"qty_{scenario_name}_{idx}"] = ret
 ```
 
 **Pitfall**: `from relationalai.semantics import sum` shadows Python's built-in `sum`.
@@ -169,7 +197,7 @@ for eps in epsilon_values:
     p = Problem(model, Float)
     # Scenario Concept handles parameter variations -- one solve, all scenarios
     p.solve_for(Entity.x_var(Scenario, x), ..., populate=False)
-    p.satisfy(require(secondary >= eps).per(Scenario))
+    p.satisfy(model.require(secondary >= eps).per(Scenario))
     p.minimize(primary_objective)  # aggregated across scenarios
     p.solve(...)
     # all scenarios solved at this epsilon level
@@ -201,9 +229,9 @@ chosen_eps = pareto_points[knee_idx]["eps"]
 
 # Re-solve with populate=True — results written to model properties
 p_final = Problem(model, Float)
-p_final.solve_for(Entity.x_var, populate=True, ...)  # writes back to ontology
+p_final.solve_for(Entity.x_var, populate=True)  # writes back to ontology
 p_final.satisfy(original_constraints)
-p_final.satisfy(require(secondary >= chosen_eps))
+p_final.satisfy(model.require(secondary >= chosen_eps))
 p_final.minimize(primary)
 p_final.solve(solver, time_limit_sec=60)
 
