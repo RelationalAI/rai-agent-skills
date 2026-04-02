@@ -39,6 +39,7 @@ description: Graph algorithm selection and execution on PyRel v1 models. Covers 
 - Business rule authoring (validation, classification, alerting) — see `rai-rules-authoring`
 
 **Overview (process steps):**
+0. Study the existing model — understand base definitions, coding conventions, and what's already wired
 1. Start from the question — identify which concepts and relationships are relevant, and what kinds of analysis best speak to the question
 2. Determine which relevant concepts should constitute nodes in the graph
 3. Determine what edges would best capture the information relevant to the question and the planned analysis
