@@ -299,7 +299,7 @@ connected = graph.is_connected()
 - BOM analysis, full dependency mapping, transitive closure
 - When you need the complete picture before filtering to specific questions
 
-**Requirements:** `directed=True` — reachability is only meaningful on directed graphs.
+**Note:** Works on both directed and undirected graphs, but most meaningful on directed graphs. On undirected connected graphs, all nodes are trivially reachable from all others.
 
 ```python
 reachable = graph.reachable(full=True)
@@ -323,7 +323,7 @@ df = (
 - `reachable(to=X)` — "What are all the upstream dependencies of X?"
 - Impact analysis, dependency tracing, supply chain propagation
 
-**Requirements:** `directed=True` — reachability is only meaningful on directed graphs.
+**Note:** Works on both directed and undirected graphs, but most meaningful on directed graphs.
 
 **Parameters:**
 - `from_=target` — specifies source node(s) for downstream reachability
@@ -474,7 +474,7 @@ graph.Node.clustering = graph.local_clustering_coefficient()
 
 **What it computes:** Number of triangles each node participates in.
 
-**Requirements:** `directed=False`.
+**Requirements:** Works on both directed and undirected graphs.
 
 **Output:** `(node, count)` — integer per node.
 
@@ -482,7 +482,7 @@ graph.Node.clustering = graph.local_clustering_coefficient()
 graph.Node.triangles = graph.triangle_count()
 ```
 
-Also available: `graph.triangle()` returns ternary `(n1, n2, n3)` of all triangles, and `graph.unique_triangle()` returns only unique triangles (each triangle appears once, not three times).
+Also available: `graph.triangle()` returns ternary `(n1, n2, n3)` of all triangles (works on directed and undirected), and `graph.unique_triangle()` returns only unique triangles (each triangle appears once, not three times).
 
 ---
 
@@ -504,7 +504,7 @@ Also available: `graph.triangle()` returns ternary `(n1, n2, n3)` of all triangl
 | `label_propagation()` | Yes | Yes | Yes | Yes |
 | `weakly_connected_component()` | Yes | Yes | N/A | N/A |
 | `is_connected()` | Yes | Yes | N/A | N/A |
-| `reachable()` | **Required** | No | N/A | N/A |
+| `reachable()` | **Best** | Yes | N/A | N/A |
 | `distance()` | Yes | Yes | Yes (non-neg) | Yes |
 | `diameter_range()` | Yes | Yes | Yes | Yes |
 | `jaccard_similarity()` | Yes | Yes | N/A | N/A |
@@ -512,4 +512,4 @@ Also available: `graph.triangle()` returns ternary `(n1, n2, n3)` of all triangl
 | `adamic_adar()` | Yes | Yes | N/A | N/A |
 | `preferential_attachment()` | Yes | Yes | N/A | N/A |
 | `local_clustering_coefficient()` | No | **Required** | N/A | N/A |
-| `triangle_count()` / `triangle()` | No | **Required** | N/A | N/A |
+| `triangle_count()` / `triangle()` | Yes | Yes | N/A | N/A |
