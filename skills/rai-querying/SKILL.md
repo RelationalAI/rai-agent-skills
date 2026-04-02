@@ -83,7 +83,15 @@ model.where(
 
 **`.to_df()`** — execute query and return a pandas DataFrame.
 
-**`.inspect()`** — convenience for debugging; prints the DataFrame to stdout. Equivalent to `print(rel.to_df())`.
+**`print(expr)`** — shows the DSL structure of an expression, concept, or relationship without executing a query. Use to verify expression composition before running:
+
+```python
+print(Order.customer)                          # → Order.customer
+print(aggs.sum(Order.total).per(Customer))     # → (sum Order.total (per Customer))
+print(model.where(Order.status == "active"))   # → (where Order.status == 'active')
+```
+
+**`.inspect()`** — convenience for debugging; executes the query and prints the DataFrame to stdout. Equivalent to `print(rel.to_df())`.
 
 ```python
 Shipment.supplier.inspect()  # Quick check of a relationship's contents

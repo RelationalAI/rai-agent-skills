@@ -35,12 +35,14 @@ When a query returns an empty DataFrame or wrong values, work through these chec
 2. **Check type alignment:**
    `.where(Order.id == "123")` returns empty when `id` is Integer — no error.
    Fix: use matching type (`.where(Order.id == 123)`).
+   Use `print(property)` to verify the expression references the expected concept and property.
    Use `.inspect()` to see actual values and infer types.
    Also check datetime columns: pandas Timestamps don't match Date properties —
    convert with `df["col"] = pd.to_datetime(df["col"]).dt.date`.
 
 3. **Check join paths:**
    Does the relationship used in `.where()` have a `model.define()` populating it?
+   Use `print(Concept.rel)` to verify the relationship references the expected concepts.
    Test: `Concept.rel.inspect()` — if empty, add a `model.define()` rule to populate it.
 
 4. **Check entity counts:**

@@ -43,9 +43,9 @@ Public API for discovering model structure at runtime. Useful for dynamic code g
 ## Quick Examples
 
 ```python
-# List all concept names
+# List all concept names — print() shows readable names (one per line)
 for concept in model.concepts:
-    print(concept)
+    print(concept)          # → Customer
 
 # Lookup by name
 Order = model.concept_index["Order"]
