@@ -129,6 +129,24 @@ FROM (
 );
 ```
 
+**For graph/network models — trace the topology before modeling:**
+
+When your data describes a network (nodes connected by edges via FK chains), trace the full path before Step 3:
+
+```sql
+-- What node types connect to what? Reveals tiers and layers.
+SELECT source.TYPE AS from_type, dest.TYPE AS to_type, COUNT(*) AS edges
+FROM <edge_table> e
+JOIN <node_table> source ON e.SOURCE_ID = source.ID
+JOIN <node_table> dest ON e.DEST_ID = dest.ID
+GROUP BY from_type, to_type ORDER BY edges DESC;
+
+-- Check for NULL FKs that create invisible network gaps
+SELECT COUNT(*) AS broken_edges FROM <edge_table> WHERE DEST_ID IS NULL OR SOURCE_ID IS NULL;
+```
+
+This reveals hidden layers, missing connections, and whether you need intermediate concepts to bridge tiers.
+
 ---
 
 ### Step 3 — Identify concepts
