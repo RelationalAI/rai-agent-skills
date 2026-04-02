@@ -39,14 +39,14 @@ description: Graph algorithm selection and execution on PyRel v1 models. Covers 
 - Business rule authoring (validation, classification, alerting) — see `rai-rules-authoring`
 
 **Overview (process steps):**
-0. Study the existing model — understand base definitions, coding conventions, and what's already wired
-1. Start from the question — identify which concepts and relationships are relevant, and what kinds of analysis best speak to the question
-2. Determine which relevant concepts should constitute nodes in the graph
-3. Determine what edges would best capture the information relevant to the question and the planned analysis
-4. Figure out how to derive those edges from the relevant relationships (sometimes a pass-through, often involving filters or more substantial logic)
-5. Choose which Graph constructor pattern fits given the node/edge decisions
-6. Select the specific algorithm(s) best suited to the question
-7. Execute, extract results, and blend back into the model for downstream use
+1. Study the existing model — understand base definitions, coding conventions, and what's already wired
+2. Start from the question — identify which concepts and relationships are relevant, and what kinds of analysis best speak to the question
+3. Determine which relevant concepts should constitute nodes in the graph
+4. Determine what edges would best capture the information relevant to the question and the planned analysis
+5. Figure out how to derive those edges from the relevant relationships (sometimes a pass-through, often involving filters or more substantial logic)
+6. Choose which Graph constructor pattern fits given the node/edge decisions
+7. Select the specific algorithm(s) best suited to the question
+8. Execute, extract results, and blend back into the model for downstream use
 
 ---
 
@@ -141,7 +141,7 @@ graph = Graph(
 
 ## Graph Analysis Workflow
 
-### Step 0: Study the Existing Model
+### Step 1: Study the Existing Model
 
 Before writing any graph or enrichment code, read the existing model file to understand:
 
@@ -149,24 +149,24 @@ Before writing any graph or enrichment code, read the existing model file to und
 2. **Coding conventions** — check how the existing model references table columns (casing, naming patterns) and follow the same style. The model file is the source of truth for conventions, not external metadata tools.
 3. **What's already wired** — identify which relationships and properties exist vs. what needs enrichment. Only enrich what's missing.
 
-### Steps 1–4: From Question to Nodes and Edges
+### Steps 2–5: From Question to Nodes and Edges
 
 Start from the question, not the ontology. The question determines which concepts become nodes, what edges you need, and how to derive them.
 
-**Step 1 — Scope the question:**
+**Step 2 — Scope the question:**
 - State the question clearly — what structural property of the data are you trying to understand?
 - Identify which concepts and relationships in the ontology are relevant to the question
 - In broad strokes, what kinds of analysis over those concepts and relationships best speak to the question?
 
-**Step 2 — Identify the nodes:**
+**Step 3 — Identify the nodes:**
 - Which of the relevant concepts should constitute nodes? Ask: "What are the actors/objects I want to rank, group, or trace?"
 
-**Step 3 — Determine the edges:**
+**Step 4 — Determine the edges:**
 - What edges would best capture the information relevant to the question and the planned analysis?
 - Does direction matter? Flow, dependency, causality → directed. Structural proximity, similarity, co-membership → undirected.
 - Note: The edges you need are informed both by the question and by the algorithm you plan to apply.
 
-**Step 4 — Derive edges from relationships:**
+**Step 5 — Derive edges from relationships:**
 - Sometimes an existing relationship maps directly to edges (the rules are essentially pass-through).
 - Often, edges must be derived from one or more relationships less directly — involving filters, joins, or more substantial logic.
 - Scan the ontology for the structural signals below to find how to build the edges you need.
@@ -188,11 +188,11 @@ Once you know what nodes and edges you need, scan the ontology for these structu
 
 **Tip:** When the ontology has an interaction concept with source/destination relationships and edge-relevant properties (volume, weight, intensity), prefer `edge_concept` over manual `Edge.new()` — it's more concise and ensures every instance is included.
 
-### Step 5: Choose Construction Pattern
+### Step 6: Choose Construction Pattern
 
-Map the ontology signal you identified in Steps 1–4 to a construction pattern and decide how to implement it:
+Map the ontology signal you identified in Steps 2–5 to a construction pattern and decide how to implement it:
 
-| Ontology Signal (from Steps 1–4) | Construction Pattern | Edge Method | Example |
+| Ontology Signal (from Steps 2–5) | Construction Pattern | Edge Method | Example |
 |-------------------------------|---------------------|-------------|---------|
 | Direct relationship | Entity-level | `Edge.new(src=a, dst=b)` | [Graph Construction from Ontology](#graph-construction-from-ontology) |
 | Intermediary concept | Infrastructure-level | `Edge.new()` from intermediary, or `edge_concept` if concept has src/dst/weight | [centrality_supply_chain.py](examples/centrality_supply_chain.py), [edge_concept_pagerank.py](examples/edge_concept_pagerank.py) |
@@ -208,7 +208,7 @@ Then decide the remaining axes:
 
 See [graph-construction.md](references/graph-construction.md) for detailed patterns including filtered edges, multi-graph, and weight construction.
 
-### Step 6: Select Algorithm
+### Step 7: Select Algorithm
 
 Match the question to the algorithm family:
 
@@ -231,7 +231,7 @@ Match the question to the algorithm family:
 
 See [algorithm-selection.md](references/algorithm-selection.md) for full per-algorithm guidance.
 
-### Step 7: Configure, Execute, and Bind Results
+### Step 8: Configure, Execute, and Bind Results
 
 ```python
 # Configure — see Parameter Guidance for directed/weighted/aggregator decisions
@@ -343,7 +343,7 @@ Start from the question, not the algorithm name:
 - `pagerank()` works on undirected but is most meaningful on directed
 - `reachable()` works on both directed and undirected, but is most meaningful on directed
 
-**Pre-flight compatibility check:** Before proceeding to Step 7, verify your chosen algorithm is compatible with your graph's directed/weighted settings.
+**Pre-flight compatibility check:** Before proceeding to Step 8, verify your chosen algorithm is compatible with your graph's directed/weighted settings.
 
 | Algorithm | Cannot use with |
 |-----------|----------------|
