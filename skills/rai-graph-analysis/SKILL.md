@@ -77,20 +77,21 @@ Node, Edge = graph.Node, graph.Edge
 # Define nodes and edges manually with Edge.new(src=..., dst=...)
 ```
 
-**Pattern 2: Existing node concept, manual edges** — use when a single concept covers all desired nodes and you want all instances as nodes (including isolated nodes with no edges).
+**Pattern 2: Existing node concept, manual edges** — use when a single concept covers all desired nodes and you want all instances as nodes (including isolated nodes with no edges). Isolated nodes can also be added explicitly via `model.define(Node(my_instance))`.
 
 ```python
 graph = Graph(
     model,
     directed=True|False,
     weighted=True|False,
-    node_concept=MyConcept,       # All instances of MyConcept become nodes
+    node_concept=MyConcept,       # All instances of MyConcept become nodes; graph.Node is bound to MyConcept
 )
 Node, Edge = graph.Node, graph.Edge
+# graph.Node IS MyConcept — properties assigned to graph.Node are directly available on MyConcept
 # Define edges manually with Edge.new(src=..., dst=...)
 ```
 
-**Pattern 3: Existing node concept + edge concept** — use when each interaction is already modeled as its own concept with source/destination relationships. Edges are derived automatically.
+**Pattern 3: Existing node concept + edge concept** — use when each interaction is already modeled as its own concept with source/destination relationships. Rather than deriving new nodes and edges, `graph.Node`, `graph.Edge`, `graph.EdgeSrc`, `graph.EdgeDst`, and `graph.EdgeWeight` bind directly to the provided concepts and relationships — avoiding extra computation, which matters for large graphs.
 
 ```python
 graph = Graph(
@@ -109,13 +110,15 @@ graph = Graph(
 - When using `edge_concept`, you must also pass `node_concept`, `edge_src_relationship`, and `edge_dst_relationship`. Add `edge_weight_relationship` when the graph is weighted.
 - **Weights must be floats.** Use `floats.float()` to cast from other numeric types: `weight=floats.float(Transaction.amount)`.
 
-### Aggregator guidance
+### `Graph` constructor `aggregator` parameter guidance
 
-`aggregator="sum"` is currently the **only supported aggregator**. It collapses multi-edges (multiple edges between the same node pair) by summing their weights. It also works on unweighted graphs to collapse multi-edges.
+`aggregator` is an optional parameter to the `Graph` constructor that defaults to `None`. When it is `None`, if the graph's edge definitions imply, or explicitly include, a multi-edge (multiple edges between the same pair of nodes), the graph logic will emit warnings.
 
-**When to use:** Only add `aggregator="sum"` when your graph construction can produce multiple edges between the same node pair (e.g., co-occurrence patterns where multiple shared attributes each generate an edge, or intermediary concepts where multiple operations connect the same two sites).
+`aggregator="sum"` is currently the only supported alternative. It collapses multi-edges by summing their weights. It also works on unweighted graphs to collapse multi-edges.
 
-**When NOT to use:** If your edge definitions inherently produce at most one edge per node pair, omit the aggregator. Using it unnecessarily can mask data issues, semantic errors, or implementation mistakes — unexpected multi-edges often indicate a bug in the edge derivation logic rather than valid data to be summed.
+**When to use:** Only add `aggregator="sum"` when your graph construction is expected to produce multiple edges between the same node pair (e.g., co-occurrence patterns where multiple shared attributes each generate an edge, or intermediary concepts where multiple operations connect the same two sites).
+
+**When NOT to use:** If your edge definitions are expected to produce at most one edge per node pair, omit the aggregator. Using it unnecessarily can mask data issues, semantic errors, or implementation mistakes — unexpected multi-edges often indicate, e.g., a bug in the edge derivation logic rather than valid data to be summed, or data with unexpected or incorrect elements.
 
 ### Algorithm cheat sheet
 
@@ -154,16 +157,16 @@ Before writing any graph or enrichment code, read the existing model file to und
 Start from the question, not the ontology. The question determines which concepts become nodes, what edges you need, and how to derive them.
 
 **Step 2 — Scope the question:**
-- State the question clearly — what structural property of the data are you trying to understand?
+- State the question clearly — what property of the data's network structure are you trying to understand?
 - Identify which concepts and relationships in the ontology are relevant to the question
-- In broad strokes, what kinds of analysis over those concepts and relationships best speak to the question?
+- In broad strokes, what kinds of graph analysis over those concepts and relationships best speak to the question?
 
 **Step 3 — Identify the nodes:**
-- Which of the relevant concepts should constitute nodes? Ask: "What are the actors/objects I want to rank, group, or trace?"
+- Which of the relevant concepts should constitute nodes — the actors or objects you want to rank, group, or trace?
 
 **Step 4 — Determine the edges:**
 - What edges would best capture the information relevant to the question and the planned analysis?
-- Does direction matter? Flow, dependency, causality → directed. Structural proximity, similarity, co-membership → undirected.
+- Does direction matter? Direction often matters for flow, dependency, or causality. Undirected is often appropriate for co-membership or symmetric relationships. Consider whether directionality is semantically meaningful for your question.
 - Note: The edges you need are informed both by the question and by the algorithm you plan to apply.
 
 **Step 5 — Derive edges from relationships:**
@@ -457,7 +460,7 @@ model.where(Site.centrality_score < 0.1).define(Site.is_at_risk())
 | Weight type error | Weights must be floats, but property is Integer/Number | Cast with `floats.float(property)` in Edge.new weight parameter |
 | Centrality all equal | Graph is a complete graph or all nodes have identical connectivity | Check if graph construction is correct; may need weighted edges to differentiate |
 | Similarity produces too many results | O(n^2) output for n nodes | Filter by minimum threshold or limit to top-k per node |
-| Reachability on undirected graph gives trivial results | On undirected connected graphs, all nodes are reachable from all others — results aren't useful | Set `directed=True` for meaningful reachability/impact analysis |
+| Reachability on undirected connected graph gives trivial results | On undirected connected graphs, all nodes are reachable from all others — results aren't useful | Set `directed=True` for meaningful reachability/impact analysis. (On disconnected undirected graphs, reachable can still be useful for discovering components for specific nodes.) |
 | Wrong node concept | Using intermediary concept as nodes instead of entity concept | Intermediary concepts form edges, not nodes — e.g., `Operation` is an edge between `Site` nodes |
 | Graph results not visible on original concept | Results bound to `graph.Node` but not to the source concept | Add explicit binding: `model.where(graph.Node == MyConcept).define(...)` |
 | TyperError with large models | Many entities (200+) with Relationships in same model as Graph cause `TyperError` in type inference | Keep large datasets (historical shipments, transactions) as pandas DataFrames for Python-side analysis; only load entities the Graph actually needs into RAI. This is a **local execution** limitation — Snowflake-backed models handle larger schemas. |
