@@ -381,6 +381,7 @@ For the full API tables (core collections, relationship/property inspection, fie
 | `.where()` on wrong target | Calling `.where()` directly on a Concept (`Site.where(...)`) | `.where()` goes on aggregations, constraints, definitions, or queries — not on bare concepts |
 | Using standalone `where()`/`select()` with multiple models | `"Multiple Models have been defined."` error | Use `model.where()`/`model.select()` instead of standalone imports |
 | Aggregation returns empty DataFrame instead of zero | `aggs.count(X).where(no_match)` returns no rows, not a row with 0 | Use `\| 0` default: `aggs.count(Shipment).where(Shipment.supplier.name == "foo") \| 0` |
+| `.exists()` on Properties raises error | `Concept.prop.exists()` — `RAIException: Cannot access relationships on core concept 'Float'.` | Use ref binding: `r = Float.ref(); model.where(Concept.prop(r)).select(r.alias("val"))` |
 
 ---
 

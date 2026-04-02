@@ -426,6 +426,7 @@ model.where(Site.centrality_score < 0.1).define(Site.is_at_risk())
 | Reachability on undirected graph | Reachability is meaningful only with directed edges | Set `directed=True` for reachability/impact analysis |
 | Wrong node concept | Using intermediary concept as nodes instead of entity concept | Intermediary concepts form edges, not nodes — e.g., `Operation` is an edge between `Site` nodes |
 | Graph results not visible on original concept | Results bound to `graph.Node` but not to the source concept | Add explicit binding: `model.where(graph.Node == MyConcept).define(...)` |
+| TyperError with large models | Many entities (200+) with Relationships in same model as Graph cause `TyperError` in type inference | Keep large datasets as pandas DataFrames for Python-side analysis; only load entities the Graph actually needs into RAI. This is a **local execution** limitation — Snowflake-backed models handle larger schemas. |
 | Empty graph when extending existing model | Script creates `Model("name")` without importing base model definitions — concepts exist but have no instances | Import the base model module (e.g., `from my_model import model, Site`) so base `define()` rules are in scope |
 
 ---
