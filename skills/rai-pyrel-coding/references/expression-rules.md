@@ -141,7 +141,21 @@ rights = union(
 select(Person.name, rights).to_df()
 ```
 
-**Rule:** All branches in a `union()` must return the same number of values (same "shape").
+**Rule:** All branches in a `union()` must have the same return type — all values or all Fragments. A bare relation call (e.g., `a.parents(c)`) returns a **value**, while `where(...)` returns a **Fragment**. Mixing these causes `[Inconsistent branches] All branches in a Union must have the same number of returned values`. Fix by making all branches the same kind: either chain relation calls so all branches return values, or wrap all branches in `where(...)` so all return Fragments.
+
+**Recursive rules with `union`:** You can write recursive `model.define()` rules using `union` in a single define. Wrap each branch in `where(...)` so both return Fragments:
+
+```python
+a, b, c = Person.ref(), Person.ref(), Person.ref()
+model.define(a.ancestors(c)).where(
+    union(
+        where(a.parents(c)),                      # base case
+        where(a.ancestors(b), b.parents(c))       # recursive case
+    )
+)
+```
+
+Both branches are Fragments, so the union is type-consistent. The two-`define` approach (one for base case, one for recursive case) is also valid and often clearer.
 
 **Note:** When used inside an outer `select(Person.name, rights)`, entities that match NO branch still appear in the result with `NaN` for the union column. Filter with `.where()` or use `dropna()` if you need only matched rows.
 

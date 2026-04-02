@@ -21,6 +21,14 @@
 | Standalone script can't see base model data | New script creates `Model("same name")` but doesn't import the base model module — concept definitions and `define()` rules aren't in scope | Import the base model (e.g., `from base_model import model, Concept`) so all definitions execute in the same session |
 | Typo creates silent empty property | `Customer.nmae` (typo) silently creates an empty property via implicit property creation — no error | `create_config(model={"implicit_properties": False})` or set `implicit_properties: false` under `model:` in raiconfig.yaml |
 | `TypeError: model argument must be a Model, but is a module` | Package directory named `model/` shadows the `model` variable after `import model.submodule` | Rename the package directory to something other than `model` (e.g., `sc_model/`, `fraud_model/`) |
+| `~Relationship()` for negation | `TypeError: bad operand type for unary ~: 'Expression'` — Python `~` doesn't work on RAI expressions | Use `model.not_(Concept.relationship())` for negation in `.where()` clauses |
+| `[Inconsistent branches]` in `union()` | Mixing bare relation calls (return values) with `where(...)` calls (return Fragments) inside a `union` | Make all branches the same type: chain relation calls so all return values (e.g., `a.rel(b).rel(c)`) or wrap all in `where(...)` |
+| Re-defining Property in function/loop fails | `Concept.prop = model.Property(...)` inside a function called multiple times — "already defined" on second call | Define Properties once at module level, outside any function or loop |
+| `Int128Array` / `NotImplementedError` on pandas operations | RAI returns `Int128Array` for counts, integer aggregations, and IDs — not just graph community labels. `.fillna(0)`, `.groupby()`, etc. fail | Cast early: `df["col"].astype("object").fillna(0).astype(int)` or `df["col"].astype(int)` if no nulls |
+
+For data loading pitfalls (post-hoc relationship assignment, NaN columns, `to_schema()` clobbering), see [data-loading.md](data-loading.md) § Common Data Loading Mistakes.
+For `.exists()` on Properties, see `rai-querying` Common Pitfalls.
+For Graph + large model TyperError, see `rai-graph-analysis` Common Pitfalls.
 
 ---
 
