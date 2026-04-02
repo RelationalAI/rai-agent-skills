@@ -110,6 +110,27 @@ gnn = GNN(
 gnn.fit()
 ```
 
+### Node Regression Example (temporal)
+
+```python
+gnn = GNN(
+    database="MY_DB", schema="MY_SCHEMA",
+    exp_database="MY_DB", exp_schema="EXPERIMENTS",
+    graph=gnn_graph,
+    pt=pt,
+    train=Train,
+    validation=Val,
+    task_type="regression",
+    eval_metric="rmse",
+    has_time_column=True,
+    device="cuda",
+    n_epochs=5,
+    lr=0.005,
+    head_layers=2,
+)
+gnn.fit()
+```
+
 ### Link Prediction Example (temporal)
 
 ```python
@@ -249,6 +270,7 @@ For the full prediction attributes reference, see [references/prediction-attribu
 | Pattern | Description | File |
 |---------|-------------|------|
 | Node classification | Binary classification training + prediction (User/Event) | [examples/train_node_classification.py](examples/train_node_classification.py) |
+| Node regression | Regression training + prediction for article sales (Article) | [examples/train_node_regression.py](examples/train_node_regression.py) |
 | Link prediction | Repeated link prediction training + prediction (Customer/Article) | [examples/train_link_prediction.py](examples/train_link_prediction.py) |
 
 ---

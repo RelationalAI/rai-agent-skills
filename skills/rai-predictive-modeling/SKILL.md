@@ -172,6 +172,25 @@ Val = Relationship(f"{User} has {Any:target}")
 Test = Relationship(f"{User}")
 ```
 
+### Node Regression (with time)
+
+```python
+Train = Relationship(f"{Article} at {Any:timestamp} has {Any:sales}")
+define(Train(Article, train_table_concept.timestamp, train_table_concept.sales)).where(
+    Article.a_article_id == train_table_concept.article_id
+)
+
+Val = Relationship(f"{Article} at {Any:timestamp} has {Any:sales}")
+define(Val(Article, val_table_concept.timestamp, val_table_concept.sales)).where(
+    Article.a_article_id == val_table_concept.article_id
+)
+
+Test = Relationship(f"{Article} at {Any:timestamp}")
+define(Test(Article, test_table_concept.timestamp)).where(
+    Article.a_article_id == test_table_concept.article_id
+)
+```
+
 ### Link Prediction (with time / repeated_link_prediction)
 
 ```python
@@ -298,6 +317,7 @@ For the full feature type reference including drop patterns, see [references/pro
 | Pattern | Description | File |
 |---------|-------------|------|
 | Node classification | Binary classification with temporal features (User/Event/EventAttendee) | [examples/node_classification_snowflake.py](examples/node_classification_snowflake.py) |
+| Node regression | Regression predicting article sales on H&M data (Customer/Article/Transaction) | [examples/node_regression_snowflake.py](examples/node_regression_snowflake.py) |
 | Link prediction | Repeated link prediction on H&M data (Customer/Article/Transaction) | [examples/link_prediction_snowflake.py](examples/link_prediction_snowflake.py) |
 
 ---
