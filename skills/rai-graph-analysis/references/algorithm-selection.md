@@ -290,6 +290,8 @@ connected = graph.is_connected()
 
 ## Reachability
 
+Works on both directed and undirected graphs, but most meaningful on directed graphs. On undirected connected graphs, all nodes are trivially reachable from all others. On disconnected undirected graphs, reachable is useful for discovering the component(s) for given node(s) — especially with domain constraints via `from_=` or `to=`.
+
 ### `reachable(full=True)`
 
 **What it computes:** All-pairs transitive closure — every `(source, target)` pair where source can reach target via directed paths. Returns the complete dependency map of the graph.
@@ -298,8 +300,6 @@ connected = graph.is_connected()
 - "What are all transitive dependencies across the entire network?"
 - BOM analysis, full dependency mapping, transitive closure
 - When you need the complete picture before filtering to specific questions
-
-**Requirements:** `directed=True` — reachability is only meaningful on directed graphs.
 
 ```python
 reachable = graph.reachable(full=True)
@@ -322,8 +322,6 @@ df = (
 - `reachable(from_=X)` — "If X goes offline, what's affected downstream?"
 - `reachable(to=X)` — "What are all the upstream dependencies of X?"
 - Impact analysis, dependency tracing, supply chain propagation
-
-**Requirements:** `directed=True` — reachability is only meaningful on directed graphs.
 
 **Parameters:**
 - `from_=target` — specifies source node(s) for downstream reachability
@@ -474,8 +472,6 @@ graph.Node.clustering = graph.local_clustering_coefficient()
 
 **What it computes:** Number of triangles each node participates in.
 
-**Requirements:** `directed=False`.
-
 **Output:** `(node, count)` — integer per node.
 
 ```python
@@ -504,7 +500,7 @@ Also available: `graph.triangle()` returns ternary `(n1, n2, n3)` of all triangl
 | `label_propagation()` | Yes | Yes | Yes | Yes |
 | `weakly_connected_component()` | Yes | Yes | N/A | N/A |
 | `is_connected()` | Yes | Yes | N/A | N/A |
-| `reachable()` | **Required** | No | N/A | N/A |
+| `reachable()` | Yes | Yes | N/A | N/A |
 | `distance()` | Yes | Yes | Yes (non-neg) | Yes |
 | `diameter_range()` | Yes | Yes | Yes | Yes |
 | `jaccard_similarity()` | Yes | Yes | N/A | N/A |
@@ -512,4 +508,4 @@ Also available: `graph.triangle()` returns ternary `(n1, n2, n3)` of all triangl
 | `adamic_adar()` | Yes | Yes | N/A | N/A |
 | `preferential_attachment()` | Yes | Yes | N/A | N/A |
 | `local_clustering_coefficient()` | No | **Required** | N/A | N/A |
-| `triangle_count()` / `triangle()` | No | **Required** | N/A | N/A |
+| `triangle_count()` / `triangle()` | Yes | Yes | N/A | N/A |
