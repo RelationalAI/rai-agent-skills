@@ -4,8 +4,14 @@
   - [Entity subtyping for derived classifications](#entity-subtyping-for-derived-classifications)
   - [Computed categorization with typed sub-concepts](#computed-categorization-with-typed-sub-concepts)
   - [Decision rule: enumeration vs. subtyping](#decision-rule-enumeration-vs-subtyping)
+  - [Subtype constraint completeness](#subtype-constraint-completeness)
+  - [Subtyping vs. subset constraint trade-off](#subtyping-vs-subset-constraint-trade-off)
   - [Multiple inheritance](#multiple-inheritance)
 - [Advanced Modeling Patterns](#advanced-modeling-patterns)
+  - [Derived vs. asserted vs. partially computed properties](#derived-vs-asserted-vs-partially-computed-properties)
+  - [Lazy vs. eager materialization](#lazy-vs-eager-materialization)
+  - [Semantic stability](#semantic-stability)
+  - [Historical properties (temporal tracking)](#historical-properties-temporal-tracking)
   - [Time-indexed properties and multi-period models](#time-indexed-properties-and-multi-period-models)
   - [Hierarchy modeling](#hierarchy-modeling)
   - [Bridge concepts via extends](#bridge-concepts-via-extends)
@@ -91,6 +97,55 @@ model.where(Customer.customer_value_score >= 150).define(Customer.value_segment(
 | Fixed categories from source data with no extra attributes | Either; prefer Enumeration if the set is closed |
 | Derived categories from computed values | Entity Subtyping |
 
+### Subtype constraint completeness
+
+When defining subtypes, explicitly declare whether the set of subtypes is **exhaustive** (every supertype instance is in some subtype), **exclusive** (no instance is in two subtypes), or a **partition** (both).
+
+| Constraint | Meaning | Validation |
+|------------|---------|------------|
+| **Exhaustive** | Every supertype instance belongs to at least one subtype | Check for uncategorized entities |
+| **Exclusive** | No instance belongs to two subtypes simultaneously | Check for overlap between subtypes |
+| **Partition** | Both exhaustive and exclusive | Both checks |
+
+```python
+# Define exclusive subtypes
+InternalOrder = model.Concept("InternalOrder", extends=[Order])
+ExternalOrder = model.Concept("ExternalOrder", extends=[Order])
+
+# Validate exclusion: no order should be both internal and external
+Order.in_both = model.Relationship(f"{Order} is both internal and external")
+model.where(InternalOrder(Order), ExternalOrder(Order)).define(Order.in_both())
+
+# Validate exhaustiveness: every order should be in some subtype
+Order.uncategorized = model.Relationship(f"{Order} is uncategorized")
+model.where(Order, model.not_(InternalOrder(Order)), model.not_(ExternalOrder(Order))).define(Order.uncategorized())
+```
+
+**Decision rule:** Always declare the intended constraint. For derived subtypes (computed from a property like `status`), the partition constraint is often implied by the derivation rules + value constraint -- don't redundantly assert what the derivation already guarantees. For asserted subtypes (loaded from data), validate explicitly.
+
+### Subtyping vs. subset constraint trade-off
+
+Subtyping and subset constraints can often model the same situation. Choose based on whether the filtered set has its own specific properties or relationships.
+
+| Situation | Preferred pattern | Reason |
+|-----------|------------------|--------|
+| Filtered set has own properties/relationships | **Subtype** (`extends`) | Subtypes inherit parent properties and can add their own |
+| Filtered set is just a condition with no specific roles | **`.where()` filter** or validation rule | Avoids concept proliferation; a filter suffices |
+| Filtered set is reused across 3+ queries | **Subtype** | Named reusability justifies the concept |
+
+```python
+# Subtype: VIPCustomers have their own discount rate
+VIPCustomer = model.Concept("VIPCustomer", extends=[Customer])
+VIPCustomer.discount_rate = model.Property(f"{VIPCustomer} has {Float:discount_rate}")
+
+# Filter only: "active orders" is just a condition, no specific properties
+# Prefer .where() unless used in 3+ places
+model.where(Order.status != "cancelled")  # inline filter
+# OR promote to subtype if reused:
+ActiveOrder = model.Concept("ActiveOrder", extends=[Order])
+model.define(ActiveOrder(Order)).where(Order.status != "cancelled")
+```
+
 ### Multiple inheritance
 
 Concepts can extend multiple parents for cross-cutting classifications:
@@ -105,6 +160,95 @@ ReturningVIPCustomer = model.Concept(
 ---
 
 ## Advanced Modeling Patterns
+
+### Derived vs. asserted vs. partially computed properties
+
+Every property in the model falls into one of three modes. Naming the mode explicitly helps the agent decide how to implement and maintain each property.
+
+| Mode | Definition | PyRel pattern | Example |
+|------|-----------|---------------|---------|
+| **Asserted** | Loaded from data, taken as ground truth | `model.define(C.prop(TABLE.col)).where(...)` | Customer.name from CUSTOMERS table |
+| **Derived** | Computed on demand from other properties | `model.define(C.prop(expression))` | Customer.total_spend = sum(Order.amount) |
+| **Partially computed** | Some instances loaded from data, others computed | Both patterns on the same property | Product.price: loaded for most, computed for bundles |
+
+```python
+# Asserted: loaded directly from source
+Customer.credit_score = model.Property(f"{Customer} has {Float:credit_score}")
+model.define(Customer.credit_score(TABLE.credit_score)).where(Customer.id == TABLE.id)
+
+# Derived: computed from base facts
+Customer.total_spend = model.Property(f"{Customer} has {Float:total_spend}")
+model.define(Customer.total_spend(aggs.sum(Order.amount).per(Customer)))
+
+# Partially computed: some products have listed prices, bundles are computed
+Product.price = model.Property(f"{Product} has {Float:price}")
+model.define(Product.price(TABLE.price)).where(Product.id == TABLE.id)  # asserted
+model.define(Product.price(aggs.sum(BundleItem.price).per(Product))).where(
+    Bundle(Product)  # derived for bundles only
+)
+```
+
+**Decision rule:** Prefer derived when base properties exist and the computation is straightforward -- this keeps the model authoritative and auditable. Use asserted for opaque externally-computed values. Partially computed is appropriate when most instances are loaded but a subset needs computation (e.g., default values, bundle pricing).
+
+### Lazy vs. eager materialization
+
+Derived properties can be evaluated lazily (computed at query time) or eagerly (materialized as stored values). This choice affects performance and freshness.
+
+| Strategy | When to use | PyRel pattern |
+|----------|-------------|---------------|
+| **Lazy** (default) | Infrequently queried, cheap to compute, or base facts change often | Standard `model.define(C.prop(expression))` |
+| **Eager** (materialized) | Queried in 3+ downstream rules/queries, expensive to compute | `model.Property()` + `model.define()` with explicit storage |
+
+RAI's default behavior is lazy evaluation -- derived properties are computed when accessed. Materialize (see [Performance: materializing computed values](#performance-materializing-computed-values)) only when an aggregation is used in 3+ downstream contexts or computation cost is significant.
+
+**Decision rule:** Start lazy. Materialize when you observe performance issues or when the same expensive aggregation appears in multiple downstream definitions. Don't materialize values that change frequently or are used only once.
+
+### Semantic stability
+
+Property-per-attribute modeling (where each property is an independent declaration) provides a key advantage: **when the domain changes, you add new properties rather than restructure existing concepts.** This is why RAI properties are declared independently rather than bundled into compound structures.
+
+**Implication for the agent:** Resist the temptation to create compound structures (wide junction concepts with many properties, nested property groups) prematurely. Each property should be independently meaningful. When the domain evolves, you add new properties or relationships without restructuring existing ones.
+
+```python
+# Good: independent properties -- adding email doesn't change anything about name
+Customer.name = model.Property(f"{Customer} has {String:name}")
+Customer.email = model.Property(f"{Customer} has {String:email}")  # added later
+
+# Avoid: compound structure that must be restructured when domain changes
+Customer.contact_info = model.Relationship(
+    f"{Customer} has {String:name} and {String:email} and {String:phone}"
+)  # Adding a new field requires changing the reading string and all bindings
+```
+
+### Historical properties (temporal tracking)
+
+When a property changes over time and you need to track its history (not just the current value), create a time-indexed property.
+
+```python
+# Current value only (default): one price per product
+Product.price = model.Property(f"{Product} has {Float:price}")
+
+# Historical tracking: price per product per effective date
+Product.price_history = model.Property(
+    f"{Product} has {Float:price} effective {Date:effective_date}"
+)
+# FD: (Product, Date) -> price -- each product has one price per date
+
+# Query current price: filter to max effective_date
+Product.current_price = model.Property(f"{Product} has {Float:current_price}")
+product_ref, price_ref, date_ref = Product.ref(), Float.ref(), Date.ref()
+model.where(
+    Product.price_history(product_ref, price_ref, date_ref),
+    date_ref == aggs.max(date_ref).per(product_ref)
+).define(product_ref.current_price(price_ref))
+```
+
+**Decision rule:** Use time-indexed facts when:
+- The domain requires knowing what a value WAS at a point in time (audit, compliance)
+- Predictive reasoning needs historical patterns (demand forecasting, trend analysis)
+- Multi-period optimization needs time-varying parameters (see multi-period models below)
+
+For current-value-only properties (most common), a simple Property suffices.
 
 ### Time-indexed properties and multi-period models
 

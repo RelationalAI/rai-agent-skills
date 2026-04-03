@@ -78,6 +78,8 @@ Start from the business domain — what concepts exist, what questions must the 
 
 **Key pattern: identify then validate.** Brainstorm broadly in steps 2 and 3, then validate against the schema. This avoids premature commitment to a modeling choice that doesn't survive contact with the data.
 
+**Quality gates:** After steps 3-5, apply the checks from [fact-decomposition-and-validation.md](references/fact-decomposition-and-validation.md) (irreducibility, sample data validation, counterexample) to catch structural errors early.
+
 ---
 
 ## Concept Design Principles
@@ -156,11 +158,9 @@ model.define(Order.revenue(sum(LineItem.total_price).per(Order)))
 
 ### Entity count guidance
 
-**Entity counts of zero at introspection time are normal.** Many models create entities dynamically when the program runs:
-- Concepts loaded from data files get entities at runtime
-- Cross-product decision concepts get entities from `model.define(X.new(a=A, b=B))`
+**Entity counts of zero at introspection time are normal.** Concepts loaded from data or created via `model.define(X.new(...))` get entities at runtime. If a concept has properties defined but zero entities, it will be populated at runtime -- do not flag it as a gap.
 
-**What matters is whether the concept has properties defined.** If a concept exists with properties but zero entities, it will be populated at runtime. Do not flag it as a gap.
+**Independent concepts:** Reference entities (countries, currencies, categories) may exist without participating in any relationship. Do not flag zero-relationship entities as errors. Only declare mandatory role constraints when the business domain truly requires participation.
 
 ### Compound identity for multi-key entities
 
@@ -184,9 +184,7 @@ See [advanced-modeling.md](references/advanced-modeling.md) for examples of both
 
 ### Use strict mode during development
 
-Disable implicit properties during development to catch typos and undefined property references at definition time rather than silently creating new properties. When `implicit_properties` is `false`, accessing an undeclared property raises an error immediately. By default it is `true`.
-
-To enable strict mode, set `implicit_properties: false` in your `raiconfig.yaml` under the model's config section. This causes any access to an undeclared property to raise an error immediately, rather than silently creating a new property.
+Set `implicit_properties: false` in your `raiconfig.yaml` under the model's config section to catch typos and undefined property references at definition time. Without this, accessing an undeclared property silently creates a new one (default is `true`).
 
 ---
 
@@ -271,6 +269,8 @@ Enrollment.grade = model.Property(f"{Enrollment} has {Float:grade}")
 | Inverse relationships | `.alt()` for concise inverse declaration | [advanced-modeling.md](references/advanced-modeling.md) |
 | Role naming | Named roles when same concept appears twice: `{Person:payer}` | [advanced-modeling.md](references/advanced-modeling.md) |
 | Same-type references | `.ref()` for relating two instances of the same type | [advanced-modeling.md](references/advanced-modeling.md) |
+| Constraint vocabulary | Mandatory/optional, subset, exclusion, self-referential, frequency, value-comparison | [constraint-patterns.md](references/constraint-patterns.md) |
+| Decomposition checks | Irreducibility, minimum key span — verify ternaries are truly irreducible | [fact-decomposition-and-validation.md](references/fact-decomposition-and-validation.md) |
 
 ---
 
@@ -284,7 +284,7 @@ For guidance on producing a descriptive inventory of a model and classifying unm
 
 ### Loading and binding data to the model 
 
-**Snowflake type mapping** (see also [rai-build-starter-ontology](../rai-build-starter-ontology/SKILL.md) for the full validation workflow):
+**Snowflake type mapping** (see also `rai-build-starter-ontology` for the full validation workflow):
 
 | Snowflake type | RAI base type |
 |---|---|
@@ -414,26 +414,16 @@ Model gaps are ONLY for data that exists in the schema but isn't mapped to the m
 
 Relationship gaps also accept optional `madlib` (PyRel reading-string, e.g., `{Order} placed by {customer:Customer}`) and `description`. `from_concept` is the concept whose source table contains the FK column.
 
-**If the schema shows NO unmapped columns (everything is "Already in model"):**
-- There are no model_gaps. All suggestions should be READY.
-- Decision variables, extended concepts, and cross-product relationships are formulation constructs created during problem formulation -- they are NOT model_gaps.
-
-**Base model vs. formulation layer:** Every base model concept must map to at least one authoritative source table (see Authoritative vs. joinable sources above). If a proposed "enrichment" has no source table, it belongs to the formulation layer -- it is a decision variable, cross-product concept, or computed expression, not a model gap.
+**Base model vs. formulation layer:** If a proposed "enrichment" has no source table, it belongs to the formulation layer, not the base model. Decision variables, cross-product concepts, computed expressions, and business parameters are formulation constructs -- NOT model_gaps.
 
 | Layer | Examples | Has source table? |
 |-------|----------|-------------------|
 | **Base model** | Customer, Site, Order with properties from schema | Yes -- loaded from data |
 | **Formulation** | FulfillmentAssignment, production_quantity, total_cost expression | No -- created during problem setup |
 
-Note: This distinction is about **data provenance for gap classification**, not code placement. In generated code, formulation-layer Property *definitions* (e.g., `Entity.amount = model.Property(...)`) still go in `define_model()` alongside base model definitions. Only solver registrations (`p.solve_for`, `p.satisfy`, `p.minimize`) go in `define_problem()`.
+Note: This distinction is about **data provenance for gap classification**, not code placement. Formulation-layer Property *definitions* still go in `define_model()`; only solver registrations go in `define_problem()`.
 
-For concrete examples of what enrichment looks like in practice, see [enrichment-patterns.md](references/enrichment-patterns.md).
-
-**What is NOT a model_gap:**
-- Decision variables (e.g., quantity_to_allocate, assigned_flag) -- created during formulation
-- Extended/cross-product concepts (e.g., Worker x Shift) -- created during formulation
-- Computed properties (e.g., total_cost = quantity * unit_cost) -- defined as expressions during formulation
-- Business parameters (budget, threshold) -- these are parameter_gap, not model_gap
+For concrete examples, see [enrichment-patterns.md](references/enrichment-patterns.md).
 
 **Same-type multiarity detection:** When a concept has a multiarity property referencing the same type (e.g., `{Stock} and {stock2:Stock} have {covar:float}` or `{Node} connects to {node2:Node} with {distance:float}`), this IS the same-type relationship — do NOT suggest an additional relationship gap. The multiarity property pattern handles pairwise operations between instances of the same type. Only suggest relationship gaps between DIFFERENT concepts.
 
@@ -493,8 +483,10 @@ For detailed enrichment patterns, property vs relationship mapping, and source c
 
 ## Reference files
 
-- Adding properties or relationships to a base model for optimization? See [enrichment-patterns.md](references/enrichment-patterns.md) for when enrichment is needed, property vs relationship mapping, and source column requirements
-- Working with enum concepts, cross-product patterns, or advanced modeling? See [categorization-and-advanced.md](references/categorization-and-advanced.md) for categorization patterns and cross-product decision concepts
-- Advanced modeling patterns (value types, ternary properties, inverse relationships, role naming, same-type references, scenario modeling)? See [advanced-modeling.md](references/advanced-modeling.md)
-- Working with a modeler-exported model or composing model layers? See [modeler-and-composition.md](references/modeler-and-composition.md) for the latest export format (Sources class, all Relationship, filter_by), legacy format (initialize(), BASE_SCHEMA), and layered model composition
-- Producing a model inventory or classifying unmapped data? See [examination-guidance.md](references/examination-guidance.md) for description principles and unmapped data classification
+- Enriching a model for optimization (relationship promotion, cross-products, multi-hop relationships, gap classification)? See [enrichment-patterns.md](references/enrichment-patterns.md)
+- Categorization, subtypes, derivation modes, temporal tracking, or semantic stability? See [categorization-and-advanced.md](references/categorization-and-advanced.md)
+- Advanced modeling (value types, identity patterns, ternary properties, inverse relationships, role naming, scenario modeling)? See [advanced-modeling.md](references/advanced-modeling.md)
+- Modeler exports or model composition? See [modeler-and-composition.md](references/modeler-and-composition.md)
+- Model inventory or unmapped data classification? See [examination-guidance.md](references/examination-guidance.md)
+- Decomposition quality gates (irreducibility, sample data validation, counterexample)? See [fact-decomposition-and-validation.md](references/fact-decomposition-and-validation.md)
+- Constraint patterns beyond FD (mandatory/optional, subset, exclusion, self-referential, frequency, value-comparison)? See [constraint-patterns.md](references/constraint-patterns.md)

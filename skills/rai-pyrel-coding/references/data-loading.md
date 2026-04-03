@@ -17,6 +17,8 @@ Comprehensive reference for binding source data to concepts. Covers all three da
 
 ### Snowflake Type Mapping
 
+Always derive property types from `INFORMATION_SCHEMA.COLUMNS` (`DATA_TYPE`, `NUMERIC_SCALE`), not from column names, CSV samples, or other ontologies. The schema is the single source of truth.
+
 | Snowflake type | RAI base type |
 |---|---|
 | VARCHAR, TEXT | `String` |

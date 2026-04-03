@@ -73,12 +73,15 @@ from snowflake import snowpark
 
 session: snowpark.Session = create_config().get_session(SnowflakeConnection)
 session.sql("""
-    SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE
+    SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE,
+           NUMERIC_PRECISION, NUMERIC_SCALE
     FROM <database>.INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA = '<schema>'
     ORDER BY TABLE_NAME, ORDINAL_POSITION
 """).show()
 ```
+
+> **Keep this result available throughout the workflow.** The `DATA_TYPE` and `NUMERIC_SCALE` columns are the authoritative source for deriving RAI property types in Step 6. When declaring each property, look up its source column in this result and use the type mapping table (Step 5) to pick the correct RAI type. Do not infer types from column names, CSV samples, or example ontologies.
 
 #### 2b — Local CSV / DataFrame (prototyping only)
 
@@ -128,6 +131,24 @@ FROM (
     GROUP BY <fk_col>
 );
 ```
+
+**For graph/network models — trace the topology before modeling:**
+
+When your data describes a network (nodes connected by edges via FK chains), trace the full path before Step 3:
+
+```sql
+-- What node types connect to what? Reveals tiers and layers.
+SELECT source.TYPE AS from_type, dest.TYPE AS to_type, COUNT(*) AS edges
+FROM <edge_table> e
+JOIN <node_table> source ON e.SOURCE_ID = source.ID
+JOIN <node_table> dest ON e.DEST_ID = dest.ID
+GROUP BY from_type, to_type ORDER BY edges DESC;
+
+-- Check for NULL FKs that create invisible network gaps
+SELECT COUNT(*) AS broken_edges FROM <edge_table> WHERE DEST_ID IS NULL OR SOURCE_ID IS NULL;
+```
+
+This reveals hidden layers, missing connections, and whether you need intermediate concepts to bridge tiers.
 
 ---
 
@@ -194,13 +215,15 @@ Always run this query before writing property declarations. A type mismatch betw
 
 **Common mismatches to check:**
 - **DATE vs TEXT** — Columns with date-like names (`signup_date`, `created_at`) may be stored as TEXT in Snowflake, especially when loaded from CSV. Check the actual type; use `String` if the column is TEXT.
-- **NUMBER precision** — A column typed `NUMBER(38,0)` is an integer, but `NUMBER(18,4)` is a float. Always check `NUMERIC_SCALE`; if scale > 0, use `Float`.
+- **NUMBER precision** — A column typed `NUMBER(38,0)` maps to `Integer`, but `NUMBER(18,4)` maps to `Float`. Always check `NUMERIC_SCALE`; if scale > 0, use `Float`. If a `NUMBER(38,0)` column holds values that are conceptually continuous (e.g., `CAPACITY_MW`, `COST_MILLION`), flag this to the user — the DDL may need `FLOAT` or `NUMBER(18,2)` instead.
 - **BOOLEAN** — Model as `Boolean` property or unary `Relationship(f"... is <flag>")`. Both work; prefer `Relationship` when the flag semantics read naturally (e.g., "Order is urgent").
 - **Numeric IDs** — A column named `CREDIT_CARD_NUMBER` or `PHONE` may be NUMBER, not TEXT. Let the schema dictate the type, not the name.
 
 ---
 
 ### Step 6 — Generate code
+
+**Derive every property type from the Snowflake schema captured in Step 2.** Use the type mapping table from Step 5 to convert each column's `DATA_TYPE` and `NUMERIC_SCALE` to the correct RAI type. Never guess types from column names, CSV samples, or patterns in other ontologies — the schema is the single source of truth.
 
 Follow conventions in `rai-pyrel-coding` and `rai-ontology-design`. Put everything in a single file named after the domain:
 
@@ -220,7 +243,9 @@ Add validation queries to the bottom of your `<domain>.py` file to confirm data 
 
 > **Note:** Import aggregates with `from relationalai.semantics.std import aggregates`.
 
-**7a — Count instances per concept** to confirm data binding loaded rows:
+**7a — Spot-check property types against schema** before running any queries. For each `BOOLEAN`, `DATE`, and `NUMBER` column in the Step 2 schema output, confirm the corresponding property declaration uses the correct RAI type. These three are the most common sources of silent type mismatches (`TyperError` at query time with no indication of which property failed). Fix any mismatch before proceeding.
+
+**7b — Count instances per concept** to confirm data binding loaded rows:
 
 ```python
 from relationalai.semantics.std import aggregates
@@ -230,7 +255,7 @@ print(df)
 # Expect: count matches source table row count. Zero means data binding failed.
 ```
 
-**7b — Verify relationships** to confirm FK joins resolved:
+**7c — Verify relationships** to confirm FK joins resolved:
 
 ```python
 df = model.select(
@@ -243,7 +268,7 @@ print(f"Linked pairs: {len(df)}")
 # Expect: non-empty results. Empty means the FK join didn't match.
 ```
 
-**7c — Answer scoped questions** from Step 1:
+**7d — Answer scoped questions** from Step 1:
 
 ```python
 df = model.select(
@@ -263,7 +288,8 @@ print(df)
 | Mistake | Cause | Fix |
 |---------|-------|-----|
 | Schema-driven names (`CUST_TABLE`, `ORD_AMT`) | Copying column/table names from schema | Use business domain names (`Customer`, `amount`) |
-| Boolean columns as `Property` | Treating booleans as data values | Use unary `Relationship(f"... is active")` |
+| Boolean columns as `String` | Guessing types from column names or example ontologies instead of Snowflake schema | Always derive types from `INFORMATION_SCHEMA.COLUMNS` `DATA_TYPE`; BOOLEAN → `Boolean` property or unary `Relationship` |
+| Boolean columns as `Boolean` property | Using a scalar property when the column represents a semantic flag | Prefer unary `Relationship(f"... is active")` for flag-style booleans |
 | Modeling every column | No scoping step | Only model columns relevant to scoped questions |
 | `model.data()` for large datasets | Treating CSV/DataFrame as production-ready | Prototyping only (≤ hundreds of rows). Use `model.Table()` |
 | Wrong Snowflake table path | Incorrect database, schema, or table name | Verify with `SHOW TABLES IN SCHEMA <db>.<schema>` |
