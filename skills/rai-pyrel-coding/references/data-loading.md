@@ -8,6 +8,7 @@
   - [Date and DateTime Columns](#date-and-datetime-columns)
   - [Optional vs Required Columns](#optional-vs-required-columns)
   - [Multiarity Property Loading](#multiarity-property-loading)
+  - [Common Data Loading Mistakes](#common-data-loading-mistakes)
   - [Programmatic Entity Creation](#programmatic-entity-creation)
 <!-- /TOC -->
 
@@ -329,7 +330,7 @@ for nu in nutrient_csv.name:
 
 These produce **silent failures** — no error is raised, but data is missing or queries return empty.
 
-**Extra CSV columns with NaN break `model.data()`.** Pass only the columns you need:
+**Extra CSV columns with NaN silently drop entities.** Any NaN in a column passed to `.new()` prevents that row's entity from being created. Pass only the columns you need:
 
 ```python
 # BROKEN — VALUE_TIER and CONTACT_EMAIL columns have NaN, silently break loading

@@ -22,12 +22,12 @@
 | Typo creates silent empty property | `Customer.nmae` (typo) silently creates an empty property via implicit property creation — no error | `create_config(model={"implicit_properties": False})` or set `implicit_properties: false` under `model:` in raiconfig.yaml |
 | `TypeError: model argument must be a Model, but is a module` | Package directory named `model/` shadows the `model` variable after `import model.submodule` | Rename the package directory to something other than `model` (e.g., `sc_model/`, `fraud_model/`) |
 | `~Relationship()` for negation | `TypeError: bad operand type for unary ~: 'Expression'` — Python `~` doesn't work on RAI expressions | Use `model.not_(Concept.relationship())` for negation in `.where()` clauses |
-| `[Inconsistent branches]` in `union()` | Mixing bare relation calls (return values) with `where(...)` calls (return Fragments) inside a `union` | Make all branches the same type: chain relation calls so all return values (e.g., `a.rel(b).rel(c)`) or wrap all in `where(...)` |
+| `[Inconsistent branches]` in `union()` | Branches return different numbers of values — e.g., a bare relation call (1 value) mixed with `where(...)` (0 values), or Fragments with different `select()` column counts | Make all branches return the same count: chain relation calls so all return values, or wrap all in `where(...)` with matching `select()` columns |
 | Re-defining Property in function/loop fails | `Concept.prop = model.Property(...)` inside a function called multiple times — "already defined" on second call | Define Properties once at module level, outside any function or loop |
 | `Int128Array` / `NotImplementedError` on pandas operations | RAI returns `Int128Array` for counts, integer aggregations, and IDs — not just graph community labels. `.fillna(0)`, `.groupby()`, etc. fail | Cast early: `df["col"].astype("object").fillna(0).astype(int)` or `df["col"].astype(int)` if no nulls |
 | `ValidationError: Unused variable` after `import *` from another model script | `from other_script import *` brings all concepts/relationships into scope — any not referenced in the current query trigger the validator | Import only what you need: `from grid import model, Substation, Line`. Never use `import *` across model scripts |
 
-For data loading pitfalls (post-hoc relationship assignment, NaN columns, `to_schema()` clobbering), see [data-loading.md](data-loading.md) § Common Data Loading Mistakes.
+For data loading pitfalls (NaN columns, `to_schema()` clobbering, NULL FKs), see [data-loading.md](data-loading.md) § Common Data Loading Mistakes.
 For `.exists()` on Properties, see `rai-querying` Common Pitfalls.
 For Graph + large model TyperError, see `rai-graph-analysis` Common Pitfalls.
 

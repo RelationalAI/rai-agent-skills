@@ -339,7 +339,7 @@ prod_cost = ProdCapacity.production_cost * sum(x_prod).per(ProdCapacity).where(
 - **Cross-concept joins need distinct attribute names** — if two concepts both have `site_id` as `identify_by`, rename one (e.g., `wk_site_id`) to avoid ambiguity
 - **Only one objective supported** — HiGHS rejects multiple `minimize()`/`maximize()` calls
 
-For constraint naming with lists and re-solve behavior (multi-scenario patterns), see [known-limitations.md](references/known-limitations.md).
+For constraint naming with lists, re-solve behavior (multi-scenario patterns), `| 0` fallback limitation, and numpy type casting, see [known-limitations.md](references/known-limitations.md).
 
 ### PyRel is additive — nothing can be removed or modified in-place
 
@@ -372,4 +372,4 @@ PyRel's model and problem APIs are **append-only**. Every call to `model.define(
 | Formulation simplification | Static vs dynamic parameters, goals vs constraints, grouped constraints, over-specification | [formulation-simplification.md](references/formulation-simplification.md) |
 | Examples index | All example problems with patterns demonstrated | [examples-index.md](references/examples-index.md) |
 | Formulation analysis context | Naming conventions, alias handling, expression parsing, aggregation patterns for review | [formulation-analysis-context.md](references/formulation-analysis-context.md) |
-| Known limitations (secondary) | Constraint naming with lists, re-solve behavior | [known-limitations.md](references/known-limitations.md) |
+| Known limitations (secondary) | Constraint naming, re-solve behavior, `\| 0` fallback limitation, numpy type casting | [known-limitations.md](references/known-limitations.md) |

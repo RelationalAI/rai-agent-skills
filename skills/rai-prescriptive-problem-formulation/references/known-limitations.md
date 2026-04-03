@@ -44,6 +44,19 @@ Re-solving the same `Problem` instance is safe. Result import uses `experimental
 
 The `| 0` (default-value) operator inside `p.satisfy(model.require(...))` with nested `sum().per().where()` aggregation causes `TyperError: Type errors detected during type inference`. This occurs when the RHS of a constraint combines a property with a conditional aggregation that uses `| 0` as a fallback.
 
+```python
+# BROKEN — | 0 inside solver constraint with nested aggregation
+p.satisfy(model.require(
+    Entity.supply >= sum(Flow.x_qty).per(Entity).where(Flow.dest(Entity)) | 0
+))
+
+# CORRECT — pre-compute aggregation in pandas, load as flat property
+combos = pd.merge(entity_df, flow_df, how="left", on="entity_id")
+combos["inflow"] = combos.groupby("entity_id")["qty"].transform("sum").fillna(0)
+model.define(Entity.filter_by(id=entity_data.entity_id).inflow(entity_data.inflow))
+p.satisfy(model.require(Entity.supply >= Entity.inflow))
+```
+
 **Workaround:** Pre-compute the aggregation in Python (e.g., enumerate combinations and build a denormalized parameter DataFrame), then pass the result as a flat property on the decision concept. Avoid nested `per().where() | 0` inside solver constraints.
 
 ## numpy Types as Solver Literals
