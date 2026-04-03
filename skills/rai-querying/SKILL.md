@@ -83,7 +83,7 @@ model.where(
 
 **`.to_df()`** — execute query and return a pandas DataFrame.
 
-**`print(expr)`** — shows the DSL structure of an expression, concept, or relationship without executing a query. Use to verify expression composition before running:
+**`print(expr)`** — shows the PyRel structure of an expression, concept, or relationship without executing a query. Use to verify expression composition before running:
 
 ```python
 print(Order.customer)                          # → Order.customer

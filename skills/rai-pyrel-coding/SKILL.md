@@ -53,7 +53,7 @@ model.define(Product.new(model.data(df).to_schema()))
 # Query — prefer model.where/model.select for multi-model safety
 result = model.where(Product.cost > 10).select(Product.id, Product.cost).to_df()
 
-# Debugging — print() shows readable DSL structure, .inspect() materializes data
+# Debugging — print() shows readable PyRel structure, .inspect() materializes data
 print(Product.cost)        # → Product.cost
 print(Product.cost > 10)   # → Product.cost > 10
 Product.cost.inspect()     # → executes query, prints DataFrame to stdout
@@ -460,15 +460,15 @@ For detailed `.where()` targets, `.per()` scoping, and operator precedence rules
 
 When queries return empty DataFrames or wrong values:
 
-**Step 0: Print the expression to verify structure.** All DSL objects (Concepts, Expressions, Fragments, Aggregates, Refs) have readable `repr`. Use `print()` to confirm an expression means what you think before querying:
+**Step 0: Print the expression to verify structure.** All PyRel objects (Concepts, Expressions, Fragments, Aggregates, Refs) have readable `repr`. Use `print()` to confirm an expression means what you think before querying:
 
 ```python
 print(Product.cost * Product.quantity)      # → Product.cost * Product.quantity
 print(aggs.sum(Order.total).per(Customer))  # → (sum Order.total (per Customer))
-print(model.where(Order.status == "active"))# → (where Order.status == 'active')
+print(model.where(Order.status == "active")) # → (where Order.status == 'active')
 ```
 
-This catches structural mistakes (wrong concept in `.per()`, missing join path) before they produce empty or wrong results. Distinct from `.inspect()` which executes a query and materializes data.
+This catches expression-level mistakes (wrong concept in `.per()`, wrong property in an aggregation) before they produce empty or wrong results. Distinct from `.inspect()` which executes a query and materializes data.
 
 Then check: typos (set `implicit_properties: false`), type alignment (Integer vs String), join paths (`.inspect()` on relationships), and entity counts.
 For the full step-by-step debugging checklist, see [common-pitfalls.md](references/common-pitfalls.md#debugging-empty-or-unexpected-results).

@@ -1,6 +1,6 @@
-"""Example: Using print() for structural debugging of DSL objects.
+"""Example: Using print() for structural debugging of PyRel objects.
 
-All DSL types have readable repr. Use print() to verify
+All PyRel types have readable repr. Use print() to verify
 expression structure before executing queries. Distinct from .inspect()
 which materializes data.
 
@@ -8,7 +8,7 @@ Targeted win: exploration and debugging of unfamiliar models — confirming
 that expressions, aggregates, and fragments reference the expected concepts
 before hitting the server.
 """
-from relationalai.semantics import Float, Integer, Model, String, count, sum
+from relationalai.semantics import Float, Integer, Model, String
 from relationalai.semantics.std import aggregates as aggs
 
 model = Model("pprint_demo")
@@ -21,7 +21,7 @@ Customer.region = model.Property(f"{Customer} has {String:region}")
 Order = model.Concept("Order", identify_by={"id": Integer})
 Order.total = model.Property(f"{Order} has {Float:total}")
 Order.status = model.Property(f"{Order} has {String:status}")
-Order.customer = model.Relationship(f"{Order} placed by {Customer}")
+Order.customer = model.Property(f"{Order} placed by {Customer:customer}")
 
 # -- Concepts print as their name --
 print(Customer)        # → Customer

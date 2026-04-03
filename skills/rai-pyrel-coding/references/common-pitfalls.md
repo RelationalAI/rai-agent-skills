@@ -35,7 +35,7 @@ When a query returns an empty DataFrame or wrong values, work through these chec
 2. **Check type alignment:**
    `.where(Order.id == "123")` returns empty when `id` is Integer — no error.
    Fix: use matching type (`.where(Order.id == 123)`).
-   Use `print(property)` to verify the expression references the expected concept and property.
+   Use `print(Order.id)` to verify the expression references the expected concept and property.
    Use `.inspect()` to see actual values and infer types.
    Also check datetime columns: pandas Timestamps don't match Date properties —
    convert with `df["col"] = pd.to_datetime(df["col"]).dt.date`.
