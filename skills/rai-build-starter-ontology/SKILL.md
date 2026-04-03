@@ -273,6 +273,14 @@ print(df)
 
 ---
 
+## Reference files
+
+| Reference | Description | File |
+|-----------|-------------|------|
+| Real model examples | Production ontology patterns for TPC-H, multi-source, and prototyping use cases | [examples.md](references/examples.md) |
+
+---
+
 ## What's Next
 
 After your starter ontology validates and queries correctly, the typical next steps are:

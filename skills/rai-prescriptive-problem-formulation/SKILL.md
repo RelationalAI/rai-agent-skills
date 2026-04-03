@@ -297,6 +297,8 @@ For detailed unwired relationship symptoms, checks, and code examples, see [cons
 
 ---
 
+## Examples
+
 For all example problems and the patterns they demonstrate, see [examples-index.md](references/examples-index.md).
 
 ---
