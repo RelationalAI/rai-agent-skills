@@ -229,6 +229,9 @@ The objective can improve infinitely — the solver can keep making the solution
 **What to tell users:** "The model is missing limits that would bound the solution. Likely cause: [missing capacity constraint / missing budget limit / wrong objective direction]."
 **Next steps:** Add missing bounds or constraints, verify objective direction and coefficient signs.
 
+### Feasible (MIP)
+For MIP problems, HiGHS may return `"Feasible"` instead of `"OPTIMAL"` when a solution is found but optimality is not proven within the default MIP gap tolerance. Check `si.relative_gap` (if available) or the solver log — a gap under 1% means the solution is effectively optimal. Treat `"Feasible"` the same as `"TIME_LIMIT"` for gap interpretation below.
+
 ### Time Limit
 The solver found a feasible solution but could not prove it is optimal within the time allowed.
 

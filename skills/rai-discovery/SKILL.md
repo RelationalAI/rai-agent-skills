@@ -151,6 +151,14 @@ Some questions require multiple reasoners in sequence. Each stage's output enric
 - If Stage N produces derived data (predictions, graph metrics, rule flags), Stage N+1 may need model enrichment to incorporate it
 - Each stage should be independently valuable — if Stage 2 fails, Stage 1 results are still useful
 
+### Implementation pattern
+
+Each stage enriches the shared ontology with new properties. Downstream stages consume those properties as if they were base data.
+
+- **Enrichment write-back:** A stage's output becomes a new `Property` or `Relationship` on an existing concept via `model.define()`. Downstream stages reference it like any other property.
+- **DataFrame bridge:** When a stage runs on a separate `Model` (see `rai-graph-analysis` [graph-construction.md](../rai-graph-analysis/references/graph-construction.md) #graph-model-separation), extract results to a DataFrame and load into the main model via `model.data()`.
+- **Fallback operator (`|`):** Allows downstream stages to degrade gracefully when an upstream enrichment is missing for some entities — e.g., `Entity.predicted_value | Entity.current_value`.
+
 ---
 
 ## Cumulative Discovery

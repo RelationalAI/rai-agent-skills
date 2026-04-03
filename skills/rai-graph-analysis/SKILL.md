@@ -454,7 +454,7 @@ model.where(Site.centrality_score < 0.1).define(Site.is_at_risk())
 | Empty graph (no edges) | Edge definition doesn't match data — wrong relationship or join path | Verify edge source/destination properties exist and have data; query edge count before running algorithms |
 | `Int128Array` error in pandas | Community/component IDs are Int128 | Cast: `df["col"].astype(int)` |
 | Duplicate/self-loop edges | Missing guard in co-occurrence pattern | Add `left.id < right.id` to `.where()` clause |
-| `aggregator` missing | Weighted graph with multi-edges requires aggregator for parallel edges | Add `aggregator="sum"` — but only when multi-edges are expected (see [Aggregator guidance](#aggregator-guidance)) |
+| `aggregator` missing | Weighted graph with multi-edges requires aggregator for parallel edges | Add `aggregator="sum"` — but only when multi-edges are expected (see [Aggregator guidance](#graph-constructor-aggregator-parameter-guidance)) |
 | Weight type error | Weights must be floats, but property is Integer/Number | Cast with `floats.float(property)` in Edge.new weight parameter |
 | Centrality all equal | Graph is a complete graph or all nodes have identical connectivity | Check if graph construction is correct; may need weighted edges to differentiate |
 | Similarity produces too many results | O(n^2) output for n nodes | Filter by minimum threshold or limit to top-k per node |
@@ -465,6 +465,7 @@ model.where(Site.centrality_score < 0.1).define(Site.is_at_risk())
 | Empty graph when extending existing model | Script creates `Model("name")` without importing base model definitions — concepts exist but have no instances | Import the base model module (e.g., `from my_model import model, Site`) so base `define()` rules are in scope |
 | `ValidationError: Unused variable` when using `rank()` with graph properties | Using `rank(desc(graph.Node.betweenness))` alongside other graph properties in `select()` triggers the unused variable validator | Sort in pandas instead: `.to_df().sort_values("betweenness", ascending=False).reset_index(drop=True)` — avoid `rank()` in graph queries |
 | `RAIException: Ungrounded variables` when mixing chained derived properties + Graph + boolean rules | Defining chained derived properties (e.g., `peak_forecast` → `future_headroom`) alongside Graph construction and boolean Relationship rules in the same model causes ungrounded variable errors | Query raw data via simple selects and compute derived values / rules in pandas. Root cause is related to the type inference limit noted above — chained derivations compound the issue |
+| `UnsupportedRecursionError` in multi-reasoner pipelines | Calling `p.variable_values()` after graph algorithms on the same `Model` can trigger recursion errors in some SDK versions | Use a separate `Model` for graph analysis and write results back via `model.data()`. See [graph-construction.md](references/graph-construction.md) #graph-model-separation. |
 
 ---
 
