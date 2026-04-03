@@ -329,20 +329,6 @@ for nu in nutrient_csv.name:
 
 These produce **silent failures** — no error is raised, but data is missing or queries return empty.
 
-**Relationships must be set in `.new()`.** Post-hoc relationship assignment silently fails:
-
-```python
-# BROKEN — post-hoc assignment
-model.define(b := Business.new(id=d["ID"]), b.name(d["NAME"]))
-model.where(Business.id == d["ID"]).define(Business.site(Site.filter_by(id=d["SITE_ID"])))
-
-# CORRECT — relationship in .new()
-model.define(
-    b := Business.new(id=d["ID"], site=Site.filter_by(id=d["SITE_ID"])),
-    b.name(d["NAME"]),
-)
-```
-
 **Extra CSV columns with NaN break `model.data()`.** Pass only the columns you need:
 
 ```python
@@ -353,7 +339,7 @@ d = model.data(read_csv("business.csv"))
 d = model.data(read_csv("business.csv")[["ID", "NAME", "RELIABILITY_SCORE"]])
 ```
 
-**`to_schema()` clobbers previously set properties.** A second `to_schema()` load of the same concept overwrites relationships and properties from the first `model.define()`:
+**`to_schema()` clobbers previously set properties (known bug).** A second `to_schema()` load of the same concept overwrites relationships and properties from the first `model.define()`. Work around by loading all properties in a single `define()`:
 
 ```python
 # BROKEN — second define clobbers site from first
@@ -367,12 +353,11 @@ model.define(
 )
 ```
 
-**NULL foreign keys create invisible network gaps.** Rows with NULL FK columns silently fail to create relationships. The entity is created but the relationship is empty. In network models, this creates invisible gaps (e.g., operations with no SKU, edges with no destination):
+**NULL foreign keys skip relationship creation.** Rows with NULL FK columns won't create a relationship (expected behavior). In network models, this can cause unexpected gaps if NULLs aren't anticipated. Check counts before loading:
 
 ```python
-# Check for NULL FKs BEFORE loading
 print(df["SITE_ID"].isna().sum(), "rows with NULL SITE_ID")
-# Filter or handle: df = df.dropna(subset=["SITE_ID"])
+# Filter if needed: df = df.dropna(subset=["SITE_ID"])
 ```
 
 ---
