@@ -393,7 +393,7 @@ RAI expressions do not support Python's boolean keywords (`and`, `or`, `not`, `i
 | `not x_assigned` | `not_(x_assigned)` |
 | `if condition else fallback` | `value \| fallback` (ordered fallback), or `.where(condition)` on the constraint |
 
-**`|` vs `model.union()`:** The `|` operator is an ordered fallback (picks the first branch that succeeds — if-then-else semantics). `model.union()` is set OR (collects ALL matching branches). Use `|` for defaults and case-when chains; use `model.union()` for multi-term objectives or OR-filtering. The `|` operator creates a `Match` object (importable from `relationalai.semantics`) — nested matches are flattened: `(a | b) | c` == `a | b | c`.
+**`|` vs `model.union()`:** The `|` operator is an ordered fallback (picks the first branch that succeeds — if-then-else semantics). `model.union()` is set OR (collects ALL matching branches). Use `|` for defaults and case-when chains; use `model.union()` for multi-term objectives or OR-filtering. The `|` operator creates a `Match` object (importable from `relationalai.semantics`) — nested matches are flattened: `(a | b) | c` == `a | b | c`. **All `union()` branches must return the same number of values** (same "shape"). A bare relation call returns 1 value; `where(...)` without `select()` returns 0. Mixing them causes `[Inconsistent branches]`. Fix: wrap all branches in `where(...)` with matching `select()` columns, or chain relation calls so all return values.
 
 ### Property Definition F-Strings
 

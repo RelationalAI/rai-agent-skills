@@ -344,7 +344,7 @@ prod_cost = ProdCapacity.production_cost * sum(x_prod).per(ProdCapacity).where(
 - **Only one objective supported** — HiGHS rejects multiple `minimize()`/`maximize()` calls
 - **Bi-objective via epsilon constraint**: To optimize two competing objectives, use the epsilon constraint loop — convert the secondary objective to a parameterized constraint and sweep it across the feasible range. Each iteration is a standard single-objective Problem. See [multi-objective-formulation.md](references/multi-objective-formulation.md).
 
-For constraint naming with lists and re-solve behavior (multi-scenario patterns), see [known-limitations.md](references/known-limitations.md).
+For constraint naming with lists, re-solve behavior (multi-scenario patterns), `| 0` fallback limitation, and numpy type casting, see [known-limitations.md](references/known-limitations.md).
 
 ### PyRel is additive — nothing can be removed or modified in-place
 
@@ -378,4 +378,4 @@ PyRel's model and problem APIs are **append-only**. Every call to `model.define(
 | Multi-objective formulation | Approach selection, epsilon constraint method, tension heuristics, pitfalls | [multi-objective-formulation.md](references/multi-objective-formulation.md) |
 | Examples index | All example problems with patterns demonstrated | [examples-index.md](references/examples-index.md) |
 | Formulation analysis context | Naming conventions, alias handling, expression parsing, aggregation patterns for review | [formulation-analysis-context.md](references/formulation-analysis-context.md) |
-| Known limitations (secondary) | Constraint naming with lists, re-solve behavior | [known-limitations.md](references/known-limitations.md) |
+| Known limitations (secondary) | Constraint naming, re-solve behavior, `\| 0` fallback limitation, numpy type casting | [known-limitations.md](references/known-limitations.md) |
