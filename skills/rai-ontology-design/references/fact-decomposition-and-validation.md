@@ -1,3 +1,5 @@
+# Fact Decomposition and Validation
+
 <!-- TOC -->
 - [Decomposition and Atomicity](#decomposition-and-atomicity)
   - [Irreducibility check](#irreducibility-check)

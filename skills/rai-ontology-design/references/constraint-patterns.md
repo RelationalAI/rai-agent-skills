@@ -1,3 +1,5 @@
+# Constraint Patterns
+
 <!-- TOC -->
 - [Constraint Patterns](#constraint-patterns)
   - [Mandatory vs. optional roles](#mandatory-vs-optional-roles)
@@ -128,9 +130,7 @@ model.where(
     Patient.allergic_to(drug)
 ).define(Patient.unsafe_prescription(drug))
 
-# Use in solver: prevent allocation of incompatible pairs
-# p.satisfy(~(Assignment.worker == worker, Assignment.site == site))
-#   .where(Worker.cannot_work_at(worker, site))
+# To enforce as a solver constraint, see `rai-prescriptive-problem-formulation`
 ```
 
 **Important distinction from subtype exclusion:** Subtype exclusion (via `extends` with disjoint subtypes) constrains what an entity IS. Exclusion constraints here operate on what an entity DOES -- they apply across different Properties and Relationships involving the same entities.
@@ -165,8 +165,7 @@ model.where(
     (age_ref < 16) | (age_ref > 100)
 ).define(Employee.invalid_age())
 
-# In solver: enforce as hard constraint
-# p.satisfy(Employee.age >= 16, Employee.age <= 100)
+# To enforce as a solver constraint, see `rai-prescriptive-problem-formulation`
 ```
 
 **Constraint taxonomy:**
@@ -237,8 +236,7 @@ Team.invalid_size = model.Relationship(f"{Team} has invalid size")
 count_ref = Integer.ref()
 model.where(Team.member_count(count_ref), count_ref != 3).define(Team.invalid_size())
 
-# In solver: enforce as hard constraint
-# p.satisfy(sum(Assignment.assigned).per(Team) == 3)
+# To enforce as a solver constraint, see `rai-prescriptive-problem-formulation`
 ```
 
 **Common patterns:**

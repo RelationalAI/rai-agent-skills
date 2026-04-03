@@ -284,7 +284,7 @@ For guidance on producing a descriptive inventory of a model and classifying unm
 
 ### Loading and binding data to the model 
 
-**Snowflake type mapping** (see also [rai-build-starter-ontology](../rai-build-starter-ontology/SKILL.md) for the full validation workflow):
+**Snowflake type mapping** (see also `rai-build-starter-ontology` for the full validation workflow):
 
 | Snowflake type | RAI base type |
 |---|---|
