@@ -428,6 +428,8 @@ model.where(Site.centrality_score < 0.1).define(Site.is_at_risk())
 | Graph results not visible on original concept | Results bound to `graph.Node` but not to the source concept | Add explicit binding: `model.where(graph.Node == MyConcept).define(...)` |
 | TyperError with large models | Many entities (200+) with Relationships in same model as Graph cause `TyperError` in type inference | Keep large datasets as pandas DataFrames for Python-side analysis; only load entities the Graph actually needs into RAI. This is a **local execution** limitation — Snowflake-backed models handle larger schemas. |
 | Empty graph when extending existing model | Script creates `Model("name")` without importing base model definitions — concepts exist but have no instances | Import the base model module (e.g., `from my_model import model, Site`) so base `define()` rules are in scope |
+| `ValidationError: Unused variable` when using `rank()` with graph properties | Using `rank(desc(graph.Node.betweenness))` alongside other graph properties in `select()` triggers the unused variable validator | Sort in pandas instead: `.to_df().sort_values("betweenness", ascending=False).reset_index(drop=True)` — avoid `rank()` in graph queries |
+| `RAIException: Ungrounded variables` when mixing chained derived properties + Graph + boolean rules | Defining chained derived properties (e.g., `peak_forecast` → `future_headroom`) alongside Graph construction and boolean Relationship rules in the same model causes ungrounded variable errors | Query raw data via simple selects and compute derived values / rules in pandas. Root cause is related to the 200+ Relationships type inference limit — chained derivations compound the issue |
 
 ---
 

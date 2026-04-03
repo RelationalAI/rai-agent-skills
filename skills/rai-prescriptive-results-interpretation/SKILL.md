@@ -178,6 +178,7 @@ all_df = p.variable_values(multiple=True).to_df()
 - Use `variable_values()` only for scenario loops or when you need solver-level inspection
 - With `variable_values()`, always provide `name=[]` using **primitive identity fields** (String/Integer), never relationship refs
 - `name=[]` with relationship refs (e.g., `MachinePeriod.machine`) causes TyperError — use `MachinePeriod.machine.machine_id` or just a string label
+- `variable_values().to_df()` columns are `name` and `value` — not `variable_name`. Check with `df.columns` if unsure
 
 **Extraction principles:**
 - **Binary variables:** Filter with `> 0.5`, not `== 1` (numeric tolerance in MIP solvers)

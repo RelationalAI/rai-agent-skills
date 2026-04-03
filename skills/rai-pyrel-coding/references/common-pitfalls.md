@@ -25,6 +25,7 @@
 | `[Inconsistent branches]` in `union()` | Mixing bare relation calls (return values) with `where(...)` calls (return Fragments) inside a `union` | Make all branches the same type: chain relation calls so all return values (e.g., `a.rel(b).rel(c)`) or wrap all in `where(...)` |
 | Re-defining Property in function/loop fails | `Concept.prop = model.Property(...)` inside a function called multiple times — "already defined" on second call | Define Properties once at module level, outside any function or loop |
 | `Int128Array` / `NotImplementedError` on pandas operations | RAI returns `Int128Array` for counts, integer aggregations, and IDs — not just graph community labels. `.fillna(0)`, `.groupby()`, etc. fail | Cast early: `df["col"].astype("object").fillna(0).astype(int)` or `df["col"].astype(int)` if no nulls |
+| `ValidationError: Unused variable` after `import *` from another model script | `from other_script import *` brings all concepts/relationships into scope — any not referenced in the current query trigger the validator | Import only what you need: `from grid import model, Substation, Line`. Never use `import *` across model scripts |
 
 For data loading pitfalls (post-hoc relationship assignment, NaN columns, `to_schema()` clobbering), see [data-loading.md](data-loading.md) § Common Data Loading Mistakes.
 For `.exists()` on Properties, see `rai-querying` Common Pitfalls.

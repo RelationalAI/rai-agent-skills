@@ -39,3 +39,15 @@ Re-solving the same `Problem` instance is safe. Result import uses `experimental
 > ```
 >
 > See [examples/factory_production.py](../examples/factory_production.py) for a complete working example of this pattern.
+
+## `| 0` Fallback in Solver Constraints
+
+The `| 0` (default-value) operator inside `p.satisfy(model.require(...))` with nested `sum().per().where()` aggregation causes `TyperError: Type errors detected during type inference`. This occurs when the RHS of a constraint combines a property with a conditional aggregation that uses `| 0` as a fallback.
+
+**Workaround:** Pre-compute the aggregation in Python (e.g., enumerate combinations and build a denormalized parameter DataFrame), then pass the result as a flat property on the decision concept. Avoid nested `per().where() | 0` inside solver constraints.
+
+## numpy Types as Solver Literals
+
+`numpy.float64`, `numpy.int64`, and other numpy scalar types are not accepted as literals in solver constraints. Extracting a value from a DataFrame (e.g., `df["col"].iloc[0]`) returns a numpy scalar, and passing it directly to `model.require()` causes `NotImplementedError: Literal type not implemented for value type: numpy.float64`.
+
+**Fix:** Cast to Python builtins before use: `float(value)`, `int(value)`.
