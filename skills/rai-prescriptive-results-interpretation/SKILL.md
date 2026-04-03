@@ -452,10 +452,11 @@ For parameter sweep patterns, scenario comparison tables, and Pareto frontier co
 
 ## Common Pitfalls
 
-Most common issues to check first:
-- **Zero objective on minimize**: Missing forcing constraints -- add `sum(x).per(Entity) >= Entity.demand` or equivalent
-- **All-zero from join mismatch**: Forcing constraints exist but `.where()` joins match zero rows -- verify constraint joins match actual data
-- **Infeasible: demand > capacity**: Total demand exceeds supply -- add slack/penalty variables or relax demand constraints
+| Mistake | Cause | Fix |
+|---------|-------|-----|
+| Zero objective on minimize | Missing forcing constraints | Add `sum(x).per(Entity) >= Entity.demand` or equivalent |
+| All-zero from join mismatch | Forcing constraints exist but `.where()` joins match zero rows | Verify constraint joins match actual data |
+| Infeasible: demand > capacity | Total demand exceeds supply | Add slack/penalty variables or relax demand constraints |
 
 For the full pitfalls table (14 entries covering numerical instability, degenerate solutions, wrong aggregation scope, and more), see [references/common-pitfalls.md](references/common-pitfalls.md).
 
