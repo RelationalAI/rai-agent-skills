@@ -185,8 +185,7 @@ Once you know what nodes and edges you need, scan the ontology for these structu
 | **Direct relationship** | Concept A has a relationship to Concept B (or to itself) | The relationship itself is an edge — use `Edge.new(src=a, dst=b)` |
 | **Intermediary concept** | A concept C with two relationships pointing to the same node type (e.g., `source` and `destination` both referencing Concept A) | Each instance of C becomes an edge between the two endpoints — use `Edge.new()` or `edge_concept` |
 | **Shared attribute** | Two instances of Concept A both relate to the same instance of Concept B (e.g., two users sharing an address, two customers ordering the same product) | Co-occurrence — entities sharing an attribute are connected. Requires `id <` guard to prevent duplicates |
-| **Parent-child** | A concept with a relationship to its own type named `parent`, `contains`, `reports_to`, or similar hierarchical terms | Directed edges from parent to child — use for reachability and tree traversal |
-| **Self-referencing** | A concept with a relationship back to itself (e.g., `subcomponent`, `depends_on`, `follows`) | Instance-to-instance edges within one concept — may contain cycles |
+| **Self-referencing** | A concept with a relationship back to itself (e.g., `parent`, `reports_to`, `depends_on`, `subcomponent`, `follows`) | Instance-to-instance edges within one concept — may be acyclic (hierarchies, DAGs) or contain cycles |
 | **Multi-concept co-occurrence** | Multiple distinct attributes shared between entities (e.g., shared address OR shared phone OR shared email) | Each shared attribute type creates edges — combine in a single graph for richer connectivity |
 
 **Tip:** When the ontology has an interaction concept with source/destination relationships and edge-relevant properties (volume, weight, intensity), prefer `edge_concept` over manual `Edge.new()` — it's more concise and ensures every instance is included.
@@ -201,7 +200,7 @@ Map the ontology signal you identified in Steps 2–5 to a construction pattern 
 | Intermediary concept | Infrastructure-level | `Edge.new()` from intermediary, or `edge_concept` if concept has src/dst/weight | [centrality_supply_chain.py](examples/centrality_supply_chain.py), [edge_concept_pagerank.py](examples/edge_concept_pagerank.py) |
 | Shared attribute | Co-occurrence | `Edge.new()` with `id <` guard | [community_derived_concept.py](examples/community_derived_concept.py) |
 | Multi-concept co-occurrence | Multi-attribute co-occurrence | Multiple `Edge.new()` calls (one per shared attribute) | [graph_rules_integration.py](examples/graph_rules_integration.py) |
-| Parent-child / Self-referencing | Hierarchy or recursive | `Edge.new(src=parent, dst=child)` | [graph-construction.md](references/graph-construction.md) |
+| Self-referencing | Hierarchy, recursive, or cyclic | `Edge.new(src=parent, dst=child)` | [graph-construction.md](references/graph-construction.md) |
 
 Then decide the remaining axes:
 
@@ -266,8 +265,7 @@ The question determines which construction to use — the same ontology can yiel
 | Entity-level directed | Business entities | Direct relationships (`ships_to`) | PageRank, reachability |
 | Infrastructure undirected weighted | Locations/sites | Intermediary concepts (`Operation`) | Centrality, WCC, bridges |
 | Co-occurrence / shared-attribute | Entities | Shared membership/purchases | Community detection |
-| Hierarchy / DAG | Hierarchical entities | Parent-child | Reachability, tree traversal |
-| Self-referencing | Single concept | Instance-to-instance refs | BOM, dependency graphs |
+| Self-referencing | Single concept | Instance-to-instance refs (parent-child, depends_on, etc.) | Reachability, tree traversal, BOM, dependency graphs |
 | `edge_concept` | Any | Existing interaction concept | When edges are already modeled |
 
 ### Two main edge definition approaches (Patterns 1–2 vs Pattern 3)
@@ -366,7 +364,7 @@ For per-algorithm deep dives (parameters, output shapes, interpretation, compati
 | | `False` | Co-occurrence, infrastructure connectivity, similarity |
 | `weighted` | `True` | Edge property (cost, volume, distance) matters for analysis. **Weights must be floats** — use `floats.float()` to cast. |
 | | `False` | Only connection existence matters |
-| `aggregator` | `"sum"` | **Only supported value.** Collapses multi-edges by summing weights. Only use when multi-edges are expected — see [Aggregator guidance](#aggregator-guidance). |
+| `aggregator` | `"sum"` | **Only supported alternative** to the default `None`. Collapses multi-edges by summing weights. Only use when multi-edges are expected — see [Aggregator guidance](#graph-constructor-aggregator-parameter-guidance). |
 | `node_concept` | Concept | Which concept forms nodes. Required with `edge_concept`. Optional otherwise (inferred from edges). |
 
 **Algorithm-specific:** `reachable(full=True)` for all-pairs reachability; `reachable(from_=X)` / `reachable(to=X)` for directional reachability. `pagerank(damping=0.85)` — default 0.85 is standard.
@@ -463,7 +461,7 @@ model.where(Site.centrality_score < 0.1).define(Site.is_at_risk())
 | Reachability on undirected connected graph gives trivial results | On undirected connected graphs, all nodes are reachable from all others — results aren't useful | Set `directed=True` for meaningful reachability/impact analysis. (On disconnected undirected graphs, reachable can still be useful for discovering components for specific nodes.) |
 | Wrong node concept | Using intermediary concept as nodes instead of entity concept | Intermediary concepts form edges, not nodes — e.g., `Operation` is an edge between `Site` nodes |
 | Graph results not visible on original concept | Results bound to `graph.Node` but not to the source concept | Add explicit binding: `model.where(graph.Node == MyConcept).define(...)` |
-| TyperError with large models | Many entities (200+) with Relationships in same model as Graph cause `TyperError` in type inference | Keep large datasets (historical shipments, transactions) as pandas DataFrames for Python-side analysis; only load entities the Graph actually needs into RAI. This is a **local execution** limitation — Snowflake-backed models handle larger schemas. |
+| `TypeError` with large local models | In local execution mode, models with many (200+) Relationships in scope alongside a Graph can exceed type inference limits, producing a `TypeError` | Reduce the number of Relationships visible to the Graph model — e.g., keep large historical datasets as pandas DataFrames for Python-side analysis and only load what the Graph needs. This limitation is specific to local execution; Snowflake-backed models handle larger schemas. |
 | Empty graph when extending existing model | Script creates `Model("name")` without importing base model definitions — concepts exist but have no instances | Import the base model module (e.g., `from my_model import model, Site`) so base `define()` rules are in scope |
 
 ---
@@ -481,7 +479,7 @@ Each example targets a distinct combination of edge construction, topology, algo
 | Louvain → derived concept | Co-occurrence edges, community labels become entities | Undirected, weighted | Louvain + degree centrality | Community → concept + hub-per-community | [community_derived_concept.py](examples/community_derived_concept.py) |
 | Graph + rules combo | Multi-concept co-occurrence (shared address/phone/email) | Undirected, unweighted | WCC | Layered Relationship flags on graph results | [graph_rules_integration.py](examples/graph_rules_integration.py) |
 | Identity graph self-join | Self-join edges from shared identifiers (phone, email) | Undirected, unweighted | WCC | Identity cluster detection | [identity_graph_wcc.py](examples/identity_graph_wcc.py) |
-| Multi-graph same model | Multiple Graph instances on same node concept | Weighted + unweighted | Eigenvector + betweenness | Parallel graph views, separate Edge defs | [multi_graph_same_model.py](examples/multi_graph_same_model.py) |
+| Multiple graphs, same model | Multiple Graph instances on same node concept | Weighted + unweighted | Eigenvector + betweenness | Parallel graph views, separate Edge defs | [multi_graph_same_model.py](examples/multi_graph_same_model.py) |
 
 ---
 
