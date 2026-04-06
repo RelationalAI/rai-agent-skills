@@ -368,7 +368,7 @@ model.define(Customer.total_spend(total))
 | Aggregation-based rule gives wrong counts | Missing `.per()` or wrong `.where()` scope | Validate contributing rows with `model.select()` before defining the rule |
 | Classification + aggregation: `FDError` | Overlapping ranges when aggregate values land on boundary | Use strict `<` on one boundary, `>=` on the other |
 | `define()` in a Python loop | Defining rules per entity in a for loop instead of declaratively | Use `model.data()` + `.where().define()`. See `rai-pyrel-coding` Common Pitfalls for before/after examples |
-| `~Relationship()` for negation | `TypeError: bad operand type for unary ~: 'Expression'` — Python `~` doesn't work on RAI expressions | Use `model.not_(Concept.relationship())` — see `rai-pyrel-coding` Common Pitfalls for the general pattern |
+| `~Relationship()` for negation | `TypeError: bad operand type for unary ~: 'Expression'` — Python `~` doesn't work on RAI expressions | Use `model.not_(Concept.relationship())` in `.where()`. For set-difference queries (entities matching flag A but not flag B), either nest `model.not_()` or query both sets and subtract in pandas |
 | Boolean flags can't be selected as columns | Unary Relationships can only be used in `.where()` filters, not in `.select().alias()` | Query flagged entity IDs separately, then merge into the main DataFrame — see pattern below |
 
 **Projecting boolean flags into a compliance table:** Since boolean Relationships can't appear in `select()`, query each flag's matching IDs separately and merge:

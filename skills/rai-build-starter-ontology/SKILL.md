@@ -213,7 +213,7 @@ WHERE TABLE_SCHEMA = '<schema>'
 ORDER BY TABLE_NAME, ORDINAL_POSITION;
 ```
 
-Always run this query before writing property declarations. A type mismatch between the RAI property and the Snowflake column causes a `TyperError` at query time with no indication of which property failed.
+Always run this query before writing property declarations. A single type mismatch between any RAI property and its Snowflake column causes a `TyperError` that blocks ALL queries on the entire model — not just the mismatched property — with no indication of which property failed.
 
 **Common mismatches to check:**
 - **DATE vs TEXT** — Columns with date-like names (`signup_date`, `created_at`) may be stored as TEXT in Snowflake, especially when loaded from CSV. Check the actual type; use `String` if the column is TEXT.
@@ -225,7 +225,9 @@ Always run this query before writing property declarations. A type mismatch betw
 
 ### Step 6 — Generate code
 
-**Derive every property type from the Snowflake schema captured in Step 2.** Use the type mapping table from Step 5 to convert each column's `DATA_TYPE` and `NUMERIC_SCALE` to the correct RAI type. Never guess types from column names, CSV samples, or patterns in other ontologies — the schema is the single source of truth.
+> **GATE: Do not proceed until Step 5 type validation is complete.**
+
+Use the type mapping table and `INFORMATION_SCHEMA.COLUMNS` output from Step 5 to derive every property type.
 
 Follow conventions in `rai-pyrel-coding` and `rai-ontology-design`. Put everything in a single file named after the domain:
 
