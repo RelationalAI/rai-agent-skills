@@ -34,12 +34,12 @@ These are the ONLY allowed problem types. Every suggestion must use exactly one 
 - If unsure between two types, check which structural checklist matches more components
 
 **Template examples by problem type:**
-- Resource Allocation: `../rai-prescriptive-problem-formulation/examples/continuous_ternary_join.py`, `../rai-prescriptive-problem-formulation/examples/quadratic_pairwise_ref.py`
-- Network Flow: `../rai-prescriptive-problem-formulation/examples/flow_conservation.py`, `../rai-prescriptive-problem-formulation/examples/multi_concept_union_objective.py`, `../rai-prescriptive-problem-formulation/examples/fixed_charge_facility.py`
-- Routing: `../rai-prescriptive-problem-formulation/examples/subtour_elimination_mtz.py`
-- Scheduling/Assignment: `../rai-prescriptive-problem-formulation/examples/binary_coverage_scoped.py`, `../rai-prescriptive-problem-formulation/examples/epoch_filter_assignment.py`, `../rai-prescriptive-problem-formulation/examples/hinge_variable_penalty.py`, `../rai-prescriptive-problem-formulation/examples/conflict_graph_exclusion.py`
-- Resource Allocation (multi-period): `../rai-prescriptive-problem-formulation/examples/multi_period_flow_conservation.py`
-- Pricing: `../rai-prescriptive-problem-formulation/examples/one_hot_temporal_recurrence.py`
+- Resource Allocation: `../rai-prescriptive-problem-formulation/examples/continuous_ternary_join.py` (diet/blending), `../rai-prescriptive-problem-formulation/examples/quadratic_pairwise_ref.py` (portfolio balancing)
+- Network Flow: `../rai-prescriptive-problem-formulation/examples/flow_conservation.py` (network flow), `../rai-prescriptive-problem-formulation/examples/multi_concept_union_objective.py` (supply chain transport), `../rai-prescriptive-problem-formulation/examples/fixed_charge_facility.py` (facility location)
+- Routing: `../rai-prescriptive-problem-formulation/examples/subtour_elimination_mtz.py` (traveling salesman)
+- Scheduling/Assignment: `../rai-prescriptive-problem-formulation/examples/binary_coverage_scoped.py` (shift assignment), `../rai-prescriptive-problem-formulation/examples/epoch_filter_assignment.py` (sprint scheduling), `../rai-prescriptive-problem-formulation/examples/hinge_variable_penalty.py` (staffing with overtime), `../rai-prescriptive-problem-formulation/examples/conflict_graph_exclusion.py` (maintenance scheduling)
+- Resource Allocation (multi-period): `../rai-prescriptive-problem-formulation/examples/multi_period_flow_conservation.py` (demand planning)
+- Pricing: `../rai-prescriptive-problem-formulation/examples/one_hot_temporal_recurrence.py` (retail markdown)
 
 ---
 

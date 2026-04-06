@@ -2,8 +2,6 @@
 
 Discovery-to-routing walkthroughs for prescriptive reasoner questions. Each example shows: question → ontology signal → reasoner classification → implementation hint → modeling needs → handoff.
 
-Source: hero-user-journey/src/hero_user_journey/ (supply chain domain, PyRel v1)
-
 ---
 
 ## "How should we re-source components if a supplier goes offline?"

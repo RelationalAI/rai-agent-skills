@@ -41,34 +41,44 @@ SelectionRef = Selection.ref()
 penalty_per_unmet = 20
 
 # --- Sample data ---
-model.data(Worker, [
+worker_data = model.data([
     {"id": 1, "name": "W1", "qualification_level": 3, "unit_cost": 25.0, "standard_hours": 8, "excess_cost_multiplier": 1.5},
     {"id": 2, "name": "W2", "qualification_level": 2, "unit_cost": 20.0, "standard_hours": 8, "excess_cost_multiplier": 1.5},
     {"id": 3, "name": "W3", "qualification_level": 1, "unit_cost": 18.0, "standard_hours": 6, "excess_cost_multiplier": 2.0},
     {"id": 4, "name": "W4", "qualification_level": 3, "unit_cost": 28.0, "standard_hours": 8, "excess_cost_multiplier": 1.5},
 ])
+model.define(Worker.new(worker_data.to_schema()))
 
-model.data(Task, [
+task_data = model.data([
     {"id": 1, "name": "T1", "duration": 4, "min_resources": 2, "min_qualification": 2, "workload": 30},
     {"id": 2, "name": "T2", "duration": 6, "min_resources": 1, "min_qualification": 3, "workload": 20},
     {"id": 3, "name": "T3", "duration": 3, "min_resources": 2, "min_qualification": 1, "workload": 15},
 ])
+model.define(Task.new(task_data.to_schema()))
 
 # Availability matrix: which workers can work which tasks
-model.data(Slot, [
-    {"worker_id": 1, "task_id": 1, "worker": Worker(id=1), "task": Task(id=1), "available": 1},
-    {"worker_id": 1, "task_id": 2, "worker": Worker(id=1), "task": Task(id=2), "available": 1},
-    {"worker_id": 1, "task_id": 3, "worker": Worker(id=1), "task": Task(id=3), "available": 0},
-    {"worker_id": 2, "task_id": 1, "worker": Worker(id=2), "task": Task(id=1), "available": 1},
-    {"worker_id": 2, "task_id": 2, "worker": Worker(id=2), "task": Task(id=2), "available": 0},
-    {"worker_id": 2, "task_id": 3, "worker": Worker(id=2), "task": Task(id=3), "available": 1},
-    {"worker_id": 3, "task_id": 1, "worker": Worker(id=3), "task": Task(id=1), "available": 1},
-    {"worker_id": 3, "task_id": 2, "worker": Worker(id=3), "task": Task(id=2), "available": 0},
-    {"worker_id": 3, "task_id": 3, "worker": Worker(id=3), "task": Task(id=3), "available": 1},
-    {"worker_id": 4, "task_id": 1, "worker": Worker(id=4), "task": Task(id=1), "available": 0},
-    {"worker_id": 4, "task_id": 2, "worker": Worker(id=4), "task": Task(id=2), "available": 1},
-    {"worker_id": 4, "task_id": 3, "worker": Worker(id=4), "task": Task(id=3), "available": 1},
+# Slot has FK relationships to Worker and Task, resolved via filter_by
+slot_data = model.data([
+    {"worker_id": 1, "task_id": 1, "available": 1},
+    {"worker_id": 1, "task_id": 2, "available": 1},
+    {"worker_id": 1, "task_id": 3, "available": 0},
+    {"worker_id": 2, "task_id": 1, "available": 1},
+    {"worker_id": 2, "task_id": 2, "available": 0},
+    {"worker_id": 2, "task_id": 3, "available": 1},
+    {"worker_id": 3, "task_id": 1, "available": 1},
+    {"worker_id": 3, "task_id": 2, "available": 0},
+    {"worker_id": 3, "task_id": 3, "available": 1},
+    {"worker_id": 4, "task_id": 1, "available": 0},
+    {"worker_id": 4, "task_id": 2, "available": 1},
+    {"worker_id": 4, "task_id": 3, "available": 1},
 ])
+model.define(Slot.new(
+    worker_id=slot_data.worker_id,
+    task_id=slot_data.task_id,
+    worker=Worker.filter_by(id=slot_data.worker_id),
+    task=Task.filter_by(id=slot_data.task_id),
+    available=slot_data.available,
+))
 
 # --- Problem setup ---
 p = Problem(model, Float)

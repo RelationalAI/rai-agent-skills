@@ -24,35 +24,12 @@
 #   Bi-objective: p.minimize(cost) with p.satisfy(model.require(sum(slack) <= eps))
 #   Same loop structure -- the epsilon constraint replaces the penalty term.
 
+import builtins
+
 from relationalai.semantics import Float, Integer, Model, String, sum
 from relationalai.semantics.reasoners.prescriptive import Problem
 
 model = Model("epsilon_constraint_pareto")
-
-# --- Inline sample data ---
-item_data = [
-    {"index": 1, "value": 0.08},
-    {"index": 2, "value": 0.15},
-    {"index": 3, "value": 0.05},
-]
-
-# Symmetric interaction matrix (3x3)
-interaction_data = [
-    {"i": 1, "j": 1, "interaction": 0.04},
-    {"i": 1, "j": 2, "interaction": 0.01},
-    {"i": 1, "j": 3, "interaction": 0.005},
-    {"i": 2, "j": 1, "interaction": 0.01},
-    {"i": 2, "j": 2, "interaction": 0.09},
-    {"i": 2, "j": 3, "interaction": 0.02},
-    {"i": 3, "j": 1, "interaction": 0.005},
-    {"i": 3, "j": 2, "interaction": 0.02},
-    {"i": 3, "j": 3, "interaction": 0.01},
-]
-
-scenario_data = [
-    {"name": "capacity_50", "capacity": 50.0},
-    {"name": "capacity_100", "capacity": 100.0},
-]
 
 # --- Ontology ---
 Item = model.Concept("Item", identify_by={"index": Integer})
@@ -61,34 +38,50 @@ Item.interaction = model.Property(f"{Item} and {Item} have {Float:interaction}")
 
 PairedItem = Item.ref()
 
-# Load item data
-for row in item_data:
-    with model.rule():
-        i = Item(index=row["index"])
-        i.set(value=row["value"])
+# --- Inline sample data via model.data() ---
+item_data = model.data([
+    {"index": 1, "value": 0.08},
+    {"index": 2, "value": 0.15},
+    {"index": 3, "value": 0.05},
+])
+model.define(Item.new(item_data.to_schema()))
 
-# Load interaction data
-for row in interaction_data:
-    with model.rule():
-        i = Item(index=row["i"])
-        j = Item(index=row["j"])
-        Item.interaction.set(i, j, row["interaction"])
+# Symmetric interaction matrix (3x3)
+interaction_raw = model.data([
+    {"i": 1, "j": 1, "w": 0.04},
+    {"i": 1, "j": 2, "w": 0.01},
+    {"i": 1, "j": 3, "w": 0.005},
+    {"i": 2, "j": 1, "w": 0.01},
+    {"i": 2, "j": 2, "w": 0.09},
+    {"i": 2, "j": 3, "w": 0.02},
+    {"i": 3, "j": 1, "w": 0.005},
+    {"i": 3, "j": 2, "w": 0.02},
+    {"i": 3, "j": 3, "w": 0.01},
+], columns=["i", "j", "w"])
+model.where(
+    Item.index(interaction_raw.i),
+    PairedItem.index(interaction_raw.j),
+).define(Item.interaction(PairedItem, interaction_raw.w))
 
 # --- Scenario Concept: capacity parameter variations ---
 # Scenarios are INSIDE the epsilon loop -- each epsilon solve handles all capacities at once.
 Scenario = model.Concept("Scenario", identify_by={"name": String})
 Scenario.capacity = model.Property(f"{Scenario} has {Float:capacity}")
 
-for row in scenario_data:
-    with model.rule():
-        s = Scenario(name=row["name"])
-        s.set(capacity=row["capacity"])
+scenario_data = model.data([
+    {"name": "capacity_50", "capacity": 50.0},
+    {"name": "capacity_100", "capacity": 100.0},
+])
+model.define(Scenario.new(scenario_data.to_schema()))
 
 # --- Decision variable indexed by Scenario ---
 Item.x_allocation = model.Property(f"{Item} in {Scenario} has {Float:allocation}")
 x_alloc = Float.ref()
 interaction_val = Float.ref()
 x_alloc_paired = Float.ref()
+
+# Keep item value lookup for post-solve benefit computation
+item_value_lookup = {1: 0.08, 2: 0.15, 3: 0.05}
 
 # =============================================================================
 # ANCHOR SOLVES: establish feasible benefit range
@@ -115,13 +108,12 @@ si1 = p1.solve_info()
 assert si1.termination_status in ("OPTIMAL", "LOCALLY_SOLVED"), f"Anchor 1 failed: {si1.termination_status}"
 
 # Evaluate benefit at min-cost solution (secondary value at anchor 1)
-import builtins
+# variable_values() returns DataFrame with name/value columns;
+# name format follows the name= pattern: "alloc_{scenario}_{item_index}"
 df1 = p1.variable_values().to_df()
-# Build lookup: item index -> Item.value coefficient
-item_values = {row["index"]: row["value"] for row in item_data}
 benefit_at_min_cost = builtins.sum(
-    item_values.get(int(str(row.iloc[0]).split("_")[-1]), 0) * float(row.iloc[1])
-    for _, row in df1.iterrows()
+    item_value_lookup.get(int(name.rsplit("_", 1)[-1]), 0) * val
+    for name, val in zip(df1["name"], df1["value"])
 )
 
 # --- Anchor 2: maximize benefit only -> get max achievable benefit ---
@@ -140,8 +132,8 @@ assert si2.termination_status in ("OPTIMAL", "LOCALLY_SOLVED"), f"Anchor 2 faile
 
 df2 = p2.variable_values().to_df()
 benefit_at_max_benefit = builtins.sum(
-    item_values.get(int(str(row.iloc[0]).split("_")[-1]), 0) * float(row.iloc[1])
-    for _, row in df2.iterrows()
+    item_value_lookup.get(int(name.rsplit("_", 1)[-1]), 0) * val
+    for name, val in zip(df2["name"], df2["value"])
 )
 
 # =============================================================================

@@ -2,8 +2,6 @@
 
 Discovery-to-routing walkthroughs for multi-reasoner chains. Each example shows how one reasoner's output enables the next, and how discovery should suggest the full chain of questions.
 
-Source: hero-user-journey/src/hero_user_journey/ (supply chain domain, PyRel v1)
-
 ---
 
 ## Graph → Prescriptive: "Identify critical warehouses, then optimize allocation weighted by importance"

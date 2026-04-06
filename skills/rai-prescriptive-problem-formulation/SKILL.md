@@ -292,7 +292,7 @@ For detailed heuristics, examples, and the over-specification recognition table,
 | Constraint references unwired relationship | Relationship declared but no `define()` data binding | Verify all relationships in `.where()` joins have `define()` rules. Unwired relationships cause TyperError or silently match zero entities. |
 | `p.satisfy()` or `model.define()` in a Python loop | Defining constraints per entity in a for loop instead of declaratively | Use vectorized `.where().define()` or `p.satisfy()` with `.per()`. See `rai-pyrel-coding` Common Pitfalls for before/after examples |
 | `Duplicate relationship` / `FDError` on re-solve | Solving multiple scenarios with `populate=True` (default) writes conflicting results to the graph | Use `populate=False` + `p.variable_values().to_df()` to extract results. Create a fresh `Problem` per scenario. See Re-Solve Behavior section. |
-| `UnsupportedRecursionError` with Graph + Prescriptive | Graph algorithms on the same `Model` can conflict with `p.variable_values()` | Use a separate `Model` for graph analysis and write results back. See `rai-graph-analysis` [graph-construction.md](../rai-graph-analysis/references/graph-construction.md) #graph-model-separation. |
+| `UnsupportedRecursionError` with Graph + Prescriptive | Graph algorithms on the same `Model` can conflict with `p.variable_values()` | Use a separate `Model` for graph analysis and write results back. See `rai-graph-analysis` [graph-construction.md](../rai-graph-analysis/references/graph-construction.md#graph-model-separation). |
 
 For detailed unwired relationship symptoms, checks, and code examples, see [constraint-formulation.md](references/constraint-formulation.md) > Unwired Relationships (Detailed).
 

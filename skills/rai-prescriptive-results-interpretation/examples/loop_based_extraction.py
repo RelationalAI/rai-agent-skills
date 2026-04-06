@@ -16,19 +16,24 @@ Item.interaction = model.Property(f"{Item} and {Item} have {Float:interaction}")
 Item.x_allocation = model.Property(f"{Item} allocation is {Float:x}")
 
 # --- Sample data (3 items with value and interaction matrix) ---
-with model.Context():
-    for idx, val in [(1, 5.0), (2, 8.0), (3, 3.0)]:
-        item = Item(index=idx)
-        item.value = val
+item_data = model.data([
+    {"index": 1, "value": 5.0},
+    {"index": 2, "value": 8.0},
+    {"index": 3, "value": 3.0},
+])
+model.define(Item.new(item_data.to_schema()))
 
-    # Symmetric interaction matrix (quadratic cost coefficients)
-    interactions = {
-        (1, 1): 2.0, (1, 2): 0.5, (1, 3): 0.3,
-        (2, 1): 0.5, (2, 2): 3.0, (2, 3): 0.7,
-        (3, 1): 0.3, (3, 2): 0.7, (3, 3): 1.5,
-    }
-    for (i, j), coeff in interactions.items():
-        Item(index=i).interaction(Item(index=j), coeff)
+# Symmetric interaction matrix (quadratic cost coefficients)
+PairedItem = Item.ref()
+interaction_raw = model.data([
+    {"i": 1, "j": 1, "w": 2.0}, {"i": 1, "j": 2, "w": 0.5}, {"i": 1, "j": 3, "w": 0.3},
+    {"i": 2, "j": 1, "w": 0.5}, {"i": 2, "j": 2, "w": 3.0}, {"i": 2, "j": 3, "w": 0.7},
+    {"i": 3, "j": 1, "w": 0.3}, {"i": 3, "j": 2, "w": 0.7}, {"i": 3, "j": 3, "w": 1.5},
+], columns=["i", "j", "w"])
+model.where(
+    Item.index(interaction_raw.i),
+    PairedItem.index(interaction_raw.j),
+).define(Item.interaction(PairedItem, interaction_raw.w))
 
 Item2 = Item.ref()
 c = Float.ref()

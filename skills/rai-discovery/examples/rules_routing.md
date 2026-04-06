@@ -2,8 +2,6 @@
 
 Discovery-to-routing walkthroughs for rules reasoner questions. Each example shows: question → ontology signal → reasoner classification → implementation hint → modeling needs → handoff.
 
-Source: hero-user-journey/src/hero_user_journey/ (supply chain domain, PyRel v1)
-
 ---
 
 ## "Which suppliers are unreliable based on our business rules?"
@@ -80,7 +78,7 @@ Source: hero-user-journey/src/hero_user_journey/ (supply chain domain, PyRel v1)
 ### Ontology signals
 - `Business` concept with `total_order_value`, `account_age_days` → segmentation inputs
 - Tier definitions are business policy (not data-driven clustering) → rules, not predictive
-- Output is categorical assignment → classification rule
+- Output is categorical assignment → derivation rule (computed property from known metrics)
 
 ### Reasoner classification: Rules (derivation)
 - "Derive tiers" from known metrics → computed categorization
