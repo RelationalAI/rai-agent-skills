@@ -5,7 +5,7 @@
 from relationalai.semantics import Float, Model, String, sum
 from relationalai.semantics.reasoners.prescriptive import Problem
 
-model = Model("diet")
+model = Model("scenario_concept_bound_scaling")
 
 # --- Ontology ---
 Nutrient = model.Concept("Nutrient", identify_by={"name": String})

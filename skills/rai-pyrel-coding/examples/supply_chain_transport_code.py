@@ -6,7 +6,7 @@
 from relationalai.semantics import Float, Integer, Model, String, std, sum
 from relationalai.semantics.reasoners.prescriptive import Problem
 
-model = Model("multi_concept_union_code")
+model = Model("supply_chain_transport_code")
 
 # --- Ontology (abbreviated) ---
 FreightGroup = model.Concept("FreightGroup", identify_by={"name": String})

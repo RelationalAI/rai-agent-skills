@@ -5,7 +5,7 @@
 from relationalai.semantics import Float, Integer, Model, per, sum
 from relationalai.semantics.reasoners.prescriptive import Problem
 
-model = Model("network_flow")
+model = Model("flow_conservation")
 
 # --- Ontology ---
 # Edge identified by (i, j) integer node indices; cap bounds the flow

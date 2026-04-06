@@ -5,7 +5,7 @@
 from relationalai.semantics import Float, Model, String, sum
 from relationalai.semantics.reasoners.prescriptive import Problem
 
-model = Model("diet")
+model = Model("continuous_ternary_join")
 
 # --- Ontology ---
 Nutrient = model.Concept("Nutrient", identify_by={"name": String})

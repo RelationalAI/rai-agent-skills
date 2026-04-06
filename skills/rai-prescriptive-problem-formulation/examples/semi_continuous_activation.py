@@ -6,7 +6,7 @@
 from relationalai.semantics import Float, Integer, Model, String, sum
 from relationalai.semantics.reasoners.prescriptive import Problem
 
-model = Model("ad_spend_allocation")
+model = Model("semi_continuous_activation")
 Concept, Property = model.Concept, model.Property
 
 # --- Ontology (abbreviated) ---

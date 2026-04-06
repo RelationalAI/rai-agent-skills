@@ -12,7 +12,7 @@ before hitting the server.
 from relationalai.semantics import Float, Integer, Model, String
 from relationalai.semantics.std import aggregates as aggs
 
-model = Model("pprint_demo")
+model = Model("pprint_debugging")
 
 # -- Concepts --
 Customer = model.Concept("Customer", identify_by={"id": Integer})

@@ -8,7 +8,7 @@
 from relationalai.semantics import Model, String, Integer, Float
 from relationalai.semantics.reasoners.graph import Graph
 
-model = Model("edge_concept_pagerank")
+model = Model("edge_concept_multi_algorithm")
 
 # --- Ontology ---
 

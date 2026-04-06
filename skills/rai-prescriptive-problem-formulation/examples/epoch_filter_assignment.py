@@ -7,7 +7,7 @@ from datetime import datetime
 from relationalai.semantics import Float, Integer, Model, String, sum
 from relationalai.semantics.reasoners.prescriptive import Problem
 
-model = Model("sprint_scheduling")
+model = Model("epoch_filter_assignment")
 Concept, Property = model.Concept, model.Property
 
 # --- Parameters ---

@@ -7,7 +7,7 @@
 from relationalai.semantics import Float, Integer, Model, String, std, sum
 from relationalai.semantics.reasoners.prescriptive import Problem
 
-model = Model("demand_planning_temporal")
+model = Model("multi_period_flow_conservation")
 Concept, Property = model.Concept, model.Property
 
 # --- Ontology (abbreviated) ---

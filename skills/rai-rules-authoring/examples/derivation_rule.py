@@ -7,7 +7,7 @@ from relationalai.semantics import Float, Integer, Model, String, distinct
 from relationalai.semantics.std import aggregates
 import relationalai.semantics as rai
 
-model = Model("derivation_example")
+model = Model("derivation_rule")
 
 # --- Ontology ---
 

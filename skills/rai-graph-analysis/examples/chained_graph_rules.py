@@ -9,7 +9,7 @@ from relationalai.semantics import Integer, Model, String
 from relationalai.semantics.reasoners.graph import Graph
 from relationalai.semantics.std import aggregates
 
-model = Model("graph_rules_integration")
+model = Model("chained_graph_rules")
 
 # --- Ontology ---
 

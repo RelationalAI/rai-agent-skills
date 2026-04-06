@@ -7,7 +7,7 @@
 from relationalai.semantics import Float, Integer, Model, String
 from relationalai.semantics.std import aggregates
 
-model = Model("Cross-Entity Alerting Example")
+model = Model("cross_entity_alerting")
 
 # --- Ontology (inline) ---
 Supplier = model.Concept("Supplier", identify_by={"id": String})

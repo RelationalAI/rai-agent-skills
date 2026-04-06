@@ -5,7 +5,7 @@
 from relationalai.semantics import Float, Integer, Model, count, sum
 from relationalai.semantics.reasoners.prescriptive import Problem
 
-model = Model("tsp")
+model = Model("subtour_elimination_mtz")
 
 # --- Ontology ---
 Edge = model.Concept("Edge", identify_by={"i": Integer, "j": Integer})

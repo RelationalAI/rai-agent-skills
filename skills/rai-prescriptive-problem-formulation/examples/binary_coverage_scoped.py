@@ -6,7 +6,7 @@
 from relationalai.semantics import Integer, Model, String, sum
 from relationalai.semantics.reasoners.prescriptive import Problem
 
-model = Model("shift_assignment")
+model = Model("binary_coverage_scoped")
 
 # --- Ontology ---
 Worker = model.Concept("Worker", identify_by={"id": Integer})

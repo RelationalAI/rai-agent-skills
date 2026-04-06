@@ -8,7 +8,7 @@ from relationalai.semantics import Float, Integer, Model, String
 from relationalai.semantics.reasoners.graph import Graph
 from relationalai.semantics.std import aggregates, floats
 
-model = Model("Multi-Graph Example")
+model = Model("multi_graph_same_model")
 
 # --- Ontology (inline) ---
 Node = model.Concept("Node", identify_by={"id": String})

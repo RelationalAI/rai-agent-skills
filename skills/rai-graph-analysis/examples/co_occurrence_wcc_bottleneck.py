@@ -8,7 +8,7 @@ from relationalai.semantics import Float, Integer, Model, String, where
 from relationalai.semantics.reasoners.graph import Graph
 from relationalai.semantics.std import aggregates as aggs
 
-model = Model("co_occurrence_clustering")
+model = Model("co_occurrence_wcc_bottleneck")
 
 # --- Ontology ---
 

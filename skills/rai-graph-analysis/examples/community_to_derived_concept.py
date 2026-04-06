@@ -8,7 +8,7 @@ from relationalai.semantics import Float, Integer, Model, String, distinct
 from relationalai.semantics.reasoners.graph import Graph
 from relationalai.semantics.std import aggregates
 
-model = Model("community_derived_concept")
+model = Model("community_to_derived_concept")
 
 # --- Ontology ---
 

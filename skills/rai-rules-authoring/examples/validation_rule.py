@@ -5,7 +5,7 @@
 from relationalai.semantics import Float, Integer, Model, String
 import relationalai.semantics as rai
 
-model = Model("validation_example")
+model = Model("validation_rule")
 
 # --- Ontology ---
 

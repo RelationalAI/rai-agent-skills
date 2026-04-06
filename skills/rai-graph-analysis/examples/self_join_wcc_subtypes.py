@@ -7,7 +7,7 @@ from relationalai.semantics import Integer, Model, String
 from relationalai.semantics.reasoners.graph import Graph
 from relationalai.semantics.std import aggregates
 
-model = Model("identity_graph_wcc")
+model = Model("self_join_wcc_subtypes")
 
 # --- Ontology ---
 
