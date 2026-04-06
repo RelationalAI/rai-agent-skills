@@ -157,7 +157,7 @@ p.satisfy(model.where(w.num > 1, w_prev.num == w.num - 1, ...).require(
     z == z_prev + sum(d, y).per(Product, w)))
 ```
 
-See `../examples/retail_markdown.py`.
+See `../examples/one_hot_temporal_recurrence.py`.
 
 ### Piecewise linear (PWL) cost approximation
 
@@ -174,7 +174,7 @@ p.satisfy(model.where(...).require(
     sum(Seg1.limit * y_bin).where(Seg1.seg == Seg2.seg - 1).per(t)))
 ```
 
-See `../examples/supply_chain_transport.py`.
+See `../examples/multi_concept_union_objective.py`.
 
 ---
 

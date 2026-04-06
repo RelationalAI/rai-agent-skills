@@ -223,7 +223,7 @@ p.minimize((1 - x) ** 2 + 100 * (y - x**2) ** 2)
 
 **Bracket access:** Use `rel["field"]` to access named roles. See References and Aliasing section below.
 
-**`Chain.ref()` and `.alt()`:** For independent chain traversals and inverse relationships, see [expression-rules.md](references/expression-rules.md#chain-ref-and-alt).
+**`Chain.ref()` and `.alt()`:** For independent chain traversals and inverse relationships, see [expression-rules.md](references/expression-rules.md#chainref-and-alt).
 
 ---
 
@@ -304,7 +304,7 @@ API reference for loading data into models. For strategy guidance (authoritative
 | `.to_schema()` | Auto-map columns to matching Property names | `exclude=[]` |
 | `model.Table("DB.SCHEMA.TABLE")` | Reference a Snowflake table | Optional column schema dict |
 | `Concept.filter_by(prop=value)` | FK resolution — look up entity by property value; no match → no row | Returns matching entity or nothing |
-| `Concept.to_identity(key=value)` | Strict identity lookup — exactly one match guaranteed; raises if not found | Use for lookups where missing is an error. See [data-loading.md](references/data-loading.md#entity-reference-binding-relationships--fks) |
+| `Concept.to_identity(key=value)` | Strict identity lookup — exactly one match guaranteed; raises if not found | Use for lookups where missing is an error. See [data-loading.md](references/data-loading.md#entity-reference-binding-relationships-fks) |
 | `Concept.new(key=value)` | Create entity instances | Identity properties as kwargs |
 | `std.common.range(n)` | Generate integer range 0..n-1 | Also `range(start, end)` |
 
@@ -377,7 +377,7 @@ def solve(model):
     ...
 ```
 
-**Template examples:** See `rai-prescriptive-problem-formulation` examples: `diet.py` (linear optimization), `shift_assignment.py` (binary assignment), `portfolio_balancing.py` (pairwise expressions).
+**Template examples:** See `rai-prescriptive-problem-formulation` examples: `continuous_ternary_join.py` (linear optimization), `binary_coverage_scoped.py` (binary assignment), `quadratic_pairwise_ref.py` (pairwise expressions).
 
 ---
 ## RAI Expression Syntax
@@ -482,6 +482,7 @@ For the full step-by-step debugging checklist, see [common-pitfalls.md](referenc
 | Multiarity properties + refs | Binding multiple Float.ref() in `.where()`, pairwise week comparison | [examples/retail_markdown_code.py](examples/retail_markdown_code.py) |
 | Standalone Property + union | Property not attached to concept, `model.union()` for multi-component objective, segment self-join | [examples/supply_chain_transport_code.py](examples/supply_chain_transport_code.py) |
 | print() debugging | Readable repr for verifying expression structure before query execution | [examples/pprint_debugging.py](examples/pprint_debugging.py) |
+| End-to-end walkthrough | Full ontology + graph + aggregation + query in a single script | [examples/customer_segmentation.py](examples/customer_segmentation.py) |
 
 ---
 

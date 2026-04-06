@@ -77,12 +77,12 @@ Rate each problem's feasibility using these actionable categories:
 - Usually `extended_property` since items already exist with data
 
 **Template examples by problem type:**
-- Allocation: `../../rai-prescriptive-problem-formulation/examples/order_fulfillment.py`, `../../rai-prescriptive-problem-formulation/examples/ad_spend_allocation.py`
-- Scheduling: `../../rai-prescriptive-problem-formulation/examples/shift_assignment.py`, `../../rai-prescriptive-problem-formulation/examples/hospital_staffing.py`
-- Routing/Network: `../../rai-prescriptive-problem-formulation/examples/network_flow.py`, `../../rai-prescriptive-problem-formulation/examples/supply_chain_transport.py`
-- Portfolio/Selection: `../../rai-prescriptive-problem-formulation/examples/portfolio_balancing.py`, `../../rai-prescriptive-problem-formulation/examples/grid_interconnection.py`
-- Pricing: `../../rai-prescriptive-problem-formulation/examples/retail_markdown.py`
-- Resource Allocation (multi-period): `../../rai-prescriptive-problem-formulation/examples/demand_planning_temporal.py`
+- Allocation: `../../rai-prescriptive-problem-formulation/examples/fixed_charge_facility.py`, `../../rai-prescriptive-problem-formulation/examples/semi_continuous_activation.py`
+- Scheduling: `../../rai-prescriptive-problem-formulation/examples/binary_coverage_scoped.py`, `../../rai-prescriptive-problem-formulation/examples/hinge_variable_penalty.py`
+- Routing/Network: `../../rai-prescriptive-problem-formulation/examples/flow_conservation.py`, `../../rai-prescriptive-problem-formulation/examples/multi_concept_union_objective.py`
+- Portfolio/Selection: `../../rai-prescriptive-problem-formulation/examples/quadratic_pairwise_ref.py`, `../../rai-prescriptive-problem-formulation/examples/coupled_binary_knapsack.py`
+- Pricing: `../../rai-prescriptive-problem-formulation/examples/one_hot_temporal_recurrence.py`
+- Resource Allocation (multi-period): `../../rai-prescriptive-problem-formulation/examples/multi_period_flow_conservation.py`
 
 ### Decision concepts as ontology extensions
 
@@ -152,7 +152,7 @@ p.solve_for(
 )
 ```
 
-**Complete cross-product examples:** See `../../rai-prescriptive-problem-formulation/examples/shift_assignment.py` and `../../rai-prescriptive-problem-formulation/examples/order_fulfillment.py`.
+**Complete cross-product examples:** See `../../rai-prescriptive-problem-formulation/examples/binary_coverage_scoped.py` and `../../rai-prescriptive-problem-formulation/examples/fixed_charge_facility.py`.
 
 **Critical rules for cross-product concepts:**
 - Use `Relationship` (not `Property` with `_id` suffix) to connect to existing concepts

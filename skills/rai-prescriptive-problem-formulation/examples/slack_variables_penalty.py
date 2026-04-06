@@ -8,7 +8,7 @@
 from relationalai.semantics import Float, Integer, Model, String, sum
 from relationalai.semantics.reasoners.prescriptive import Problem
 
-model = Model("Slack Variables Example")
+model = Model("slack_variables_penalty")
 
 # --- Ontology (inline) ---
 Route = model.Concept("Route", identify_by={"id": String})

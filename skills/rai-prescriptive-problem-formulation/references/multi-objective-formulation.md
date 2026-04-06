@@ -255,5 +255,5 @@ This two-phase approach uses the loop for frontier exploration (robust, handles 
 ## References
 
 - Epsilon loop pattern: same as Loop + `populate=False` in [scenario-analysis.md](scenario-analysis.md) Pattern 2
-- Formulation example: [portfolio_risk_return.py](../examples/portfolio_risk_return.py) -- epsilon loop + Scenario Concept, QP
+- Formulation example: [epsilon_constraint_pareto.py](../examples/epsilon_constraint_pareto.py) -- epsilon loop + Scenario Concept, QP
 - Results analysis: see `rai-prescriptive-results-interpretation` > Pareto Frontier / Efficient Frontier Results

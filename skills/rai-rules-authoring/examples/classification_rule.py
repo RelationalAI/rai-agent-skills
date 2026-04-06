@@ -7,7 +7,7 @@ from relationalai.semantics import Float, Integer, Model, String
 from relationalai.semantics.std import strings
 import relationalai.semantics as rai
 
-model = Model("classification_example")
+model = Model("classification_rule")
 
 # --- Ontology ---
 

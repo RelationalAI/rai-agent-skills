@@ -369,6 +369,23 @@ model.define(Customer.total_spend(total))
 | Classification + aggregation: `FDError` | Overlapping ranges when aggregate values land on boundary | Use strict `<` on one boundary, `>=` on the other |
 | `define()` in a Python loop | Defining rules per entity in a for loop instead of declaratively | Use `model.data()` + `.where().define()`. See `rai-pyrel-coding` Common Pitfalls for before/after examples |
 | `~Relationship()` for negation | `TypeError: bad operand type for unary ~: 'Expression'` — Python `~` doesn't work on RAI expressions | Use `model.not_(Concept.relationship())` — see `rai-pyrel-coding` Common Pitfalls for the general pattern |
+| Boolean flags can't be selected as columns | Unary Relationships can only be used in `.where()` filters, not in `.select().alias()` | Query flagged entity IDs separately, then merge into the main DataFrame — see pattern below |
+
+**Projecting boolean flags into a compliance table:** Since boolean Relationships can't appear in `select()`, query each flag's matching IDs separately and merge:
+
+```python
+def query_flag(model, relationship, concept, flag_name):
+    """Query entities matching a boolean Relationship, return df with flag column."""
+    df = model.where(relationship()).select(concept.id.alias("id")).to_df()
+    df[flag_name] = True
+    return df
+
+# Usage: build compliance table from multiple boolean rules
+base_df = model.select(Entity.id.alias("id"), Entity.name.alias("name")).to_df()
+flag_df = query_flag(model, Entity.fails_check, Entity, "fails_check")
+base_df = base_df.merge(flag_df, on="id", how="left")
+base_df["fails_check"] = base_df["fails_check"].fillna(False)
+```
 
 For general PyRel pitfalls (type mismatches, aggregation scoping, join expansion, missing data,
 f-string syntax, `rai` function availability, subtype limitations, boolean negation), see
@@ -383,11 +400,12 @@ cross-entity property access), see [pyrel-subtype-rules.md](references/pyrel-sub
 
 | Pattern | Description | File |
 |---------|-------------|------|
-| Validation | Credit limit compliance with cross-entity join | [validation_rule.py](examples/validation_rule.py) |
-| Classification | Multi-tier customer segmentation with mutually exclusive ranges | [classification_rule.py](examples/classification_rule.py) |
-| Derivation | Order total via aggregation with property materialization | [derivation_rule.py](examples/derivation_rule.py) |
-| Alerting | SLA breach detection with temporal logic and missing-data handling | [alerting_rule.py](examples/alerting_rule.py) |
+| Validation | Threshold compliance with cross-entity join | [validation_rule.py](examples/validation_rule.py) |
+| Classification | Multi-tier entity classification with mutually exclusive ranges | [classification_rule.py](examples/classification_rule.py) |
+| Derivation | Computed total via aggregation with property materialization | [derivation_rule.py](examples/derivation_rule.py) |
+| Alerting | Temporal threshold breach detection with missing-data handling | [alerting_rule.py](examples/alerting_rule.py) |
 | Reconciliation | Two-source delta with tolerance and severity classification | [reconciliation_rule.py](examples/reconciliation_rule.py) |
+| Cross-entity alerting | Disjunctive OR flags via multiple `define()` calls + proportional comparison | [cross_entity_alerting.py](examples/cross_entity_alerting.py) |
 
 ---
 

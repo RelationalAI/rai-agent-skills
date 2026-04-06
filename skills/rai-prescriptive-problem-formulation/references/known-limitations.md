@@ -39,7 +39,7 @@ for scenario in scenarios:
 all_results = pd.concat(results)
 ```
 
-See [examples/factory_production.py](../examples/factory_production.py) for a complete working example of this pattern.
+See [examples/partitioned_subproblem.py](../examples/partitioned_subproblem.py) for a complete working example of this pattern.
 
 ## `| 0` Fallback in Solver Constraints
 

@@ -369,11 +369,12 @@ Post-solve diagnosis (trivial all-zero solutions, infeasibility root causes, qua
 
 | Pattern | Description | File |
 |---|---|---|
-| Scenario Concept (portfolio) | Scenario as data concept, single solve, multi-arg variables, `model.select()` results | [examples/portfolio_balancing_scenarios.py](examples/portfolio_balancing_scenarios.py) |
-| Scenario Concept (diet) | Scaling constraint bounds by scenario parameter (`Nutrient.min * Scenario.nutrient_scaling`) | [examples/diet_scenarios.py](examples/diet_scenarios.py) |
-| Scenario Concept (grid MILP) | Two binary variable types indexed by Scenario, `.per(Substation, Scenario)` grouping, cross-variable budget | [examples/grid_interconnection_scenarios.py](examples/grid_interconnection_scenarios.py) |
-| Entity exclusion (supplier) | Loop + `where=[]` with `!=` filter to exclude entities, `populate=False`, `variable_values()` results | [examples/supplier_reliability_scenarios.py](examples/supplier_reliability_scenarios.py) |
-| Partitioned sub-problems (factory) | Loop + `where=[]` filter per partition, `populate=False`, `variable_values()` results | [examples/factory_production_scenarios.py](examples/factory_production_scenarios.py) |
+| Scenario Concept (parameter sweep) | Scenario as data concept, single solve, multi-arg variables, `model.select()` results | [examples/scenario_concept_parameter_sweep.py](examples/scenario_concept_parameter_sweep.py) |
+| Scenario Concept (bound scaling) | Scaling constraint bounds by scenario parameter (`Concept.bound * Scenario.scaling_factor`) | [examples/scenario_concept_bound_scaling.py](examples/scenario_concept_bound_scaling.py) |
+| Scenario Concept (multi-binary MILP) | Two binary variable types indexed by Scenario, `.per(Entity, Scenario)` grouping, cross-variable budget | [examples/scenario_concept_milp.py](examples/scenario_concept_milp.py) |
+| Entity exclusion (disruption) | Loop + `where=[]` with `!=` filter to exclude entities, `populate=False`, `variable_values()` results | [examples/entity_exclusion_disruption.py](examples/entity_exclusion_disruption.py) |
+| Partitioned sub-problems (loop) | Loop + `where=[]` filter per partition, `populate=False`, `variable_values()` results | [examples/partitioned_iteration_scenarios.py](examples/partitioned_iteration_scenarios.py) |
+| Scenario Concept (demand multiplier) | Demand parameter sweep via Scenario Concept, multiplier-based bound scaling | [examples/scenario_concept_demand_scaling.py](examples/scenario_concept_demand_scaling.py) |
 
 ---
 

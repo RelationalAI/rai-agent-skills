@@ -197,9 +197,9 @@ Map the ontology signal you identified in Steps 2–5 to a construction pattern 
 | Ontology Signal (from Steps 2–5) | Construction Pattern | Edge Method | Example |
 |-------------------------------|---------------------|-------------|---------|
 | Direct relationship | Entity-level | `Edge.new(src=a, dst=b)` | [Graph Construction from Ontology](#graph-construction-from-ontology) |
-| Intermediary concept | Infrastructure-level | `Edge.new()` from intermediary, or `edge_concept` if concept has src/dst/weight | [centrality_supply_chain.py](examples/centrality_supply_chain.py), [edge_concept_pagerank.py](examples/edge_concept_pagerank.py) |
-| Shared attribute | Co-occurrence | `Edge.new()` with `id <` guard | [community_derived_concept.py](examples/community_derived_concept.py) |
-| Multi-concept co-occurrence | Multi-attribute co-occurrence | Multiple `Edge.new()` calls (one per shared attribute) | [graph_rules_integration.py](examples/graph_rules_integration.py) |
+| Intermediary concept | Infrastructure-level | `Edge.new()` from intermediary, or `edge_concept` if concept has src/dst/weight | [centrality_weighted_undirected.py](examples/centrality_weighted_undirected.py), [edge_concept_multi_algorithm.py](examples/edge_concept_multi_algorithm.py) |
+| Shared attribute | Co-occurrence | `Edge.new()` with `id <` guard | [community_to_derived_concept.py](examples/community_to_derived_concept.py) |
+| Multi-concept co-occurrence | Multi-attribute co-occurrence | Multiple `Edge.new()` calls (one per shared attribute) | [chained_graph_rules.py](examples/chained_graph_rules.py) |
 | Self-referencing | Hierarchy, recursive, or cyclic | `Edge.new(src=parent, dst=child)` | [graph-construction.md](references/graph-construction.md) |
 
 Then decide the remaining axes:
@@ -454,7 +454,7 @@ model.where(Site.centrality_score < 0.1).define(Site.is_at_risk())
 | Empty graph (no edges) | Edge definition doesn't match data — wrong relationship or join path | Verify edge source/destination properties exist and have data; query edge count before running algorithms |
 | `Int128Array` error in pandas | Community/component IDs are Int128 | Cast: `df["col"].astype(int)` |
 | Duplicate/self-loop edges | Missing guard in co-occurrence pattern | Add `left.id < right.id` to `.where()` clause |
-| `aggregator` missing | Weighted graph with multi-edges requires aggregator for parallel edges | Add `aggregator="sum"` — but only when multi-edges are expected (see [Aggregator guidance](#aggregator-guidance)) |
+| `aggregator` missing | Weighted graph with multi-edges requires aggregator for parallel edges | Add `aggregator="sum"` — but only when multi-edges are expected (see [Aggregator guidance](#graph-constructor-aggregator-parameter-guidance)) |
 | Weight type error | Weights must be floats, but property is Integer/Number | Cast with `floats.float(property)` in Edge.new weight parameter |
 | Centrality all equal | Graph is a complete graph or all nodes have identical connectivity | Check if graph construction is correct; may need weighted edges to differentiate |
 | Similarity produces too many results | O(n^2) output for n nodes | Filter by minimum threshold or limit to top-k per node |
@@ -465,6 +465,7 @@ model.where(Site.centrality_score < 0.1).define(Site.is_at_risk())
 | Empty graph when extending existing model | Script creates `Model("name")` without importing base model definitions — concepts exist but have no instances | Import the base model module (e.g., `from my_model import model, Site`) so base `define()` rules are in scope |
 | `ValidationError: Unused variable` when using `rank()` with graph properties | Using `rank(desc(graph.Node.betweenness))` alongside other graph properties in `select()` triggers the unused variable validator | Sort in pandas instead: `.to_df().sort_values("betweenness", ascending=False).reset_index(drop=True)` — avoid `rank()` in graph queries |
 | `RAIException: Ungrounded variables` when mixing chained derived properties + Graph + boolean rules | Defining chained derived properties (e.g., `peak_forecast` → `future_headroom`) alongside Graph construction and boolean Relationship rules in the same model causes ungrounded variable errors | Query raw data via simple selects and compute derived values / rules in pandas. Root cause is related to the type inference limit noted above — chained derivations compound the issue |
+| `UnsupportedRecursionError` in multi-reasoner pipelines | Calling `p.variable_values()` after graph algorithms on the same `Model` can trigger recursion errors in some SDK versions | Use a separate `Model` for graph analysis and write results back via `model.data()`. See [graph-construction.md](references/graph-construction.md#graph-model-separation). |
 
 ---
 
@@ -474,14 +475,17 @@ Each example targets a distinct combination of edge construction, topology, algo
 
 | Primary Pattern | Construction | Topology | Algorithms | Result Pattern | File |
 |----------------|-------------|----------|------------|----------------|------|
-| Infrastructure `Edge.new()` | Intermediary concept (Operation) creates edges | Undirected, weighted | Eigenvector centrality | Simple property binding | [centrality_supply_chain.py](examples/centrality_supply_chain.py) |
-| Co-occurrence `Edge.new()` | Shared-attribute edges with `id <` guard | Undirected, unweighted | WCC + betweenness | Hybrid risk: graph metric + domain attribute | [co_occurrence_clustering.py](examples/co_occurrence_clustering.py) |
-| `edge_concept` + computed weight | Interaction concept as edges, multi-factor weight | Directed, weighted | PageRank + degree centrality | Multi-algorithm classification | [edge_concept_pagerank.py](examples/edge_concept_pagerank.py) |
-| Directed reachability | `edge_concept` for dependency chain | Directed, unweighted | Reachability (4 modes) + betweenness | Graph + ontology enrichment | [reachability_impact_analysis.py](examples/reachability_impact_analysis.py) |
-| Louvain → derived concept | Co-occurrence edges, community labels become entities | Undirected, weighted | Louvain + degree centrality | Community → concept + hub-per-community | [community_derived_concept.py](examples/community_derived_concept.py) |
-| Graph + rules combo | Multi-concept co-occurrence (shared address/phone/email) | Undirected, unweighted | WCC | Layered Relationship flags on graph results | [graph_rules_integration.py](examples/graph_rules_integration.py) |
-| Identity graph self-join | Self-join edges from shared identifiers (phone, email) | Undirected, unweighted | WCC | Identity cluster detection | [identity_graph_wcc.py](examples/identity_graph_wcc.py) |
+| Infrastructure `Edge.new()` | Intermediary concept (Operation) creates edges | Undirected, weighted | Eigenvector centrality | Simple property binding | [centrality_weighted_undirected.py](examples/centrality_weighted_undirected.py) |
+| Co-occurrence `Edge.new()` | Shared-attribute edges with `id <` guard | Undirected, unweighted | WCC + betweenness | Hybrid risk: graph metric + domain attribute | [co_occurrence_wcc_bottleneck.py](examples/co_occurrence_wcc_bottleneck.py) |
+| `edge_concept` + computed weight | Interaction concept as edges, multi-factor weight | Directed, weighted | PageRank + degree centrality | Multi-algorithm classification | [edge_concept_multi_algorithm.py](examples/edge_concept_multi_algorithm.py) |
+| Directed reachability | `edge_concept` for dependency chain | Directed, unweighted | Reachability (4 modes) + betweenness | Graph + ontology enrichment | [reachability_four_modes.py](examples/reachability_four_modes.py) |
+| Louvain → derived concept | Co-occurrence edges, community labels become entities | Undirected, weighted | Louvain + degree centrality | Community → concept + hub-per-community | [community_to_derived_concept.py](examples/community_to_derived_concept.py) |
+| Graph + rules combo | Multi-concept co-occurrence (shared address/phone/email) | Undirected, unweighted | WCC | Layered Relationship flags on graph results | [chained_graph_rules.py](examples/chained_graph_rules.py) |
+| Identity graph self-join | Self-join edges from shared identifiers (phone, email) | Undirected, unweighted | WCC | Identity cluster detection | [self_join_wcc_subtypes.py](examples/self_join_wcc_subtypes.py) |
 | Multiple graphs, same model | Multiple Graph instances on same node concept | Weighted + unweighted | Eigenvector + betweenness | Parallel graph views, separate Edge defs | [multi_graph_same_model.py](examples/multi_graph_same_model.py) |
+| Jaccard similarity | Co-occurrence edges via shared attribute | Undirected, unweighted | Jaccard similarity | Top-k similar pairs extraction | [similarity_jaccard.py](examples/similarity_jaccard.py) |
+| Shortest path + diameter | `edge_concept` with cost weight | Directed, weighted | Distance + diameter_range | All-pairs shortest paths, graph extent | [shortest_path_distance.py](examples/shortest_path_distance.py) |
+| Graph model isolation | Separate `Model()` for graph, results transferred to main model | Undirected, weighted | Eigenvector centrality | SDK recursion workaround for graph + prescriptive | [graph_model_isolation.py](examples/graph_model_isolation.py) |
 
 ---
 

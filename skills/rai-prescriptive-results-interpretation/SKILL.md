@@ -229,6 +229,9 @@ The objective can improve infinitely — the solver can keep making the solution
 **What to tell users:** "The model is missing limits that would bound the solution. Likely cause: [missing capacity constraint / missing budget limit / wrong objective direction]."
 **Next steps:** Add missing bounds or constraints, verify objective direction and coefficient signs.
 
+### Feasible (MIP)
+For MIP problems, HiGHS may return `"Feasible"` instead of `"OPTIMAL"` when a solution is found but optimality is not proven within the default MIP gap tolerance. Check `si.relative_gap` (if available) or the solver log — a gap under 1% means the solution is effectively optimal. Treat `"Feasible"` the same as `"TIME_LIMIT"` for gap interpretation below.
+
 ### Time Limit
 The solver found a feasible solution but could not prove it is optimal within the time allowed.
 
@@ -387,7 +390,7 @@ Solution results contain values for "decision concepts" — entities created to 
 Present results in this order (6-part template):
 
 1. **Problem Context** (2-3 sentences): What problem was being solved and the business context.
-   - "We optimized the distribution network to minimize total logistics cost while meeting all regional demand."
+   - "We optimized the allocation to minimize total cost while meeting all demand constraints."
 
 2. **What Was Decided**: The key allocations, assignments, or quantities. Lead with the actionable output. Include objective value and what it means in business terms.
    - "The model recommends producing 500 units at Site A and 300 at Site B. Total cost: $1.2M."
@@ -416,11 +419,11 @@ Present results in this order (6-part template):
 
 Decision makers need to understand not just what the solution recommends, but why. Use binding constraints and dual values to answer specific questions:
 
-- **"Why was X selected?"** → Identify which constraints and cost/value properties made X optimal. "Supplier A gets 60% of orders because it has the lowest cost per unit while meeting the reliability threshold you set."
-- **"Why was Y excluded?"** → Identify which constraint or cost makes Y suboptimal. "Warehouse 3 isn't used because transportation cost to Eastern customer segments makes it more expensive despite available capacity."
+- **"Why was X selected?"** → Identify which constraints and cost/value properties made X optimal. "Entity A gets 60% of allocation because it has the lowest unit cost while meeting the quality threshold."
+- **"Why was Y excluded?"** → Identify which constraint or cost makes Y suboptimal. "Entity C isn't used because its fixed cost exceeds the savings from proximity despite available capacity."
 - **"What's preventing Z?"** → Identify the binding constraint. "Site B can't produce more because its capacity constraint is binding at 500 units."
 
-Frame every explanation in terms the decision maker already knows — their suppliers, their warehouses, their customers — not constraint indices or dual values.
+Frame every explanation in terms the decision maker already knows — their entities, their resources, their constraints — not variable indices or dual values.
 
 ### Translating Shadow Prices (Dual Values)
 
@@ -482,8 +485,8 @@ Use this after every solve to ensure result quality:
 
 | Pattern | Description | File |
 |---|---|---|
-| Scenario Concept results | Results in ontology via `model.select(Scenario.name, ...)`, per-scenario aggregation, comparison queries | [examples/portfolio_scenario_concept_results.py](examples/portfolio_scenario_concept_results.py) |
-| Loop-based results | `variable_values().to_df()`, `solve_info().display()`, status/objective access, scenario comparison table | [examples/portfolio_results.py](examples/portfolio_results.py) |
+| Scenario Concept results | Results in ontology via `model.select(Scenario.name, ...)`, per-scenario aggregation, comparison queries | [examples/scenario_concept_extraction.py](examples/scenario_concept_extraction.py) |
+| Loop-based results | `variable_values().to_df()`, `solve_info().display()`, status/objective access, scenario comparison table | [examples/loop_based_extraction.py](examples/loop_based_extraction.py) |
 | Pareto frontier analysis | Tradeoff table, marginal rates + knee detection, allocation shifts + regime detection, ASCII frontier visualization | [examples/pareto_frontier_analysis.py](examples/pareto_frontier_analysis.py) |
 
 ---

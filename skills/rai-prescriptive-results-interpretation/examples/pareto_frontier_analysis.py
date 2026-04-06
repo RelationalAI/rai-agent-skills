@@ -5,7 +5,7 @@
 #     allocation shifts, and regime characterization.
 #   - Each Pareto point is a complete solution (variable_values df). No point is
 #     strictly better than another — present as a menu of operating points.
-#   - Parallels portfolio_scenario_concept_results.py (multi-solution extraction)
+#   - Parallels scenario_concept_extraction.py (multi-solution extraction)
 #     but for epsilon loop output rather than Scenario Concept output.
 #
 # This example uses a generic pareto_points list structure. The same analysis
@@ -16,7 +16,7 @@ import builtins
 # =============================================================================
 # INPUT: pareto_points from epsilon loop
 # =============================================================================
-# Each point is a dict from the epsilon sweep (see portfolio_risk_return.py):
+# Each point is a dict from the epsilon sweep (see epsilon_constraint_pareto.py):
 #   pareto_points = [
 #       {"label": "min_risk", "primary": 18704.12, "secondary": 137.25, "variables": df},
 #       {"label": "eps_1",    "primary": 19906.79, "secondary": 147.71, "variables": df},
@@ -26,7 +26,7 @@ import builtins
 # "secondary" = the constrained objective value (computed from variable df)
 # "variables" = variable_values().to_df() for this point
 
-# --- Example data (from tested portfolio risk/return run) ---
+# --- Example data (from a tested epsilon constraint sweep) ---
 pareto_points = [
     {"label": "min_risk", "primary": 18704.12, "secondary": 137.25},
     {"label": "eps_1",    "primary": 19906.79, "secondary": 147.71},
