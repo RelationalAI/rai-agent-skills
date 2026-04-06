@@ -1,9 +1,9 @@
-# NOTE: Design-only example — demonstrates binary/pairwise properties (Stock.covar),
-# .ref() for same-type instance binding, and financial services domain patterns.
-# Pattern: financial services — portfolio optimization, binary property, .ref() pairwise
-# Key ideas: Stock.covar is a binary Property relating two Stock instances;
-# Stock.ref() creates a second independent iterator for pairwise binding;
-# Holdings junction connects Accounts to Stocks; filter_by for FK resolution.
+# NOTE: Design-only example (requires Snowflake tables) — demonstrates binary/pairwise
+# properties, .ref() for same-type instance binding, and junction concepts.
+# Pattern: binary property + .ref() pairwise binding + junction concept
+# Key ideas: Concept.covar is a binary Property relating two instances of the same type;
+# Concept.ref() creates a second independent iterator for pairwise binding;
+# Junction concept connects two parent concepts; filter_by for FK resolution.
 
 """Financial Services — Users, accounts, transactions, stocks, portfolios.
 

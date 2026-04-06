@@ -268,7 +268,7 @@ p.satisfy(model.where(Product.x_select(w, d, x)).require(
 ))
 ```
 
-The `sum(d, x)` aggregates over the Discount dimension only; `.per(Product, w)` groups by the remaining dimensions. This is the standard one-hot encoding for discrete choice. See `../examples/retail_markdown.py`.
+The `sum(d, x)` aggregates over the Discount dimension only; `.per(Product, w)` groups by the remaining dimensions. This is the standard one-hot encoding for discrete choice. See `../examples/one_hot_temporal_recurrence.py`.
 
 ### Temporal recurrence (running totals / inventory balance)
 
@@ -287,7 +287,7 @@ p.satisfy(model.where(
 ).require(z == z_prev + sum(d, y).per(Product, w)))
 ```
 
-The `w_prev.num == w.num - 1` join creates a two-period self-join on the time concept. This is the canonical pattern for inventory-style accumulation. See `../examples/retail_markdown.py`.
+The `w_prev.num == w.num - 1` join creates a two-period self-join on the time concept. This is the canonical pattern for inventory-style accumulation. See `../examples/one_hot_temporal_recurrence.py`.
 
 ### Monotone ordering (price ladder / non-decreasing sequence)
 
@@ -300,7 +300,7 @@ p.satisfy(model.where(
 ).require(x + x2 <= 1))
 ```
 
-This says: if discount `d` is selected in week `w`, then no strictly lower discount `d2` can be selected in week `w+1`. See `../examples/retail_markdown.py`.
+This says: if discount `d` is selected in week `w`, then no strictly lower discount `d2` can be selected in week `w+1`. See `../examples/one_hot_temporal_recurrence.py`.
 
 ### Self-defeating constraints
 

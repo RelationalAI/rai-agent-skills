@@ -3,7 +3,7 @@
 # WCC for identity graph communities; Relationship flags for layered rule
 # application (is_in_large_group -> is_suspicious);
 # rules combine graph results with domain conditions.
-# Harvested from: templates/v1/fraud-detection
+
 
 from relationalai.semantics import Integer, Model, String
 from relationalai.semantics.reasoners.graph import Graph

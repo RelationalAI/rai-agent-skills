@@ -9,7 +9,7 @@ from relationalai.semantics import Integer, Model, String, Float, distinct
 from relationalai.semantics.std import aggregates as aggs
 from relationalai.semantics.reasoners.graph import Graph
 
-model = Model("reachability_supply_chain")
+model = Model("reachability_four_modes")
 
 # --- Ontology ---
 

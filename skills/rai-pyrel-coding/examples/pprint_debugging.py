@@ -1,3 +1,4 @@
+# Pattern: print() for structural debugging of PyRel expressions before execution
 """Example: Using print() for structural debugging of PyRel objects.
 
 All PyRel types have readable repr. Use print() to verify

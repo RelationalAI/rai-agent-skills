@@ -1,4 +1,4 @@
-# NOTE: Design-only example — demonstrates the LEGACY modeler export format.
+# NOTE: Design-only example (requires Snowflake tables) — demonstrates the LEGACY modeler export format.
 # Detection signals: initialize() wrapper, _Concept prefix, Property/Relationship
 # with "{...}" string syntax (not f-strings), standalone define() import
 # (not model.define()), .where() binding (not filter_by()).

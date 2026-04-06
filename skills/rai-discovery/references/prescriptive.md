@@ -34,12 +34,12 @@ These are the ONLY allowed problem types. Every suggestion must use exactly one 
 - If unsure between two types, check which structural checklist matches more components
 
 **Template examples by problem type:**
-- Resource Allocation: `../rai-prescriptive-problem-formulation/examples/diet.py`, `../rai-prescriptive-problem-formulation/examples/portfolio_balancing.py`
-- Network Flow: `../rai-prescriptive-problem-formulation/examples/network_flow.py`, `../rai-prescriptive-problem-formulation/examples/supply_chain_transport.py`, `../rai-prescriptive-problem-formulation/examples/order_fulfillment.py`
-- Routing: `../rai-prescriptive-problem-formulation/examples/traveling_salesman.py`
-- Scheduling/Assignment: `../rai-prescriptive-problem-formulation/examples/shift_assignment.py`, `../rai-prescriptive-problem-formulation/examples/sprint_scheduling.py`, `../rai-prescriptive-problem-formulation/examples/hospital_staffing.py`, `../rai-prescriptive-problem-formulation/examples/machine_maintenance.py`
-- Resource Allocation (multi-period): `../rai-prescriptive-problem-formulation/examples/demand_planning_temporal.py`
-- Pricing: `../rai-prescriptive-problem-formulation/examples/retail_markdown.py`
+- Resource Allocation: `../rai-prescriptive-problem-formulation/examples/continuous_ternary_join.py`, `../rai-prescriptive-problem-formulation/examples/quadratic_pairwise_ref.py`
+- Network Flow: `../rai-prescriptive-problem-formulation/examples/flow_conservation.py`, `../rai-prescriptive-problem-formulation/examples/multi_concept_union_objective.py`, `../rai-prescriptive-problem-formulation/examples/fixed_charge_facility.py`
+- Routing: `../rai-prescriptive-problem-formulation/examples/subtour_elimination_mtz.py`
+- Scheduling/Assignment: `../rai-prescriptive-problem-formulation/examples/binary_coverage_scoped.py`, `../rai-prescriptive-problem-formulation/examples/epoch_filter_assignment.py`, `../rai-prescriptive-problem-formulation/examples/hinge_variable_penalty.py`, `../rai-prescriptive-problem-formulation/examples/conflict_graph_exclusion.py`
+- Resource Allocation (multi-period): `../rai-prescriptive-problem-formulation/examples/multi_period_flow_conservation.py`
+- Pricing: `../rai-prescriptive-problem-formulation/examples/one_hot_temporal_recurrence.py`
 
 ---
 

@@ -1,6 +1,6 @@
-# NOTE: Shows individual Property declarations and self-referential BOM relationship —
-# design reference for complex schemas beyond the starter build.
-# Pattern: supply chain network — modeler export, many concepts, self-referential BOM
+# NOTE: Design-only example (requires Snowflake tables) — shows individual Property
+# declarations and self-referential relationship for hierarchical assembly.
+# Pattern: many concepts + self-referential hierarchy + Sources class
 # Key ideas: Sources class with Snowflake tables; single-field identify_by (ID only);
 # Properties for scalar attributes; Relationships for concept-to-concept links;
 # self-referential relationship (SKU → SKU for assembly); short_name for disambiguation.

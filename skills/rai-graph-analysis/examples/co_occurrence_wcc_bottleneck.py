@@ -2,7 +2,7 @@
 # Key ideas: shared-attribute edge construction with id < guard to prevent duplicates;
 # WCC for dependency clusters; betweenness centrality for bottleneck identification;
 # hybrid risk assessment combining graph metric with domain attribute.
-# Harvested from: templates/v1/machine_dependencies
+
 
 from relationalai.semantics import Float, Integer, Model, String, where
 from relationalai.semantics.reasoners.graph import Graph

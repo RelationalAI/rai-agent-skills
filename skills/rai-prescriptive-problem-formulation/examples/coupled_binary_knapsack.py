@@ -6,7 +6,7 @@
 from relationalai.semantics import Float, Integer, Model, String, sum
 from relationalai.semantics.reasoners.prescriptive import Problem
 
-model = Model("grid_interconnection")
+model = Model("coupled_binary_knapsack")
 Concept, Property = model.Concept, model.Property
 
 # --- Ontology (abbreviated) ---

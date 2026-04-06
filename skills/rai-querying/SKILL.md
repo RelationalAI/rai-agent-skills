@@ -398,7 +398,7 @@ For the full API tables (core collections, relationship/property inspection, fie
 | Pattern | Description | File |
 |---|---|---|
 | Aggregation queries | `model.select()`, `.alias()`, `sum/count` with `.per()`, multi-hop joins, `.to_df()` | [examples/aggregation_queries.py](examples/aggregation_queries.py) |
-| Computed properties | `std.datetime` arithmetic, enum-subconcept segmentation, argmax with tiebreaker | [examples/jaffle_computed.py](examples/jaffle_computed.py) |
+| Computed properties | `std.datetime` arithmetic, enum-subconcept segmentation, argmax with tiebreaker | [examples/datetime_argmax_segmentation.py](examples/datetime_argmax_segmentation.py) |
 
 ---
 

@@ -27,10 +27,10 @@ Sensitivity analysis uses one of two PyRel patterns, chosen based on what is bei
   results contain scenario dimension, queryable via `model.select(Scenario.name, ...)`.
   Variables are multi-argument Properties: `Property(f"{Entity} in {Scenario} is {Float:var}")`.
   Constraints use `.per(Scenario)` for per-scenario aggregation and `Scenario.param` for
-  scenario-specific values. See `rai-prescriptive-solver-management/examples/portfolio_balancing_scenarios.py`.
+  scenario-specific values. See `rai-prescriptive-solver-management/examples/scenario_concept_parameter_sweep.py`.
 - **Entity exclusion** (remove a supplier, disable a facility): Loop + `where=[]` filter —
   multiple solves, results collected per iteration via `variable_values().to_df()`.
-  See `rai-prescriptive-solver-management/examples/factory_production_scenarios.py`.
+  See `rai-prescriptive-solver-management/examples/partitioned_iteration_scenarios.py`.
 
 Both produce the same output format for stakeholders: comparison tables with business language.
 

@@ -400,11 +400,12 @@ cross-entity property access), see [pyrel-subtype-rules.md](references/pyrel-sub
 
 | Pattern | Description | File |
 |---------|-------------|------|
-| Validation | Credit limit compliance with cross-entity join | [validation_rule.py](examples/validation_rule.py) |
-| Classification | Multi-tier customer segmentation with mutually exclusive ranges | [classification_rule.py](examples/classification_rule.py) |
-| Derivation | Order total via aggregation with property materialization | [derivation_rule.py](examples/derivation_rule.py) |
-| Alerting | SLA breach detection with temporal logic and missing-data handling | [alerting_rule.py](examples/alerting_rule.py) |
+| Validation | Threshold compliance with cross-entity join | [validation_rule.py](examples/validation_rule.py) |
+| Classification | Multi-tier entity classification with mutually exclusive ranges | [classification_rule.py](examples/classification_rule.py) |
+| Derivation | Computed total via aggregation with property materialization | [derivation_rule.py](examples/derivation_rule.py) |
+| Alerting | Temporal threshold breach detection with missing-data handling | [alerting_rule.py](examples/alerting_rule.py) |
 | Reconciliation | Two-source delta with tolerance and severity classification | [reconciliation_rule.py](examples/reconciliation_rule.py) |
+| Cross-entity alerting | Disjunctive OR flags via multiple `define()` calls + proportional comparison | [cross_entity_alerting.py](examples/cross_entity_alerting.py) |
 
 ---
 

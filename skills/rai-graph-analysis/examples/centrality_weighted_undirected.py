@@ -6,7 +6,7 @@ from relationalai.semantics import Float, Integer, Model, String
 from relationalai.semantics.reasoners.graph import Graph
 from relationalai.semantics.std import aggregates, floats
 
-model = Model("supply_chain_centrality")
+model = Model("centrality_weighted_undirected")
 
 # --- Ontology ---
 

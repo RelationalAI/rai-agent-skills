@@ -5,7 +5,7 @@
 from relationalai.semantics import Float, Integer, Model, String, sum
 from relationalai.semantics.reasoners.prescriptive import Problem
 
-model = Model("machine_maintenance")
+model = Model("conflict_graph_exclusion")
 Concept, Property = model.Concept, model.Property
 
 # --- Ontology (abbreviated) ---

@@ -6,7 +6,7 @@
 from relationalai.semantics import Float, Integer, Model, String, sum
 from relationalai.semantics.reasoners.prescriptive import Problem
 
-model = Model("supplier_reliability")
+model = Model("entity_exclusion_disruption")
 Concept, Property = model.Concept, model.Property
 
 # --- Ontology ---

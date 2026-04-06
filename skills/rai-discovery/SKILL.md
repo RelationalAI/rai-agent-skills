@@ -421,5 +421,6 @@ After discovery, use the appropriate formulation skill for the chosen reasoner t
 |---------|-------------|------|
 | Prescriptive routing | Discovery scenario walkthrough for optimization problems | [prescriptive_routing.md](examples/prescriptive_routing.md) |
 | Graph routing | Discovery scenario walkthrough for graph analytics | [graph_routing.md](examples/graph_routing.md) |
+| Rules routing | Discovery scenario walkthrough for classification, validation, and derivation rules | [rules_routing.md](examples/rules_routing.md) |
 | Predictive routing | Discovery scenario walkthrough for predictive modeling | [predictive_routing.md](examples/predictive_routing.md) |
 | Chained routing | Discovery scenario walkthrough for multi-reasoner pipelines | [chained_routing.md](examples/chained_routing.md) |

@@ -6,9 +6,11 @@
 import relationalai.semantics as rai
 from relationalai.semantics.std import datetime as dt
 
-model = rai.Model("jaffle_computed")
+model = rai.Model("datetime_argmax_segmentation")
 
-# (Assumes Customer, Product, Order, OrderItem, SupplyItem already defined)
+# NOTE: This is a pattern reference, not a standalone script. It assumes an existing
+# ontology with Customer, Product, Order, OrderItem concepts already defined.
+# Adapt the concept names and properties to your model.
 
 # --- std.datetime arithmetic: customer longevity ---
 CustomerLongevityDays = model.Concept("CustomerLongevityDays", extends=[rai.Integer])

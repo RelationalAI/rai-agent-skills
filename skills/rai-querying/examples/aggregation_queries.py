@@ -5,7 +5,7 @@
 from relationalai.semantics import Float, Integer, Model, String, distinct
 from relationalai.semantics.std import aggregates as aggs
 
-model = Model("supply_chain")
+model = Model("aggregation_queries")
 
 # --- Ontology (abbreviated for query examples) ---
 Site = model.Concept("Site", identify_by={"id": String})

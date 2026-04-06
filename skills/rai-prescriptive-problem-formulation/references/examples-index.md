@@ -2,21 +2,26 @@
 
 | Problem Type | Pattern Demonstrated | File |
 |---|---|---|
-| Diet optimization | Continuous vars + ternary property join for per-nutrient constraint | [examples/diet.py](../examples/diet.py) |
-| Network flow | Flow conservation per node using two independent Edge refs | [examples/network_flow.py](../examples/network_flow.py) |
-| Shift assignment | Binary vars scoped to availability + per-entity coverage constraints | [examples/shift_assignment.py](../examples/shift_assignment.py) |
-| Portfolio balancing | Pairwise quadratic risk via Stock.ref() + Float.ref() covariance binding | [examples/portfolio_balancing.py](../examples/portfolio_balancing.py) |
-| Supply chain transport | Multi-concept coordination: inventory conservation + mode selection + model.union() objective | [examples/supply_chain_transport.py](../examples/supply_chain_transport.py) |
-| Retail markdown | One-hot selection, price ladder constraint, cumulative tracking with temporal recurrence | [examples/retail_markdown.py](../examples/retail_markdown.py) |
-| Factory production | Partitioned sub-problem solving with `populate=False` and `where=[filter]` | [examples/factory_production.py](../examples/factory_production.py) |
-| Traveling salesman | Derived scalar bounds, MTZ subtour elimination, degree constraints, walrus aliasing | [examples/traveling_salesman.py](../examples/traveling_salesman.py) |
-| Machine maintenance | Conflict-graph mutual exclusion via Conflict concept + dual `.ref()` | [examples/machine_maintenance.py](../examples/machine_maintenance.py) |
-| Order fulfillment | Fixed-charge facility location: FCUsage tracking concept + linking constraint | [examples/order_fulfillment.py](../examples/order_fulfillment.py) |
-| Hospital staffing | Overtime hinge variable + skill-filtered aggregation + unmet demand penalty | [examples/hospital_staffing.py](../examples/hospital_staffing.py) |
-| Sprint scheduling | Epoch filtering pipeline + skill-constrained assignment domain + weighted completion | [examples/sprint_scheduling.py](../examples/sprint_scheduling.py) |
-| Demand planning (temporal) | Multi-period flow conservation with time-indexed multiarity variables + model.union() objective | [examples/demand_planning_temporal.py](../examples/demand_planning_temporal.py) |
-| Grid interconnection | Capacity expansion — two coupled binary decision sets sharing a resource constraint + budget knapsack | [examples/grid_interconnection.py](../examples/grid_interconnection.py) |
-| Ad spend allocation | Semi-continuous variables via binary activation indicator + per-campaign and global budget | [examples/ad_spend_allocation.py](../examples/ad_spend_allocation.py) |
+| Continuous + ternary join | Continuous vars + ternary property join for per-attribute constraint | [examples/continuous_ternary_join.py](../examples/continuous_ternary_join.py) |
+| Flow conservation | Flow conservation per node using two independent Edge refs | [examples/flow_conservation.py](../examples/flow_conservation.py) |
+| Binary coverage (scoped) | Binary vars scoped to availability + per-entity coverage constraints | [examples/binary_coverage_scoped.py](../examples/binary_coverage_scoped.py) |
+| Quadratic pairwise ref | Pairwise quadratic term via Concept.ref() + Float.ref() binding | [examples/quadratic_pairwise_ref.py](../examples/quadratic_pairwise_ref.py) |
+| Multi-concept union objective | Multi-concept coordination: cross-concept conservation + binary selection + model.union() objective | [examples/multi_concept_union_objective.py](../examples/multi_concept_union_objective.py) |
+| One-hot temporal recurrence | One-hot selection, stepped-value constraint, cumulative tracking with temporal recurrence | [examples/one_hot_temporal_recurrence.py](../examples/one_hot_temporal_recurrence.py) |
+| Partitioned subproblem | Partitioned sub-problem solving with `populate=False` and `where=[filter]` | [examples/partitioned_subproblem.py](../examples/partitioned_subproblem.py) |
+| Subtour elimination (MTZ) | Derived scalar bounds, MTZ subtour elimination, degree constraints, walrus aliasing | [examples/subtour_elimination_mtz.py](../examples/subtour_elimination_mtz.py) |
+| Conflict graph exclusion | Conflict-graph mutual exclusion via Conflict concept + dual `.ref()` | [examples/conflict_graph_exclusion.py](../examples/conflict_graph_exclusion.py) |
+| Fixed-charge facility | Fixed-charge facility location: tracking concept + binary linking constraint | [examples/fixed_charge_facility.py](../examples/fixed_charge_facility.py) |
+| Hinge variable penalty | Hinge variable + attribute-filtered aggregation + unmet-requirement penalty | [examples/hinge_variable_penalty.py](../examples/hinge_variable_penalty.py) |
+| Epoch filter assignment | Epoch filtering pipeline + attribute-constrained assignment domain + weighted completion | [examples/epoch_filter_assignment.py](../examples/epoch_filter_assignment.py) |
+| Multi-period flow conservation | Multi-period flow conservation with time-indexed multiarity variables + model.union() objective | [examples/multi_period_flow_conservation.py](../examples/multi_period_flow_conservation.py) |
+| Coupled binary knapsack | Capacity expansion — two coupled binary decision sets sharing a resource constraint + budget knapsack | [examples/coupled_binary_knapsack.py](../examples/coupled_binary_knapsack.py) |
+| Semi-continuous activation | Semi-continuous variables via binary activation indicator + per-entity and global budget | [examples/semi_continuous_activation.py](../examples/semi_continuous_activation.py) |
 | N-queens (Integer) | Pairwise inequality constraints with `.ref()`, `Problem(model, Integer)`, MiniZinc | [examples/n_queens.py](../examples/n_queens.py) |
 | Sudoku (Integer) | `all_different` global constraint with `.per()` grouping, standalone property variables | [examples/sudoku.py](../examples/sudoku.py) |
-| Portfolio risk/return (bi-objective) | Epsilon constraint loop + Scenario Concept inside, quadratic risk objective, anchor solves + sweep | [examples/portfolio_risk_return.py](../examples/portfolio_risk_return.py) |
+| Epsilon constraint Pareto | Epsilon constraint loop + Scenario Concept inside, quadratic objective, anchor solves + sweep | [examples/epsilon_constraint_pareto.py](../examples/epsilon_constraint_pareto.py) |
+| Chained graph → prescriptive | Graph centrality enrichment feeding prescriptive objective weight | [examples/chained_graph_prescriptive.py](../examples/chained_graph_prescriptive.py) |
+| Chained graph → constraint | Graph centrality as prescriptive constraint lower bound (proportional allocation) | [examples/chained_graph_constraint.py](../examples/chained_graph_constraint.py) |
+| Chained rules → prescriptive | Rules-derived boolean flags as hard constraints + cost surcharges in optimizer | [examples/chained_rules_prescriptive.py](../examples/chained_rules_prescriptive.py) |
+| Union heterogeneous objective | `model.union()` combining costs from different concept scopes into single objective | [examples/union_heterogeneous_objective.py](../examples/union_heterogeneous_objective.py) |
+| Slack variables penalty | Slack variables absorbing shortfall + penalty term for soft constraints | [examples/slack_variables_penalty.py](../examples/slack_variables_penalty.py) |
