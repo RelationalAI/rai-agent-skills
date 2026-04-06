@@ -40,7 +40,7 @@ npx skills add RelationalAI/rai-agent-skills --skill '*'
 npx skills add RelationalAI/rai-agent-skills --skill '*' --agent cortex
 ```
 
-### Claude
+### Claude Code
 Follow [these instructions](https://code.claude.com/docs/en/discover-plugins#add-marketplaces) to point at this repo.
 
 Also see this quick [video](https://www.loom.com/share/a78519cfa60149158779cb9925a44a1b) for an overview.
@@ -50,11 +50,21 @@ Example:
 /plugin marketplace add RelationalAI/rai-agent-skills
 /plugin install rai@RelationalAI
 # or use the wizard
-/plugin 
+/plugin
 ```
 Restart your session after installing.
 
-![Claude skills](doc/claude.png)
+![Claude Code skills](doc/claude.png)
+
+### Claude Desktop
+1. Open the Claude Desktop app and go to **Customize** in the left sidebar.
+2. Under **Plugins**, browse the directory and find **Rai** by RelationalAI.
+3. Click to install, then toggle the plugin on.
+
+Skills will be available in your next session.
+
+![Claude Desktop plugin directory](doc/claude-desktop-directory.png)
+![Claude Desktop plugin detail](doc/claude-desktop-plugin.png)
 
 ### Cortex Code
 Follow [these instructions](https://docs.snowflake.com/en/user-guide/cortex-code/extensibility#skills).
