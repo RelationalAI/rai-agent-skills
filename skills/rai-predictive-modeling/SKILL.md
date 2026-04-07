@@ -192,6 +192,9 @@ define(Test(Article, test_table_concept.timestamp)).where(
 )
 ```
 
+> **Link prediction has two task types — do not choose for the user.**
+> `link_prediction` (static, no timestamps) and `repeated_link_prediction` (temporal, with timestamps) serve different data shapes. The correct choice depends on whether the user's data has temporal ordering. Present both options and ask the user which applies to their data.
+
 ### Link Prediction (with time / repeated_link_prediction)
 
 ```python
