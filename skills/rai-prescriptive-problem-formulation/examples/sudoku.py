@@ -1,3 +1,4 @@
+# Pattern: grid constraint satisfaction with block partitioning via MiniZinc
 """
 Sudoku: fill a 9x9 grid so each row, column, and 3x3 box contains digits 1-9.
 

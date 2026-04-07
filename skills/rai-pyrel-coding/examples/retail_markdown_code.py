@@ -5,7 +5,7 @@
 from relationalai.semantics import Float, Integer, Model, String, count, sum
 from relationalai.semantics.reasoners.prescriptive import Problem
 
-model = Model("retail_markdown")
+model = Model("retail_markdown_code")
 
 # --- Multiarity property declarations ---
 Product = model.Concept("Product", identify_by={"name": String})

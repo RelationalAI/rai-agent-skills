@@ -1,3 +1,22 @@
+<!-- TOC -->
+- [Sensitivity Analysis](#sensitivity-analysis)
+  - [Implementation Patterns](#implementation-patterns)
+  - [What-If Framing for Stakeholders](#what-if-framing-for-stakeholders)
+  - [Which Parameters to Vary](#which-parameters-to-vary)
+  - [Parameter Type Taxonomy](#parameter-type-taxonomy)
+  - [Presenting Scenario Results](#presenting-scenario-results)
+  - [Identifying Critical Parameters](#identifying-critical-parameters)
+  - [Strategic vs. Operational Framing](#strategic-vs-operational-framing)
+- [Translating Shadow Prices](#translating-shadow-prices)
+- [Pareto Frontier / Efficient Frontier Analysis](#pareto-frontier--efficient-frontier-analysis)
+  - [Explaining the Frontier to Users](#explaining-the-frontier-to-users)
+  - [Quality Gates (before interpretation)](#quality-gates-before-interpretation)
+  - [Standardized Analysis Structure](#standardized-analysis-structure)
+  - [Presenting as Operating Points](#presenting-as-operating-points)
+  - [Export Patterns](#export-patterns)
+  - [Key Metrics](#key-metrics)
+<!-- /TOC -->
+
 ## Sensitivity Analysis
 
 ### Implementation Patterns
@@ -8,10 +27,10 @@ Sensitivity analysis uses one of two PyRel patterns, chosen based on what is bei
   results contain scenario dimension, queryable via `model.select(Scenario.name, ...)`.
   Variables are multi-argument Properties: `Property(f"{Entity} in {Scenario} is {Float:var}")`.
   Constraints use `.per(Scenario)` for per-scenario aggregation and `Scenario.param` for
-  scenario-specific values. See `rai-prescriptive-solver-management/examples/portfolio_balancing_scenarios.py`.
+  scenario-specific values. See `rai-prescriptive-solver-management/examples/scenario_concept_parameter_sweep.py`.
 - **Entity exclusion** (remove a supplier, disable a facility): Loop + `where=[]` filter —
   multiple solves, results collected per iteration via `variable_values().to_df()`.
-  See `rai-prescriptive-solver-management/examples/factory_production_scenarios.py`.
+  See `rai-prescriptive-solver-management/examples/partitioned_iteration_scenarios.py`.
 
 Both produce the same output format for stakeholders: comparison tables with business language.
 
@@ -88,3 +107,67 @@ The context determines how to present scenario results:
 - **Operational decisions** (recurring use): Show weighted objective sensitivity — how the solution changes as weights shift. Stakeholders set weights once, then run daily.
 
 Detect context from problem characteristics: one-time capacity planning, facility location, network design → strategic. Daily scheduling, routing, allocation → operational.
+
+---
+
+## Translating Shadow Prices (Dual Values)
+
+Shadow prices (dual values) tell you the marginal value of relaxing a constraint by one unit. Translate them as:
+
+| Technical | Business Language |
+|-----------|-------------------|
+| "Shadow price of capacity constraint at Site A = $50" | "Adding one more unit of capacity at Site A would save $50 in total cost." |
+| "Shadow price of budget constraint = 0.12" | "Each additional dollar of budget would generate $0.12 in objective improvement." |
+| "Shadow price = 0 (non-binding)" | "This constraint has slack — relaxing it would not change the solution." |
+
+---
+
+## Pareto Frontier / Efficient Frontier Analysis
+
+When results come from an epsilon constraint loop (bi-objective optimization), apply this standardized analysis structure. The Pareto frontier IS a sensitivity analysis — it shows how the primary objective responds to changes in the secondary objective's bound.
+
+### Explaining the Frontier to Users
+
+Frame in business terms: "Each point on the frontier is a valid solution representing a different balance between your two goals — [primary] and [secondary]. No point is strictly better than another. The frontier shows where improving one goal starts costing significantly more in the other."
+
+### Quality Gates (before interpretation)
+
+- All points OPTIMAL? If some INFEASIBLE, note which secondary targets are unachievable.
+- Points show variation in the primary? If all same value, objectives aren't in tension.
+- At least 3 non-anchor points? Fewer may miss the frontier shape.
+
+### Standardized Analysis Structure
+
+Produce all of these for any Pareto frontier result:
+
+1. **Tradeoff table**: both objectives at each point + marginal rate between consecutive points. The secondary objective must be computed from the variable_values DataFrame (solver only reports the primary).
+
+2. **Marginal rate + knee detection**: The marginal rate is Δprimary / Δsecondary between consecutive points. The **knee** is where the marginal rate RATIO jumps most: `rates[i+1] / rates[i]`. The knee is NOT where the absolute rate is highest — that's always the last point. The knee is where diminishing returns begin.
+
+3. **Allocation shifts + regime detection**: Compare variable values between consecutive points. Look for structural phase transitions — entities that activate or deactivate, substitution patterns that change. These regime shifts are more valuable than raw numbers. Example: "Going from 70% to 80% coverage activates Warehouse_South and opens 3 new routes."
+
+4. **Frontier visualization**: Table or scatter plot showing the tradeoff shape. Mark the knee point.
+
+5. **Business narrative**: Characterize 2-3 regions of the frontier (e.g., "efficient zone", "premium zone", "saturation zone"). Frame the knee as a recommendation: "[secondary value] at [primary value] offers the best value — each additional unit of [secondary] beyond this costs [X]x more."
+
+### Presenting as Operating Points
+
+Present the frontier as a menu of operating points, not a single answer. The user picks their preferred balance. For each candidate operating point, show:
+- Both objective values
+- Key decisions at that point (what's active, what's not)
+- What changes if they move one point up or down the frontier
+
+### Export Patterns
+
+- **Pareto summary**: one row per point (epsilon, primary_value, secondary_value, status)
+- **Per-point variables**: full variable_values DataFrame for each point (user can compare allocations)
+- Same pattern as scenario result export (one DataFrame per scenario → one DataFrame per Pareto point)
+- To populate the chosen operating point back into the ontology, see `rai-prescriptive-problem-formulation` > [multi-objective-formulation.md](../../rai-prescriptive-problem-formulation/references/multi-objective-formulation.md) > Storing Results
+
+### Key Metrics
+
+- **Marginal rate of substitution**: cost of improving secondary by one unit, in primary units
+- **Knee point**: where marginal rate ratio jumps most (diminishing returns threshold)
+- **Anchor points**: the two extremes (pure primary-optimal and pure secondary-optimal)
+- **Steep regions**: small secondary improvements cost a lot in primary
+- **Flat regions**: secondary can be improved cheaply

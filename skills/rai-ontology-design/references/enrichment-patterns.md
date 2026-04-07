@@ -5,6 +5,7 @@
   - [Variable pattern selection for enrichment](#variable-pattern-selection-for-enrichment)
   - [Common problem types and their enrichments](#common-problem-types-and-their-enrichments)
   - [Decision concepts as ontology extensions](#decision-concepts-as-ontology-extensions)
+  - [Promoting relationships to concepts](#promoting-relationships-to-concepts)
   - [Cross-product concept creation](#cross-product-concept-creation)
   - [Filtered cross-products](#filtered-cross-products)
   - [Multi-hop relationship enrichment](#multi-hop-relationship-enrichment)
@@ -52,7 +53,7 @@ Rate each problem's feasibility using these actionable categories:
 
 1. **Check existing relationships first.** If Product already has `Product.factory`, add `production_quantity` to Product -- do not create a FactoryProduct cross-product.
 2. **Use `extended_property`** when the concept already has entities and an existing relationship to related concepts.
-3. **Use `extended_concept`** only when no relationship exists between the concepts being paired.
+3. **Use `extended_concept`** when no relationship exists between the concepts being paired, OR when an existing relationship needs its own attributes (see [Promoting relationships to concepts](#promoting-relationships-to-concepts) below).
 
 ### Common problem types and their enrichments
 
@@ -76,12 +77,12 @@ Rate each problem's feasibility using these actionable categories:
 - Usually `extended_property` since items already exist with data
 
 **Template examples by problem type:**
-- Allocation: `../../rai-prescriptive-problem-formulation/examples/order_fulfillment.py`, `../../rai-prescriptive-problem-formulation/examples/ad_spend_allocation.py`
-- Scheduling: `../../rai-prescriptive-problem-formulation/examples/shift_assignment.py`, `../../rai-prescriptive-problem-formulation/examples/hospital_staffing.py`
-- Routing/Network: `../../rai-prescriptive-problem-formulation/examples/network_flow.py`, `../../rai-prescriptive-problem-formulation/examples/supply_chain_transport.py`
-- Portfolio/Selection: `../../rai-prescriptive-problem-formulation/examples/portfolio_balancing.py`, `../../rai-prescriptive-problem-formulation/examples/grid_interconnection.py`
-- Pricing: `../../rai-prescriptive-problem-formulation/examples/retail_markdown.py`
-- Resource Allocation (multi-period): `../../rai-prescriptive-problem-formulation/examples/demand_planning_temporal.py`
+- Allocation: `../../rai-prescriptive-problem-formulation/examples/fixed_charge_facility.py`, `../../rai-prescriptive-problem-formulation/examples/semi_continuous_activation.py`
+- Scheduling: `../../rai-prescriptive-problem-formulation/examples/binary_coverage_scoped.py`, `../../rai-prescriptive-problem-formulation/examples/hinge_variable_penalty.py`
+- Routing/Network: `../../rai-prescriptive-problem-formulation/examples/flow_conservation.py`, `../../rai-prescriptive-problem-formulation/examples/multi_concept_union_objective.py`
+- Portfolio/Selection: `../../rai-prescriptive-problem-formulation/examples/quadratic_pairwise_ref.py`, `../../rai-prescriptive-problem-formulation/examples/coupled_binary_knapsack.py`
+- Pricing: `../../rai-prescriptive-problem-formulation/examples/one_hot_temporal_recurrence.py`
+- Resource Allocation (multi-period): `../../rai-prescriptive-problem-formulation/examples/multi_period_flow_conservation.py`
 
 ### Decision concepts as ontology extensions
 
@@ -94,6 +95,35 @@ When a prescriptive problem is formulated, it creates decision concepts (e.g., `
 - The ontology is richer after optimization -- it contains "what should happen," not just "what exists"
 
 This does not change the gap classification (decision concepts are still formulation-layer, not MODEL_GAP), but it reframes their purpose: they are ontology extensions, not temporary solver artifacts.
+
+### Promoting relationships to concepts
+
+Sometimes a relationship between two concepts needs its own properties -- a grade on an enrollment, a cost on an assignment, a date on a membership. When this happens, **promote the relationship to a concept** with compound identity. The promoted concept acts as both a link between the participating concepts and an entity that carries its own data.
+
+**When promotion is needed:**
+1. When no relationship exists between two concepts being paired (the `extended_concept` case already documented)
+2. **Also** when a relationship DOES exist but needs its own attributes
+
+The current `extended_concept` guidance ("use only when no relationship exists") is a sufficient but not necessary condition. Promotion is also needed when a relationship carries data.
+
+```python
+# Relationship exists (Student enrolled in Course) but needs attributes
+# Promote the enrollment relationship into an Enrollment concept
+Enrollment = model.Concept("Enrollment", identify_by={"student": Student, "course": Course})
+Enrollment.grade = model.Property(f"{Enrollment} has {Float:grade}")
+Enrollment.enrollment_date = model.Property(f"{Enrollment} has {Date:enrollment_date}")
+
+# The promoted concept maintains 1:1 correspondence with the relationship:
+# every Enrollment entity corresponds to exactly one (Student, Course) pair
+# and vice versa -- compound identify_by enforces this
+```
+
+**1:1 correspondence rule:** The promoted concept must maintain a 1:1 mapping with the underlying relationship instances. Using compound `identify_by` with the participating concepts enforces this -- each unique pair of participants maps to exactly one entity. Without this, you risk creating entities that don't correspond to valid relationships (e.g., phantom enrollments without a real student-course link).
+
+**Decision rule:**
+- Relationship has no attributes: use `model.Relationship()` directly
+- Relationship has 1 attribute: use an N-ary Property (e.g., `f"{A} to {B} costs {Float:cost}"`)
+- Relationship has 2+ attributes: promote to a junction concept with compound identity
 
 ### Cross-product concept creation
 
@@ -122,7 +152,7 @@ p.solve_for(
 )
 ```
 
-**Complete cross-product examples:** See `../../rai-prescriptive-problem-formulation/examples/shift_assignment.py` and `../../rai-prescriptive-problem-formulation/examples/order_fulfillment.py`.
+**Complete cross-product examples:** See `../../rai-prescriptive-problem-formulation/examples/binary_coverage_scoped.py` and `../../rai-prescriptive-problem-formulation/examples/fixed_charge_facility.py`.
 
 **Critical rules for cross-product concepts:**
 - Use `Relationship` (not `Property` with `_id` suffix) to connect to existing concepts

@@ -134,6 +134,20 @@ model.where(graph.Node == Site).define(
 )
 ```
 
+### Shorthand: assign to graph.Node with `node_concept`
+
+When `node_concept` is set (e.g., `node_concept=User`), `graph.Node` IS the concept — assigning to `graph.Node` directly creates the property on the concept without a separate binding step:
+
+```python
+# graph.Node IS User when node_concept=User — property is automatically available on User
+graph.Node.community = graph.weakly_connected_component()
+
+# Query directly via User — no explicit binding needed
+df = model.select(User.name, User.community).to_df()
+```
+
+Use this shorthand when you need a simple property binding. Use the explicit three-step pattern (declare `model.Property`, bind via `define()`) when you need more control (e.g., custom property type declarations, or binding results to a concept different from `node_concept`).
+
 ### Why binding matters
 
 Without binding, graph results are only accessible via `graph.Node` queries. Binding makes them available as first-class concept properties — queryable, usable in rules, referenceable in optimization constraints and objectives.

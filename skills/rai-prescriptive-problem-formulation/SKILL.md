@@ -20,7 +20,7 @@ description: Formulates optimization problems from ontology models covering deci
 
 **When NOT to use:**
 - Post-solve diagnosis of solutions that look wrong (all zeros, infeasible status, concentrated values) — see `rai-prescriptive-results-interpretation`
-- Problem discovery (suggesting problems for an ontology, reasoner classification) — see `rai-problem-discovery/SKILL.md`
+- Question discovery (what can this ontology answer, reasoner classification) — see `rai-discovery`
 - PyRel syntax (imports, types, property patterns, stdlib) — see `rai-pyrel-coding`
 - Ontology modeling or model enrichment (concept design, gap classification) — see `rai-ontology-design`
 - Solver execution and diagnostics (solver selection, parameters, numerical stability) — see `rai-prescriptive-solver-management`
@@ -58,7 +58,11 @@ p = Problem(model, Float)
 
 ## Formulation Workflow
 
-After a problem is selected (from problem discovery) and the ontology is enriched (if needed), build the formulation in this order:
+**Interaction mode:** Before starting, ask the user which mode they prefer:
+- **Guided** — present your proposed variables, constraints, and objective at each step and confirm before proceeding. Best when the user has domain context to share — problem framing involves subjective judgment (what's a hard constraint vs. a soft goal, how to scope variables, which business rules matter most).
+- **One-shot** — produce the best formulation you can in a single pass. Best when the user wants speed and will review/iterate after.
+
+After a question is selected (from question discovery) and the ontology is enriched (if needed), build the formulation in this order:
 
 ### Step 1: Define Variables
 What decisions are being made? What can the solver control?
@@ -75,11 +79,13 @@ What rules must the solution satisfy?
 - Add flow conservation if the model has network structure
 - Derive parameters from data ranges, not arbitrary values (Parameter Derivation from Data)
 
-### Step 3: Define Objective
+### Step 3: Define Objective(s)
 What are we optimizing?
 - Start with user's stated goal — map business language to minimize/maximize (Objective Context Integration)
 - Reference defined variables and data properties in the expression
 - Check for trivial solution risk: "If all variables = 0, are all constraints satisfied?" If yes, Step 2 needs a forcing constraint.
+- **Competing objectives?** If the formulation has a penalty term bundling two concerns (cost + penalty×slack), or a constraint that represents a competing goal (return ≥ threshold), consider whether the user wants to explore the tradeoff rather than fix a single point. See [multi-objective-formulation.md](references/multi-objective-formulation.md) for the epsilon constraint approach.
+- **Parameter sensitivity?** If key constraints use fixed values that could vary (budget, demand, service level), consider scenario analysis to show how the solution changes. See [scenario-analysis.md](references/scenario-analysis.md).
 
 ### Step 4: Validate
 Is the formulation complete and correct?
@@ -94,6 +100,15 @@ Can we reduce complexity without losing correctness?
 - Static parameters over dynamic calculations
 - Objective terms for goals; constraints for hard requirements
 - Group-level constraints over pairwise/granular combinations
+
+### Step 6: Present, React, Refine
+Is the formulation complete — including constraints the user couldn't articulate upfront?
+- Solve and present the result to the user (see Constraint Elicitation > Post-Solve: Iterative Refinement)
+- Use the result as an elicitation tool to surface latent preferences
+- Disambiguate rejections into constraint types, add them, re-solve
+- Repeat until the user accepts or feasibility pressure forces prioritization
+
+Steps 1-5 produce the best formulation you can build from what the user has told you. Step 6 discovers what they couldn't tell you until they saw a concrete result. Most real-world formulations require at least one pass through Step 6.
 
 For detailed patterns for each step, see [variable-formulation.md](references/variable-formulation.md), [constraint-formulation.md](references/constraint-formulation.md), and [objective-formulation.md](references/objective-formulation.md).
 
@@ -125,7 +140,13 @@ When presenting variables, constraints, and objectives to the user, describe the
 
 Code snippets in `solver_registration`, `expression`, and `entity_creation` fields remain technical (valid PyRel). But every field the user reads should sound like a business analyst wrote it, not a database query.
 
-### Eliciting Constraints from Business Users
+---
+
+## Constraint Elicitation
+
+Constraints are rarely handed to you complete. They emerge through two complementary phases: asking the right questions before solving, and using results to surface preferences the user couldn't articulate in the abstract. This section covers user-facing elicitation techniques. For model-structural constraint discovery (boundary probes, structural probes, multi-concept probes), see [constraint-formulation.md](references/constraint-formulation.md) > Constraint Discovery Patterns.
+
+### Pre-Solve: From Business Language to Constraints
 
 Non-OR users rarely describe their problem in terms of "constraints" and "objectives." Use these diagnostic questions to surface the formulation elements:
 
@@ -139,7 +160,7 @@ Non-OR users rarely describe their problem in terms of "constraints" and "object
 
 **Technique:** Start with "What makes a solution unacceptable?" — this reliably surfaces hard constraints. Then ask "What would make one acceptable solution better than another?" — this surfaces objective terms.
 
-### Business Constraint Disambiguation
+#### Disambiguating Business Language
 
 Common business phrases are ambiguous between constraint and objective. Always clarify before formulating.
 
@@ -153,42 +174,61 @@ Common business phrases are ambiguous between constraint and objective. Always c
 
 **Decision rule:** If violating it makes the solution invalid or unacceptable → **constraint**. If it is a preference or "nice to have" → **objective term**. When unclear, default to soft (objective) and ask the user: "If the optimizer found a solution that violates this but saves 20% on cost, would that be acceptable?"
 
+### Post-Solve: Iterative Refinement
+
+Pre-solve elicitation has a fundamental limit: users cannot always articulate preferences until they see a concrete result that violates them. "No constraints" often means "I can't think of any right now," not "anything goes." Preferences may be real but latent — only surfaceable through confrontation with a specific proposal.
+
+**Principle: Use results as an elicitation tool.** The first solve with minimal constraints is diagnostic, not prescriptive — its purpose is to provoke reactions that reveal the real formulation. This is Step 6 of the Formulation Workflow.
+
+**The refinement loop:**
+
+1. Solve with current constraints (initially minimal)
+2. Present the result, highlighting aspects most likely to provoke a reaction
+3. Ask targeted reaction questions to surface latent preferences
+4. When the user rejects an aspect, disambiguate what type of constraint it implies
+5. Add the constraint, re-solve, repeat until the user accepts
+
+**Skill routing within the loop:** Steps 1 and 5 involve solving — use `rai-prescriptive-solver-management` for solver execution. If the result is technically wrong (infeasible, all-zero, solver error), route to `rai-prescriptive-results-interpretation` for diagnosis — it will route back here once the issue is classified as a missing constraint or incomplete formulation. This skill governs steps 2-4: the result is *optimal and technically valid*, but the user's reaction reveals the formulation is incomplete.
+
+**Presenting results to surface latent preferences:**
+
+Don't just show optimal values. Frame them to make implicit preferences visible:
+- **Highlight large shifts from status quo** — users often have unstated change-aversion. Showing the magnitude of change surfaces comfort thresholds on rate of change, not just absolute levels.
+- **Anchor to domain norms** — reference what peers, industry standards, or historical ranges look like. This calibrates the user's reaction and surfaces social or organizational bounds they haven't stated.
+- **Show the trade-off cost** — when a value looks extreme, present what relaxing it would cost in the objective. This distinguishes hard constraints ("no, regardless of cost") from soft preferences ("well, if it saves that much...").
+- **Flag boundary solutions** — when the solver pushes a variable to its bound (zero, maximum), call it out explicitly. Boundary solutions frequently violate unstated preferences.
+
+**Post-solve reaction questions:**
+
+| Question | What it surfaces |
+|----------|-----------------|
+| "Does anything in this result feel wrong or surprising?" | Latent hard constraints |
+| "Which value would you change first?" | The tightest latent preference |
+| "Would you be comfortable acting on this / presenting this?" | Social, organizational, or reputational constraints beyond personal preference |
+| "If this were the only feasible solution, would you change your requirements?" | Whether the discomfort is a hard constraint or a negotiable preference |
+
+**Disambiguating the rejection:**
+
+When a user rejects an aspect of the result, the rejection is ambiguous. Before adding a constraint, determine:
+- **Absolute bound vs. change bound** — "too much X" could mean X exceeds an absolute comfort level, or that the jump from the current state is too large. These are different constraints with different formulations.
+- **Hard constraint vs. soft preference** — test with: "If violating this saved [meaningful amount] on [objective], would that change your answer?" Hard constraints survive this test; soft preferences don't — and should become objective penalty terms instead.
+- **Specific vs. vague** — if the rejection is vague ("this seems aggressive"), probe which dimension: concentration, deviation from current, absolute level, or something else entirely. Each maps to a different constraint type.
+
+**When to stop iterating:**
+- The user accepts the result — explicitly, or by shifting to implementation questions. If the user accepts on the first pass, Step 6 is done; do not probe for objections that aren't there.
+- The user provides a specific value ("just cap it at 10%") — take the bound directly, no need to run the disambiguation protocol.
+- Changes between iterations become marginal
+- The user starts making trade-offs between constraints — this signals the efficient frontier has been found and the remaining decisions are genuinely preferential
+
+**Feasibility pressure:** If repeated rejections shrink the feasible region toward infeasibility, pause and present the tension explicitly: these preferences conflict, and the user must prioritize. This is itself a form of constraint elicitation — forcing a ranking among competing bounds.
+
+**Documenting the trail:** Keep a running log of each constraint added and the user reaction that motivated it. This captures the "why" behind bounds that would otherwise look arbitrary in the final formulation — valuable for model maintenance and stakeholder review.
+
 ---
 
 ## Business-to-Formulation Mapping
 
-Translating business language into mathematical formulation requires mapping three things: what decisions are controlled (variables), what limits must be respected (constraints), and what is being optimized (objective).
-
-### Identifying variables from business context
-
-| Business language | Variable type | What to look for |
-|-------------------|---------------|-----------------|
-| "assign", "schedule", "select" | Binary | Assignment/selection entities |
-| "produce", "manufacture", "ship", "order" | Integer | Discrete units |
-| "allocate %", "invest", "price" | Continuous | Divisible amounts |
-| "how many", "count", "number of" | Integer | Countable quantities |
-| "optimize", "balance" | Depends | The controllable quantities in the model |
-
-### Identifying constraints from business context
-
-| Business language | Constraint type | Pattern |
-|-------------------|-----------------|---------|
-| "capacity", "limit", "maximum", "cannot exceed" | Capacity | `variable <= capacity` |
-| "must meet", "at least", "minimum", "require" | Requirement | `variable >= minimum` |
-| "balance", "conserve", "in = out" | Conservation | `inflow == outflow` |
-| "only one", "either/or", "if then" | Logical | Conditional expressions |
-| "fair", "balanced", "even distribution" | Equity | Variance or ratio constraints |
-
-### Identifying objectives from business context
-
-| Business language | Direction | Typical expression | User-facing description |
-|-------------------|-----------|-------------------|------------------------|
-| "cost", "expense", "spend" | Minimize | `sum(entity.cost * entity.quantity_var)` | Minimize total operating cost |
-| "profit", "revenue", "return" | Maximize | `sum(entity.price * entity.quantity_var)` | Maximize total profit across all products |
-| "satisfy", "meet demand", "service" | Min unmet | `sum(demand - fulfilled)` | Minimize unmet customer demand |
-| "efficient", "utilize", "throughput" | Maximize | `sum(quantity_var / capacity)` | Maximize resource utilization across facilities |
-| "waste", "leftover", "unused" | Minimize | `sum(capacity - quantity_var)` | Minimize wasted capacity |
-| "fair", "balanced", "equal" | Min variance | `sum((value - avg)^2)` or max-min | Balance workload evenly across teams |
+Derive the mapping from the ontology structure and the user's stated goals. The ontology's concepts, properties, and relationships tell you what can be controlled (variables), what has limits (constraints), and what the user wants to achieve (objective). Steps 1-3 of the Formulation Workflow provide the process for this.
 
 ---
 
@@ -230,66 +270,12 @@ This is often unintended, but not always wrong — the user may intentionally le
 
 ## Formulation Simplification
 
-Users often propose formulations that seem natural from a business perspective but create unnecessary complexity.
-
-### Static parameters vs. dynamic calculations
-
-**The problem:** Users want constraints that depend on dynamically calculated values ("capacity can't exceed 3x last period's utilization," "limit should be 150% of historical average").
-
-**Why it is problematic:** Requires pulling historical data at solve time, makes the model harder to debug, creates hidden dependencies, and makes what-if analysis difficult.
-
-**Better approach:** Use static parameters that can be easily updated. Instead of computing a dynamic cap, set a static limit that achieves the same constraint. The user can update it when planning changes.
-
-**When dynamic IS appropriate:** The calculation is simple and stable (e.g., sum of child values), the relationship is fundamental (e.g., inventory balance), or real-time data is essential (rare in planning problems).
-
-### Requirements vs. goals: constraint or objective?
-
-**The fundamental distinction:**
-- **Requirements** (non-negotiable) become **constraints**: must be satisfied for a valid solution
-- **Goals** (can trade off) become **objective terms**: what we are trying to achieve, with priorities
-
-It is a REQUIREMENT (constraint) if:
-- Violating it makes the solution invalid/unusable
-- There are contractual, legal, or safety implications
-- It is a physical impossibility to violate (capacity, conservation)
-
-It is a GOAL (objective) if:
-- Missing it is undesirable but the solution is still useful
-- There are trade-offs between competing targets
-- Priorities exist (some targets matter more than others)
-- You want visibility into how close you got
-
-**The problem with goals-as-constraints:** Problem becomes infeasible if goals conflict with capacity. No solution tells you nothing about which goal caused the conflict. Small data changes can flip from feasible to infeasible.
-
-**Better approach for goals:** Use shortfall variables and penalty terms in the objective. This lets the optimizer trade off between goals and shows how close you got to each target.
-
-### Grouped constraints vs. granular combinations
-
-**The problem:** Users specify constraints for specific entity combinations ("Facilities A and B combined must handle 60% of demand"). This creates many specific constraints, is hard to maintain as entities change, and obscures the underlying business intent.
-
-**Better approach:** Define groups that capture the business intent. A single group constraint replaces multiple pairwise constraints. Adding/removing members means updating group membership, not rewriting constraints.
-
-**When granular IS appropriate:** Truly entity-specific rules (contractual minimums with specific partners), temporary exceptions, or when the grouping does not exist conceptually in the business.
-
-### Recognizing over-specification
-
-| User says | Likely issue | Better approach |
-|-----------|-------------|-----------------|
-| "calculated from historical data" | Dynamic dependency | Static parameter |
-| "MUST hit target" | Goal vs. requirement unclear | Clarify, then constraint or objective |
-| "X and Y combined" | Granular combinations | Meaningful groups |
-| "factor in the score/rating" | Complex constraint coefficient | Objective term |
-| "only if", "depends on" | Conditional complexity | Simplify or use indicator |
-
-### Simplification principles
-
-**Prefer:**
+Users often propose formulations that seem natural from a business perspective but create unnecessary complexity. Key simplification heuristics:
 - Static parameters over dynamic calculations
-- Objective terms for goals; constraints for requirements
+- Objective terms for goals; constraints for hard requirements
 - Group-level constraints over pairwise/granular combinations
-- Simple bounds over conditional logic
 
-**The test:** "If the business context changes slightly, how hard is it to update this formulation?" A good formulation requires changing one parameter or group membership. A problematic formulation requires rewriting multiple constraints.
+For detailed heuristics, examples, and the over-specification recognition table, see [formulation-simplification.md](references/formulation-simplification.md).
 
 ---
 
@@ -305,99 +291,20 @@ It is a GOAL (objective) if:
 | Missing forcing requirement | MINIMIZE objective with no forcing constraint yields zero | Always identify what real-world requirement forces positive activity |
 | Constraint references unwired relationship | Relationship declared but no `define()` data binding | Verify all relationships in `.where()` joins have `define()` rules. Unwired relationships cause TyperError or silently match zero entities. |
 | `p.satisfy()` or `model.define()` in a Python loop | Defining constraints per entity in a for loop instead of declaratively | Use vectorized `.where().define()` or `p.satisfy()` with `.per()`. See `rai-pyrel-coding` Common Pitfalls for before/after examples |
+| `Duplicate relationship` / `FDError` on re-solve | Solving multiple scenarios with `populate=True` (default) writes conflicting results to the graph | Use `populate=False` + `p.variable_values().to_df()` to extract results. Create a fresh `Problem` per scenario. See Re-Solve Behavior section. |
+| `UnsupportedRecursionError` with Graph + Prescriptive | Graph algorithms on the same `Model` can conflict with `p.variable_values()` | Use a separate `Model` for graph analysis and write results back. See `rai-graph-analysis` [graph-construction.md](../rai-graph-analysis/references/graph-construction.md#graph-model-separation). |
 
-### Unwired Relationships
-
-A declared `model.Relationship()` without a corresponding `model.define()` rule has NO DATA at solve time. The relationship exists in the schema but has zero bindings.
-
-**Symptoms:**
-- `TyperError` during solve ("type inference" or "type could not be determined")
-- Constraints silently match zero entities (empty joins)
-- `.per(Concept)` aggregations return nothing
-
-**Check:** For every relationship in a constraint `.where()` clause, verify a `model.define()` rule populates it. If no define rule exists, the relationship is unwired — do not use it in constraints.
-
-**Example:**
-```python
-# WRONG: constraint uses unwired relationship (no define() rule)
-sum(Operation.x_flow).where(Operation.transformation == Site).per(Site) >= Site.demand
-
-# CORRECT: use a relationship with define() data binding, or join via shared identity properties
-Op = Operation.ref()
-UD = UnmetDemand.ref()
-sum(Op.x_flow).where(Op.output_sku == UD.sku).per(UD.sku)
-```
+For detailed unwired relationship symptoms, checks, and code examples, see [constraint-formulation.md](references/constraint-formulation.md) > Unwired Relationships (Detailed).
 
 ---
 
 ## Examples
 
-| Problem Type | Pattern Demonstrated | File |
-|---|---|---|
-| Diet optimization | Continuous vars + ternary property join for per-nutrient constraint | [examples/diet.py](examples/diet.py) |
-| Network flow | Flow conservation per node using two independent Edge refs | [examples/network_flow.py](examples/network_flow.py) |
-| Shift assignment | Binary vars scoped to availability + per-entity coverage constraints | [examples/shift_assignment.py](examples/shift_assignment.py) |
-| Portfolio balancing | Pairwise quadratic risk via Stock.ref() + Float.ref() covariance binding | [examples/portfolio_balancing.py](examples/portfolio_balancing.py) |
-| Supply chain transport | Multi-concept coordination: inventory conservation + mode selection + model.union() objective | [examples/supply_chain_transport.py](examples/supply_chain_transport.py) |
-| Retail markdown | One-hot selection, price ladder constraint, cumulative tracking with temporal recurrence | [examples/retail_markdown.py](examples/retail_markdown.py) |
-| Factory production | Partitioned sub-problem solving with `populate=False` and `where=[filter]` | [examples/factory_production.py](examples/factory_production.py) |
-| Traveling salesman | Derived scalar bounds, MTZ subtour elimination, degree constraints, walrus aliasing | [examples/traveling_salesman.py](examples/traveling_salesman.py) |
-| Machine maintenance | Conflict-graph mutual exclusion via Conflict concept + dual `.ref()` | [examples/machine_maintenance.py](examples/machine_maintenance.py) |
-| Order fulfillment | Fixed-charge facility location: FCUsage tracking concept + linking constraint | [examples/order_fulfillment.py](examples/order_fulfillment.py) |
-| Hospital staffing | Overtime hinge variable + skill-filtered aggregation + unmet demand penalty | [examples/hospital_staffing.py](examples/hospital_staffing.py) |
-| Sprint scheduling | Epoch filtering pipeline + skill-constrained assignment domain + weighted completion | [examples/sprint_scheduling.py](examples/sprint_scheduling.py) |
-| Demand planning (temporal) | Multi-period flow conservation with time-indexed multiarity variables + model.union() objective | [examples/demand_planning_temporal.py](examples/demand_planning_temporal.py) |
-| Vehicle scheduling | Fixed-charge vehicle usage with big-M linking to binary assignments | [examples/vehicle_scheduling.py](examples/vehicle_scheduling.py) |
-| Grid interconnection | Capacity expansion — two coupled binary decision sets sharing a resource constraint + budget knapsack | [examples/grid_interconnection.py](examples/grid_interconnection.py) |
-| Ad spend allocation | Semi-continuous variables via binary activation indicator + per-campaign and global budget | [examples/ad_spend_allocation.py](examples/ad_spend_allocation.py) |
-| N-queens (Integer) | Pairwise inequality constraints with `.ref()`, `Problem(model, Integer)`, MiniZinc | [examples/n_queens.py](examples/n_queens.py) |
-| Sudoku (Integer) | `all_different` global constraint with `.per()` grouping, standalone property variables | [examples/sudoku.py](examples/sudoku.py) |
+For all example problems and the patterns they demonstrate, see [examples-index.md](references/examples-index.md).
 
 ---
 
-## Formulation Analysis Context
-
-When reviewing a formulation, the LLM must understand these naming and reference conventions to avoid false positives:
-
-### Local Aliases and Constants
-
-If local variable aliases are defined (e.g., `Al -> Allocation.ref()`), then `Al.quantity` is VALID — refs use the slot name, no x_ prefix. If constants are defined (e.g., `MULTIPLIER = 2.0`), they ARE defined. Do NOT flag these as "undefined" — the code compiles and runs; if something were truly undefined, RAI would catch it.
-
-### Decision Variable Naming Convention
-
-- Decision variable attributes use `x_` prefix: `Entity.x_var_name` in Python code
-- Property template strings use the SLOT name (no x_): `"{Entity} has {var_name:float}"`
-- Ref-based access uses the slot name (no x_): `E = Entity.ref(); E.var_name`
-- Do NOT flag variables as unused if you see the property name in constraints/objectives
-
-### Expression Parsing Limitations
-
-- Constraint expressions may be TRUNCATED or SUMMARIZED (e.g., `"sum(...)"` instead of full expansion)
-- Variables used inside inline aggregations (`sum()`, `select()`, `where()`) may not appear in the expression string
-- **Do NOT flag variables as unused if they appear in aggregation hints or are typical for the problem type**
-
-### Derived vs Decision Variables
-
-- Some properties are COMPUTED (e.g., `distance = sqrt(...)`) not decision variables
-- Computed properties don't need to appear in constraints
-- Only flag DECISION variables (from `solve_for()`) as unused, NOT computed properties
-
-### V1 Aggregation Patterns
-
-Structure: `sum(X.prop).where(filter).per(grouping)` (for full `.per()` semantics, see `rai-querying`)
-- `.where()` on sum: FILTERS which items are aggregated
-- `.per()` on sum: GROUPS the aggregation (one value per group)
-- `.where()` on require(): ITERATES (one constraint per entity)
-
-**For per-entity constraints, use `.per()` on BOTH the sum and the constraint:**
-- `.per(Entity)` on `sum(...)` groups the aggregation (one total per Entity)
-- `.where(Entity)` on `require()` iterates the constraint (one constraint per Entity)
-
-Python variables holding expressions (e.g., `total = sum(...)`) are valid — don't flag as undefined.
-
-### Python Variables in Constraints
-
-Code uses Python variables for intermediate expressions. If an identifier is assigned before use, it's VALID.
+When reviewing an existing formulation, see [formulation-analysis-context.md](references/formulation-analysis-context.md).
 
 ---
 
@@ -436,23 +343,9 @@ prod_cost = ProdCapacity.production_cost * sum(x_prod).per(ProdCapacity).where(
 - **`name=[]` must NOT traverse relationships** — use identity fields (e.g., `ProdCapacity.site_id`) not `ProdCapacity.site.name` (causes FD violation)
 - **Cross-concept joins need distinct attribute names** — if two concepts both have `site_id` as `identify_by`, rename one (e.g., `wk_site_id`) to avoid ambiguity
 - **Only one objective supported** — HiGHS rejects multiple `minimize()`/`maximize()` calls
+- **Bi-objective via epsilon constraint**: To optimize two competing objectives, use the epsilon constraint loop — convert the secondary objective to a parameterized constraint and sweep it across the feasible range. Each iteration is a standard single-objective Problem. See [multi-objective-formulation.md](references/multi-objective-formulation.md).
 
-### Constraint naming with lists
-
-Name constraints with list expressions for readable debug output:
-
-```python
-p.satisfy(model.require(
-    Edge.x_flow <= Edge.capacity
-), name=["capacity", Edge.i, Edge.j])
-# Produces names like: "capacity_1_3", "capacity_2_5"
-```
-
-List elements are joined with underscores. Use entity identifiers (IDs, names) in the list for per-entity constraint names.
-
-### Re-Solve Behavior (1.0.3+)
-
-Re-solving the same `Problem` instance is safe. Result import uses `experimental.load_data` with replace semantics — previous results remain intact if a subsequent solve fails. The inline formulation pattern (fresh `Problem` per scenario loop iteration) is still useful for clean separation of scenarios, but is no longer required for error recovery.
+For constraint naming with lists, re-solve behavior (multi-scenario patterns), `| 0` fallback limitation, and numpy type casting, see [known-limitations.md](references/known-limitations.md).
 
 ### PyRel is additive — nothing can be removed or modified in-place
 
@@ -480,3 +373,10 @@ PyRel's model and problem APIs are **append-only**. Every call to `model.define(
 | Constraint formulation | Forcing, capacity, balance, linking, `.where()` scoping, parameter derivation | [constraint-formulation.md](references/constraint-formulation.md) |
 | Objective formulation | Direction, multi-component, penalty terms, scenario formulation | [objective-formulation.md](references/objective-formulation.md) |
 | Problem patterns & validation | Common patterns (assignment, flow, knapsack) and the validation checklist | [problem-patterns-and-validation.md](references/problem-patterns-and-validation.md) |
+| Global constraints | `all_different`, `implies`, SOS1/SOS2 syntax, solver requirements, CP vs MIP guide | [global-constraints.md](references/global-constraints.md) |
+| Scenario analysis | Scenario Concept vs Loop + where= patterns, decision matrix, code examples | [scenario-analysis.md](references/scenario-analysis.md) |
+| Formulation simplification | Static vs dynamic parameters, goals vs constraints, grouped constraints, over-specification | [formulation-simplification.md](references/formulation-simplification.md) |
+| Multi-objective formulation | Approach selection, epsilon constraint method, tension heuristics, pitfalls | [multi-objective-formulation.md](references/multi-objective-formulation.md) |
+| Examples index | All example problems with patterns demonstrated | [examples-index.md](references/examples-index.md) |
+| Formulation analysis context | Naming conventions, alias handling, expression parsing, aggregation patterns for review | [formulation-analysis-context.md](references/formulation-analysis-context.md) |
+| Known limitations (secondary) | Constraint naming, re-solve behavior, `\| 0` fallback limitation, numpy type casting | [known-limitations.md](references/known-limitations.md) |

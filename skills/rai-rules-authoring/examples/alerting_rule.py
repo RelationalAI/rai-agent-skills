@@ -8,7 +8,7 @@ from relationalai.semantics.std.datetime import datetime
 from relationalai.semantics.std import numbers, aggregates
 import relationalai.semantics as rai
 
-model = Model("alerting_example")
+model = Model("alerting_rule")
 
 # --- Ontology ---
 

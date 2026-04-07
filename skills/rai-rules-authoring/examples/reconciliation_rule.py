@@ -6,7 +6,7 @@ from relationalai.semantics import Float, Integer, Model, String
 from relationalai.semantics.std import math
 import relationalai.semantics as rai
 
-model = Model("reconciliation_example")
+model = Model("reconciliation_rule")
 
 # --- Ontology ---
 

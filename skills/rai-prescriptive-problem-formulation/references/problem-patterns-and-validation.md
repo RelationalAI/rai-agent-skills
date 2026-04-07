@@ -157,7 +157,7 @@ p.satisfy(model.where(w.num > 1, w_prev.num == w.num - 1, ...).require(
     z == z_prev + sum(d, y).per(Product, w)))
 ```
 
-See `../examples/retail_markdown.py`.
+See `../examples/one_hot_temporal_recurrence.py`.
 
 ### Piecewise linear (PWL) cost approximation
 
@@ -174,7 +174,7 @@ p.satisfy(model.where(...).require(
     sum(Seg1.limit * y_bin).where(Seg1.seg == Seg2.seg - 1).per(t)))
 ```
 
-See `../examples/supply_chain_transport.py`.
+See `../examples/multi_concept_union_objective.py`.
 
 ---
 
@@ -461,7 +461,7 @@ Systematic validation catches issues before the solver does (or before the solve
 
 Identifying the problem type early drives better formulation decisions — variable patterns, constraint structures, solver selection, and common pitfalls are all type-dependent.
 
-For the full classification table (semantic + structural signals), disambiguation rules, per-type structural checklists, and template references, see `rai-problem-discovery/prescriptive.md`.
+For the full classification table (semantic + structural signals), disambiguation rules, per-type structural checklists, and template references, see `rai-discovery/prescriptive.md`.
 
 Quick reference for validation use:
 
@@ -476,3 +476,12 @@ Quick reference for validation use:
 **Note:** Multi-period is an attribute, not a type. A multi-period problem adds time-indexed variables and balance constraints linking periods to whichever base type applies.
 
 ---
+
+## Multi-Objective Validation
+
+When a formulation has two objectives (via epsilon constraint loop), validate:
+
+1. **Objectives are in tension**: improving one worsens the other under the same constraints. Test: solve each independently — if both can be optimal simultaneously, they don't need bi-objective treatment (combine into one).
+2. **Secondary expressible as constraint**: the secondary objective expression can be wrapped in `model.require(expr >= eps)` or `model.require(expr <= eps)`.
+3. **Scale compatibility**: if objectives are on very different scales, the epsilon range may be skewed. Consider normalizing (rates per unit rather than absolutes).
+4. **Both objectives reference at least one decision variable**: otherwise one objective is constant and the "tradeoff" is trivial.

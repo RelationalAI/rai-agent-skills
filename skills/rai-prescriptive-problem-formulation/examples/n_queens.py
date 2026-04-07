@@ -1,3 +1,4 @@
+# Pattern: all-different constraint satisfaction via MiniZinc integer solver
 """
 N-Queens: place n queens on an n*n chessboard such that no two queens attack each other.
 

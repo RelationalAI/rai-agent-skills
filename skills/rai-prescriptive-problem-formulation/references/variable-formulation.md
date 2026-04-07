@@ -326,7 +326,7 @@ model.define(node_count(count(Node)))
 p.solve_for(Node.u, type="int", lower=1, upper=node_count)
 ```
 
-This pattern applies whenever a bound is computed from data (counts, max values, sums) rather than a property on the variable's concept. See `../examples/traveling_salesman.py`.
+This pattern applies whenever a bound is computed from data (counts, max values, sums) rather than a property on the variable's concept. See `../examples/subtour_elimination_mtz.py`.
 
 ### Standalone variables (not attached to a named concept)
 
@@ -339,7 +339,7 @@ p.solve_for(bin_tl(t, y_bin_tl), type="bin", name=["y_bin_tl", t],
             where=[t == departure_days])
 ```
 
-Use this when no appropriate concept exists as a carrier, or when a variable is purely parametric (indexed only by Integer, String, etc.). See `../examples/supply_chain_transport.py`.
+Use this when no appropriate concept exists as a carrier, or when a variable is purely parametric (indexed only by Integer, String, etc.). See `../examples/multi_concept_union_objective.py`.
 
 ### Granularity
 
@@ -656,7 +656,7 @@ p.solve_for(Route.x_flow(Scenario, x_flow), name=[Scenario.name, Route.origin, R
 
 **Why prefer Scenario Concept when possible:** Results are incorporated into the ontology — queryable via `model.select()` like any other property, composable with other model queries, and available for downstream derived properties. Loop results live outside the model in Python DataFrames. Use Loop only when the problem *structure* changes between scenarios (entities added/removed, constraint graph differs).
 
-See `rai-prescriptive-solver-management/examples/portfolio_balancing_scenarios.py`, `diet_scenarios.py`, `grid_interconnection_scenarios.py`.
+See `rai-prescriptive-solver-management/examples/scenario_concept_parameter_sweep.py`, `scenario_concept_bound_scaling.py`, `scenario_concept_milp.py`.
 
 ### Loop + where= filter — entity exclusion and partitioned sub-problems
 
@@ -687,6 +687,6 @@ for factory_name in factory_names:
     p.solve("highs", time_limit_sec=60)
 ```
 
-See `rai-prescriptive-solver-management/examples/factory_production_scenarios.py`.
+See `rai-prescriptive-solver-management/examples/partitioned_iteration_scenarios.py`.
 
 ---

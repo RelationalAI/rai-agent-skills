@@ -1,6 +1,6 @@
 # Real Model Examples
 
-These are real base models from production RAI projects, showing different patterns for building starter ontologies.
+These are real base models from production RAI projects, showing different patterns for building starter ontologies. These examples focus on **build patterns** — data loading, Sources class setup, FK binding, and file organization. For advanced design patterns (enrichment, categorization, composition, time hierarchies), see the examples in `rai-ontology-design`.
 
 ## Example 1: TPC-H Supply Chain (Snowflake tables, hierarchy, compound identity)
 

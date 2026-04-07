@@ -53,8 +53,10 @@ model.define(Product.new(model.data(df).to_schema()))
 # Query — prefer model.where/model.select for multi-model safety
 result = model.where(Product.cost > 10).select(Product.id, Product.cost).to_df()
 
-# Debugging — inspect prints data to stdout
-Product.cost.inspect()
+# Debugging — print() shows readable PyRel structure, .inspect() materializes data
+print(Product.cost)        # → Product.cost
+print(Product.cost > 10)   # → Product.cost > 10
+Product.cost.inspect()     # → executes query, prints DataFrame to stdout
 
 # Solver
 p = Problem(model, Float)
@@ -68,46 +70,7 @@ p.solve("highs")
 
 ## Imports
 
-All v1 import paths:
-
-```python
-# Module alias (preferred in reference KGs for conciseness)
-import relationalai.semantics as rai
-# Then use: rai.Model, rai.Concept, rai.Property; model.where(), model.select(), model.define(), etc.
-
-# Explicit imports (preferred in standalone scripts / solver code)
-from relationalai.semantics import (
-    Model,                              # Model creation
-    Float, Integer, String, Date,       # Type references
-    DateTime, Number,                   # DateTime for timestamps, Number.size(p,s) for decimals
-    sum, count, max, min, avg,          # Aggregation — shadows Python builtins (see note below)
-    per, where, select, define,         # Query/definition functions
-    require,                            # Constraint creation (also model.require)
-    data, distinct,                     # Data loading, dedup
-)
-
-# Reasoner-specific imports
-from relationalai.semantics.reasoners.prescriptive import (
-    Problem,
-    all_different, implies, special_ordered_set_type_1, special_ordered_set_type_2,
-)
-from relationalai.semantics.reasoners.graph import Graph
-
-# Standard library
-from relationalai.semantics import std
-from relationalai.semantics.std.datetime import datetime       # datetime.year(), .month(), etc. — shadows Python datetime
-from relationalai.semantics.std import datetime as dt           # dt.date.period_days(), dt.datetime.to_date()
-from relationalai.semantics.std import math                     # math.abs()
-from relationalai.semantics.std.strings import string, concat   # string conversion, concatenation
-from relationalai.semantics.std import strings                  # full string library
-from relationalai.semantics.std import re                       # regex module (v1)
-
-# Builtin shadowing — when you need both RAI and Python builtins, use a module alias:
-from relationalai.semantics.std import aggregates as aggs       # aggs.sum, aggs.count, aggs.max, aggs.min
-import datetime as py_datetime                                  # Python stdlib datetime
-```
-
-**Long import lines:** Split across multiple lines with `()` or use `import relationalai.semantics as rai` to keep lines manageable.
+For the complete import catalog, see [imports.md](references/imports.md).
 
 ---
 
@@ -140,6 +103,8 @@ Types are imported objects, not strings. Used in Property f-strings and as type 
 **`Number.size(precision, scale)`** — always use with explicit parameters. `Number` alone (unparameterized) causes type inference issues and should be avoided. Always specify `Number.size(p, s)` (e.g., `Number.size(38, 4)` for Snowflake NUMBER columns). Do NOT call `Number(38, 4)` directly (that's concept invocation, not type construction).
 
 **Deprecated alias:** `decimal` is a deprecated alias for `Number` — do not use it. Use `Number.size(p, s)` instead.
+
+**Snowflake type alignment:** When loading from Snowflake tables, the property type must match the column's actual data type. Verify with `DESCRIBE TABLE` or `INFORMATION_SCHEMA.COLUMNS`. See [rai-ontology-design](../rai-ontology-design/SKILL.md) for the full mapping table and [rai-build-starter-ontology](../rai-build-starter-ontology/SKILL.md) for the validation workflow.
 
 ---
 
@@ -258,7 +223,7 @@ p.minimize((1 - x) ** 2 + 100 * (y - x**2) ** 2)
 
 **Bracket access:** Use `rel["field"]` to access named roles. See References and Aliasing section below.
 
-**`Chain.ref()` and `.alt()`:** For independent chain traversals and inverse relationships, see [expression-rules.md](references/expression-rules.md#chain-ref-and-alt).
+**`Chain.ref()` and `.alt()`:** For independent chain traversals and inverse relationships, see [expression-rules.md](references/expression-rules.md#chainref-and-alt).
 
 ---
 
@@ -293,6 +258,16 @@ model.define(Order.priority_label("low")).where(Order.total <= 1000)
 ```
 
 **`model.where(...).define(...)` and `model.define(...).where(...)`** — both directions are valid. Use whichever reads more naturally for the logic.
+
+**Computed properties from aggregation** — use `.per()` inside `define()` to materialize aggregated metrics onto entities:
+
+```python
+# Computed metric: count of operations per site
+model.where(
+    Operation.destination_site(op, site),
+    Operation.type(op, "SHIP")
+).define(Site.count_is_destination(site, aggs.count(op).per(site)))
+```
 
 **Key principle:** Most logic should live in definitions. Queries (`select().to_df()`) should be simple — selecting and aggregating values that definitions have already computed. If you find yourself writing complex logic inside a query, consider extracting it into a definition instead.
 
@@ -329,7 +304,7 @@ API reference for loading data into models. For strategy guidance (authoritative
 | `.to_schema()` | Auto-map columns to matching Property names | `exclude=[]` |
 | `model.Table("DB.SCHEMA.TABLE")` | Reference a Snowflake table | Optional column schema dict |
 | `Concept.filter_by(prop=value)` | FK resolution — look up entity by property value; no match → no row | Returns matching entity or nothing |
-| `Concept.to_identity(key=value)` | Strict identity lookup — exactly one match guaranteed; raises if not found | Use for lookups where missing is an error |
+| `Concept.to_identity(key=value)` | Strict identity lookup — exactly one match guaranteed; raises if not found | Use for lookups where missing is an error. See [data-loading.md](references/data-loading.md#entity-reference-binding-relationships-fks) |
 | `Concept.new(key=value)` | Create entity instances | Identity properties as kwargs |
 | `std.common.range(n)` | Generate integer range 0..n-1 | Also `range(start, end)` |
 
@@ -360,36 +335,7 @@ model.define(concept := Concept.new(key=src.SRC_COL), concept.target_prop(src.OT
 
 **Column name casing:** Snowflake normalizes unquoted identifiers to UPPERCASE. Column schema dicts must use UPPERCASE names to match.
 
-### FK resolution with `filter_by`
-
-```python
-# Preferred: filter_by in model.define() — no separate where() needed
-model.define(
-    Order.filter_by(id=source.ORDER_ID)
-    .ordered_by(Customer.filter_by(id=source.CUSTOMER_ID))
-)
-
-# Alternative: model.where() + define()
-order = model.where(Order.id == source.ORDER_ID)
-order.define(Order.ordered_by(Customer.filter_by(id=source.CUSTOMER_ID)))
-```
-
-`filter_by` returns the entity matching the given property value. If no match exists, the relationship is not defined (no error). The `model.define(Concept.filter_by(...).prop(...))` pattern is used by modeler exports and avoids separate `where()` calls.
-
-### Multiarity property loading
-
-```python
-for nu in nutrient_csv.name:
-    model.define(food.contains(Nutrient, getattr(food_data, nu))).where(Nutrient.name == nu)
-```
-
-### Programmatic entity creation
-
-```python
-model.define(Queen.new(row=std.common.range(n)))           # Range-based
-model.define(sf := Factory.new(name="steel_factory"), sf.avail(40.0))  # Inline
-model.define(Node.new(v=Edge.i))                            # Derived from existing data
-```
+For FK resolution with `filter_by`, multiarity property loading, and programmatic entity creation patterns, see [data-loading.md](references/data-loading.md).
 
 ---
 
@@ -431,7 +377,7 @@ def solve(model):
     ...
 ```
 
-**Template examples:** See `rai-prescriptive-problem-formulation` examples: `diet.py` (linear optimization), `shift_assignment.py` (binary assignment), `portfolio_balancing.py` (pairwise expressions).
+**Template examples:** See `rai-prescriptive-problem-formulation` examples: `continuous_ternary_join.py` (linear optimization), `binary_coverage_scoped.py` (binary assignment), `quadratic_pairwise_ref.py` (pairwise expressions).
 
 ---
 ## RAI Expression Syntax
@@ -447,7 +393,7 @@ RAI expressions do not support Python's boolean keywords (`and`, `or`, `not`, `i
 | `not x_assigned` | `not_(x_assigned)` |
 | `if condition else fallback` | `value \| fallback` (ordered fallback), or `.where(condition)` on the constraint |
 
-**`|` vs `model.union()`:** The `|` operator is an ordered fallback (picks the first branch that succeeds — if-then-else semantics). `model.union()` is set OR (collects ALL matching branches). Use `|` for defaults and case-when chains; use `model.union()` for multi-term objectives or OR-filtering. The `|` operator creates a `Match` object (importable from `relationalai.semantics`) — nested matches are flattened: `(a | b) | c` == `a | b | c`.
+**`|` vs `model.union()`:** The `|` operator is an ordered fallback (picks the first branch that succeeds — if-then-else semantics). `model.union()` is set OR (collects ALL matching branches). Use `|` for defaults and case-when chains; use `model.union()` for multi-term objectives or OR-filtering. The `|` operator creates a `Match` object (importable from `relationalai.semantics`) — nested matches are flattened: `(a | b) | c` == `a | b | c`. **All `union()` branches must return the same number of values** (same "shape"). A bare relation call returns 1 value; `where(...)` without `select()` returns 0. Mixing them causes `[Inconsistent branches]`. Fix: wrap all branches in `where(...)` with matching `select()` columns, or chain relation calls so all return values.
 
 ### Property Definition F-Strings
 
@@ -479,21 +425,10 @@ Shipment.x_flow = model.Property(f'{Shipment} has {{x_flow:float}}')  # Number(3
 | Redundant `model.Property()` for identity field | `identify_by` already auto-creates the property | Remove the duplicate `model.Property()` declaration |
 | `FDError: Found non-unique values` | Property received two different values for same key set | Establish actual multiplicity — switch to `Relationship` if truly many-to-many, fix overlapping rules, or fix data quality if it should be many-to-one |
 | Empty DataFrame from queries | Missing `define()` call, wrong concept type, or missing data | Verify entities exist and computed values are `define()`d before querying |
-| `TypeMismatch` error | Comparing concepts of different types via `==` | Ensure both sides are the same concept type; value types prevent cross-type joins |
-| Duplicate column name on Snowflake export | Case-insensitive column name collision (`LongShort` vs `longshort`) | Use distinct uppercase names for all `.alias()` values |
-| Using Python builtins on RAI expressions | `abs()`, `min()`, `max()`, `round()` don't work on symbolic expressions | Use `math.abs()`, RAI aggregation imports, or algebraic equivalents |
-| `//` on two decision variables | Floor division fails when both operands are decision variables | Works fine on property // constant (e.g., `Player.p // group_size`). Only fails with two solver variables — use algebraic reformulation |
-| `count(X, condition)` not working | Using wrong syntax for conditional counting | Use `count(Player, x == group)` — second arg is a condition expression, works in both query and solver contexts |
-| Long import lines breaking linters | LLMs generate 100+ char single-line imports | Split across multiple lines with `()` or use module alias (`import relationalai.semantics as rai`) |
 | Using bare `Number` without `.size()` | Causes type inference issues at runtime | Always use `Number.size(p, s)` (e.g., `Number.size(38, 4)`) |
-| Relationship declared but has no data | `model.Relationship(...)` without a corresponding `model.define()` data binding | Relationship has NO DATA at runtime — any `.where()` join on it returns zero matches. Add `model.define(From.rel(To)).where(...)` to populate it from data. |
-| Using `~` for negations | Causes `TypeError: bad operand type for unary ~: 'Expression'` | Always use `model.not_(expr)`
-| Using aggregates without model.distinct() | Causes duplicate rows in output | use `model.select(model.distinct(expr))` around all columns |
-| Incorrect datetimes for inline data | Causes query errors or empty result sets | use eg `df["date"] = pd.to_datetime(df["date"]).dt.date` |
-| Entity-valued Property for concept-to-concept FK | Some model files use `model.Property(f"{Order} placed by {Customer:customer}")` for FKs | Recommended when the FK is many-to-one (each Order has exactly one Customer) — provides performance benefits and enforces the functional constraint. Use `model.Relationship()` only if the association is truly many-to-many or cardinality is uncertain |
-| Dynamic model loading loses module-level concepts | Using `importlib.util` to load a model file — concepts defined as module variables aren't on the model object | After loading, iterate module attributes and `setattr(model, name, obj)` for each `rai.Concept` instance |
-| Standalone script can't see base model data | New script creates `Model("same name")` but doesn't import the base model module — concept definitions and `define()` rules aren't in scope | Import the base model (e.g., `from base_model import model, Concept`) so all definitions execute in the same session |
-| Typo creates silent empty property | `Customer.nmae` (typo) silently creates an empty property via implicit property creation — no error | `create_config(model={"implicit_properties": False})` or set `implicit_properties: false` under `model:` in raiconfig.yaml |
+| Using `~` for negations | Causes `TypeError: bad operand type for unary ~: 'Expression'` | Always use `model.not_(expr)` |
+
+For additional pitfalls (type mismatches, Snowflake export casing, Python builtins on RAI expressions, implicit property typos, and more), see [common-pitfalls.md](references/common-pitfalls.md).
 
 ### Avoid Python loops around `model.define()` / `model.require()`
 
@@ -523,38 +458,20 @@ For detailed `.where()` targets, `.per()` scoping, and operator precedence rules
 
 ## Debugging Empty or Unexpected Results
 
-When a query returns an empty DataFrame or wrong values, work through these checks in order (cheapest/highest-yield first):
+When queries return empty DataFrames or wrong values:
 
-1. **Check for typos (implicit properties):**
-   Typos silently create empty properties (see pitfall table above). Quick test:
-   set `implicit_properties: false` in raiconfig.yaml and re-run — any typo will error.
-
-2. **Check type alignment:**
-   `.where(Order.id == "123")` returns empty when `id` is Integer — no error.
-   Fix: use matching type (`.where(Order.id == 123)`).
-   Use `.inspect()` to see actual values and infer types.
-   Also check datetime columns: pandas Timestamps don't match Date properties —
-   convert with `df["col"] = pd.to_datetime(df["col"]).dt.date`.
-
-3. **Check join paths:**
-   Does the relationship used in `.where()` have a `model.define()` populating it?
-   Test: `Concept.rel.inspect()` — if empty, add a `model.define()` rule to populate it.
-
-4. **Check entity counts:**
+**Step 0: Print the expression to verify structure.** All PyRel objects (Concepts, Expressions, Fragments, Aggregates, Refs) have readable `repr`. Use `print()` to confirm an expression means what you think before querying:
 
 ```python
-model.select(count(Customer)).to_df()
+print(Product.cost * Product.quantity)      # → Product.cost * Product.quantity
+print(aggs.sum(Order.total).per(Customer))  # → (sum Order.total (per Customer))
+print(model.where(Order.status == "active")) # → (where Order.status == 'active')
 ```
 
-   If 0: data not loaded. Check table path and `model.define()` rules.
+This catches expression-level mistakes (wrong concept in `.per()`, wrong property in an aggregation) before they produce empty or wrong results. Distinct from `.inspect()` which executes a query and materializes data.
 
-5. **Isolate where conditions:**
-
-```python
-model.where(A).select(X).to_df()            # works?
-model.where(A, B).select(X).to_df()         # still works?
-model.where(A, B, C).select(X).to_df()      # empty? → C is the culprit
-```
+Then check: typos (set `implicit_properties: false`), type alignment (Integer vs String), join paths (`.inspect()` on relationships), and entity counts.
+For the full step-by-step debugging checklist, see [common-pitfalls.md](references/common-pitfalls.md#debugging-empty-or-unexpected-results).
 
 ---
 
@@ -564,6 +481,8 @@ model.where(A, B, C).select(X).to_df()      # empty? → C is the culprit
 |---|---|---|
 | Multiarity properties + refs | Binding multiple Float.ref() in `.where()`, pairwise week comparison | [examples/retail_markdown_code.py](examples/retail_markdown_code.py) |
 | Standalone Property + union | Property not attached to concept, `model.union()` for multi-component objective, segment self-join | [examples/supply_chain_transport_code.py](examples/supply_chain_transport_code.py) |
+| print() debugging | Readable repr for verifying expression structure before query execution | [examples/pprint_debugging.py](examples/pprint_debugging.py) |
+| End-to-end walkthrough | Full ontology + graph + aggregation + query in a single script | [examples/customer_segmentation.py](examples/customer_segmentation.py) |
 
 ---
 
@@ -573,4 +492,6 @@ model.where(A, B, C).select(X).to_df()      # empty? → C is the culprit
 |-----------|-------------|------|
 | Expression rules | `.where()`, `.per()`, aggregation targets, scoping rules, operator precedence | [expression-rules.md](references/expression-rules.md) |
 | Data loading | Primitive binding, FK/entity reference binding, `to_schema()` rules, unary flags, optional vs required columns | [data-loading.md](references/data-loading.md) |
-| Standard library | `rai_abs()`, string functions, date arithmetic, complete function reference | [standard-library.md](references/standard-library.md) |
+| Standard library | `math.abs()`, string functions, date arithmetic, complete function reference | [standard-library.md](references/standard-library.md) |
+| Imports | Complete import catalog — module aliases, explicit imports, reasoner imports, std library, builtin shadowing | [imports.md](references/imports.md) |
+| Common pitfalls | Lower-frequency pitfalls and step-by-step debugging checklist for empty/unexpected results | [common-pitfalls.md](references/common-pitfalls.md) |

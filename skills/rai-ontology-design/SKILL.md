@@ -11,15 +11,16 @@ description: Covers RAI domain modeling decisions including concepts, relationsh
 **What:** Domain modeling decisions — concepts, relationships, properties, data mapping, model composition, and model enrichment for optimization.
 
 **When to use:**
-- Building an ontology from source data (tables/schema)
-- Deciding whether something should be a concept vs. a property
+- **As design authority** — consulted by `rai-build-starter-ontology` during greenfield builds for concept, relationship, and property design decisions
+- **Enriching an existing model** — adding properties, relationships, or subtypes to a model that already loads and queries
+- **Reviewing or evolving a model** — assessing model gaps, examining ontology inventories, applying advanced patterns
+- **Working with modeler exports** — understanding and extending models exported from the RAI modeler (latest or legacy format)
 - Mapping schema columns to model properties and relationships
 - Assessing model gaps for optimization (READY / MODEL_GAP / DATA_GAP)
-- Reviewing or enriching a modeler-exported model
 - Designing cross-product decision concepts for optimization
-- Understanding the modeler export format (latest: top-level model + Sources class; legacy: initialize() + Concepts/BASE_SCHEMA)
 
 **When NOT to use:**
+- Building a first ontology from scratch — start with `rai-build-starter-ontology`, which uses this skill as its design authority
 - PyRel syntax reference (imports, types, f-string patterns, stdlib) — see `rai-pyrel-coding`
 - Optimization formulation (variables, constraints, objectives) — see `rai-prescriptive-problem-formulation`
 - Query construction (select, aggregation, joins) — see `rai-querying`
@@ -51,9 +52,11 @@ description: Covers RAI domain modeling decisions including concepts, relationsh
 
 ---
 
-## Ontology Design Workflow
+## Design Decision Sequence
 
-When building an ontology, start from the business domain -- what concepts exist, what questions must the model answer -- then find data mappings. Domain-first modeling produces better models than table-to-concept mapping because user intent drives concept selection rather than table structure. Think through these phases in order. This is not a pipeline to execute step-by-step -- it is the order in which decisions should be considered, since each phase depends on the one before it.
+These are the design decisions that underlie any ontology, whether built from scratch via `rai-build-starter-ontology` or evolved incrementally. They are listed in dependency order — each phase depends on the one before it. For a complete greenfield build workflow, use `rai-build-starter-ontology`.
+
+Start from the business domain — what concepts exist, what questions must the model answer — then find data mappings. Domain-first modeling produces better models than table-to-concept mapping because user intent drives concept selection rather than table structure.
 
 0. **Scope first (for new models)** -- Define 1-3 concrete questions the model must answer and explicitly list what is out of scope. Keep the first version to ~10-15 must-have properties. A tight scope keeps the model small enough to implement and validate without rework. Example:
 
@@ -74,6 +77,8 @@ When building an ontology, start from the business domain -- what concepts exist
 6. **Validate data scale before setting thresholds** -- When defining subtypes or computed flags with numeric thresholds (e.g., "high traffic" locations, "high value" customers), explore the actual data distribution first. Run `model.select(aggs.min(X.prop), aggs.max(X.prop), aggs.avg(X.prop)).to_df()` to understand the value range before choosing a cutoff. Assuming a 0-100 scale when the data is actually 0-10 (or vice versa) produces zero results or captures everything.
 
 **Key pattern: identify then validate.** Brainstorm broadly in steps 2 and 3, then validate against the schema. This avoids premature commitment to a modeling choice that doesn't survive contact with the data.
+
+**Quality gates:** After steps 3-5, apply the checks from [fact-decomposition-and-validation.md](references/fact-decomposition-and-validation.md) (irreducibility, sample data validation, counterexample) to catch structural errors early.
 
 ---
 
@@ -153,11 +158,9 @@ model.define(Order.revenue(sum(LineItem.total_price).per(Order)))
 
 ### Entity count guidance
 
-**Entity counts of zero at introspection time are normal.** Many models create entities dynamically when the program runs:
-- Concepts loaded from data files get entities at runtime
-- Cross-product decision concepts get entities from `model.define(X.new(a=A, b=B))`
+**Entity counts of zero at introspection time are normal.** Concepts loaded from data or created via `model.define(X.new(...))` get entities at runtime. If a concept has properties defined but zero entities, it will be populated at runtime -- do not flag it as a gap.
 
-**What matters is whether the concept has properties defined.** If a concept exists with properties but zero entities, it will be populated at runtime. Do not flag it as a gap.
+**Independent concepts:** Reference entities (countries, currencies, categories) may exist without participating in any relationship. Do not flag zero-relationship entities as errors. Only declare mandatory role constraints when the business domain truly requires participation.
 
 ### Compound identity for multi-key entities
 
@@ -181,9 +184,7 @@ See [advanced-modeling.md](references/advanced-modeling.md) for examples of both
 
 ### Use strict mode during development
 
-Disable implicit properties during development to catch typos and undefined property references at definition time rather than silently creating new properties. When `implicit_properties` is `false`, accessing an undeclared property raises an error immediately. By default it is `true`.
-
-To enable strict mode, set `implicit_properties: false` in your `raiconfig.yaml` under the model's config section. This causes any access to an undeclared property to raise an error immediately, rather than silently creating a new property.
+Set `implicit_properties: false` in your `raiconfig.yaml` under the model's config section to catch typos and undefined property references at definition time. Without this, accessing an undeclared property silently creates a new one (default is `true`).
 
 ---
 
@@ -268,6 +269,8 @@ Enrollment.grade = model.Property(f"{Enrollment} has {Float:grade}")
 | Inverse relationships | `.alt()` for concise inverse declaration | [advanced-modeling.md](references/advanced-modeling.md) |
 | Role naming | Named roles when same concept appears twice: `{Person:payer}` | [advanced-modeling.md](references/advanced-modeling.md) |
 | Same-type references | `.ref()` for relating two instances of the same type | [advanced-modeling.md](references/advanced-modeling.md) |
+| Constraint vocabulary | Mandatory/optional, subset, exclusion, self-referential, frequency, value-comparison | [constraint-patterns.md](references/constraint-patterns.md) |
+| Decomposition checks | Irreducibility, minimum key span — verify ternaries are truly irreducible | [fact-decomposition-and-validation.md](references/fact-decomposition-and-validation.md) |
 
 ---
 
@@ -281,7 +284,7 @@ For guidance on producing a descriptive inventory of a model and classifying unm
 
 ### Loading and binding data to the model 
 
-**Snowflake type mapping:**
+**Snowflake type mapping** (see also `rai-build-starter-ontology` for the full validation workflow):
 
 | Snowflake type | RAI base type |
 |---|---|
@@ -291,9 +294,11 @@ For guidance on producing a descriptive inventory of a model and classifying unm
 | FLOAT, DOUBLE | `Float` |
 | DATE | `Date` |
 | TIMESTAMP_NTZ, TIMESTAMP | `DateTime` |
-| BOOLEAN | Unary `Relationship` (not boolean property) |
+| BOOLEAN | `Boolean` property, or unary `Relationship` for flag-style |
 
-**Load data** using `model.define(C.new(id=TABLE.key))`, **bind properties and relationships** using `model.define(...).where(...)`. For complete data loading API reference (CSV, Snowflake, `filter_by`, `model.where`, required vs optional columns, boolean flags), see `rai-pyrel-coding` [data-loading.md](../rai-pyrel-coding/references/data-loading.md). For a minimal worked example, see [examples/jaffle.py](examples/jaffle.py).
+Always verify column types against `INFORMATION_SCHEMA.COLUMNS` before writing property declarations. A mismatch causes a `TyperError` at query time with no detail about which property failed. Let the schema dictate the type, not the column name.
+
+**Load data** using `model.define(C.new(id=TABLE.key))`, **bind properties and relationships** using `model.define(...).where(...)`. For complete data loading API reference (CSV, Snowflake, `filter_by`, `model.where`, required vs optional columns, boolean flags), see `rai-pyrel-coding` [data-loading.md](../rai-pyrel-coding/references/data-loading.md). For a minimal worked example, see [examples/value_type_fk_resolution.py](examples/value_type_fk_resolution.py).
 
 **Key rules:**
 - `Property` for many-to-one (functional) associations. `Relationship` for many-to-many associations.
@@ -349,14 +354,23 @@ This pattern is common in modeler exports where a single `BUSINESS` table contai
 
 ## Layering Principles
 
+### When to split into layers
+
+A single file is fine for starter ontologies and small projects. Split into a package when:
+- Multiple reasoners (solver + graph) share the same base model
+- Derived/computed logic is reused across 2+ applications
+- The file exceeds ~300 lines and has distinct data-loading vs. business-logic sections
+
 ### Layer Responsibilities
 
-Structure models in three layers with one-way dependencies: **core → computed → apps**.
+When splitting, structure models in three layers with one-way dependencies: **core → computed → apps**.
+
+> **Constraint:** The package directory name and the `Model(...)` variable name must differ. If `model = Model("my_project")`, the package cannot be called `model/`. Python resolves `import model.core` to the directory, shadowing the variable. Use a domain-specific directory name (e.g., `sc_model/`, `fraud_model/`).
 
 | Layer | Purpose | Contains | Avoids |
 |-------|---------|----------|--------|
-| **Core** (`model/core/`) | Physical-to-semantic translation | Concept declarations, properties bound to source columns, structural FK relationships | Aggregations, derivations, business rules |
-| **Computed** (`model/computed/`) | Reusable business logic | Derived properties, segmentations, calculated metrics, entity subtypes | Application-specific filters or one-off calculations |
+| **Core** (`<name>/core.py`) | Physical-to-semantic translation | Concept declarations, properties bound to source columns, structural FK relationships | Aggregations, derivations, business rules |
+| **Computed** (`<name>/computed.py`) | Reusable business logic | Derived properties, segmentations, calculated metrics, entity subtypes | Application-specific filters or one-off calculations |
 | **Application** (`apps/`) | Feature delivery | Queries, aggregations, parameterized reports, optimization | Redefining concepts or business rules |
 
 **Decision rule:** Raw source data mapping → Core. Reused across 2+ apps or fundamental business semantics → Computed. Everything else → Application.
@@ -400,32 +414,24 @@ Model gaps are ONLY for data that exists in the schema but isn't mapped to the m
 
 Relationship gaps also accept optional `madlib` (PyRel reading-string, e.g., `{Order} placed by {customer:Customer}`) and `description`. `from_concept` is the concept whose source table contains the FK column.
 
-**If the schema shows NO unmapped columns (everything is "Already in model"):**
-- There are no model_gaps. All suggestions should be READY.
-- Decision variables, extended concepts, and cross-product relationships are formulation constructs created during problem formulation -- they are NOT model_gaps.
-
-**Base model vs. formulation layer:** Every base model concept must map to at least one authoritative source table (see Authoritative vs. joinable sources above). If a proposed "enrichment" has no source table, it belongs to the formulation layer -- it is a decision variable, cross-product concept, or computed expression, not a model gap.
+**Base model vs. formulation layer:** If a proposed "enrichment" has no source table, it belongs to the formulation layer, not the base model. Decision variables, cross-product concepts, computed expressions, and business parameters are formulation constructs -- NOT model_gaps.
 
 | Layer | Examples | Has source table? |
 |-------|----------|-------------------|
 | **Base model** | Customer, Site, Order with properties from schema | Yes -- loaded from data |
 | **Formulation** | FulfillmentAssignment, production_quantity, total_cost expression | No -- created during problem setup |
 
-Note: This distinction is about **data provenance for gap classification**, not code placement. In generated code, formulation-layer Property *definitions* (e.g., `Entity.amount = model.Property(...)`) still go in `define_model()` alongside base model definitions. Only solver registrations (`p.solve_for`, `p.satisfy`, `p.minimize`) go in `define_problem()`.
+Note: This distinction is about **data provenance for gap classification**, not code placement. Formulation-layer Property *definitions* still go in `define_model()`; only solver registrations go in `define_problem()`.
 
-For concrete examples of what enrichment looks like in practice, see [enrichment-patterns.md](references/enrichment-patterns.md).
-
-**What is NOT a model_gap:**
-- Decision variables (e.g., quantity_to_allocate, assigned_flag) -- created during formulation
-- Extended/cross-product concepts (e.g., Worker x Shift) -- created during formulation
-- Computed properties (e.g., total_cost = quantity * unit_cost) -- defined as expressions during formulation
-- Business parameters (budget, threshold) -- these are parameter_gap, not model_gap
+For concrete examples, see [enrichment-patterns.md](references/enrichment-patterns.md).
 
 **Same-type multiarity detection:** When a concept has a multiarity property referencing the same type (e.g., `{Stock} and {stock2:Stock} have {covar:float}` or `{Node} connects to {node2:Node} with {distance:float}`), this IS the same-type relationship — do NOT suggest an additional relationship gap. The multiarity property pattern handles pairwise operations between instances of the same type. Only suggest relationship gaps between DIFFERENT concepts.
 
 ---
 
 ## Enrichment Workflow
+
+**Prerequisite:** The model must already load and query successfully. If no model exists yet, use `rai-build-starter-ontology` first.
 
 After problem selection, if feasibility is MODEL_GAP, enrich the ontology before formulation:
 
@@ -459,22 +465,28 @@ For detailed enrichment patterns, property vs relationship mapping, and source c
 
 ## Examples
 
-| Domain | Pattern Demonstrated | File |
+| Pattern | Techniques Demonstrated | File |
 |---|---|---|
-| E-commerce (Jaffle) | Value-type concepts, FK resolution with filter_by, boolean flags as unary Relationships, computed aggregations | [examples/jaffle.py](examples/jaffle.py) |
-| Supply chain (TPC-H) | Geographic hierarchy chain, compound identity for junction concepts, derived metrics layered on base model | [examples/tpch.py](examples/tpch.py) |
-| Food truck (Tasty Bytes) | Multi-level location + time hierarchies, customer segmentation with mutually exclusive conditional rules | [examples/tasty_bytes.py](examples/tasty_bytes.py) |
-| Marketing (Ad Spend) | Sources class, derived concepts from column values, bridge entity, `.alias()` for inverse | [examples/ad_spend.py](examples/ad_spend.py) |
-| Supply chain network | Many concepts, individual Properties, self-referential SKU→SKU, identity limited to natural key | [examples/supply_chain.py](examples/supply_chain.py) |
-| Machine maintenance | CSV data, cross-product decision concepts, constrained cartesian via `.where()`, `.ref()` derived properties, generated Period concept | [examples/machines.py](examples/machines.py) |
-| Telco network | Large-scale (14 tables, 12+ concepts), unary flags, bidirectional inverses, self-referential caller/callee, walrus operator binding | [examples/telco.py](examples/telco.py) |
-| Engineering analytics | Multi-schema sources (4 domains), individual Properties, boolean flags as unary Relationships, cross-system linking (GitHub↔PM) | [examples/engineering_analytics.py](examples/engineering_analytics.py) |
+| Value-type + FK resolution | Value-type concepts, FK resolution with filter_by, boolean flags as unary Relationships, computed aggregations | [examples/value_type_fk_resolution.py](examples/value_type_fk_resolution.py) |
+| Hierarchy + compound key | Geographic hierarchy chain, compound identity for junction concepts, derived metrics layered on base model | [examples/geographic_hierarchy_compound_key.py](examples/geographic_hierarchy_compound_key.py) |
+| Multi-level hierarchy | Multi-level location + time hierarchies, entity classification with mutually exclusive conditional rules | [examples/multi_level_hierarchy_segmentation.py](examples/multi_level_hierarchy_segmentation.py) |
+| Derived concept + bridge | Sources class, derived concepts from column values, bridge entity, `.alias()` for inverse | [examples/derived_concept_bridge_entity.py](examples/derived_concept_bridge_entity.py) |
+| Self-referential hierarchy | Many concepts, individual Properties, self-referential Entity→Entity, identity limited to natural key | [examples/self_referential_bom.py](examples/self_referential_bom.py) |
+| Cross-product decision concept | CSV data, cross-product decision concepts, constrained cartesian via `.where()`, `.ref()` derived properties, generated Period concept | [examples/cross_product_decision_concept.py](examples/cross_product_decision_concept.py) |
+| Large-scale bidirectional | Large-scale (14 tables, 12+ concepts), unary flags, bidirectional inverses, self-referential caller/callee, walrus operator binding | [examples/large_scale_bidirectional.py](examples/large_scale_bidirectional.py) |
+| Multi-schema cross-system | Multi-schema sources (4 domains), individual Properties, boolean flags as unary Relationships, cross-system entity linking | [examples/multi_schema_cross_system.py](examples/multi_schema_cross_system.py) |
+| Pairwise property + ref | Binary/pairwise property, `.ref()` for same-type binding, junction concept for many-to-many | [examples/pairwise_property_ref.py](examples/pairwise_property_ref.py) |
+| Auxiliary schema enrichment | Auxiliary schema loading, composite key enrichment, filter_by for cross-schema binding | [examples/auxiliary_schema_enrichment.py](examples/auxiliary_schema_enrichment.py) |
+| Modeler export (legacy) | Legacy `initialize()` format, `_Concept` prefix, `Property("{...}")` strings, standalone `define()`, `.where()` binding | [examples/modeler_legacy_export.py](examples/modeler_legacy_export.py) |
 
 ---
 
 ## Reference files
 
-- Adding properties or relationships to a base model for optimization? See [enrichment-patterns.md](references/enrichment-patterns.md) for when enrichment is needed, property vs relationship mapping, and source column requirements
-- Working with enum concepts, cross-product patterns, or advanced modeling? See [categorization-and-advanced.md](references/categorization-and-advanced.md) for categorization patterns and cross-product decision concepts
-- Working with a modeler-exported model or composing model layers? See [modeler-and-composition.md](references/modeler-and-composition.md) for the latest export format (Sources class, all Relationship, filter_by), legacy format (initialize(), BASE_SCHEMA), and layered model composition
-- Producing a model inventory or classifying unmapped data? See [examination-guidance.md](references/examination-guidance.md) for description principles and unmapped data classification
+- Enriching a model for optimization (relationship promotion, cross-products, multi-hop relationships, gap classification)? See [enrichment-patterns.md](references/enrichment-patterns.md)
+- Categorization, subtypes, derivation modes, temporal tracking, or semantic stability? See [categorization-and-advanced.md](references/categorization-and-advanced.md)
+- Advanced modeling (value types, identity patterns, ternary properties, inverse relationships, role naming, scenario modeling)? See [advanced-modeling.md](references/advanced-modeling.md)
+- Modeler exports or model composition? See [modeler-and-composition.md](references/modeler-and-composition.md)
+- Model inventory or unmapped data classification? See [examination-guidance.md](references/examination-guidance.md)
+- Decomposition quality gates (irreducibility, sample data validation, counterexample)? See [fact-decomposition-and-validation.md](references/fact-decomposition-and-validation.md)
+- Constraint patterns beyond FD (mandatory/optional, subset, exclusion, self-referential, frequency, value-comparison)? See [constraint-patterns.md](references/constraint-patterns.md)

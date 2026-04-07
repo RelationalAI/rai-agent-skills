@@ -25,7 +25,7 @@ This allows you to write PyRel programs and use the `rai` CLI tool.
 - Writing PyRel models or queries — see `rai-pyrel-coding`
 - Designing ontology structure — see `rai-ontology-design`
 - Configuring engines, profiles, or advanced settings — see `rai-configuration`
-- Discovering analytical use cases for an existing model — see `rai-problem-discovery`
+- Discovering what questions an existing model can answer — see `rai-discovery`
 
 ---
 
@@ -106,4 +106,4 @@ Propose either
 ## Important Skills
 - `rai-pyrel-coding`: Write PyRel (use always)
 - `rai-ontology-design`: Design PyRel models (use for modeling complicated domains & use cases)
-- `rai-problem-discovery`: Design PyRel solutions (use for building full-scale intelligent apps)
+- `rai-discovery`: Discover questions to answer or problems to solve — surfaces what the data can support and routes to the right reasoner workflow

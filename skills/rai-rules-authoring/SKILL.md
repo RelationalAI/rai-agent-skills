@@ -36,7 +36,7 @@ and reconciliation rule types.
 - Testing that a rule produces correct results on known data
 
 **When NOT to use:**
-- Discovering what rules a model can support (reasoner classification, feasibility) — see `rai-problem-discovery`
+- Discovering what rules a model can support (reasoner classification, feasibility) — see `rai-discovery`
 - PyRel syntax reference (imports, types, property patterns) — see `rai-pyrel-coding`
 - Ontology modeling decisions (concept vs property, data mapping) — see `rai-ontology-design`
 - Optimization formulation (variables, constraints, objectives) — see `rai-prescriptive-problem-formulation`
@@ -140,33 +140,12 @@ model.where(condition).define(Entity.is_valid())
 
 **Classification** — typed sub-concepts with mutually exclusive conditions:
 
-Use typed sub-concepts (not string Properties) for derived classifications. This provides type
-safety, extensibility, and efficient filtering. See `rai-ontology-design`
-[categorization-and-advanced.md](../rai-ontology-design/references/categorization-and-advanced.md)
-for full guidance on enumeration vs. subtyping.
-
 ```python
-# Define segment hierarchy
-CustomerValueSegment = model.Concept("CustomerValueSegment")
-ValueSegmentVIP = model.Concept("ValueSegmentVIP", extends=[CustomerValueSegment])
-ValueSegmentGold = model.Concept("ValueSegmentGold", extends=[CustomerValueSegment])
-ValueSegmentStandard = model.Concept("ValueSegmentStandard", extends=[CustomerValueSegment])
-
-# Create named instances
-SegmentName = model.Concept("SegmentName", extends=[String])
-model.define(ValueSegmentVIP.new(name=SegmentName("VIP")))
-model.define(ValueSegmentGold.new(name=SegmentName("Gold")))
-model.define(ValueSegmentStandard.new(name=SegmentName("Standard")))
-
-# Assign based on score thresholds (mutually exclusive conditions)
-Customer.value_segment = model.Relationship(f"{Customer} has value segment {CustomerValueSegment}")
-model.where(Customer.lifetime_spend >= 50000).define(Customer.value_segment(ValueSegmentVIP))
-model.where(
-    Customer.lifetime_spend >= 10000,
-    Customer.lifetime_spend < 50000,
-).define(Customer.value_segment(ValueSegmentGold))
-model.where(Customer.lifetime_spend < 10000).define(Customer.value_segment(ValueSegmentStandard))
+HighValue = model.Concept(f"{Entity} is high value")
+model.where(Entity.score > threshold).define(HighValue(Entity))
 ```
+
+Use typed sub-concepts (not string Properties) for derived classifications. For full subtype classification with multiple tiers, see [pyrel-rule-patterns.md](references/pyrel-rule-patterns.md#classification-rules). For enumeration vs. subtyping guidance, see `rai-ontology-design` [categorization-and-advanced.md](../rai-ontology-design/references/categorization-and-advanced.md).
 
 **Derivation** — computed value via `Property`:
 
@@ -204,6 +183,8 @@ Run these checks on every rule before considering it complete:
 | Join paths valid | `.where()` relationships traverse existing paths | Zero results despite matching data |
 | Type alignment | Condition compares same types | Zero matches from silent type mismatch |
 | Aggregation scoped | `.per()` present when aggregating across entities | Single global result instead of per-entity |
+
+For exhaustiveness validation (finding unclassified entities, diagnosing gaps, and adding catch-all rules), see [rule-validation-and-testing.md](references/rule-validation-and-testing.md#exhaustiveness-validation).
 
 ### Step 6: Connect to Downstream
 
@@ -307,62 +288,7 @@ stats = model.select(
 - Ratios may be > 1.0 when numerator and denominator are on different scales
 - Percentages may be stored as 0-1 (not 0-100) or vice versa
 
-### Multi-Entity Subtype Rules (Cross-Entity Joins)
-
-Complex rules can span multiple entities via relationship traversal in `.where()`. When PyRel joins
-through relationships, it acts as an **existential check** — "there exists a related entity where
-this condition is true."
-
-```python
-# Subtype spanning 3 entities: flag orders where
-#   1. Order is overdue (boolean flag)
-#   2. Customer is high-risk (existing subtype)
-#   3. Warehouse has low stock on the ordered product
-RiskyOverdueOrder = model.Concept("RiskyOverdueOrder", extends=[Order])
-
-model.define(RiskyOverdueOrder(Order)).where(
-    Order.is_overdue(),                    # boolean flag filter
-    Order.customer(Customer),              # join to Customer
-    HighRiskCustomer(Customer),            # existing subtype check
-    Order.product(Product),                # join to Product
-    Product.stocked_at(Warehouse),         # join to Warehouse
-    Warehouse.stock_level < 10,            # threshold on related entity
-)
-```
-
-**Key patterns in complex rules:**
-- **OR conditions** → separate `model.define()` calls (never use `|` operator in subtype `where()`)
-- **Existential joins** → relationship traversal in `where()` acts as "there exists"
-- **Mixing subtypes** → reference existing subtypes (e.g., `HighRiskCustomer(Customer)`) as conditions
-- **Boolean flags as filters** → use `Entity.is_flag()` in `where()`, not in `select()`
-- **Multi-hop traversal** → chain relationships: `Entity_A → Entity_B → Entity_C` via multiple `where()` conditions
-
-For a real-world 5-entity example with OR branches, see
-[complex-rule-example.md](references/complex-rule-example.md).
-
-### Rule Dependency Building Blocks
-
-Build complex rules by layering simpler components:
-
-```python
-# Layer 1: Computed property
-Order.fulfillment_ratio = model.Property(...)
-model.define(Order.fulfillment_ratio(
-    Order.shipped_qty / Order.ordered_qty
-)).where(Order.ordered_qty > 0)
-
-# Layer 2: Boolean flag (OR via multiple define calls)
-Order.is_delayed = model.Relationship(...)
-model.define(Order.is_delayed()).where(Order.status == "backordered")
-model.define(Order.is_delayed()).where(Order.status == "on_hold")
-
-# Layer 3: Subtype combining layers 1 + 2
-CriticallyDelayedOrder = model.Concept("CriticallyDelayedOrder", extends=[Order])
-model.define(CriticallyDelayedOrder(Order)).where(
-    Order.is_delayed(),
-    Order.fulfillment_ratio < 0.5,
-)
-```
+For multi-entity subtype rules (cross-entity joins, existential checks, OR conditions) and rule dependency building blocks (layered derivations), see [complex-multi-entity-rules.md](references/complex-multi-entity-rules.md).
 
 ---
 
@@ -370,32 +296,7 @@ model.define(CriticallyDelayedOrder(Order)).where(
 
 ### Rule-to-Rule Chaining
 
-Rules can consume other rules' output. The derived property from Rule A becomes a condition in Rule B.
-
-```python
-# Rule A: classify risk tier using subtypes
-RiskTier = model.Concept("RiskTier")
-HighRisk = model.Concept("HighRisk", extends=[RiskTier])
-MediumRisk = model.Concept("MediumRisk", extends=[RiskTier])
-LowRisk = model.Concept("LowRisk", extends=[RiskTier])
-
-RiskTierName = model.Concept("RiskTierName", extends=[String])
-model.define(HighRisk.new(name=RiskTierName("high")))
-model.define(MediumRisk.new(name=RiskTierName("medium")))
-model.define(LowRisk.new(name=RiskTierName("low")))
-
-Customer.risk_tier = model.Relationship(f"{Customer} has risk tier {RiskTier}")
-model.where(Customer.score < 40).define(Customer.risk_tier(HighRisk))
-model.where(Customer.score >= 40, Customer.score < 80).define(Customer.risk_tier(MediumRisk))
-model.where(Customer.score >= 80).define(Customer.risk_tier(LowRisk))
-
-# Rule B: flag for review based on Rule A's output + additional condition
-Customer.needs_review = model.Relationship(f"{Customer} needs review")
-model.where(
-    Customer.risk_tier(HighRisk),
-    Customer.open_orders > 5,
-).define(Customer.needs_review())
-```
+Rules can consume other rules' output. The derived property from Rule A becomes a condition in Rule B. For a full rule-to-rule chaining example, see [rule-chaining-patterns.md](references/rule-chaining-patterns.md#rule-to-rule-chaining).
 
 **Ordering guarantee:** PyRel definitions are declarative. The runtime resolves dependencies
 automatically. If Rule B references Rule A's output, the engine evaluates A before B. No explicit
@@ -414,51 +315,7 @@ ordering is needed in code.
 
 ## Cross-Reasoner Integration
 
-Rule outputs (boolean flags, derived values, classifications) feed other reasoners as inputs. The key patterns:
-
-### Rules → Prescriptive
-
-```python
-# Boolean flag as constraint filter
-Order.is_compliant = model.Relationship(f"{Order} is compliant")
-model.where(Order.customer(Customer), Order.amount <= Customer.credit_limit).define(Order.is_compliant())
-
-# Decision variable scoped to compliant orders only
-Order.x_assign = model.Property(f"{Order} has {Float:x_assign}")
-
-# from relationalai.semantics.reasoners.prescriptive import Problem
-p = Problem(model, Float)
-p.solve_for(Order.x_assign, type="bin", where=[Order.is_compliant()])
-
-# Derived value as objective weight
-Customer.ltv = model.Property(f"{Customer} has {Float:ltv}")
-model.define(Customer.ltv(aggregates.sum(Order.amount).per(Customer).where(Order.customer(Customer))))
-p.maximize(aggregates.sum(Order.x_assign * Customer.ltv).where(Order.customer(Customer)))
-```
-
-### Graph → Rules
-
-Graph metrics (centrality, community, component) become rule conditions. Always explore the data distribution before setting thresholds (see [Data Exploration Before Threshold Selection](#data-exploration-before-threshold-selection)).
-
-```python
-# Graph produced Site.centrality_score (see rai-graph-analysis)
-Site.is_at_risk = model.Relationship(f"{Site} is at risk")
-model.where(Site.centrality_score < 0.1).define(Site.is_at_risk())
-```
-
-### Predictive → Rules
-
-Predicted scores feed rule thresholds:
-
-```python
-Customer.is_churn_risk = model.Relationship(f"{Customer} is churn risk")
-model.where(Customer.predicted_churn_risk > 0.8).define(Customer.is_churn_risk())
-```
-
-### Rules → Rules / Rules → Predictive
-
-- **Rules → Rules:** Layered derivations — see [Rule Chaining](#rule-chaining)
-- **Rules → Predictive:** Rule-derived properties (`value_segment`, `is_compliant`, `ltv`) are automatically available as features for predictive models on the same concept
+Rule outputs (boolean flags, derived values, classifications) feed other reasoners as inputs. For code examples of each integration pattern, see [rule-chaining-patterns.md](references/rule-chaining-patterns.md#cross-reasoner-integration).
 
 ---
 
@@ -511,6 +368,24 @@ model.define(Customer.total_spend(total))
 | Aggregation-based rule gives wrong counts | Missing `.per()` or wrong `.where()` scope | Validate contributing rows with `model.select()` before defining the rule |
 | Classification + aggregation: `FDError` | Overlapping ranges when aggregate values land on boundary | Use strict `<` on one boundary, `>=` on the other |
 | `define()` in a Python loop | Defining rules per entity in a for loop instead of declaratively | Use `model.data()` + `.where().define()`. See `rai-pyrel-coding` Common Pitfalls for before/after examples |
+| `~Relationship()` for negation | `TypeError: bad operand type for unary ~: 'Expression'` — Python `~` doesn't work on RAI expressions | Use `model.not_(Concept.relationship())` in `.where()`. For set-difference queries (entities matching flag A but not flag B), either nest `model.not_()` or query both sets and subtract in pandas |
+| Boolean flags can't be selected as columns | Unary Relationships can only be used in `.where()` filters, not in `.select().alias()` | Query flagged entity IDs separately, then merge into the main DataFrame — see pattern below |
+
+**Projecting boolean flags into a compliance table:** Since boolean Relationships can't appear in `select()`, query each flag's matching IDs separately and merge:
+
+```python
+def query_flag(model, relationship, concept, flag_name):
+    """Query entities matching a boolean Relationship, return df with flag column."""
+    df = model.where(relationship()).select(concept.id.alias("id")).to_df()
+    df[flag_name] = True
+    return df
+
+# Usage: build compliance table from multiple boolean rules
+base_df = model.select(Entity.id.alias("id"), Entity.name.alias("name")).to_df()
+flag_df = query_flag(model, Entity.fails_check, Entity, "fails_check")
+base_df = base_df.merge(flag_df, on="id", how="left")
+base_df["fails_check"] = base_df["fails_check"].fillna(False)
+```
 
 For general PyRel pitfalls (type mismatches, aggregation scoping, join expansion, missing data,
 f-string syntax, `rai` function availability, subtype limitations, boolean negation), see
@@ -525,11 +400,12 @@ cross-entity property access), see [pyrel-subtype-rules.md](references/pyrel-sub
 
 | Pattern | Description | File |
 |---------|-------------|------|
-| Validation | Credit limit compliance with cross-entity join | [validation_rule.py](examples/validation_rule.py) |
-| Classification | Multi-tier customer segmentation with mutually exclusive ranges | [classification_rule.py](examples/classification_rule.py) |
-| Derivation | Order total via aggregation with property materialization | [derivation_rule.py](examples/derivation_rule.py) |
-| Alerting | SLA breach detection with temporal logic and missing-data handling | [alerting_rule.py](examples/alerting_rule.py) |
+| Validation | Threshold compliance with cross-entity join | [validation_rule.py](examples/validation_rule.py) |
+| Classification | Multi-tier entity classification with mutually exclusive ranges | [classification_rule.py](examples/classification_rule.py) |
+| Derivation | Computed total via aggregation with property materialization | [derivation_rule.py](examples/derivation_rule.py) |
+| Alerting | Temporal threshold breach detection with missing-data handling | [alerting_rule.py](examples/alerting_rule.py) |
 | Reconciliation | Two-source delta with tolerance and severity classification | [reconciliation_rule.py](examples/reconciliation_rule.py) |
+| Cross-entity alerting | Disjunctive OR flags via multiple `define()` calls + proportional comparison | [cross_entity_alerting.py](examples/cross_entity_alerting.py) |
 
 ---
 
@@ -540,3 +416,6 @@ cross-entity property access), see [pyrel-subtype-rules.md](references/pyrel-sub
 | Rule patterns | Detailed PyRel code patterns for all five rule types | [pyrel-rule-patterns.md](references/pyrel-rule-patterns.md) |
 | Validation & testing | Rule validation, testing, and debugging guidance | [rule-validation-and-testing.md](references/rule-validation-and-testing.md) |
 | Subtype rules | PyRel v1 subtype rules, f-string syntax, rai functions, boolean negation | [pyrel-subtype-rules.md](references/pyrel-subtype-rules.md) |
+| Complex multi-entity rules | Multi-entity subtype rules, cross-entity joins, rule dependency building blocks | [complex-multi-entity-rules.md](references/complex-multi-entity-rules.md) |
+| Rule chaining patterns | Rule-to-rule chaining and cross-reasoner integration code examples | [rule-chaining-patterns.md](references/rule-chaining-patterns.md) |
+| Complex rule example | Real-world 5-entity subtype rule with OR branches and layered dependencies | [complex-rule-example.md](references/complex-rule-example.md) |

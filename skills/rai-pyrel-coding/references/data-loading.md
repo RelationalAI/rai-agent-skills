@@ -7,6 +7,9 @@
   - [Boolean Columns from Source Data](#boolean-columns-from-source-data)
   - [Date and DateTime Columns](#date-and-datetime-columns)
   - [Optional vs Required Columns](#optional-vs-required-columns)
+  - [Multiarity Property Loading](#multiarity-property-loading)
+  - [Common Data Loading Mistakes](#common-data-loading-mistakes)
+  - [Programmatic Entity Creation](#programmatic-entity-creation)
 <!-- /TOC -->
 
 ## Data Loading Patterns
@@ -14,6 +17,8 @@
 Comprehensive reference for binding source data to concepts. Covers all three data source types (`model.Table()`, `model.data(pandas.read_csv(...))`, `model.data(rows)`) and both binding targets (primitive properties and entity references).
 
 ### Snowflake Type Mapping
+
+Always derive property types from `INFORMATION_SCHEMA.COLUMNS` (`DATA_TYPE`, `NUMERIC_SCALE`), not from column names, CSV samples, or other ontologies. The schema is the single source of truth.
 
 | Snowflake type | RAI base type |
 |---|---|
@@ -23,7 +28,7 @@ Comprehensive reference for binding source data to concepts. Covers all three da
 | FLOAT, DOUBLE | `Float` |
 | DATE | `Date` |
 | TIMESTAMP_NTZ, TIMESTAMP | `DateTime` |
-| BOOLEAN | Unary `Relationship` (not boolean property) |
+| BOOLEAN | `Boolean` property, or unary `Relationship` for flag-style |
 
 ---
 
@@ -308,4 +313,64 @@ To make columns optional, bind them separately:
 model.define(Region.new(id=src.R_REGIONKEY))
 model.define(Region.filter_by(id=src.R_REGIONKEY).name(src.R_NAME))
 model.define(Region.filter_by(id=src.R_REGIONKEY).comment(src.R_COMMENT))
+```
+
+---
+
+### Multiarity Property Loading
+
+Load multiarity properties (e.g., nutrient content per food) by iterating over the arity dimension:
+
+```python
+for nu in nutrient_csv.name:
+    model.define(food.contains(Nutrient, getattr(food_data, nu))).where(Nutrient.name == nu)
+```
+
+---
+
+### Common Data Loading Mistakes
+
+These produce **silent failures** — no error is raised, but data is missing or queries return empty.
+
+**Extra CSV columns with NaN silently drop entities.** Any NaN in a column passed to `.new()` prevents that row's entity from being created. Pass only the columns you need:
+
+```python
+# BROKEN — VALUE_TIER and CONTACT_EMAIL columns have NaN, silently break loading
+d = model.data(read_csv("business.csv"))
+
+# CORRECT
+d = model.data(read_csv("business.csv")[["ID", "NAME", "RELIABILITY_SCORE"]])
+```
+
+**`to_schema()` clobbers previously set properties (known bug).** A second `to_schema()` load of the same concept overwrites relationships and properties from the first `model.define()`. Work around by loading all properties in a single `define()`:
+
+```python
+# BROKEN — second define clobbers site from first
+model.define(b := Business.new(id=d["ID"], site=Site.filter_by(id=d["SITE_ID"])), ...)
+model.define(Business.new(model.data(subset[["id","score"]]).to_schema()))
+
+# CORRECT — load all properties per batch in one define
+model.define(
+    b := Business.new(id=d["ID"], site=Site.filter_by(id=d["SITE_ID"])),
+    b.name(d["NAME"]), b.score(d["SCORE"]),
+)
+```
+
+**NULL foreign keys skip relationship creation.** Rows with NULL FK columns won't create a relationship (expected behavior). In network models, this can cause unexpected gaps if NULLs aren't anticipated. Check counts before loading:
+
+```python
+print(df["SITE_ID"].isna().sum(), "rows with NULL SITE_ID")
+# Filter if needed: df = df.dropna(subset=["SITE_ID"])
+```
+
+---
+
+### Programmatic Entity Creation
+
+Create entities from ranges, inline values, or derived data:
+
+```python
+model.define(Queen.new(row=std.common.range(n)))           # Range-based
+model.define(sf := Factory.new(name="steel_factory"), sf.avail(40.0))  # Inline
+model.define(Node.new(v=Edge.i))                            # Derived from existing data
 ```

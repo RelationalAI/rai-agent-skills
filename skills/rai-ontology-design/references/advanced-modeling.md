@@ -2,6 +2,20 @@
 
 Detailed patterns extracted from the Concept Design, Relationship Principles, and Data Mapping sections of SKILL.md. Refer to these when working with advanced PyRel modeling scenarios.
 
+<!-- TOC -->
+- [Value Type Concepts for Type Safety](#value-type-concepts-for-type-safety)
+- [Concept Creation with identify_by](#concept-creation-with-identify_by)
+  - [Identity pattern taxonomy](#identity-pattern-taxonomy)
+  - [Composite keys and preferred identification](#composite-keys-and-preferred-identification)
+- [Ternary Property: Implicit Key Ordering](#ternary-property-implicit-key-ordering)
+- [Property and Relationship String Quality](#property-and-relationship-string-quality)
+- [Property Grouping Guidance](#property-grouping-guidance)
+- [Inverse Relationships for Bidirectional Navigation](#inverse-relationships-for-bidirectional-navigation)
+- [Role Naming for Disambiguation](#role-naming-for-disambiguation)
+- [Same-Type Instance References](#same-type-instance-references)
+- [Multi-argument Properties (Scenario Modeling)](#multi-argument-properties-scenario-modeling)
+<!-- /TOC -->
+
 ---
 
 ## Value Type Concepts for Type Safety
@@ -61,6 +75,45 @@ model.define(_Site.new(id=TABLE__SITE.id))
 
 Both patterns are valid. Use `identify_by` when the identity key and type are known upfront. Use the Property + `.new()` pattern in modeler exports where identity is established during data loading.
 
+### Identity pattern taxonomy
+
+Identity patterns follow three naming conventions for value type concepts. Choosing the right one produces self-documenting, semantically clear models:
+
+| Mode | Pattern | Example | When to use |
+|------|---------|---------|-------------|
+| **Popular** | Value type = ConceptName + RefMode | `CustomerName`, `ProductCode` | Most common; the value type name combines the concept with a standard suffix (.Name, .Code, .Nr) |
+| **General** | Value type has its own name | `TaxFileNumber`, `ISBN` | When the reference scheme has a well-known independent name |
+| **Unit-based** | Value type is a measurement unit | `kg`, `USD`, `meters` | For measured quantities where the unit IS the identity (rare for entity IDs; common for value types) |
+
+```python
+# Popular mode: CustomerID combines "Customer" + "ID"
+CustomerID = model.Concept("CustomerID", extends=[String])
+Customer = model.Concept("Customer", identify_by={"id": CustomerID})
+
+# General mode: ISBN is a well-known independent identifier
+ISBN = model.Concept("ISBN", extends=[String])
+Book = model.Concept("Book", identify_by={"isbn": ISBN})
+
+# Simple mode (prototyping): raw type, no value type concept
+Order = model.Concept("Order", identify_by={"id": Integer})
+```
+
+### Composite keys and preferred identification
+
+When an entity has multiple candidate keys (e.g., employee number AND name+department), declare which is the **preferred** key (used in `identify_by`) and which is secondary (modeled as a uniqueness-constrained Property).
+
+```python
+# Preferred: employee number (system-assigned, stable)
+Employee = model.Concept("Employee", identify_by={"emp_number": Integer})
+
+# Secondary: name + department (business-meaningful but not guaranteed unique)
+# Model as properties -- the identify_by declares the preferred key
+Employee.name = model.Property(f"{Employee} has {String:name}")
+Employee.department = model.Property(f"{Employee} in {Department:department}")
+```
+
+**Decision rule:** Prefer surrogate/system IDs for `identify_by` (stable, guaranteed unique). Use natural keys (name, code) as secondary properties. For compound identity where both keys are truly needed, use `identify_by` with multiple fields.
+
 **Third pattern — `Concept.identify_by(existing_prop)`:** Attach identity to a pre-declared property. Use when you need a custom reading string on the identity property (the default `identify_by={"field": Type}` uses an auto-generated reading):
 
 ```python
@@ -88,6 +141,8 @@ model.Property(f"{Supplier} supplies {Part} in {Float:quantity}")
 ```
 
 **Rule:** Place the dependent value (the "column" you'd look up) as the LAST field. Place identifying keys first.
+
+**Before committing a ternary:** Verify it passes the irreducibility and minimum key span checks in [fact-decomposition-and-validation.md](fact-decomposition-and-validation.md). A ternary that decomposes into independent binaries should be split.
 
 ---
 

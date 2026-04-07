@@ -1,9 +1,10 @@
-"""Example: Customer segmentation using graph analysis. Suggested reading for users: https://docs.relational.ai/build/tutorials/meet-pyrel"""
+# Pattern: graph-based entity segmentation with community detection and derived subtypes
+"""Example: Entity segmentation using graph analysis. Suggested reading: https://docs.relational.ai/build/tutorials/meet-pyrel"""
 from relationalai.semantics import Float, Integer, Model, String, distinct
 from relationalai.semantics.reasoners.graph import Graph
 from relationalai.semantics.std import aggregates
 
-model = Model("retail_customer_segmentation")
+model = Model("customer_segmentation")
 
 # Declare Customer, Product, and Order concepts and their properties
 Customer = model.Concept("Customer", identify_by={"id": Integer})
