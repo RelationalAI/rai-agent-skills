@@ -27,13 +27,13 @@ val_table_concept = Concept("ValidationTable")
 test_table_concept = Concept("TestTable")
 
 # ── Phase 3: Populate Concepts (from Snowflake) ─────────────────────────────
-define(Customer.new(Table("HM_MINI.PUBLIC.CUSTOMERS").to_schema()))
-define(Article.new(Table("HM_MINI.PUBLIC.ARTICLES").to_schema()))
-define(Transaction.new(Table("HM_MINI.PUBLIC.TRANSACTIONS_DEDUP").to_schema()))
+define(Customer.new(Table("DB.SCHEMA.CUSTOMERS").to_schema()))
+define(Article.new(Table("DB.SCHEMA.ARTICLES").to_schema()))
+define(Transaction.new(Table("DB.SCHEMA.TRANSACTIONS_DEDUP").to_schema()))
 
-define(train_table_concept.new(Table("HM_MINI.TASK_SALES.TRAIN").to_schema()))
-define(val_table_concept.new(Table("HM_MINI.TASK_SALES.VAL").to_schema()))
-define(test_table_concept.new(Table("HM_MINI.TASK_SALES.TEST").to_schema()))
+define(train_table_concept.new(Table("DB.SCHEMA.TRAIN").to_schema()))
+define(val_table_concept.new(Table("DB.SCHEMA.VAL").to_schema()))
+define(test_table_concept.new(Table("DB.SCHEMA.TEST").to_schema()))
 
 # ── Phase 4: Setup Task Relationships ─────────────────────────────────────────
 Train = Relationship(f"{Article} at {Any:timestamp} has {Any:sales}")

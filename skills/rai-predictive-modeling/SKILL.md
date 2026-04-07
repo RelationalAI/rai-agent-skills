@@ -1,6 +1,6 @@
 ---
 name: rai-predictive-modeling
-description: Build GNN data models with concepts, Snowflake population, task relationships, graph edges, and feature transformation. Use when defining entity types, loading data, configuring graph structure, or setting up PropertyTransformer for a predictive GNN pipeline.
+description: Build GNN data models — concepts, Snowflake data loading, task relationships, graph edges, and PropertyTransformer features.
 ---
 
 # Predictive Modeling
@@ -20,6 +20,7 @@ description: Build GNN data models with concepts, Snowflake population, task rel
 **When NOT to use:**
 - Training a GNN model or generating predictions — see `rai-predictive-training`
 - Registering or loading saved models — see `rai-predictive-management`
+- Running graph algorithms (centrality, community, etc.) — see `rai-graph-analysis`
 
 **Overview:**
 1. Imports and Model setup
@@ -300,15 +301,15 @@ For the full feature type reference including drop patterns, see [references/pro
 
 | Mistake | Cause | Fix |
 |---------|-------|-----|
-| Concept name is plural (e.g. "Customers") | Naming convention | Use singular names: `Concept("Customer")` |
-| Task table concept has `identify_by` | Task tables don't need primary keys | Use plain `Concept("TrainTable")` with no `identify_by` |
-| Snowflake table name not fully qualified | Missing database or schema prefix | Use `"DATABASE.SCHEMA.TABLE"` format |
-| Test Relationship includes label/target | Test data should not contain the answer | Omit the "has" clause: `f"{Source}"` or `f"{Source} at {Any:ts}"` |
-| Positional args in `define(Train(...))` don't match template | Template and population call must align | Match the order: source, [timestamp], [label/target] |
-| Self-referential edge without `.ref()` | Same concept on both sides creates ambiguity | Use `PostRef = Post.ref()` for the destination |
-| `time_col` fields not in `datetime` list | Both lists must include the field | Add time columns to both `datetime=[...]` and `time_col=[...]` |
-| Task table concept used in edge definition | Only graph concepts participate in edges | Edges connect domain entities, not task tables |
-| Missing type import | e.g. using `Date` without importing it | Add missing types to the import line |
+| Concept name is plural (e.g. "Customers") | Naming convention — inconsistent concept references | Use singular names: `Concept("Customer")` |
+| Task table concept has `identify_by` | Task tables don't need primary keys — causes unexpected join behavior | Use plain `Concept("TrainTable")` with no `identify_by` |
+| Snowflake table name not fully qualified | Missing database or schema prefix — `TableNotFoundError` | Use `"DATABASE.SCHEMA.TABLE"` format |
+| Test Relationship includes label/target | Test data should not contain the answer — data leakage, meaningless results | Omit the "has" clause: `f"{Source}"` or `f"{Source} at {Any:ts}"` |
+| Positional args in `define(Train(...))` don't match template | Template and population call must align — runtime error or silent wrong column binding | Match the order: source, [timestamp], [label/target] |
+| Self-referential edge without `.ref()` | Same concept on both sides creates ambiguity — runtime error | Use `PostRef = Post.ref()` for the destination |
+| `time_col` fields not in `datetime` list | Both lists must include the field — time column not encoded as temporal feature | Add time columns to both `datetime=[...]` and `time_col=[...]` |
+| Task table concept used in edge definition | Only graph concepts participate in edges — invalid graph structure | Edges connect domain entities, not task tables |
+| Missing type import | e.g. using `Date` without importing it — `NameError` | Add missing types to the import line |
 
 ---
 

@@ -3,11 +3,9 @@ GNN Node Classification — Training & Prediction (Phases 7-8)
 =============================================================
 Binary classification training and prediction on user data.
 
-Assumes data model from `rai-predictive-modeling`:
-  - gnn_graph: Graph with edges defined
-  - pt: PropertyTransformer configured
-  - Train, Val, Test: Relationship objects
-  - User: source concept (head of Relationship template)
+Assumes data model from `rai-predictive-modeling`.
+See: examples/node_classification_snowflake.py for the full data model.
+Required variables: gnn_graph, pt, Train, Val, Test, User
 """
 
 # ── Phase 7: Train GNN ──────────────────────────────────────────────────────

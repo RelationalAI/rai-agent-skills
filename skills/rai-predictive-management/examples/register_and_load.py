@@ -12,8 +12,8 @@ Session 2: Load the registered model and generate predictions.
 #   gnn_graph, pt, Train, Val, Test, User
 
 gnn = GNN(
-    database="MY_DB", schema="MY_SCHEMA",
-    exp_database="MY_DB", exp_schema="EXPERIMENTS",
+    database="DB", schema="SCHEMA",
+    exp_database="DB", exp_schema="EXPERIMENTS",
     graph=gnn_graph, pt=pt,
     train=Train, validation=Val,
     task_type="binary_classification", eval_metric="roc_auc",
@@ -23,7 +23,7 @@ gnn = GNN(
 gnn.fit()
 
 gnn.register_model(
-    model_database="MY_DB",
+    model_database="DB",
     model_schema="MODEL_REGISTRY",
     model_name="fraud_detector",
     version_name="v1",
@@ -32,16 +32,17 @@ gnn.register_model(
 
 
 # ── Session 2: Load and Predict ─────────────────────────────────────────────
-# Rebuild graph and PropertyTransformer (same structure as training session)
-# gnn_graph = Graph(model, directed=True, weighted=False, aggregator="sum")
-# ... define edges ...
-# pt = PropertyTransformer(...)
+# REQUIRED: Rebuild the same graph and PT structure used during training
+gnn_graph = Graph(model, directed=True, weighted=False, aggregator="sum")
+Edge = gnn_graph.Edge
+# ... define edges (same as training session) ...
+pt = PropertyTransformer(...)  # same config as training session
 
 gnn = GNN(
-    database="MY_DB", schema="MY_SCHEMA",
-    exp_database="MY_DB", exp_schema="EXPERIMENTS",
+    database="DB", schema="SCHEMA",
+    exp_database="DB", exp_schema="EXPERIMENTS",
     graph=gnn_graph, pt=pt,
-    model_database="MY_DB",
+    model_database="DB",
     model_schema="MODEL_REGISTRY",
     model_name="fraud_detector",
     version_name="v1",

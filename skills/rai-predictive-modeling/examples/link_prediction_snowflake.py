@@ -27,30 +27,30 @@ val_table_concept = Concept("ValidationTable")
 test_table_concept = Concept("TestTable")
 
 # ── Phase 3: Populate Concepts (from Snowflake) ─────────────────────────────
-define(Customer.new(Table("HM_MINI.PUBLIC.CUSTOMERS").to_schema()))
-define(Article.new(Table("HM_MINI.PUBLIC.ARTICLES").to_schema()))
-define(Transaction.new(Table("HM_MINI.PUBLIC.TRANSACTIONS_DEDUP").to_schema()))
+define(Customer.new(Table("DB.SCHEMA.CUSTOMERS").to_schema()))
+define(Article.new(Table("DB.SCHEMA.ARTICLES").to_schema()))
+define(Transaction.new(Table("DB.SCHEMA.TRANSACTIONS_DEDUP").to_schema()))
 
-define(train_table_concept.new(Table("HM_MINI.PUBLIC.TRAIN_LINK").to_schema()))
-define(val_table_concept.new(Table("HM_MINI.PUBLIC.VALIDATION_LINK").to_schema()))
-define(test_table_concept.new(Table("HM_MINI.PUBLIC.TEST_LINK").to_schema()))
+define(train_table_concept.new(Table("DB.SCHEMA.TRAIN_LINK").to_schema()))
+define(val_table_concept.new(Table("DB.SCHEMA.VALIDATION_LINK").to_schema()))
+define(test_table_concept.new(Table("DB.SCHEMA.TEST_LINK").to_schema()))
 
 # ── Phase 4: Setup Task Relationships ─────────────────────────────────────────
 Train = Relationship(f"{Customer} at {Any:timestamp} has {Article}")
 define(Train(Customer, train_table_concept.timestamp, Article)).where(
-    Customer.c_customer_id == train_table_concept.customer_id,
+    Customer.C_customer_id == train_table_concept.customer_id,
     Article.a_article_id == train_table_concept.article_id,
 )
 
 Val = Relationship(f"{Customer} at {Any:timestamp} has {Article}")
 define(Val(Customer, val_table_concept.timestamp, Article)).where(
-    Customer.c_customer_id == val_table_concept.customer_id,
+    Customer.C_customer_id == val_table_concept.customer_id,
     Article.a_article_id == val_table_concept.article_id,
 )
 
 Test = Relationship(f"{Customer} at {Any:timestamp}")
 define(Test(Customer, test_table_concept.timestamp)).where(
-    Customer.c_customer_id == test_table_concept.customer_id,
+    Customer.C_customer_id == test_table_concept.customer_id,
 )
 
 # ── Phase 5: Build Graph & Edges ────────────────────────────────────────────

@@ -32,7 +32,7 @@ description: Register trained GNN models to Snowflake Model Registry and load pr
 **Register:**
 ```python
 gnn.register_model(
-    model_database="MY_DB",
+    model_database="DB",
     model_schema="MODEL_REGISTRY",
     model_name="fraud_detector",
     version_name="v1",
@@ -42,10 +42,10 @@ gnn.register_model(
 **Load by registry key:**
 ```python
 gnn = GNN(
-    database="MY_DB", schema="MY_SCHEMA",
-    exp_database="MY_DB", exp_schema="EXPERIMENTS",
+    database="DB", schema="SCHEMA",
+    exp_database="DB", exp_schema="EXPERIMENTS",
     graph=gnn_graph, pt=pt,
-    model_database="MY_DB", model_schema="MODEL_REGISTRY",
+    model_database="DB", model_schema="MODEL_REGISTRY",
     model_name="fraud_detector", version_name="v1",
 )
 gnn.load()
@@ -54,8 +54,8 @@ gnn.load()
 **Load by run ID:**
 ```python
 gnn = GNN(
-    database="MY_DB", schema="MY_SCHEMA",
-    exp_database="MY_DB", exp_schema="EXPERIMENTS",
+    database="DB", schema="SCHEMA",
+    exp_database="DB", exp_schema="EXPERIMENTS",
     graph=gnn_graph, pt=pt,
     model_run_id="01c2d9a0-0711-c54d-000a-1dc707f7a1e6",
 )
@@ -79,7 +79,7 @@ After `gnn.fit()` completes, register the model to the Snowflake Model Registry:
 
 ```python
 gnn.register_model(
-    model_database="MY_DB",
+    model_database="DB",
     model_schema="MODEL_REGISTRY",
     model_name="fraud_detector",
     version_name="v1",
@@ -97,11 +97,11 @@ The combination of `(model_database, model_schema, model_name, version_name)` un
 
 ```python
 gnn = GNN(
-    database="MY_DB", schema="MY_SCHEMA",
-    exp_database="MY_DB", exp_schema="EXPERIMENTS",
+    database="DB", schema="SCHEMA",
+    exp_database="DB", exp_schema="EXPERIMENTS",
     graph=gnn_graph,
     pt=pt,
-    model_database="MY_DB",
+    model_database="DB",
     model_schema="MODEL_REGISTRY",
     model_name="fraud_detector",
     version_name="v1",
@@ -115,8 +115,8 @@ User.predictions = gnn.predictions(domain=Test)
 
 ```python
 gnn = GNN(
-    database="MY_DB", schema="MY_SCHEMA",
-    exp_database="MY_DB", exp_schema="EXPERIMENTS",
+    database="DB", schema="SCHEMA",
+    exp_database="DB", exp_schema="EXPERIMENTS",
     graph=gnn_graph,
     pt=pt,
     model_run_id="01c2d9a0-0711-c54d-000a-1dc707f7a1e6",
@@ -138,8 +138,8 @@ A typical multi-session workflow:
 
 ```python
 gnn = GNN(
-    database="MY_DB", schema="MY_SCHEMA",
-    exp_database="MY_DB", exp_schema="EXPERIMENTS",
+    database="DB", schema="SCHEMA",
+    exp_database="DB", exp_schema="EXPERIMENTS",
     graph=gnn_graph, pt=pt,
     train=Train, validation=Val,
     task_type="binary_classification", eval_metric="roc_auc",
@@ -148,7 +148,7 @@ gnn = GNN(
 )
 gnn.fit()
 gnn.register_model(
-    model_database="MY_DB", model_schema="MODEL_REGISTRY",
+    model_database="DB", model_schema="MODEL_REGISTRY",
     model_name="fraud_detector", version_name="v1",
 )
 ```
@@ -164,10 +164,10 @@ gnn_graph = Graph(model, directed=True, weighted=False, aggregator="sum")
 pt = PropertyTransformer(...)
 
 gnn = GNN(
-    database="MY_DB", schema="MY_SCHEMA",
-    exp_database="MY_DB", exp_schema="EXPERIMENTS",
+    database="DB", schema="SCHEMA",
+    exp_database="DB", exp_schema="EXPERIMENTS",
     graph=gnn_graph, pt=pt,
-    model_database="MY_DB", model_schema="MODEL_REGISTRY",
+    model_database="DB", model_schema="MODEL_REGISTRY",
     model_name="fraud_detector", version_name="v1",
 )
 gnn.load()
@@ -180,10 +180,10 @@ User.predictions = gnn.predictions(domain=Test)
 
 | Mistake | Cause | Fix |
 |---------|-------|-----|
-| Calling `register_model()` before `fit()` | Model must be trained first | Always call `gnn.fit()` before `gnn.register_model()` |
-| Omitting `graph` or `pt` when loading | Loaded models still need the graph structure | Provide the same `graph` and `pt` used during training |
-| Passing `train`, `validation`, or hyperparameters when loading | These are training-only parameters | Omit `train`, `validation`, `task_type`, `eval_metric`, and all hyperparameters |
-| Reusing the same `(name, version)` tuple | Registry keys must be unique | Use a new `version_name` for each registration |
+| Calling `register_model()` before `fit()` | Model must be trained first — `RuntimeError`, no weights to serialize | Always call `gnn.fit()` before `gnn.register_model()` |
+| Omitting `graph` or `pt` when loading | Loaded models still need the graph structure — `RuntimeError` | Provide the same `graph` and `pt` used during training |
+| Passing `train`, `validation`, or hyperparameters when loading | These are training-only parameters — ignored or unexpected behavior | Omit `train`, `validation`, `task_type`, `eval_metric`, and all hyperparameters |
+| Reusing the same `(name, version)` tuple | Registry keys must be unique — `RegistryError` | Use a new `version_name` for each registration |
 
 ---
 

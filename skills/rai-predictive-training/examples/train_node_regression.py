@@ -3,17 +3,15 @@ GNN Node Regression — Training & Prediction (Phases 7-8)
 =========================================================
 Regression training predicting article sales.
 
-Assumes data model from `rai-predictive-modeling`:
-  - gnn_graph: Graph with edges defined
-  - pt: PropertyTransformer configured
-  - Train, Val, Test: Relationship objects
-  - Article: source concept (head of Relationship template)
+Assumes data model from `rai-predictive-modeling`.
+See: examples/node_regression_snowflake.py for the full data model.
+Required variables: gnn_graph, pt, Train, Val, Test, Article
 """
 
 # ── Phase 7: Train GNN ──────────────────────────────────────────────────────
 gnn = GNN(
-    database="MY_DB", schema="MY_SCHEMA",
-    exp_database="MY_DB", exp_schema="EXPERIMENTS",
+    database="DB", schema="SCHEMA",
+    exp_database="DB", exp_schema="EXPERIMENTS",
     graph=gnn_graph,
     pt=pt,
     train=Train,

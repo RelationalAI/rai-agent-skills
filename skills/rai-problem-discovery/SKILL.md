@@ -362,7 +362,12 @@ Each suggestion includes a `reasoners` field — an ordered list specifying the 
 }
 ```
 
-After discovery, use the appropriate formulation skill for the chosen reasoner type.
+After discovery, route to the appropriate skill based on the `reasoners` tag:
+
+- **prescriptive** → `rai-prescriptive-problem-formulation`
+- **graph** → `rai-graph-analysis`
+- **rules** → `rai-rules-authoring`
+- **predictive** → `rai-predictive-modeling`
 
 ---
 

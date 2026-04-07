@@ -254,14 +254,13 @@ For the full prediction attributes reference, see [references/prediction-attribu
 
 | Mistake | Cause | Fix |
 |---------|-------|-----|
-| Passing `select(...)` fragments to `train=` or `validation=` | GNN expects Relationship objects | Use `train=Train` with the Relationship object directly |
-| Missing `has_time_column=True` | Relationships use "at" keyword but flag not set | Set `has_time_column=True` when templates contain "at" |
-| Treating hyperparameters as named GNN parameters | Hyperparameters are `**kwargs` | Pass them directly: `GNN(..., device="cuda", n_epochs=5)` |
-| Expecting `gnn.predictions()` to return results | Predictions are assigned to a concept attribute | Use `Source.predictions = gnn.predictions(domain=Test)` |
-| Using `.predicted_Article` (uppercase) | Attribute name is always lowercase | Use `.predicted_article` regardless of concept casing |
-| Passing wrong object to `domain=` | Must be the Test Relationship | Use `domain=Test` with the Relationship object |
-| Omitting `pt=None` when no PropertyTransformer | Not a real issue | `pt` defaults to `None`; omitting it is fine |
-| Invalid task_type/metric combination | Not all metrics work with all task types | Check the valid pairs in [references/task-types-and-metrics.md](references/task-types-and-metrics.md) |
+| Passing `select(...)` fragments to `train=` or `validation=` | GNN expects Relationship objects — `TypeError` | Use `train=Train` with the Relationship object directly |
+| Missing `has_time_column=True` | Relationships use "at" keyword but flag not set — temporal ordering ignored, degraded accuracy | Set `has_time_column=True` when templates contain "at" |
+| Treating hyperparameters as named GNN parameters | Hyperparameters are `**kwargs` — `TypeError` | Pass them directly: `GNN(..., device="cuda", n_epochs=5)` |
+| Expecting `gnn.predictions()` to return results | Predictions are assigned to a concept attribute — returns `None` | Use `Source.predictions = gnn.predictions(domain=Test)` |
+| Using `.predicted_Article` (uppercase) | Attribute name is always lowercase — `AttributeError` | Use `.predicted_article` regardless of concept casing |
+| Passing wrong object to `domain=` | Must be the Test Relationship — `TypeError` or wrong prediction scope | Use `domain=Test` with the Relationship object |
+| Invalid task_type/metric combination | Not all metrics work with all task types — `ValueError` | Check the valid pairs in [references/task-types-and-metrics.md](references/task-types-and-metrics.md) |
 
 ---
 
