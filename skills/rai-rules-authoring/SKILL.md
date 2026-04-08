@@ -369,6 +369,7 @@ model.define(Customer.total_spend(total))
 | Classification + aggregation: `FDError` | Overlapping ranges when aggregate values land on boundary | Use strict `<` on one boundary, `>=` on the other |
 | `define()` in a Python loop | Defining rules per entity in a for loop instead of declaratively | Use `model.data()` + `.where().define()`. See `rai-pyrel-coding` Common Pitfalls for before/after examples |
 | `~Relationship()` for negation | `TypeError: bad operand type for unary ~: 'Expression'` — Python `~` doesn't work on RAI expressions | Use `model.not_(Concept.relationship())` in `.where()`. For set-difference queries (entities matching flag A but not flag B), either nest `model.not_()` or query both sets and subtract in pandas |
+| `Unground Variables` from mixed numeric comparison | Comparing a Float property to an Integer property (or vice versa) in a rule condition — types must match exactly | Cast to a common type: `Entity.float_prop < floats.float(Entity.int_prop)` or `numbers.integer(Entity.float_prop)`. See `rai-pyrel-coding` Common Pitfalls for general ungrounded variable debugging |
 | Boolean flags can't be selected as columns | Unary Relationships can only be used in `.where()` filters, not in `.select().alias()` | Query flagged entity IDs separately, then merge into the main DataFrame — see pattern below |
 
 **Projecting boolean flags into a compliance table:** Since boolean Relationships can't appear in `select()`, query each flag's matching IDs separately and merge:

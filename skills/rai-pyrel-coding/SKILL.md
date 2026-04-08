@@ -427,6 +427,7 @@ Shipment.x_flow = model.Property(f'{Shipment} has {{x_flow:float}}')  # Number(3
 | Empty DataFrame from queries | Missing `define()` call, wrong concept type, or missing data | Verify entities exist and computed values are `define()`d before querying |
 | Using bare `Number` without `.size()` | Causes type inference issues at runtime | Always use `Number.size(p, s)` (e.g., `Number.size(38, 4)`) |
 | Using `~` for negations | Causes `TypeError: bad operand type for unary ~: 'Expression'` | Always use `model.not_(expr)` |
+| `Unground Variables` error | A variable in a rule body cannot be bound — typically type mismatch (Float vs Integer), non-existent property, or join path with no bindings | See [Debugging section below](#debugging-empty-or-unexpected-results) for step-by-step fix. For graph-specific variant (chained derivations + graph + boolean rules), see `rai-graph-analysis` Common Pitfalls |
 
 For additional pitfalls (type mismatches, Snowflake export casing, Python builtins on RAI expressions, implicit property typos, and more), see [common-pitfalls.md](references/common-pitfalls.md).
 
@@ -471,6 +472,8 @@ print(model.where(Order.status == "active")) # → (where Order.status == 'activ
 This catches expression-level mistakes (wrong concept in `.per()`, wrong property in an aggregation) before they produce empty or wrong results. Distinct from `.inspect()` which executes a query and materializes data.
 
 Then check: typos (set `implicit_properties: false`), type alignment (Integer vs String), join paths (`.inspect()` on relationships), and entity counts.
+
+**Ungrounded variable errors:** `RAIException: [Unground Variables]` means a variable cannot be bound. Most common cause: comparing properties of mismatched types (e.g., Float vs Integer). Debugging steps: (1) isolate the `define()`/`require()` call, (2) check both sides of every comparison for type alignment, (3) cast with `floats.float(int_prop)` or `numbers.integer(float_prop)`, (4) comment out clauses incrementally to find the offending one. The error message may say "see above for details" but output can be swallowed by spinner — set `TERM=dumb` to see full output.
 For the full step-by-step debugging checklist, see [common-pitfalls.md](references/common-pitfalls.md#debugging-empty-or-unexpected-results).
 
 ---

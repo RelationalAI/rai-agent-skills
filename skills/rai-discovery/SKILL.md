@@ -386,7 +386,7 @@ Each suggestion includes a `reasoners` field — an ordered list specifying the 
 }
 ```
 
-After discovery, use the appropriate formulation skill for the chosen reasoner type.
+After discovery, use the appropriate formulation skill for the chosen reasoner type. Before writing any PyRel code, also load `rai-querying` and `rai-pyrel-coding` — discovery covers *what* to ask, but coding skills cover *how* to write it (v1 syntax, imports, query patterns).
 
 ---
 
