@@ -20,6 +20,7 @@ Skills are markdown files encoding expert knowledge — heuristics, workflows, a
 The skills in this repo instruct your agent how to use the `relationalai` Python package (aka PyRel) to leverage RAI semantic models and advanced reasoners.
 
 ## Prerequisites
+**Assumes `relationalai` (PyRel) v1.0.12+**
 
 The RelationalAI Native App for Snowflake must be installed in your account by an administrator.
 - Request access [here](https://app.snowflake.com/marketplace/listing/GZTYZOOIX8H/relationalai-relationalai). 
@@ -83,4 +84,3 @@ Example:
     "RelationalAI/rai-agent-skills"
 ]
 ```
-

@@ -319,6 +319,8 @@ model.where(t.amount >= 100.0).define(graph.Edge.new(src=t.payer, dst=t.payee))
 
 For detailed patterns (multi-intermediary, hierarchy, self-referencing, multi-graph, weight construction, validation), see [graph-construction.md](references/graph-construction.md).
 
+**Multi-reasoner warning:** If your pipeline combines graph algorithms with prescriptive optimization or other reasoners, define graph constructs on a **separate Model** and write results back via `model.data()`. Mixing graph algorithms and `p.variable_values()` on the same Model triggers `UnsupportedRecursionError`. See [graph_model_isolation.py](examples/graph_model_isolation.py) and Common Pitfalls below.
+
 ---
 
 ## Algorithm Selection
@@ -413,7 +415,7 @@ model.where(graph.Node == Customer).define(
 
 ### Type handling
 
-**Critical:** Community/component IDs return as `Int128Array`. Cast before pandas: `df["community"].astype(int)`
+**Critical:** Community detection IDs (Louvain, Infomap) return as `Int128Array` — cast before pandas: `df["community"].astype(int)`. WCC component IDs return as **string hashes** — use `.astype(str)`, not `.astype(int)`.
 
 ### Validation
 
@@ -452,7 +454,7 @@ model.where(Site.centrality_score < 0.1).define(Site.is_at_risk())
 |---------|-------|-----|
 | `louvain()` fails on directed graph | Louvain requires undirected | Set `directed=False` or use `infomap()` for directed |
 | Empty graph (no edges) | Edge definition doesn't match data — wrong relationship or join path | Verify edge source/destination properties exist and have data; query edge count before running algorithms |
-| `Int128Array` error in pandas | Community/component IDs are Int128 | Cast: `df["col"].astype(int)` |
+| `Int128Array` error in pandas | Community detection IDs (Louvain, Infomap) are Int128 | Cast: `df["col"].astype(int)`. Note: WCC component IDs are string hashes — use `.astype(str)` instead |
 | Duplicate/self-loop edges | Missing guard in co-occurrence pattern | Add `left.id < right.id` to `.where()` clause |
 | `aggregator` missing | Weighted graph with multi-edges requires aggregator for parallel edges | Add `aggregator="sum"` — but only when multi-edges are expected (see [Aggregator guidance](#graph-constructor-aggregator-parameter-guidance)) |
 | Weight type error | Weights must be floats, but property is Integer/Number | Cast with `floats.float(property)` in Edge.new weight parameter |

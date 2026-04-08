@@ -390,6 +390,8 @@ For the full API tables (core collections, relationship/property inspection, fie
 | Using standalone `where()`/`select()` with multiple models | `"Multiple Models have been defined."` error | Use `model.where()`/`model.select()` instead of standalone imports |
 | Aggregation returns empty DataFrame instead of zero | `aggs.count(X).where(no_match)` returns no rows, not a row with 0 | Use `\| 0` default: `aggs.count(Shipment).where(Shipment.supplier.name == "foo") \| 0` |
 | `.exists()` on Properties raises error | `Concept.prop.exists()` — `RAIException: Cannot access relationships on core concept 'Float'.` | Use ref binding: `r = Float.ref(); model.where(Concept.prop(r)).select(r.alias("val"))` |
+| Inflated aggregation from multi-relationship select | Binding two relationships through the same concept in one `select` (e.g., `A.r1(C)` and `B.r2(C)`) creates a cartesian product of matching pairs — aggregation counts silently wrong | Split into separate queries per relationship, or pre-aggregate with derived properties. This is distinct from prescriptive cross-product concepts — it applies to any `select` with multiple join paths through a shared concept |
+| Silent column renaming (`_2`, `_3` suffixes) | Two concepts in a query share a property name (e.g., both have `.name`) — `to_df()` silently appends `_2` to disambiguate | Always apply `.alias()` to every selected property. Without explicit aliases, downstream code referencing the original column name gets wrong data or `KeyError` |
 
 ---
 
