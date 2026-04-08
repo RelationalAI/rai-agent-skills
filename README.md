@@ -27,6 +27,8 @@ The RelationalAI Native App for Snowflake must be installed in your account by a
 
 The `rai_developer` role is needed to execute PyRel programs.
 
+Assumes relationalai (Pyrel) v1.0.12+
+
 ## Installation
 
 ### Generic
@@ -83,4 +85,3 @@ Example:
     "RelationalAI/rai-agent-skills"
 ]
 ```
-
