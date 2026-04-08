@@ -85,7 +85,7 @@ What are we optimizing?
 - Reference defined variables and data properties in the expression
 - Check for trivial solution risk: "If all variables = 0, are all constraints satisfied?" If yes, Step 2 needs a forcing constraint.
 - **Competing objectives?** If the formulation has a penalty term bundling two concerns (cost + penalty×slack), or a constraint that represents a competing goal (return ≥ threshold), consider whether the user wants to explore the tradeoff rather than fix a single point. See [multi-objective-formulation.md](references/multi-objective-formulation.md) for the epsilon constraint approach.
-- **Parameter sensitivity?** If key constraints use fixed values that could vary (budget, demand, service level), consider scenario analysis to show how the solution changes. See [scenario-analysis.md](references/scenario-analysis.md).
+- **Parameter sensitivity / what-if?** If key constraints use fixed values that could vary (budget, demand, service level), use the Scenario Concept pattern — parameterize the constraint, index the decision variable by Scenario, and solve all scenarios in a single solve. This keeps results in the ontology and avoids manual re-solve loops. See [scenario-analysis.md](references/scenario-analysis.md).
 
 ### Step 4: Validate
 Is the formulation complete and correct?

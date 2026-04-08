@@ -202,6 +202,8 @@ graph.Node.community = graph.louvain()
 
 **Type note:** Community labels are `Int128Array` — cast with `.astype(int)` before pandas operations.
 
+**Non-deterministic:** Louvain may produce different community assignments, counts, and sizes across runs on the same data. Report results as ranges or structural assertions, not exact values.
+
 ---
 
 ### `infomap()`
@@ -222,6 +224,8 @@ graph.Node.community = graph.louvain()
 ```python
 graph.Node.community = graph.infomap()
 ```
+
+**Non-deterministic:** Infomap uses stochastic node movement to optimize the map equation. Community assignments may differ across runs on the same data.
 
 ---
 
