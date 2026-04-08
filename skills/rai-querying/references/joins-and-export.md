@@ -46,6 +46,32 @@ Nation.region.r_name                                # Nation -> Region -> r_name
 CalendarDay.calendar_year.nr                        # CalendarDay -> Year -> nr
 ```
 
+**Multi-hop join inference (4+ relationships):** When the question requires tracing a path through many concepts, chain relationship applications in `.where()` to join them, then select from any concept in the chain:
+
+```python
+# Trace: LineItem -> Order -> Customer -> Region -> Country
+# "What countries do our high-value line items ship to?"
+li = LineItem.ref()
+order = Order.ref()
+customer = Customer.ref()
+region = Region.ref()
+country = Country.ref()
+
+model.where(
+    li.part_of_order(order),
+    order.placed_by(customer),
+    customer.located_in(region),
+    region.belongs_to(country),
+    li.extended_price > 1000.0,
+).select(
+    li.id.alias("line_item"),
+    customer.name.alias("customer"),
+    country.name.alias("country"),
+).to_df()
+```
+
+Each `.where()` condition joins the next hop. Use explicit concept refs and relationship applications — not dot-chains — so bindings carry across all hops.
+
 **Dot-chain binding gotcha:** A dot-chain in `select` creates its own independent lookup — it does NOT carry bindings established by relationship applications in `where`. This is a common source of incorrect results:
 
 ```python

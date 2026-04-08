@@ -345,6 +345,7 @@ Start from the question, not the algorithm name:
 - `local_clustering_coefficient()` requires `directed=False`
 - `pagerank()` works on undirected but is most meaningful on directed
 - `reachable()` works on both directed and undirected, but is most meaningful on directed
+- `louvain()`, `infomap()`, and `label_propagation()` are **non-deterministic** — community assignments, counts, and sizes may vary between runs on the same data. Report results as ranges or structural assertions, not exact values.
 
 **Pre-flight compatibility check:** Before proceeding to Step 8, verify your chosen algorithm is compatible with your graph's directed/weighted settings.
 
@@ -457,6 +458,7 @@ model.where(Site.centrality_score < 0.1).define(Site.is_at_risk())
 | `Int128Array` error in pandas | Community detection IDs (Louvain, Infomap) are Int128 | Cast: `df["col"].astype(int)`. Note: WCC component IDs are string hashes — use `.astype(str)` instead |
 | Duplicate/self-loop edges | Missing guard in co-occurrence pattern | Add `left.id < right.id` to `.where()` clause |
 | `aggregator` missing | Weighted graph with multi-edges requires aggregator for parallel edges | Add `aggregator="sum"` — but only when multi-edges are expected (see [Aggregator guidance](#graph-constructor-aggregator-parameter-guidance)) |
+| Parallel edges mask bridges | Two edges between the same node pair mean removing one doesn't disconnect the pair — neither is a true bridge | Before reporting bridges, check whether the underlying data has parallel edges between the same endpoints. Do not collapse with `aggregator="sum"` before bridge detection — that merges parallel edges into one, making the single result appear to be a bridge when physically it isn't |
 | Weight type error | Weights must be floats, but property is Integer/Number | Cast with `floats.float(property)` in Edge.new weight parameter |
 | Centrality all equal / graph too dense | Two causes: (1) co-occurrence edges built on shared attribute values rather than shared specific entities produce near-complete graphs; (2) even with correct edges, all nodes have identical connectivity | (1) Build edges from shared specific entities (same FK value), not shared attribute categories; (2) add weighted edges to differentiate. If centrality is still uniform after both fixes, the underlying data may lack structural bottlenecks |
 | Similarity produces too many results | O(n^2) output for n nodes | Filter by minimum threshold or limit to top-k per node |
