@@ -29,11 +29,12 @@ The RelationalAI Native App for Snowflake must be installed in your account by a
 The `rai_developer` role is needed to execute PyRel programs.
 
 ## Installation
+Notes: 
+- For most coding agents, the installed skills will be available in your next session.
+- You can invoke the skills using the `/rai-` command. 
 
 ### Generic
-
-- You or your agent can manually copy the contents of our [skills](skills) folder into your skills folder.
-
+- You or your agent can manually copy the contents of this repo's [skills](skills) folder into your skills folder.
 - [Vercel's skills CLI](https://github.com/vercel-labs/skills) (requres `npm` v5.2.0+) helps you manage & update skills for most coding agents.
 ```bash
 npx skills add RelationalAI/rai-agent-skills --skill '*'
@@ -41,7 +42,7 @@ npx skills add RelationalAI/rai-agent-skills --skill '*'
 npx skills add RelationalAI/rai-agent-skills --skill '*' --agent cortex
 ```
 
-### Claude Code
+### Claude Code CLI
 Follow [these instructions](https://code.claude.com/docs/en/discover-plugins#add-marketplaces) to point at this repo.
 
 Also see this quick [video](https://www.loom.com/share/a78519cfa60149158779cb9925a44a1b) for an overview.
@@ -57,17 +58,7 @@ Restart your session after installing.
 
 ![Claude Code skills](doc/claude.png)
 
-### Claude Desktop
-1. Open the Claude Desktop app and go to **Customize** in the left sidebar.
-2. Under **Plugins**, browse the directory and find **Rai** by RelationalAI.
-3. Click to install, then toggle the plugin on.
-
-Skills will be available in your next session.
-
-![Claude Desktop plugin directory](doc/claude-desktop-directory.png)
-![Claude Desktop plugin detail](doc/claude-desktop-plugin.png)
-
-### Cortex Code
+### Cortex Code CLI
 Follow [these instructions](https://docs.snowflake.com/en/user-guide/cortex-code/extensibility#skills).
 
 In short, clone this repo to your file system then use the `/skill` dialog to add the [skills](skills) folder.
@@ -84,3 +75,23 @@ Example:
     "RelationalAI/rai-agent-skills"
 ]
 ```
+
+### Cursor
+Follow [these instructions](https://cursor.com/docs/skills#installing-skills-from-github).
+
+In short, specify this repo's URL `https://github.com/RelationalAI/rai-agent-skills.git` as a Remote Rule (Github).
+
+### OpenAI Codex
+Follow [these instructions](https://developers.openai.com/codex/skills)
+
+In short, download this repo's contents and ask your agent to copy the skills repo contents to the .agents/skills in your working repo root directory
+
+### Claude Code Desktop App
+1. Open the Claude Desktop app and go to **Customize** in the left sidebar.
+2. Under **Plugins**, browse the directory and find **Rai** by RelationalAI.
+3. Click to install, then toggle the plugin on.
+
+Alternatively, you can download this repo's contents and copy the skills into the Claude app.
+
+![Claude Desktop plugin directory](doc/claude-desktop-directory.png)
+![Claude Desktop plugin detail](doc/claude-desktop-plugin.png)
