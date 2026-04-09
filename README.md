@@ -17,7 +17,8 @@ Skills are markdown files encoding expert knowledge: heuristics, workflows, and 
 +-------------+   +-------------+
 ```
 
-The skills in this repo instruct your agent how to use the `relationalai` Python package to leverage RelationalAI ontologies and advanced reasoners by generating and executing PyRel code. - Generating PyRel enables the agent to create the RelationalAI ontology and extend it with reasoners. 
+The skills in this repo instruct your agent how to use the `relationalai` Python package to leverage RelationalAI ontologies and advanced reasoners by generating and executing PyRel code.
+- Generating PyRel enables the agent to create the RelationalAI ontology and extend it with reasoners. 
 - By executing PyRel, the agent can then query the ontology to answer questions or resolve issues.
 
 ## Prerequisites
@@ -93,7 +94,6 @@ In short, download this repo's contents and ask your agent to copy the skills re
 Alternatively, you can download this repo's contents and copy the skills into the Claude app.
 
 ![Claude Desktop plugin directory](doc/claude-desktop-directory.png)
-![Claude Desktop plugin detail](doc/claude-desktop-plugin.png)
 
 ## Usage
 **Invoke the skills using the `/rai-` command.**
