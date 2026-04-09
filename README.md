@@ -2,7 +2,7 @@
 
 Empower your coding agent with the decision intelligence capabilities of [RelationalAI](https://relational.ai).
 
-Skills are markdown files encoding expert knowledge — heuristics, workflows, and patterns. They are distributed as folders and installed into a location the agent can discover (e.g. ~/.claude/skills/). At runtime, the agent reads relevant skills to inform its reasoning, and calls tools to take action. Skills shape how the agent thinks; tools shape what it can do.
+Skills are markdown files encoding expert knowledge: heuristics, workflows, and patterns. They are distributed as folders and installed into a location the agent can discover (e.g. `~/.claude/skills/`). At runtime, the agent reads relevant skills to inform its reasoning, and calls tools and APIs to take action. 
 
 ```
           +---------+
@@ -12,12 +12,13 @@ Skills are markdown files encoding expert knowledge — heuristics, workflows, a
      reads           calls
       /                 \
 +-------------+   +-------------+
-|   Skills    |   |    Tools    |
+|   Skills    |   | Tools/APIs  |
 | <knowledge> |   |  <actions>  |
 +-------------+   +-------------+
 ```
 
-The skills in this repo instruct your agent how to use the `relationalai` Python package (aka PyRel) to leverage RAI semantic models and advanced reasoners.
+The skills in this repo instruct your agent how to use the `relationalai` Python package to leverage RelationalAI ontologies and advanced reasoners by generating and executing PyRel code. - Generating PyRel enables the agent to create the RelationalAI ontology and extend it with reasoners. 
+- By executing PyRel, the agent can then query the ontology to answer questions or resolve issues.
 
 ## Prerequisites
 **Assumes `relationalai` (PyRel) v1.0.12+**
@@ -29,13 +30,11 @@ The RelationalAI Native App for Snowflake must be installed in your account by a
 The `rai_developer` role is needed to execute PyRel programs.
 
 ## Installation
-Notes: 
-- For most coding agents, the installed skills will be available in your next session.
-- You can invoke the skills using the `/rai-` command. 
+Note: For most coding agents, the installed skills will be available in your next session.
 
-### Generic
-- You or your agent can manually copy the contents of this repo's [skills](skills) folder into your skills folder.
-- [Vercel's skills CLI](https://github.com/vercel-labs/skills) (requres `npm` v5.2.0+) helps you manage & update skills for most coding agents.
+### Any Coding Agent
+- Ask your agent to copy the contents of this repo's [skills](skills) folder into its skills folder.
+- [Vercel's skills CLI](https://github.com/vercel-labs/skills) (requires `npm` v5.2.0+) helps you manage & update skills for most coding agents.
 ```bash
 npx skills add RelationalAI/rai-agent-skills --skill '*'
 # optionally specify an agent
@@ -82,7 +81,7 @@ Follow [these instructions](https://cursor.com/docs/skills#installing-skills-fro
 In short, specify this repo's URL `https://github.com/RelationalAI/rai-agent-skills.git` as a Remote Rule (Github).
 
 ### OpenAI Codex
-Follow [these instructions](https://developers.openai.com/codex/skills)
+Follow [these instructions](https://developers.openai.com/codex/skills).
 
 In short, download this repo's contents and ask your agent to copy the skills repo contents to the .agents/skills in your working repo root directory
 
@@ -95,3 +94,23 @@ Alternatively, you can download this repo's contents and copy the skills into th
 
 ![Claude Desktop plugin directory](doc/claude-desktop-directory.png)
 ![Claude Desktop plugin detail](doc/claude-desktop-plugin.png)
+
+## Usage
+**Invoke the skills using the `/rai-` command.**
+
+| #   | Skill | Workflow Area |
+|-----|-------|----------------|
+| 1   | rai-onboarding | Setup |
+| 2   | rai-configuration | Setup |
+| 3   | rai-pyrel-coding | Development Reference |
+| 4   | rai-build-starter-ontology | Ontology |
+| 5   | rai-ontology-design | Ontology |
+| 6   | rai-rules-authoring | Ontology |
+| 7   | rai-querying | Reasoning |
+| 8   | rai-discovery | Reasoning |
+| 9   | rai-graph-analysis | Reasoning |
+| 10  | rai-prescriptive-problem-formulation | Reasoning |
+| 11  | rai-prescriptive-solver-management | Reasoning |
+| 12  | rai-prescriptive-results-interpretation | Reasoning |
+| 13  | rai-cortex-integration | Integration & Operations |
+| 14  | rai-health-skill | Integration & Operations |
