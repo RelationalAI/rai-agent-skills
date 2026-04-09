@@ -36,9 +36,7 @@ These are named parameters on `GNN(...)`, not train_params:
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `test_batch_size` | int | None | Batch size for prediction/inference |
-| `export_csv` | bool | True | Export tables as CSV instead of Snowflake staging |
 | `stream_logs` | bool | True | Stream training logs to console |
-| `skip_cdc` | bool | True | Skip CDC for faster data loading |
 | `extract_embeddings` | bool | False | Extract node embeddings during prediction |
 | `use_current_time` | bool | True | Use current time for temporal models |
 

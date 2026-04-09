@@ -87,8 +87,6 @@ The `GNN` constructor takes data locations, graph structure, task configuration,
 |-----------|---------|-------------|
 | `pt` | None | PropertyTransformer (omit for auto-inference) |
 | `has_time_column` | False | Set `True` when Relationships use the "at" keyword |
-| `export_csv` | True | Export tables as CSV instead of Snowflake staging |
-| `skip_cdc` | True | Skip CDC for faster data loading |
 | `stream_logs` | True | Stream training logs to console |
 
 ### Node Classification Example
@@ -144,8 +142,6 @@ gnn = GNN(
     task_type="repeated_link_prediction",
     eval_metric="link_prediction_precision@5",
     has_time_column=True,
-    export_csv=True,
-    skip_cdc=True,
     device="cuda",
     n_epochs=5,
     lr=0.005,

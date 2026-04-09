@@ -19,8 +19,6 @@ gnn = GNN(
     task_type="binary_classification",
     eval_metric="roc_auc",
     has_time_column=True,
-    export_csv=True,
-    skip_cdc=True,
     device="cuda",
     n_epochs=5,
 )
