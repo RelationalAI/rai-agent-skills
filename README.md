@@ -2,7 +2,7 @@
 
 Empower your coding agent with the decision intelligence capabilities of [RelationalAI](https://relational.ai).
 
-Skills are markdown files encoding expert knowledge: heuristics, workflows, and patterns. They are distributed as folders and installed into a location the agent can discover (e.g. `~/.claude/skills/`). At runtime, the agent reads relevant skills to inform its reasoning, and calls tools and APIs to take action. 
+Skills are markdown files encoding **expert knowledge** – heuristics, workflows, and patterns – distributed as folders and installed into a location the agent can discover (e.g. `~/.claude/skills/`). At runtime, the agent reads relevant skills to inform its reasoning, and calls tools and APIs to take action. 
 
 ```
           +---------+
@@ -17,9 +17,9 @@ Skills are markdown files encoding expert knowledge: heuristics, workflows, and 
 +-------------+   +-------------+
 ```
 
-The skills in this repo instruct your agent how to use the `relationalai` Python package to leverage RelationalAI ontologies and advanced reasoners by generating and executing PyRel code.
-- Generating PyRel enables the agent to create the RelationalAI ontology and extend it with reasoners. 
-- By executing PyRel, the agent can then query the ontology to answer questions or resolve issues.
+The skills in this repo instruct your agent **how to use the `relationalai` Python package to leverage RelationalAI ontologies and advanced reasoners by generating and executing PyRel code**. They roughly map to workflow steps.
+- Generating PyRel enables the agent to create the RelationalAI ontology, extend it with reasoners, and use its outputs. 
+- By executing PyRel, the agent can then query the ontology to answer questions, resolve issues, or help with setup.
 
 ## Prerequisites
 **Assumes `relationalai` (PyRel) v1.0.12+**
