@@ -221,7 +221,7 @@ Match the question to the algorithm family:
 | "What natural groups exist?" | Community | Requires undirected for Louvain; infomap handles directed |
 | "Is the network fragmented?" | Components | WCC for undirected; SCC future |
 | "What are all transitive dependencies?" | Reachability | `reachable()` |
-| "What depends on X? / What does X affect?" | Reachability | `reachable()` — most meaningful on directed |
+| "What depends on X? / What does X affect?" | Reachability | `reachable()` |
 | "How far apart are X and Y?" | Distance | Supports weighted (non-negative) |
 | "Which entities are most similar?" | Similarity | Based on shared neighborhoods |
 | "How tightly connected are local regions?" | Clustering | Triangle-based metrics |
@@ -336,7 +336,7 @@ Start from the question, not the algorithm name:
 | "What natural groups exist?" | Community | `louvain()` (undirected) or `infomap()` (directed) |
 | "Is the network fragmented?" | Components | `weakly_connected_component()` |
 | "What are all transitive dependencies?" | Reachability | `reachable()` |
-| "What depends on X? / What does X affect?" | Reachability | `reachable()` — **most meaningful on directed** |
+| "What depends on X? / What does X affect?" | Reachability | `reachable()` |
 | "How far apart are X and Y?" | Distance | `distance()` — supports weighted (non-negative) |
 | "Which entities are most similar?" | Similarity | `jaccard_similarity()` |
 | "How tightly connected locally?" | Clustering | `local_clustering_coefficient()` — **requires undirected** |
@@ -371,39 +371,35 @@ For per-algorithm deep dives (parameters, output shapes, interpretation, compati
 | `aggregator` | `"sum"` | **Only supported alternative** to the default `None`. Collapses multi-edges by summing weights. Only use when multi-edges are expected — see [Aggregator guidance](#graph-constructor-aggregator-parameter-guidance). |
 | `node_concept` | Concept | Which concept forms nodes. Required with `edge_concept`. Optional otherwise (inferred from edges). |
 
-**Algorithm-specific:** `pagerank(damping=0.85)` — default 0.85 is standard. For reachability, distance, similarity, and other relations that support domain constraints, see [Domain Constraints](#domain-constraints).
-
 ---
 
 ## Domain Constraints
 
-Domain constraints control which subset of a relation gets materialized. Without them, relations are materialized in full.
+Domain constraints control which subset of a relationship gets materialized. Without them, relationships are materialized in full.
 
 ### Why domain constraints matter
 
-For some relations, full materialization is tractable. For example, `outdegree` is linear in the number of nodes/edges — materializing it fully is typically reasonable. But other relations can be expensive or intractable to materialize in full. For example, `preferential_attachment` is quadratic in the number of nodes, and `common_neighbor` can be cubic — full materialization rapidly becomes infeasible as the graph grows.
+For some relationships, full materialization is tractable. For example, `outdegree` is linear in the number of nodes/edges — materializing it fully is typically reasonable. But other relationships can be expensive or intractable to materialize in full. For example, `preferential_attachment` is quadratic in the number of nodes, and `common_neighbor` can be cubic — full materialization rapidly becomes infeasible as the graph grows.
 
-Even for tractable relations, applications often need only a small subset. If you only need the `outdegree` of a single node, paying the cost of materializing the full relation is wasteful. Domain constraints let you specify which subset to materialize.
+Even for relationships that are tractable to materialize in full, applications often need only a small subset. If you only need the `outdegree` of a single node, paying the cost of materializing the full relationship is wasteful. Domain constraints let you specify which subset to materialize.
 
-### Which relations support domain constraints
+### Which relationships support domain constraints
 
-Not all relations support domain constraints, and those that do support different keyword arguments. **Check the docstring for a given relation** (in the graph library source or documentation) to confirm which domain constraint modes it supports at this time.
+Not all relationships support domain constraints, and those that do support different keyword arguments. **Check the docstring for a given relationship** (in the graph library source or documentation) to confirm which domain constraint modes it supports at this time.
 
-General patterns by relation shape:
+General patterns by relationship shape:
 
-| Relation Shape | Examples | Typical Domain Constraint Keywords |
+| Relationship Shape | Examples | Typical Domain Constraint Keywords |
 |---------------|----------|-----------------------------------|
-| Node → value (binary) | `degree()`, `outdegree()`, `neighbor()`, `triangle_count()`, `local_clustering_coefficient()`, `weakly_connected_component()`, `degree_centrality()` | `of` |
-| Node-pair (ternary) | `jaccard_similarity()`, `cosine_similarity()`, `adamic_adar()`, `preferential_attachment()`, `distance()`, `reachable()`, `common_neighbor()` | `full`, `from_`, `to`, `between` |
-| Scalar / global | `num_nodes()`, `eigenvector_centrality()`, `pagerank()`, `louvain()`, etc. | None — computed in full by nature |
+| Node → value (binary) | `degree()`, `neighbor()`, `local_clustering_coefficient()`, `weakly_connected_component()`, `degree_centrality()` | `of` |
+| Node-pair (binary) | `reachable()` | `full`, `from_`, `to`, `between` |
+
+| Node-pair (ternary) | `jaccard_similarity()`, `preferential_attachment()`, `distance()`, `common_neighbor()` | `full`, `from_`, `to`, `between` |
+| Scalar / global | `num_nodes()`, `eigenvector_centrality()`, `pagerank()`, `louvain()` | None — computed in full by nature |
 
 ### The `full` keyword
 
-Relations that are typically expensive enough to materialize in full that doing so is a footgun (similarity, reachability, distance, common_neighbor, triangle, unique_triangle) will **error with guidance** if called without domain-constraint keyword arguments. To override this guard and compute the full relation, pass `full=True`:
-
-```python
-similarity = graph.jaccard_similarity(full=True)  # Explicitly opt in to O(n^2) computation
-```
+Relationships that are typically expensive enough to materialize in full that doing so is a footgun (e.g. preferential attachment, reachable, common_neighbor, triangle) will **error with guidance** if called without domain-constraint keyword arguments. To override this guard and compute the full relationship, pass `full=True`:
 
 ### Domain constraint keyword patterns
 
@@ -416,7 +412,7 @@ Each keyword argument takes a `Relationship` containing the nodes or node pairs 
 | `to=R` | Unary Relationship (nodes) | Constrain destination / second-argument nodes | `graph.reachable(to=target_nodes)` |
 | `from_=R1, to=R2` | Two unary Relationships | Separately constrain both axes | `graph.distance(from_=sources, to=targets)` |
 | `between=R` | Binary Relationship (node pairs) | Jointly constrain to specific node pairs | `graph.distance(between=node_pairs)` |
-| `full=True` | Boolean | Override guard; compute full relation | `graph.jaccard_similarity(full=True)` |
+| `full=True` | Boolean | Override guard; compute full relationship | `graph.jaccard_similarity(full=True)` |
 
 ### Example: constrained similarity
 
@@ -426,7 +422,7 @@ seeds = model.Relationship(f"{graph.Node} is a seed node")
 model.where(...).define(seeds(graph.Node))
 
 # Compute similarity only from seed nodes to all other nodes — not all O(n^2) pairs
-graph.Node.similarity_score = graph.jaccard_similarity(from_=seeds)
+similarity_relationship = graph.jaccard_similarity(from_=seeds)
 ```
 
 ---
@@ -518,7 +514,7 @@ model.where(Site.centrality_score < 0.1).define(Site.is_at_risk())
 | Parallel edges mask bridges | Two edges between the same node pair mean removing one doesn't disconnect the pair — neither is a true bridge | Before reporting bridges, check whether the underlying data has parallel edges between the same endpoints. Do not collapse with `aggregator="sum"` before bridge detection — that merges parallel edges into one, making the single result appear to be a bridge when physically it isn't |
 | Weight type error | Weights must be floats, but property is Integer/Number | Cast with `floats.float(property)` in Edge.new weight parameter |
 | Centrality all equal / graph too dense | Two causes: (1) co-occurrence edges built on shared attribute values rather than shared specific entities produce near-complete graphs; (2) even with correct edges, all nodes have identical connectivity | (1) Build edges from shared specific entities (same FK value), not shared attribute categories; (2) add weighted edges to differentiate. If centrality is still uniform after both fixes, the underlying data may lack structural bottlenecks |
-| Similarity produces too many results | O(n^2) output for n nodes | Use [domain constraints](#domain-constraints) to limit computation: e.g. `graph.jaccard_similarity(from_=seed_nodes)`. If you need the full relation, filter by minimum threshold or limit to top-k per node after `full=True`. |
+| Similarity produces too many results | O(n^2) output for n nodes | Use [domain constraints](#domain-constraints) to limit computation: e.g. `graph.jaccard_similarity(from_=seed_nodes)`. If you need the full relationship, filter by minimum threshold or limit to top-k per node after `full=True`. |
 | Reachability on undirected connected graph gives trivial results | On undirected connected graphs, all nodes are reachable from all others — results aren't useful | Set `directed=True` for meaningful reachability/impact analysis. (On disconnected undirected graphs, reachable can still be useful for discovering components for specific nodes.) |
 | Wrong node concept | Using intermediary concept as nodes instead of entity concept | Intermediary concepts form edges, not nodes — e.g., `Operation` is an edge between `Site` nodes |
 | Graph results not visible on original concept | Results bound to `graph.Node` but not to the source concept | Add explicit binding: `model.where(graph.Node == MyConcept).define(...)` |
