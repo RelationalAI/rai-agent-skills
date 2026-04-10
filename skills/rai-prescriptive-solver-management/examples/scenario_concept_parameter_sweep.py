@@ -42,12 +42,10 @@ interaction_data = model.data(
 )
 ItemA = Item.ref()
 ItemB = Item.ref()
-model.define(
-    ItemA.interaction(ItemB, interaction_data.interaction).where(
-        ItemA.index == interaction_data.item_a,
-        ItemB.index == interaction_data.item_b,
-    )
-)
+model.where(
+    ItemA.index == interaction_data.item_a,
+    ItemB.index == interaction_data.item_b,
+).define(ItemA.interaction(ItemB, interaction_data.interaction))
 
 # Scenario with min_benefit parameter
 Scenario = model.Concept("Scenario", identify_by={"name": String})

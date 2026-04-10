@@ -42,16 +42,12 @@ interaction_data = model.data(
     ],
     columns=["item_a", "item_b", "interaction"],
 )
-item_a = Item.ref()
-item_b = Item.ref()
-model.define(
-    model.where(
-        item_a(Item),
-        item_b(Item),
-        interaction_data.item_a == item_a.index,
-        interaction_data.item_b == item_b.index,
-    ).set(item_a.interaction(item_b, interaction_data.interaction))
-)
+ItemA = Item.ref()
+ItemB = Item.ref()
+model.where(
+    ItemA.index == interaction_data.item_a,
+    ItemB.index == interaction_data.item_b,
+).define(ItemA.interaction(ItemB, interaction_data.interaction))
 
 Scenario = model.Concept("Scenario", identify_by={"name": String})
 Scenario.min_benefit = model.Property(f"{Scenario} has {Float:min_benefit}")
