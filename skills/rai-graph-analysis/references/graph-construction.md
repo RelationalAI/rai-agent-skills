@@ -388,9 +388,9 @@ graph.is_connected().inspect()
 
 ---
 
-## Graph Model Separation
+## Graph Model Separation (legacy — SDK < 1.0.13 only)
 
-> **SDK >= 1.0.13:** The `UnsupportedRecursionError` when mixing graph algorithms and prescriptive reasoning on the same `Model` is **fixed**. You no longer need a separate graph Model. The pattern below remains valid for defensive isolation or for supporting older SDK versions.
+> **SDK >= 1.0.13:** The `UnsupportedRecursionError` when mixing graph algorithms and prescriptive reasoning on the same `Model` is **fixed**. Build the graph directly on the main `Model` using a domain concept as `node_concept` — no separate graph Model or mirror concepts. The pattern below is preserved only for users on older SDK versions.
 
 In SDK < 1.0.13, graph algorithms on the same `Model` as another reasoner (e.g., Prescriptive) could cause `UnsupportedRecursionError`. The known trigger was prescriptive result extraction after graph algorithms on the same model.
 
@@ -423,9 +423,8 @@ model.define(Site.filter_by(id=cent_src.site_id).centrality(cent_src.centrality)
 ```
 
 **When to use this pattern:**
-- You are on SDK < 1.0.13 and get `UnsupportedRecursionError` when combining Graph with another reasoner on one model
-- You want defensive isolation in a multi-reasoner pipeline regardless of SDK version
+- Only when you are on SDK < 1.0.13 and get `UnsupportedRecursionError` when combining Graph with another reasoner on one model
 
-**When it's unnecessary:**
-- SDK >= 1.0.13 — graph and prescriptive work on the same Model without conflict
+**When NOT to use it:**
+- SDK >= 1.0.13 — graph and prescriptive work on the same Model without conflict; use domain concepts directly as `node_concept`
 - Graph-only scripts with no other reasoners

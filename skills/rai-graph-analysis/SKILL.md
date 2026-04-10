@@ -319,7 +319,7 @@ model.where(t.amount >= 100.0).define(graph.Edge.new(src=t.payer, dst=t.payee))
 
 For detailed patterns (multi-intermediary, hierarchy, self-referencing, multi-graph, weight construction, validation), see [graph-construction.md](references/graph-construction.md).
 
-**Multi-reasoner note:** In SDK >= 1.0.13, graph algorithms and prescriptive optimization work on the same `Model` without conflict. For older SDKs, mixing graph algorithms and prescriptive result extraction on the same `Model` could trigger `UnsupportedRecursionError` — the workaround was to define graph constructs on a **separate Model** and write results back via `model.data()`. That pattern is still valid for defensive isolation. See [graph_model_isolation.py](examples/graph_model_isolation.py) and Common Pitfalls below.
+**Multi-reasoner note:** In SDK >= 1.0.13, graph algorithms and prescriptive optimization work on the same `Model` without conflict — use domain concepts directly as `node_concept` (no mirror concepts or separate models needed). For older SDKs, mixing graph algorithms and prescriptive result extraction on the same `Model` could trigger `UnsupportedRecursionError` — the workaround was to define graph constructs on a **separate Model** and write results back via `model.data()`. See [graph_model_isolation.py](examples/graph_model_isolation.py) for the legacy pattern.
 
 ---
 
@@ -416,7 +416,7 @@ model.where(graph.Node == Customer).define(
 
 ### Type handling
 
-**Critical:** Community detection IDs (Louvain, Infomap) return as `Int128Array` — cast before pandas: `df["community"].astype(int)`. WCC component IDs return as **string hashes** — use `.astype(str)`, not `.astype(int)`.
+**Critical:** Community detection IDs (Louvain, Infomap) return as `Int128Array` — cast before pandas operations **and** before `model.data()`: `df["community"] = df["community"].astype(int)`. Int128Dtype is unrecognized by `model.data()` type inference (maps to `"Any"`, causing `TyperError`). WCC component IDs return as **string hashes** — use `.astype(str)`, not `.astype(int)`.
 
 ### Validation
 
@@ -455,7 +455,7 @@ model.where(Site.centrality_score < 0.1).define(Site.is_at_risk())
 |---------|-------|-----|
 | `louvain()` fails on directed graph | Louvain requires undirected | Set `directed=False` or use `infomap()` for directed |
 | Empty graph (no edges) | Edge definition doesn't match data — wrong relationship or join path | Verify edge source/destination properties exist and have data; query edge count before running algorithms |
-| `Int128Array` error in pandas | Community detection IDs (Louvain, Infomap) are Int128 | Cast: `df["col"].astype(int)`. Note: WCC component IDs are string hashes — use `.astype(str)` instead |
+| `Int128Array` errors in pandas or `model.data()` | Community detection IDs (Louvain, Infomap) are Int128 — incompatible with pandas ops and `model.data()` type inference | Cast: `df["col"] = df["col"].astype(int)` before pandas operations and before passing to `model.data()`. Note: WCC component IDs are string hashes — use `.astype(str)` instead |
 | Duplicate/self-loop edges | Missing guard in co-occurrence pattern | Add `left.id < right.id` to `.where()` clause |
 | `aggregator` missing | Weighted graph with multi-edges requires aggregator for parallel edges | Add `aggregator="sum"` — but only when multi-edges are expected (see [Aggregator guidance](#graph-constructor-aggregator-parameter-guidance)) |
 | Parallel edges mask bridges | Two edges between the same node pair mean removing one doesn't disconnect the pair — neither is a true bridge | Before reporting bridges, check whether the underlying data has parallel edges between the same endpoints. Do not collapse with `aggregator="sum"` before bridge detection — that merges parallel edges into one, making the single result appear to be a bridge when physically it isn't |
@@ -469,7 +469,7 @@ model.where(Site.centrality_score < 0.1).define(Site.is_at_risk())
 | Empty graph when extending existing model | Script creates `Model("name")` without importing base model definitions — concepts exist but have no instances | Import the base model module (e.g., `from my_model import model, Site`) so base `define()` rules are in scope |
 | `ValidationError: Unused variable` when using `rank()` with graph properties | Using `rank(desc(graph.Node.betweenness))` alongside other graph properties in `select()` triggers the unused variable validator | Sort in pandas instead: `.to_df().sort_values("betweenness", ascending=False).reset_index(drop=True)` — avoid `rank()` in graph queries |
 | `RAIException: Ungrounded variables` when mixing chained derived properties + Graph + boolean rules | Defining chained derived properties (e.g., `peak_forecast` → `future_headroom`) alongside Graph construction and boolean Relationship rules in the same model causes ungrounded variable errors | Query raw data via simple selects and compute derived values / rules in pandas. Root cause is related to the type inference limit noted above — chained derivations compound the issue |
-| `UnsupportedRecursionError` in multi-reasoner pipelines | In SDK < 1.0.13, mixing graph algorithms and prescriptive result extraction on the same `Model` could trigger recursion errors. **Fixed in SDK >= 1.0.13.** | Upgrade to SDK >= 1.0.13. For older SDKs, use a separate `Model` for graph analysis and write results back via `model.data()`. See [graph-construction.md](references/graph-construction.md#graph-model-separation). |
+| `UnsupportedRecursionError` in multi-reasoner pipelines | In SDK < 1.0.13, mixing graph algorithms and prescriptive result extraction on the same `Model` could trigger recursion errors. **Fixed in SDK >= 1.0.13.** | Upgrade to SDK >= 1.0.13 and use domain concepts directly as `node_concept` on a single model. For older SDKs, use a separate `Model` for graph analysis and write results back via `model.data()`. See [graph-construction.md](references/graph-construction.md#graph-model-separation). |
 
 ---
 
@@ -489,7 +489,7 @@ Each example targets a distinct combination of edge construction, topology, algo
 | Multiple graphs, same model | Multiple Graph instances on same node concept | Weighted + unweighted | Eigenvector + betweenness | Parallel graph views, separate Edge defs | [multi_graph_same_model.py](examples/multi_graph_same_model.py) |
 | Jaccard similarity | Co-occurrence edges via shared attribute | Undirected, unweighted | Jaccard similarity | Top-k similar pairs extraction | [similarity_jaccard.py](examples/similarity_jaccard.py) |
 | Shortest path + diameter | `edge_concept` with cost weight | Directed, weighted | Distance + diameter_range | All-pairs shortest paths, graph extent | [shortest_path_distance.py](examples/shortest_path_distance.py) |
-| Graph model isolation | Separate `Model()` for graph, results transferred to main model | Undirected, weighted | Eigenvector centrality | Defensive isolation for graph + prescriptive (required for SDK < 1.0.13, optional otherwise) | [graph_model_isolation.py](examples/graph_model_isolation.py) |
+| Graph model isolation | Separate `Model()` for graph, results transferred to main model | Undirected, weighted | Eigenvector centrality | **Legacy (SDK < 1.0.13 only)** — separate model to avoid `UnsupportedRecursionError`. In SDK >= 1.0.13, use domain concepts directly on a single model instead. | [graph_model_isolation.py](examples/graph_model_isolation.py) |
 
 ---
 

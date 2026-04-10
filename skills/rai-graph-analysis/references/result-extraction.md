@@ -208,9 +208,9 @@ model.where(graph.Node == Site).define(
 
 ### Int128Array from RAI
 
-Community labels, component IDs, and other integer graph outputs return as `Int128Array` in DataFrames. This type is incompatible with most pandas operations.
+Community labels, component IDs, and other integer graph outputs return as `Int128Array` in DataFrames. This type is incompatible with most pandas operations and with `model.data()` type inference (Int128Dtype maps to `"Any"` instead of `"Integer"`, causing `TyperError`).
 
-**Always cast before pandas operations:**
+**Always cast integer columns before further use:**
 
 ```python
 df["community"] = df["community"].astype(int)
@@ -218,7 +218,8 @@ df["component_id"] = df["component_id"].astype(int)
 ```
 
 **Failure symptoms without casting:**
-- `TypeError` on groupby, merge, or comparison operations
+- `TyperError` from `model.data()` type inference (Int128Dtype → `"Any"`)
+- `TypeError` on pandas groupby, merge, or comparison operations
 - Silent wrong results on equality checks
 - JSON serialization errors
 

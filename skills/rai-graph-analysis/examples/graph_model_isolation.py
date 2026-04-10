@@ -1,14 +1,14 @@
-# Pattern: Separate Model() for graph analysis to avoid SDK UnsupportedRecursionError.
-# NOTE: Fixed in SDK >= 1.0.13 — this pattern remains valid for defensive isolation.
-# Key ideas: graph algorithms create recursive definitions internally; when combined
-# with prescriptive post-solve queries (Variable.values() or model.select()) on the
-# same model, older SDK versions raise UnsupportedRecursionError. The workaround: run
-# graph on a dedicated graph_model = Model("graph_stage"), extract results to a
-# DataFrame, then load them back into the main model via model.data() + model.define().
-# The main model can then use graph-enriched properties in prescriptive or rules
-# stages without conflict.
-
-import pandas as pd
+# LEGACY PATTERN: Separate Model() for graph analysis (SDK < 1.0.13 only).
+# In SDK >= 1.0.13, graph and prescriptive work on the same Model — use domain
+# concepts directly as node_concept instead of mirror concepts. See the templates
+# (energy_grid_planning, machine_maintenance) for the recommended single-model
+# approach. This example is preserved only for users on older SDK versions.
+#
+# Background: In SDK < 1.0.13, graph algorithms on the same Model as prescriptive
+# post-solve queries (Variable.values() or model.select()) raised
+# UnsupportedRecursionError. The workaround: run graph on a dedicated
+# graph_model = Model("graph_stage"), extract results to a DataFrame, then load
+# them back into the main model via model.data() + model.define().
 
 from relationalai.semantics import Float, Integer, Model, String, sum
 from relationalai.semantics.reasoners.graph import Graph
@@ -64,12 +64,13 @@ model.define(
 )
 
 # =============================================================================
-# Stage 1: Graph analysis on a SEPARATE model
+# Stage 1: Graph analysis on a SEPARATE model (SDK < 1.0.13 only)
 # =============================================================================
-# WHY: The graph reasoner creates recursive internal definitions. If graph and
-# prescriptive share the same Model, post-solve queries (Variable.values() or
-# model.select()) trigger UnsupportedRecursionError. Using a dedicated graph_model
-# avoids this.
+# In SDK < 1.0.13, the graph reasoner's recursive internal definitions conflicted
+# with prescriptive post-solve queries (Variable.values() or model.select()) on the
+# same Model, raising UnsupportedRecursionError. A dedicated graph_model avoided
+# this. In SDK >= 1.0.13, build the graph directly on `model` using Site as
+# node_concept — no separate model or mirror concepts needed.
 
 graph_model = Model("graph_stage")
 
@@ -106,15 +107,10 @@ print(centrality_df.sort_values("centrality", ascending=False).to_string(index=F
 # Load centrality scores as data on the main model and define as a Site property.
 
 Site.centrality = model.Property(f"{Site} has centrality {Float:centrality}")
-# Convert to standard Python types: to_df() returns Int128Dtype for integer columns,
-# which causes TyperError when passed to model.data() on a different model.
-centrality_clean = pd.DataFrame(
-    {
-        "id": centrality_df["id"].astype(int).tolist(),
-        "centrality": centrality_df["centrality"].tolist(),
-    }
-)
-cent_data = model.data(centrality_clean)
+# Int128Dtype: model.data() requires .astype(int) on Int128 columns to avoid
+# TyperError during type inference. Also cast before pandas ops (groupby, merge, sort).
+centrality_df["id"] = centrality_df["id"].astype(int)
+cent_data = model.data(centrality_df[["id", "centrality"]])
 model.where(Site.id == cent_data["id"]).define(Site.centrality(cent_data["centrality"]))
 
 # =============================================================================

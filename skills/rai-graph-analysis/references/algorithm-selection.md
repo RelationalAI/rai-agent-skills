@@ -200,7 +200,7 @@ graph.Node.community = graph.louvain()
 
 **Interpretation:** Nodes with the same community label are more densely connected to each other than to nodes in other communities.
 
-**Type note:** Community labels are `Int128Array` — cast with `.astype(int)` before pandas operations.
+**Type note:** Community labels are `Int128Array` — cast with `.astype(int)` before pandas operations and before passing to `model.data()` (Int128Dtype is unrecognized by `model.data()` type inference).
 
 **Non-deterministic:** Louvain may produce different community assignments, counts, and sizes across runs on the same data. Report results as ranges or structural assertions, not exact values.
 
@@ -274,7 +274,7 @@ graph.Node.component = graph.weakly_connected_component()
 
 **Interpretation:** All nodes with the same component_id can reach each other. A single large component suggests good connectivity; many small components suggest fragmentation.
 
-**Type note:** Component IDs are `Int128Array` — cast before pandas operations.
+**Type note:** Component IDs are `Int128Array` — cast with `.astype(int)` before pandas operations and before passing to `model.data()`.
 
 ---
 
