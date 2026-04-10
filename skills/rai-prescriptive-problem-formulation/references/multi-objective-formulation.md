@@ -116,7 +116,7 @@ for eps in epsilon_values:
     # Extract solution via Variable.values() structured query
     value_ref = Float.ref()
     variables_df = model.select(
-        var.entity.name.alias("entity"),  # back-pointer from ProblemVariable
+        var.<concept>.name.alias("entity"),  # replace <concept> with your concept name
         value_ref.alias("value"),
     ).where(var.values(0, value_ref)).to_df()
 
@@ -209,8 +209,8 @@ for eps in epsilon_values:
     ...
     value_ref = Float.ref()
     variables_df = model.select(
-        var.entity.name.alias("entity"),
-        var.entity.secondary_coeff.alias("coefficient"),  # include coefficient for secondary
+        var.<concept>.name.alias("entity"),          # replace <concept> with your concept name
+        var.<concept>.secondary_coeff.alias("coeff"), # secondary objective coefficient via back-pointer
         value_ref.alias("value"),
     ).where(var.values(0, value_ref)).to_df()
 

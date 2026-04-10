@@ -104,7 +104,7 @@ problem.solve_info().display()
 
 # --- Results per scenario ---
 print("\nAllocations per scenario:")
-model.select(Scenario.name, Item.index, Item.x_allocation).where(
+model.select(Scenario.name, Item.index, x_alloc.alias("allocation")).where(
     Item.x_allocation(Scenario, x_alloc), x_alloc > 0.001
 ).inspect()
 
