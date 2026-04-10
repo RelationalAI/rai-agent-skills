@@ -35,6 +35,47 @@ scenario_data = model.data(
 )
 model.define(Scenario.new(scenario_data.to_schema()))
 
+# --- Data ---
+sub_data = model.data(
+    [(1, "SubA", 50), (2, "SubB", 30)],
+    columns=["id", "name", "current_capacity"],
+)
+model.define(Substation.new(sub_data.to_schema()))
+
+proj_data = model.data(
+    [
+        (1, "SolarPark", 1, 40, 5e8, 1e8),
+        (2, "WindFarm", 1, 20, 3e8, 0.5e8),
+        (3, "DataCenter", 2, 25, 6e8, 2e8),
+        (4, "Factory", 2, 15, 2e8, 0.8e8),
+    ],
+    columns=[
+        "id",
+        "name",
+        "substation_id",
+        "capacity_needed",
+        "revenue",
+        "connection_cost",
+    ],
+)
+model.define(
+    Project.new(
+        proj_data.to_schema(exclude=["substation_id"]),
+        substation=Substation.filter_by(id=proj_data.substation_id),
+    )
+)
+
+upg_data = model.data(
+    [(1, 1, 30, 4e8), (2, 1, 60, 7e8), (3, 2, 20, 3e8), (4, 2, 40, 5e8)],
+    columns=["id", "substation_id", "capacity_added", "upgrade_cost"],
+)
+model.define(
+    Upgrade.new(
+        upg_data.to_schema(exclude=["substation_id"]),
+        substation=Substation.filter_by(id=upg_data.substation_id),
+    )
+)
+
 # --- Decision variables — both indexed by Scenario ---
 Project.x_approved = Property(f"{Project} in {Scenario} is {Float:approved}")
 Upgrade.x_selected = Property(f"{Upgrade} in {Scenario} is {Float:selected}")

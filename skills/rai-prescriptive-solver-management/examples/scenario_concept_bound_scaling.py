@@ -25,6 +25,42 @@ scenario_data = model.data(
 )
 model.define(Scenario.new(scenario_data.to_schema()))
 
+# --- Data: nutrients and foods ---
+nutrient_data = model.data(
+    [("Protein", 50.0, 150.0), ("Carbs", 200.0, 400.0), ("Fat", 40.0, 100.0)],
+    columns=["name", "min", "max"],
+)
+model.define(Nutrient.new(nutrient_data.to_schema()))
+
+food_data = model.data(
+    [("Rice", 0.8), ("Chicken", 2.5), ("Beans", 1.2), ("Butter", 3.0)],
+    columns=["name", "cost"],
+)
+model.define(Food.new(food_data.to_schema()))
+
+# Ternary: food contains nutrient in quantity
+contains_data = model.data(
+    [
+        ("Rice", "Protein", 2.5),
+        ("Rice", "Carbs", 45.0),
+        ("Rice", "Fat", 0.5),
+        ("Chicken", "Protein", 30.0),
+        ("Chicken", "Carbs", 0.0),
+        ("Chicken", "Fat", 5.0),
+        ("Beans", "Protein", 8.0),
+        ("Beans", "Carbs", 22.0),
+        ("Beans", "Fat", 0.5),
+        ("Butter", "Protein", 0.1),
+        ("Butter", "Carbs", 0.0),
+        ("Butter", "Fat", 12.0),
+    ],
+    columns=["food_name", "nutrient_name", "qty"],
+)
+model.where(
+    Food.name == contains_data.food_name,
+    Nutrient.name == contains_data.nutrient_name,
+).define(Food.contains(Nutrient, contains_data.qty))
+
 # --- Decision variable indexed by Scenario ---
 Food.x_amount = model.Property(f"{Food} in {Scenario} has {Float:amount}")
 x_amt = Float.ref()

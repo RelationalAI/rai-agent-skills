@@ -20,6 +20,29 @@ FreightGroup.inv_start = Property(f"{FreightGroup} has {Float:inv_start}")
 TransportType = Concept("TransportType", identify_by={"name": String})
 TransportType.transit_time = Property(f"{TransportType} has {Integer:transit_time}")
 
+# --- Inline data ---
+fg_data = model.data(
+    [
+        ("FG_East", 1, 5, 1, 4, 100.0),
+        ("FG_West", 1, 5, 1, 4, 80.0),
+    ],
+    columns=[
+        "name",
+        "inv_start_t",
+        "inv_end_t",
+        "tra_start_t",
+        "tra_end_t",
+        "inv_start",
+    ],
+)
+model.define(FreightGroup.new(fg_data.to_schema()))
+
+tt_data = model.data(
+    [("tl", 2), ("ltl", 1)],
+    columns=["name", "transit_time"],
+)
+model.define(TransportType.new(tt_data.to_schema()))
+
 # --- Decision variables ---
 t = Integer.ref()
 fg = FreightGroup.ref()

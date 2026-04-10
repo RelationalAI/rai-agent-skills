@@ -28,6 +28,35 @@ SiteSKU.init_inv = Property(f"{SiteSKU} has {Float:init_inv}")
 WeeklyDemand = Concept("WeeklyDemand", identify_by={"site_id": Integer, "sku_id": Integer, "week": Integer})
 WeeklyDemand.qty = Property(f"{WeeklyDemand} has {Float:qty}")
 
+# --- Inline data ---
+site_data = model.data([(1, "Plant_A"), (2, "Plant_B")], columns=["id", "name"])
+model.define(Site.new(site_data.to_schema()))
+
+sku_data = model.data([(1, "Widget"), (2, "Gadget")], columns=["id", "name"])
+model.define(SKU.new(sku_data.to_schema()))
+
+ss_data = model.data(
+    [
+        (1, 1, 50.0, 5.0, 0.5, 20.0),
+        (1, 2, 40.0, 8.0, 0.6, 15.0),
+        (2, 1, 60.0, 4.0, 0.4, 10.0),
+    ],
+    columns=["site_id", "sku_id", "max_prod", "prod_cost", "hold_cost", "init_inv"],
+)
+model.define(SiteSKU.new(ss_data.to_schema()))
+
+# Demand for a few weeks (not every week needs demand; weeks without demand have zero demand implicitly)
+wd_rows = []
+for site_id, sku_id, demands in [
+    (1, 1, {1: 10.0, 3: 15.0, 5: 20.0, 8: 25.0, 11: 10.0}),
+    (1, 2, {2: 12.0, 4: 18.0, 7: 10.0, 10: 14.0, 13: 8.0}),
+    (2, 1, {1: 8.0, 4: 12.0, 6: 15.0, 9: 20.0, 12: 10.0}),
+]:
+    for wk, qty in demands.items():
+        wd_rows.append((site_id, sku_id, wk, qty))
+wd_data = model.data(wd_rows, columns=["site_id", "sku_id", "week", "qty"])
+model.define(WeeklyDemand.new(wd_data.to_schema()))
+
 # --- Time periods via std.common.range() ---
 num_weeks = 13
 weeks = std.common.range(1, num_weeks + 1)

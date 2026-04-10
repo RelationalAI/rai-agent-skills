@@ -12,6 +12,26 @@ Edge = model.Concept("Edge", identify_by={"i": Integer, "j": Integer})
 Edge.dist = model.Property(f"{Edge} has {Float:dist}")
 
 Node = model.Concept("Node", identify_by={"v": Integer})
+# --- Data: complete directed graph on 4 nodes with distances ---
+edge_data = model.data(
+    [
+        (1, 2, 10.0),
+        (1, 3, 15.0),
+        (1, 4, 20.0),
+        (2, 1, 10.0),
+        (2, 3, 35.0),
+        (2, 4, 25.0),
+        (3, 1, 15.0),
+        (3, 2, 35.0),
+        (3, 4, 30.0),
+        (4, 1, 20.0),
+        (4, 2, 25.0),
+        (4, 3, 30.0),
+    ],
+    columns=["i", "j", "dist"],
+)
+model.define(Edge.new(edge_data.to_schema()))
+
 model.define(Node.new(v=Edge.i))  # derive nodes from edge endpoints
 
 # Derived scalar: node count as Relationship (needed for solve_for upper= bound)

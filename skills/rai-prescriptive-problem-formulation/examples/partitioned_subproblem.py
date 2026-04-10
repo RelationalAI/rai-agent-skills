@@ -18,6 +18,34 @@ Product.rate = model.Property(f"{Product} has {Float:rate}")
 Product.profit = model.Property(f"{Product} has {Float:profit}")
 Product.demand = model.Property(f"{Product} has {Integer:demand}")
 
+# --- Inline data ---
+factory_data = model.data(
+    [("Factory_A", 100.0), ("Factory_B", 80.0)],
+    columns=["name", "avail"],
+)
+model.define(Factory.new(factory_data.to_schema()))
+
+product_data = model.data(
+    [
+        ("P1", "Factory_A", 20.0, 10.0, 50),
+        ("P2", "Factory_A", 25.0, 15.0, 40),
+        ("P3", "Factory_A", 30.0, 8.0, 60),
+        ("P4", "Factory_B", 15.0, 12.0, 45),
+        ("P5", "Factory_B", 20.0, 18.0, 30),
+    ],
+    columns=["name", "factory_name", "rate", "profit", "demand"],
+)
+model.define(
+    Product.new(
+        name=product_data.name,
+        factory_name=product_data.factory_name,
+        rate=product_data.rate,
+        profit=product_data.profit,
+        demand=product_data.demand,
+        factory=Factory.filter_by(name=product_data.factory_name),
+    )
+)
+
 # --- Decision variable (declared once, scoped per iteration) ---
 Product.x_quantity = model.Property(f"{Product} has {Float:quantity}")
 

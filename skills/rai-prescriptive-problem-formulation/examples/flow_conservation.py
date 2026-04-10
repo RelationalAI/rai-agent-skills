@@ -12,6 +12,13 @@ model = Model("flow_conservation")
 Edge = model.Concept("Edge", identify_by={"i": Integer, "j": Integer})
 Edge.cap = model.Property(f"{Edge} has {Float:cap}")
 
+# --- Inline data: small directed graph for max-flow (source=1, sink=4) ---
+edge_data = model.data(
+    [(1, 2, 10.0), (1, 3, 8.0), (2, 3, 5.0), (2, 4, 7.0), (3, 4, 10.0)],
+    columns=["i", "j", "cap"],
+)
+model.define(Edge.new(edge_data.to_schema()))
+
 # --- Decision variable ---
 # Flow on each edge, non-negative and bounded by capacity
 Edge.x_flow = model.Property(f"{Edge} has {Float:flow}")

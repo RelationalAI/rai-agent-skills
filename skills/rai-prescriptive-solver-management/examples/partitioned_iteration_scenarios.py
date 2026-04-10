@@ -18,6 +18,29 @@ Product.profit = model.Property(f"{Product} has {Float:profit}")
 Product.demand = model.Property(f"{Product} has {Integer:demand}")
 Product.x_quantity = model.Property(f"{Product} has {Float:quantity}")
 
+# --- Data ---
+factory_data = model.data(
+    [("Factory_A", 40.0), ("Factory_B", 30.0)],
+    columns=["name", "avail"],
+)
+model.define(Factory.new(factory_data.to_schema()))
+
+product_data = model.data(
+    [
+        ("P1", "Factory_A", 5.0, 10.0, 50),
+        ("P2", "Factory_A", 4.0, 8.0, 40),
+        ("P3", "Factory_B", 6.0, 12.0, 30),
+        ("P4", "Factory_B", 3.0, 7.0, 45),
+    ],
+    columns=["name", "factory_name", "rate", "profit", "demand"],
+)
+model.define(
+    Product.new(
+        product_data.to_schema(),
+        factory=Factory.filter_by(name=product_data.factory_name),
+    )
+)
+
 # --- Iteration pattern: one sub-problem per factory ---
 factory_names = ["Factory_A", "Factory_B"]
 scenario_results = []

@@ -36,6 +36,38 @@ model.define(SupplyOrder.product(Product)).where(SupplyOrder.option(SupplyOption
 SupplyOrder.cost_per_unit = Property(f"{SupplyOrder} has {Float:cost_per_unit}")
 model.define(SupplyOrder.cost_per_unit(SupplyOption.cost_per_unit)).where(SupplyOrder.option(SupplyOption))
 
+# --- Data ---
+supplier_data = model.data(
+    [(1, "SupplierA", 100), (2, "SupplierB", 80), (3, "SupplierC", 60)],
+    columns=["id", "name", "capacity"],
+)
+model.define(Supplier.new(supplier_data.to_schema()))
+
+product_data = model.data(
+    [(1, "Widget", 70), (2, "Gadget", 50)],
+    columns=["id", "name", "demand"],
+)
+model.define(Product.new(product_data.to_schema()))
+
+option_data = model.data(
+    [
+        (1, 1, 1, 2.0),
+        (2, 1, 2, 3.0),
+        (3, 2, 1, 4.0),
+        (4, 2, 2, 1.5),
+        (5, 3, 1, 2.5),
+        (6, 3, 2, 3.5),
+    ],
+    columns=["id", "supplier_id", "product_id", "cost_per_unit"],
+)
+model.define(
+    SupplyOption.new(
+        option_data.to_schema(exclude=["supplier_id", "product_id"]),
+        supplier=Supplier.filter_by(id=option_data.supplier_id),
+        product=Product.filter_by(id=option_data.product_id),
+    )
+)
+
 # --- Disruption scenarios: exclude suppliers one at a time ---
 excluded_suppliers = [None, "SupplierC", "SupplierB"]
 scenario_results = []
