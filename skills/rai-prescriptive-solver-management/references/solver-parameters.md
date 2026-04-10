@@ -16,13 +16,13 @@ Any additional keyword arguments are passed as raw solver-specific options. A wa
 
 ```python
 # HiGHS-specific
-p.solve("highs", time_limit_sec=120, presolve="on", threads=4)
+problem.solve("highs", time_limit_sec=120, presolve="on", threads=4)
 
 # Gurobi-specific (note: CamelCase parameter names)
-p.solve("gurobi", time_limit_sec=120, MIPFocus=1, Presolve=2, Threads=0)
+problem.solve("gurobi", time_limit_sec=120, MIPFocus=1, Presolve=2, Threads=0)
 
 # Ipopt-specific
-p.solve("ipopt", time_limit_sec=60, max_iter=1000, tol=1e-8, mu_strategy="adaptive")
+problem.solve("ipopt", time_limit_sec=60, max_iter=1000, tol=1e-8, mu_strategy="adaptive")
 ```
 
 **Key solver-specific parameters:**
@@ -63,10 +63,10 @@ For nonlinear solvers like Ipopt, provide initial values via the `start=` parame
 # Standalone variable with warm start (Rosenbrock example)
 x = model.Relationship(f"{Float:x}")
 y = model.Relationship(f"{Float:y}")
-p.solve_for(x, name="x", lower=-100.0, upper=5.0, start=0.0)
-p.solve_for(y, name="y", lower=-100.0, upper=5.0, start=0.0)
-p.minimize((1 - x) ** 2 + 100 * (y - x**2) ** 2)
-p.solve("ipopt", log_to_console=True)
+problem.solve_for(x, name="x", lower=-100.0, upper=5.0, start=0.0)
+problem.solve_for(y, name="y", lower=-100.0, upper=5.0, start=0.0)
+problem.minimize((1 - x) ** 2 + 100 * (y - x**2) ** 2)
+problem.solve("ipopt", log_to_console=True)
 # termination_status: "LOCALLY_SOLVED" (Ipopt finds local optima, not global)
 ```
 
@@ -77,7 +77,7 @@ p.solve("ipopt", log_to_console=True)
 Two patterns for exploring how solutions change under different assumptions:
 
 - **Scenario Concept** — parameter variations (budget, demand, thresholds) solved in a single solve. Results live in the ontology.
-- **Loop + where= filter** — entity exclusion or partitioned sub-problems. Each iteration is independent. Use `populate=False` + `variable_values().to_df()`.
+- **Loop + where= filter** — entity exclusion or partitioned sub-problems. Each iteration is independent. Use `populate=False` + `Variable.values()` (preferred) or `variable_values().to_df()` (deprecated).
 
 **Decision rule:** Only parameter values change -> Scenario Concept. Entities or constraint structure change -> Loop + where=.
 

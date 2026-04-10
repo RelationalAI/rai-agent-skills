@@ -29,8 +29,8 @@ model.define(Scenario.new(scenario_data.to_schema()))
 Food.x_amount = model.Property(f"{Food} in {Scenario} has {Float:amount}")
 x_amt = Float.ref()
 
-p = Problem(model, Float)
-p.solve_for(
+problem = Problem(model, Float)
+x_amount_var = problem.solve_for(
     Food.x_amount(Scenario, x_amt),
     name=["amt", Scenario.scenario_name, Food.name],
     lower=0,
@@ -39,21 +39,25 @@ p.solve_for(
 # --- Constraint: nutrient bounds scaled by scenario parameter ---
 # Nutrient.min * Scenario.nutrient_scaling <= total intake <= Nutrient.max * Scenario.nutrient_scaling
 nutrient_qty = Float.ref()
-p.satisfy(model.where(
-    Food.x_amount(Scenario, x_amt),
-    Food.contains(Nutrient, nutrient_qty),
-).require(
-    sum(nutrient_qty * x_amt).per(Nutrient, Scenario) >= Nutrient.min * Scenario.nutrient_scaling,
-    sum(nutrient_qty * x_amt).per(Nutrient, Scenario) <= Nutrient.max * Scenario.nutrient_scaling,
-))
+problem.satisfy(
+    model.where(
+        Food.x_amount(Scenario, x_amt),
+        Food.contains(Nutrient, nutrient_qty),
+    ).require(
+        sum(nutrient_qty * x_amt).per(Nutrient, Scenario)
+        >= Nutrient.min * Scenario.nutrient_scaling,
+        sum(nutrient_qty * x_amt).per(Nutrient, Scenario)
+        <= Nutrient.max * Scenario.nutrient_scaling,
+    )
+)
 
 # --- Objective: minimize total cost ---
-p.minimize(sum(Food.cost * x_amt).where(Food.x_amount(Scenario, x_amt)))
+problem.minimize(sum(Food.cost * x_amt).where(Food.x_amount(Scenario, x_amt)))
 
 # --- Solve all scenarios at once ---
-p.display()
-p.solve("highs", time_limit_sec=60)
-p.solve_info().display()
+problem.display()
+problem.solve("highs", time_limit_sec=60)
+problem.solve_info().display()
 
 # --- Results per scenario (in the ontology) ---
 print("\nDiet plan per scenario:")

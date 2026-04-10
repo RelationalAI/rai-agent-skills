@@ -14,7 +14,7 @@ Requires all variables in the group to take pairwise distinct values. Returns an
 
 ```python
 # Sudoku: all different per row, per column, per box
-p.satisfy(
+problem.satisfy(
     model.require(
         all_different(x).per(i),                              # each row
         all_different(x).per(j),                              # each column
@@ -31,10 +31,10 @@ Creates `left => right` constraint. Returns an `Expression` (not an Aggregate â€
 
 ```python
 # If x = 1, then y must = 1
-p.satisfy(model.require(implies(x == 1, y == 1)))
+problem.satisfy(model.require(implies(x == 1, y == 1)))
 
 # If facility is open, production must be positive
-p.satisfy(model.require(implies(Facility.x_open == 1, Facility.x_production >= 1)))
+problem.satisfy(model.require(implies(Facility.x_open == 1, Facility.x_production >= 1)))
 ```
 
 ## `special_ordered_set_type_1` â€” SOS1 at most one non-zero
@@ -45,7 +45,7 @@ At most one variable in the set can be non-zero. Used for selecting exactly one 
 
 ```python
 # At most one facility in a region can be open
-p.satisfy(model.require(special_ordered_set_type_1(Facility.index, Facility.x_open).per(Region)))
+problem.satisfy(model.require(special_ordered_set_type_1(Facility.index, Facility.x_open).per(Region)))
 ```
 
 Arguments: `(index_expression, variable_expression)` where `index` defines the ordering.
@@ -58,7 +58,7 @@ At most 2 variables can be non-zero, and they must be consecutive in the given o
 
 ```python
 # PWL: at most 2 consecutive weights non-zero
-p.satisfy(model.require(special_ordered_set_type_2(Point.i, Point.w)))
+problem.satisfy(model.require(special_ordered_set_type_2(Point.i, Point.w)))
 ```
 
 Arguments: `(index_expression, variable_expression)` where `index` defines the ordering.

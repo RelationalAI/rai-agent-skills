@@ -58,28 +58,35 @@ interaction_value = Float.ref()
 total_budget = 1000
 
 # --- Formulation ---
-p = Problem(model, Float)
-p.solve_for(Item.x_allocation(Scenario, x_alloc),
-            name=[Scenario.name, "alloc", Item.index])
-p.satisfy(model.where(Item.x_allocation(Scenario, x_alloc)).require(x_alloc >= 0))
-p.satisfy(model.where(Item.x_allocation(Scenario, x_alloc)).require(
-    sum(x_alloc).per(Scenario) <= total_budget))
-p.satisfy(model.where(Item.x_allocation(Scenario, x_alloc)).require(
-    sum(x_alloc * Item.value).per(Scenario) >= Scenario.min_benefit))
+problem = Problem(model, Float)
+x_allocation_var = problem.solve_for(
+    Item.x_allocation(Scenario, x_alloc), name=[Scenario.name, "alloc", Item.index]
+)
+problem.satisfy(model.where(Item.x_allocation(Scenario, x_alloc)).require(x_alloc >= 0))
+problem.satisfy(
+    model.where(Item.x_allocation(Scenario, x_alloc)).require(
+        sum(x_alloc).per(Scenario) <= total_budget
+    )
+)
+problem.satisfy(
+    model.where(Item.x_allocation(Scenario, x_alloc)).require(
+        sum(x_alloc * Item.value).per(Scenario) >= Scenario.min_benefit
+    )
+)
 
 quad_cost = sum(interaction_value * x_alloc * paired_alloc).per(Scenario).where(
     Item.x_allocation(Scenario, x_alloc),
     PairedItem.x_allocation(Scenario, paired_alloc),
     Item.interaction(PairedItem, interaction_value),
 )
-p.minimize(sum(quad_cost))
+problem.minimize(sum(quad_cost))
 
-p.solve("highs", time_limit_sec=60)
+problem.solve("highs", time_limit_sec=60)
 
 # --- Result extraction: all queries use model.select() ---
 
 # 1. Solve status
-si = p.solve_info()
+si = problem.solve_info()
 si.display()
 print(f"Status: {si.termination_status}")
 print(f"Objective (total quadratic cost): {si.objective_value}")

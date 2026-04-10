@@ -1,10 +1,10 @@
 # Pattern: Separate Model() for graph analysis to avoid SDK UnsupportedRecursionError.
 # Key ideas: graph algorithms create recursive definitions internally; when combined
-# with prescriptive post-solve queries (p.variable_values()) on the same model, the
-# SDK raises UnsupportedRecursionError. The workaround: run graph on a dedicated
-# graph_model = Model("graph_stage"), extract results to a DataFrame, then load them
-# back into the main model via model.data() + model.define(). The main model can
-# then use graph-enriched properties in prescriptive or rules stages without conflict.
+# with prescriptive post-solve queries (Variable.values() or model.select()) on the
+# same model, the SDK raises UnsupportedRecursionError. The workaround: run graph on
+# a dedicated graph_model = Model("graph_stage"), extract results to a DataFrame, then
+# load them back into the main model via model.data() + model.define(). The main model
+# can then use graph-enriched properties in prescriptive or rules stages without conflict.
 
 from relationalai.semantics import Float, Integer, Model, String, sum
 from relationalai.semantics.reasoners.graph import Graph
@@ -63,8 +63,9 @@ model.define(
 # Stage 1: Graph analysis on a SEPARATE model
 # =============================================================================
 # WHY: The graph reasoner creates recursive internal definitions. If graph and
-# prescriptive share the same Model, post-solve queries like p.variable_values()
-# trigger UnsupportedRecursionError. Using a dedicated graph_model avoids this.
+# prescriptive share the same Model, post-solve queries (Variable.values() or
+# model.select()) trigger UnsupportedRecursionError. Using a dedicated graph_model
+# avoids this.
 
 graph_model = Model("graph_stage")
 
@@ -112,20 +113,20 @@ BUDGET = 300.0
 
 Site.x_invest = model.Property(f"{Site} investment is {Float:x}")
 
-p = Problem(model, Float)
-p.solve_for(Site.x_invest, lower=0, name=["invest", Site.name])
+problem = Problem(model, Float)
+problem.solve_for(Site.x_invest, lower=0, name=["invest", Site.name])
 
-p.satisfy(model.require(sum(Site.x_invest) <= BUDGET))
-p.satisfy(model.require(Site.x_invest <= 10 * Site.operating_cost))
+problem.satisfy(model.require(sum(Site.x_invest) <= BUDGET))
+problem.satisfy(model.require(Site.x_invest <= 10 * Site.operating_cost))
 
 # Objective: maximize centrality-weighted investment
-p.maximize(sum(Site.x_invest * Site.centrality))
+problem.maximize(sum(Site.x_invest * Site.centrality))
 
 # --- Solve ---
-p.display()
-p.solve("highs", time_limit_sec=60)
-model.require(p.termination_status() == "OPTIMAL")
-si = p.solve_info()
+problem.display()
+problem.solve("highs", time_limit_sec=60)
+model.require(problem.termination_status() == "OPTIMAL")
+si = problem.solve_info()
 si.display()
 print(f"\nStatus: {si.termination_status}, Objective: {si.objective_value:.4f}")
 

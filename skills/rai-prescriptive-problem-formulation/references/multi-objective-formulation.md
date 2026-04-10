@@ -51,16 +51,16 @@ When the secondary objective is currently modeled as a constraint with a fixed b
 
 ```python
 # BEFORE (single-objective): return is a fixed constraint
-p.satisfy(model.require(sum(Stock.returns * x_qty).per(Scenario) >= min_return))
-p.minimize(risk_expr)
+problem.satisfy(model.require(sum(Stock.returns * x_qty).per(Scenario) >= min_return))
+problem.minimize(risk_expr)
 
 # AFTER (bi-objective): return target becomes the loop parameter
 for rate in epsilon_rates:
-    p = Problem(model, Float)
-    p.solve_for(..., populate=False)
-    p.satisfy(model.require(sum(Stock.returns * x_qty).per(Scenario) >= rate * Scenario.budget))
-    p.minimize(risk_expr)
-    p.solve(...)
+    problem = Problem(model, Float)
+    problem.solve_for(..., populate=False)
+    problem.satisfy(model.require(sum(Stock.returns * x_qty).per(Scenario) >= rate * Scenario.budget))
+    problem.minimize(risk_expr)
+    problem.solve(...)
 ```
 
 ### Entry 2: Bundled Penalty to Unbundle
@@ -70,15 +70,15 @@ When two concerns are combined via penalty weight in a single objective.
 ```python
 # BEFORE (single-objective): cost + penalty bundled
 PENALTY = 10000
-p.minimize(sum(Route.cost * Route.x_flow) + PENALTY * sum(Demand.x_unmet))
+problem.minimize(sum(Route.cost * Route.x_flow) + PENALTY * sum(Demand.x_unmet))
 
 # AFTER (bi-objective): split into primary objective + epsilon constraint
 for eps in epsilon_values:
-    p = Problem(model, Float)
-    p.solve_for(..., populate=False)
-    p.satisfy(model.require(sum(Demand.x_unmet) <= eps))  # secondary as constraint
-    p.minimize(sum(Route.cost * Route.x_flow))              # primary only
-    p.solve(...)
+    problem = Problem(model, Float)
+    problem.solve_for(..., populate=False)
+    problem.satisfy(model.require(sum(Demand.x_unmet) <= eps))  # secondary as constraint
+    problem.minimize(sum(Route.cost * Route.x_flow))              # primary only
+    problem.solve(...)
 ```
 
 ## Epsilon Constraint Method
@@ -98,14 +98,14 @@ Without anchors, epsilon values may be non-binding (wasted solves) or infeasible
 pareto = []
 consecutive_infeasible = 0
 for eps in epsilon_values:
-    p = Problem(model, Float)
-    p.solve_for(..., populate=False)      # fresh Problem each iteration
-    p.satisfy(original_constraints)
-    p.satisfy(model.require(secondary >= eps))   # epsilon constraint
-    p.minimize(primary_objective)
-    p.solve(solver, time_limit_sec=60)
+    problem = Problem(model, Float)
+    problem.solve_for(..., populate=False)      # fresh Problem each iteration
+    problem.satisfy(original_constraints)
+    problem.satisfy(model.require(secondary >= eps))   # epsilon constraint
+    problem.minimize(primary_objective)
+    problem.solve(solver, time_limit_sec=60)
 
-    si = p.solve_info()
+    si = problem.solve_info()
     if si.termination_status not in ("OPTIMAL", "LOCALLY_SOLVED"):
         consecutive_infeasible += 1
         if consecutive_infeasible >= 2:
@@ -116,7 +116,7 @@ for eps in epsilon_values:
     pareto.append({
         "eps": eps,
         "primary": si.objective_value,
-        "variables": p.variable_values().to_df(),
+        "variables": problem.variable_values().to_df(),  # deprecated; prefer Variable.values() for new code
     })
 ```
 
@@ -147,7 +147,7 @@ epsilon_values = [
 ## Evaluating the Secondary Objective
 
 The solver only reports the primary (optimized) objective value. To get both objectives at each
-Pareto point, evaluate the secondary expression on the `variable_values` DataFrame:
+Pareto point, evaluate the secondary expression on the variable values DataFrame (from `variable_values()` or `Variable.values()`):
 
 ```python
 import builtins  # RAI `sum` shadows Python's built-in
@@ -194,12 +194,12 @@ can be used INSIDE the epsilon loop:
 
 ```python
 for eps in epsilon_values:
-    p = Problem(model, Float)
+    problem = Problem(model, Float)
     # Scenario Concept handles parameter variations -- one solve, all scenarios
-    p.solve_for(Entity.x_var(Scenario, x), ..., populate=False)
-    p.satisfy(model.require(secondary >= eps).per(Scenario))
-    p.minimize(primary_objective)  # aggregated across scenarios
-    p.solve(...)
+    problem.solve_for(Entity.x_var(Scenario, x), ..., populate=False)
+    problem.satisfy(model.require(secondary >= eps).per(Scenario))
+    problem.minimize(primary_objective)  # aggregated across scenarios
+    problem.solve(...)
     # all scenarios solved at this epsilon level
 ```
 
@@ -217,7 +217,7 @@ for eps in epsilon_values:
         "eps": eps,
         "primary": si.objective_value,
         "secondary": evaluate_secondary(df, ...),
-        "variables": p.variable_values().to_df(),
+        "variables": problem.variable_values().to_df(),  # deprecated; prefer Variable.values() for new code
     })
 ```
 
@@ -228,12 +228,12 @@ for eps in epsilon_values:
 chosen_eps = pareto_points[knee_idx]["eps"]
 
 # Re-solve with populate=True — results written to model properties
-p_final = Problem(model, Float)
-p_final.solve_for(Entity.x_var, populate=True)  # writes back to ontology
-p_final.satisfy(original_constraints)
-p_final.satisfy(model.require(secondary >= chosen_eps))
-p_final.minimize(primary)
-p_final.solve(solver, time_limit_sec=60)
+problem_final = Problem(model, Float)
+problem_final.solve_for(Entity.x_var, populate=True)  # writes back to ontology
+problem_final.satisfy(original_constraints)
+problem_final.satisfy(model.require(secondary >= chosen_eps))
+problem_final.minimize(primary)
+problem_final.solve(solver, time_limit_sec=60)
 
 # Results now queryable via model.select(), composable with other model queries
 model.select(Entity.id, Entity.x_var).where(Entity.x_var > 0.001).inspect()

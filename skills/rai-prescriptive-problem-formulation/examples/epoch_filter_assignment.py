@@ -60,26 +60,40 @@ model.define(
 )
 
 # --- Problem ---
-p = Problem(model, Float)
-p.solve_for(Assignment.x_assigned, type="bin",
-            name=["assign", Assignment.issue.key, Assignment.developer.name, Assignment.sprint.name])
+problem = Problem(model, Float)
+x_assigned_var = problem.solve_for(
+    Assignment.x_assigned,
+    type="bin",
+    name=[
+        "assign",
+        Assignment.issue.key,
+        Assignment.developer.name,
+        Assignment.sprint.name,
+    ],
+)
 
 # Constraint: each issue assigned exactly once
-p.satisfy(model.require(
-    sum(Assignment.x_assigned).per(Issue) == 1
-).where(Assignment.issue == Issue))
+problem.satisfy(
+    model.require(sum(Assignment.x_assigned).per(Issue) == 1).where(
+        Assignment.issue == Issue
+    )
+)
 
 # Constraint: developer capacity per sprint
 capacity_multiplier = 1.0
-p.satisfy(model.require(
-    sum(Assignment.x_assigned * Assignment.issue.story_points).per(Developer, Sprint)
-    <= Developer.capacity_points_per_sprint * capacity_multiplier
-).where(Assignment.developer == Developer, Assignment.sprint == Sprint))
+problem.satisfy(
+    model.require(
+        sum(Assignment.x_assigned * Assignment.issue.story_points).per(
+            Developer, Sprint
+        )
+        <= Developer.capacity_points_per_sprint * capacity_multiplier
+    ).where(Assignment.developer == Developer, Assignment.sprint == Sprint)
+)
 
 # Objective: minimize weighted completion time (higher priority = higher delay cost)
 max_priority = 3
-p.minimize(
+problem.minimize(
     sum(Assignment.x_assigned * (max_priority + 1 - Assignment.issue.priority) * Assignment.sprint.number)
 )
 
-p.solve("highs", time_limit_sec=60)
+problem.solve("highs", time_limit_sec=60)

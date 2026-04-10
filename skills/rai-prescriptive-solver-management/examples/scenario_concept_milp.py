@@ -44,53 +44,72 @@ x_selected = Float.ref()
 ProjectRef = Project.ref()
 UpgradeRef = Upgrade.ref()
 
-p = Problem(model, Float)
-p.solve_for(Project.x_approved(Scenario, x_approved), type="bin",
-            name=["proj", Scenario.name, Project.name])
-p.solve_for(Upgrade.x_selected(Scenario, x_selected), type="bin",
-            name=["upg", Scenario.name, Upgrade.substation.name, Upgrade.capacity_added])
+problem = Problem(model, Float)
+x_approved_var = problem.solve_for(
+    Project.x_approved(Scenario, x_approved),
+    type="bin",
+    name=["proj", Scenario.name, Project.name],
+)
+x_selected_var = problem.solve_for(
+    Upgrade.x_selected(Scenario, x_selected),
+    type="bin",
+    name=["upg", Scenario.name, Upgrade.substation.name, Upgrade.capacity_added],
+)
 
 # --- Constraint: capacity at substation (per Substation, per Scenario) ---
 x_approved_ref = Float.ref()
 x_selected_ref = Float.ref()
-p.satisfy(model.where(
-    Project.x_approved(Scenario, x_approved_ref),
-    Upgrade.x_selected(Scenario, x_selected_ref),
-    Project.substation(Substation),
-    Upgrade.substation(Substation),
-).require(
-    Substation.current_capacity
-    + sum(x_selected_ref * UpgradeRef.capacity_added).where(UpgradeRef.substation == Substation).per(Substation, Scenario)
-    >= sum(x_approved_ref * ProjectRef.capacity_needed).where(ProjectRef.substation == Substation).per(Substation, Scenario)
-))
+problem.satisfy(
+    model.where(
+        Project.x_approved(Scenario, x_approved_ref),
+        Upgrade.x_selected(Scenario, x_selected_ref),
+        Project.substation(Substation),
+        Upgrade.substation(Substation),
+    ).require(
+        Substation.current_capacity
+        + sum(x_selected_ref * UpgradeRef.capacity_added)
+        .where(UpgradeRef.substation == Substation)
+        .per(Substation, Scenario)
+        >= sum(x_approved_ref * ProjectRef.capacity_needed)
+        .where(ProjectRef.substation == Substation)
+        .per(Substation, Scenario)
+    )
+)
 
 # --- Constraint: at most one upgrade per substation (per Scenario) ---
-p.satisfy(model.where(
-    Upgrade.x_selected(Scenario, x_selected),
-).require(
-    sum(x_selected).where(Upgrade.substation == Substation).per(Substation, Scenario) <= 1
-))
+problem.satisfy(
+    model.where(
+        Upgrade.x_selected(Scenario, x_selected),
+    ).require(
+        sum(x_selected)
+        .where(Upgrade.substation == Substation)
+        .per(Substation, Scenario)
+        <= 1
+    )
+)
 
 # --- Constraint: budget limit (per Scenario) — spans both variable types ---
-p.satisfy(model.where(
-    Project.x_approved(Scenario, x_approved),
-    Upgrade.x_selected(Scenario, x_selected),
-).require(
-    sum(x_approved * Project.connection_cost).per(Scenario)
-    + sum(x_selected * Upgrade.upgrade_cost).per(Scenario)
-    <= Scenario.budget
-))
+problem.satisfy(
+    model.where(
+        Project.x_approved(Scenario, x_approved),
+        Upgrade.x_selected(Scenario, x_selected),
+    ).require(
+        sum(x_approved * Project.connection_cost).per(Scenario)
+        + sum(x_selected * Upgrade.upgrade_cost).per(Scenario)
+        <= Scenario.budget
+    )
+)
 
 # --- Objective: maximize net revenue ---
-p.maximize(
+problem.maximize(
     sum(x_approved * (Project.revenue - Project.connection_cost))
     .where(Project.x_approved(Scenario, x_approved))
 )
 
 # --- Solve all budget scenarios at once ---
-p.display()
-p.solve("highs", time_limit_sec=60)
-p.solve_info().display()
+problem.display()
+problem.solve("highs", time_limit_sec=60)
+problem.solve_info().display()
 
 # --- Results per scenario (in the ontology) ---
 print("\nApproved projects per scenario:")

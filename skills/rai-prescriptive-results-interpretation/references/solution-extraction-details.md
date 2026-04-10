@@ -37,23 +37,36 @@ The `.into(table)` call writes query results to the specified Snowflake table. U
 
 v1 supports multiple solutions natively:
 
-- **Request multiple solutions:** `p.solve("minizinc", solution_limit=10)` — `solution_limit` is a first-class parameter
-- **Check count:** `p.num_points()` (Relationship) or `p.solve_info().num_points` (Python)
-- **Extract all solutions:** `p.variable_values(multiple=True).to_df()` returns a DataFrame with `sol_index` (0-based), `name`, `value`
-- **Switch active solution:** `p.load_point(index)` loads solution at 0-based index (0 = first, up to `num_points - 1`). After loading, `model.select()` on populated properties reflects the selected solution. `load_point()` can also be used with `populate=False` to manually control when solution values are written to model properties.
+- **Request multiple solutions:** `problem.solve("minizinc", solution_limit=10)` — `solution_limit` is a first-class parameter
+- **Check count:** `problem.num_points()` (Relationship) or `problem.solve_info().num_points` (Python)
+- **Extract solution values:** Use `Variable.values(sol_index, value_ref)` on the `ProblemVariable` returned by `solve_for()` for structured access via back-pointers (preferred). `variable_values()` still works but is deprecated and emits `DeprecationWarning`.
+- **`load_point()` is deprecated:** `load_point(0)` is a no-op with `DeprecationWarning`; `load_point(k>0)` raises `NotImplementedError`. For multi-solution access, use `Variable.values(sol_index, value_ref)` with different `sol_index` values.
 
 ```python
 # Solve with multiple solutions
-p.solve("minizinc", solution_limit=5)
-si = p.solve_info()
+problem = Problem(model, Float)
+assign_var = problem.solve_for(Food.x_amount, lower=0)
+problem.minimize(sum(Food.cost * Food.x_amount))
+problem.solve("minizinc", solution_limit=5)
+si = problem.solve_info()
 print(f"Found {si.num_points} solutions")
 
-# View all solutions
-all_df = p.variable_values(multiple=True).to_df()
+# Extract solution at index 0 (preferred: Variable.values())
+value_ref = Float.ref()
+sol0_df = model.select(
+    assign_var.food.name.alias("food"),
+    value_ref.alias("amount"),
+).where(assign_var.values(0, value_ref), value_ref > 0.001).to_df()
 
-# Switch to solution 2 (0-based) and query
-p.load_point(2)
-sol2_df = model.select(Food.name, Food.amount).to_df()
+# Extract solution at index 2
+sol2_df = model.select(
+    assign_var.food.name.alias("food"),
+    value_ref.alias("amount"),
+).where(assign_var.values(2, value_ref), value_ref > 0.001).to_df()
+
+# Legacy approach (deprecated):
+# all_df = problem.variable_values(multiple=True).to_df()
+# problem.load_point(2)  # deprecated: load_point(0) is a no-op; load_point(k>0) raises NotImplementedError
 ```
 
 **How many solutions to request:**
@@ -68,10 +81,10 @@ Constraints defined over concepts automatically apply to new data added between 
 1. Solve relaxed problem
 2. Inspect solution (e.g., find subtours)
 3. Add violated constraints as new data
-4. Re-solve — existing `p.satisfy()` picks up new data
+4. Re-solve — existing `problem.satisfy()` picks up new data
 
 ## Scenario / Parametric Solving
 
 **Scenario Concept (parameter variations) — preferred when applicable:** Results from a single solve are incorporated into the ontology — queryable via `model.select(Scenario.name, ...).where(Entity.x_var(Scenario, x_ref), x_ref > threshold)`, composable with other model queries, and available for downstream derived properties. Group by `Scenario.name` for comparison tables. Variables are multi-argument Properties indexed by (Entity, Scenario) — the scenario column is part of the variable identity. Use when only parameter values change between scenarios (budget, demand, thresholds). See [examples/scenario_concept_extraction.py](../examples/scenario_concept_extraction.py).
 
-**Loop + where= (entity exclusion):** Each iteration produces a separate `variable_values().to_df()` — results live in Python DataFrames, outside the model. Collect per-iteration results in a list, label by scenario. Use `populate=False` to prevent cross-iteration contamination. Required when the problem *structure* changes between scenarios (entities added/removed, constraint graph differs). See [examples/loop_based_extraction.py](../examples/loop_based_extraction.py).
+**Loop + where= (entity exclusion):** Each iteration produces results via `Variable.values()` (preferred) or `variable_values().to_df()` (deprecated) — results live in Python DataFrames, outside the model. Collect per-iteration results in a list, label by scenario. Use `populate=False` to prevent cross-iteration contamination. Required when the problem *structure* changes between scenarios (entities added/removed, constraint graph differs). See [examples/loop_based_extraction.py](../examples/loop_based_extraction.py).

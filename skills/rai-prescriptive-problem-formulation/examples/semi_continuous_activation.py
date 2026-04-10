@@ -33,31 +33,51 @@ model.define(Allocation.new(effectiveness=Effectiveness))
 
 total_budget = 45_000
 
-p = Problem(model, Float)
-p.solve_for(Allocation.x_spend, lower=0,
-            name=["spend", Allocation.effectiveness.channel.name,
-                   Allocation.effectiveness.campaign.name])
-p.solve_for(Allocation.x_active, type="bin",
-            name=["active", Allocation.effectiveness.channel.name,
-                   Allocation.effectiveness.campaign.name])
+problem = Problem(model, Float)
+x_spend_var = problem.solve_for(
+    Allocation.x_spend,
+    lower=0,
+    name=[
+        "spend",
+        Allocation.effectiveness.channel.name,
+        Allocation.effectiveness.campaign.name,
+    ],
+)
+x_active_var = problem.solve_for(
+    Allocation.x_active,
+    type="bin",
+    name=[
+        "active",
+        Allocation.effectiveness.channel.name,
+        Allocation.effectiveness.campaign.name,
+    ],
+)
 
 # --- Semi-continuous linking: spend is 0 or within [min, max] of channel ---
 # Lower bound when active: spend >= min_spend * active  (0 when inactive)
-p.satisfy(model.require(
-    Allocation.x_spend >= Allocation.effectiveness.channel.min_spend * Allocation.x_active))
+problem.satisfy(
+    model.require(
+        Allocation.x_spend
+        >= Allocation.effectiveness.channel.min_spend * Allocation.x_active
+    )
+)
 # Upper bound when active: spend <= max_spend * active  (0 when inactive)
-p.satisfy(model.require(
-    Allocation.x_spend <= Allocation.effectiveness.channel.max_spend * Allocation.x_active))
+problem.satisfy(
+    model.require(
+        Allocation.x_spend
+        <= Allocation.effectiveness.channel.max_spend * Allocation.x_active
+    )
+)
 
 # Per-campaign budget
 campaign_spend = sum(Allocation.x_spend).where(
     Allocation.effectiveness.campaign == Campaign).per(Campaign)
-p.satisfy(model.require(campaign_spend <= Campaign.budget))
+problem.satisfy(model.require(campaign_spend <= Campaign.budget))
 
 # Global budget
-p.satisfy(model.require(sum(Allocation.x_spend) <= total_budget))
+problem.satisfy(model.require(sum(Allocation.x_spend) <= total_budget))
 
 # Objective: maximize expected conversions
-p.maximize(sum(Allocation.x_spend * Allocation.effectiveness.conversion_rate))
+problem.maximize(sum(Allocation.x_spend * Allocation.effectiveness.conversion_rate))
 
-p.solve("highs", time_limit_sec=60)
+problem.solve("highs", time_limit_sec=60)

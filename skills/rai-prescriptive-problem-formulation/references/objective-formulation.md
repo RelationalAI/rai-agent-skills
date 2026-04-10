@@ -79,7 +79,7 @@ If a needed property doesn't exist, report it as a model_gap so enrichment can a
 
 ### Multi-objective handling
 
-Only one `p.minimize()` or `p.maximize()` per problem. For multiple goals:
+Only one `problem.minimize()` or `problem.maximize()` per problem. For multiple goals:
 
 | Approach | Description | When to Use |
 |----------|-------------|-------------|
@@ -107,14 +107,14 @@ Before finalizing the objective, check for these misalignments:
 ### Single-component objectives
 
 ```python
-p.minimize(sum(Food.cost * Food.amount))           # Minimize total cost
-p.maximize(sum(Edge.flow).where(Edge.i(1)))         # Maximize total flow
-p.minimize(max(Node.color), name="chromatic_number") # Minimize max (min-max)
+problem.minimize(sum(Food.cost * Food.amount))           # Minimize total cost
+problem.maximize(sum(Edge.flow).where(Edge.i(1)))         # Maximize total flow
+problem.minimize(max(Node.color), name="chromatic_number") # Minimize max (min-max)
 
 # Quadratic objective (portfolio risk)
 c = Float.ref()
 risk = sum(c * Stock.quantity * Stock2.quantity).where(Stock.covar(Stock2, c))
-p.minimize(risk)
+problem.minimize(risk)
 ```
 
 ### Multi-component objectives with `model.union()`
@@ -129,7 +129,7 @@ total_ltl_rem_cost = LTLSegment.cost * sum(x_rem_ltl).per(LTLSegment).where(
 )
 
 total_cost = sum(model.union(total_inv_cost, total_tl_cost, total_ltl_rem_cost))
-p.minimize(total_cost)
+problem.minimize(total_cost)
 ```
 
 **Why `model.union()`:** Each term may involve different concepts and scopes. `model.union()` collects them into a single summable set.
@@ -161,10 +161,10 @@ Convert a soft constraint into a penalty variable added to the objective.
 ```python
 # Shortfall variable for unmet demand
 Order.shortfall = model.Property(f"{Order} has {Float:shortfall}")
-p.solve_for(Order.shortfall, lower=0, name=["slack", Order.id])
+problem.solve_for(Order.shortfall, lower=0, name=["slack", Order.id])
 
 # Link shortfall to demand satisfaction
-p.satisfy(model.require(Order.fulfilled + Order.shortfall == Order.demand))
+problem.satisfy(model.require(Order.fulfilled + Order.shortfall == Order.demand))
 
 # Penalize shortfall in objective
 penalty_weight = 1000
@@ -172,7 +172,7 @@ total_cost = sum(model.union(
     sum(Route.cost * Route.flow),
     penalty_weight * sum(Order.shortfall)
 ))
-p.minimize(total_cost)
+problem.minimize(total_cost)
 ```
 
 ### Common objective patterns

@@ -20,28 +20,30 @@ Food.contains = model.Property(f"{Food} contains {Nutrient} in {Float:qty}")
 # --- Decision variable ---
 # Continuous quantity of each food; lower=0 enforces non-negativity
 Food.x_amount = model.Property(f"{Food} has {Float:amount}")
-p = Problem(model, Float)
-p.solve_for(Food.x_amount, name=Food.name, lower=0)
+problem = Problem(model, Float)
+x_amount_var = problem.solve_for(Food.x_amount, name=Food.name, lower=0)
 
 # --- Nutritional constraint ---
 # qty binds the third field of the ternary property Food.contains(Nutrient, qty)
 qty = Float.ref()
 nutrient_total = sum(qty * Food.x_amount).where(Food.contains(Nutrient, qty)).per(Nutrient)
 # One require() fragment covers all nutrients simultaneously; no Python loop needed
-p.satisfy(model.require(
-    nutrient_total >= Nutrient.min,
-    nutrient_total <= Nutrient.max,
-))
+problem.satisfy(
+    model.require(
+        nutrient_total >= Nutrient.min,
+        nutrient_total <= Nutrient.max,
+    )
+)
 
 # --- Objective ---
 total_cost = sum(Food.cost * Food.x_amount)
-p.minimize(total_cost)
+problem.minimize(total_cost)
 
 # --- Solve ---
-p.display()
-p.solve("highs", time_limit_sec=60)
-model.require(p.termination_status() == "OPTIMAL")
-p.solve_info().display()
+problem.display()
+problem.solve("highs", time_limit_sec=60)
+model.require(problem.termination_status() == "OPTIMAL")
+problem.solve_info().display()
 
 # Extract solution — properties populated after solve (populate=True default)
 model.select(Food.name.alias("food"), Food.x_amount.alias("amount")).where(

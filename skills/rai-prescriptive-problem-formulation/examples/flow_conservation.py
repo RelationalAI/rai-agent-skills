@@ -15,8 +15,10 @@ Edge.cap = model.Property(f"{Edge} has {Float:cap}")
 # --- Decision variable ---
 # Flow on each edge, non-negative and bounded by capacity
 Edge.x_flow = model.Property(f"{Edge} has {Float:flow}")
-p = Problem(model, Float)
-p.solve_for(Edge.x_flow, name=["x", Edge.i, Edge.j], lower=0, upper=Edge.cap)
+problem = Problem(model, Float)
+x_flow_var = problem.solve_for(
+    Edge.x_flow, name=["x", Edge.i, Edge.j], lower=0, upper=Edge.cap
+)
 
 # --- Flow conservation constraint ---
 # Two independent refs scan all edges: Ei for outflow, Ej for inflow
@@ -27,17 +29,17 @@ flow_out = per(Ei.i).sum(Ei.x_flow)
 flow_in = per(Ej.j).sum(Ej.x_flow)
 # Join on Ei.i == Ej.j selects nodes that appear as both source and destination (interior nodes)
 balance = model.require(flow_in == flow_out).where(Ei.i == Ej.j)
-p.satisfy(balance)
+problem.satisfy(balance)
 
 # --- Objective: maximize total flow leaving the source node ---
 total_flow = sum(Edge.x_flow).where(Edge.i(1))
-p.maximize(total_flow)
+problem.maximize(total_flow)
 
 # --- Solve ---
-p.display()
-p.solve("highs", time_limit_sec=60)
-model.require(p.termination_status() == "OPTIMAL")
-si = p.solve_info()
+problem.display()
+problem.solve("highs", time_limit_sec=60)
+model.require(problem.termination_status() == "OPTIMAL")
+si = problem.solve_info()
 si.display()
 print(f"Max flow: {si.objective_value:.2f}")
 # Extract solution — properties populated after solve (populate=True default)

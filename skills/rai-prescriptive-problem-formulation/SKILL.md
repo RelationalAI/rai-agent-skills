@@ -40,18 +40,19 @@ description: Formulates optimization problems from ontology models covering deci
 ```python
 from relationalai.semantics.reasoners.prescriptive import Problem
 
-p = Problem(model, Float)
+problem = Problem(model, Float)
 ```
 
 | Method | Signature | Purpose |
 |--------|-----------|---------|
-| `solve_for` | `(expr, where=, populate=True, name=, type=, lower=, upper=, start=)` | Declare decision variable. `type`: `"cont"`, `"int"`, `"bin"` |
-| `satisfy` | `(expr, name=)` | Add constraint |
-| `minimize` | `(expr, name=)` | Set minimization objective |
-| `maximize` | `(expr, name=)` | Set maximization objective |
+| `solve_for` | `(expr, where=, populate=True, name=, type=, lower=, upper=, start=)` | Declare decision variable. Returns `ProblemVariable` (a Concept usable in `model.define()`, `model.select()`, `.ref()`). `type`: `"cont"`, `"int"`, `"bin"` |
+| `satisfy` | `(expr, name=)` | Add constraint. Returns `ProblemConstraint` (a Concept). |
+| `minimize` | `(expr, name=)` | Set minimization objective. Returns `ProblemObjective` (a Concept). |
+| `maximize` | `(expr, name=)` | Set maximization objective. Returns `ProblemObjective` (a Concept). |
 | `solve` | `(solver, time_limit_sec=, ...)` | Execute solve. Solvers: `"highs"`, `"minizinc"`, `"ipopt"`, `"gurobi"` |
 | `verify` | `(*fragments)` | Post-solve constraint verification |
-| `variable_values` | `(multiple=False)` | Extract solution values as Fragment |
+| `variable_values` | `(multiple=False)` | Extract solution values as Fragment. **Deprecated** — prefer `Variable.values(sol_index, value_ref)` on the `ProblemVariable` returned by `solve_for()`. See `rai-prescriptive-results-interpretation`. |
+| `Variable.values` | `(sol_index, value_ref)` | Property on `ProblemVariable`. Extracts solution values for the variable at the given solution index, binding to `value_ref`. Primary pattern for `populate=False` workflows. |
 | `display` | `(part=)` | Print formulation summary |
 
 ---
@@ -290,10 +291,10 @@ For detailed heuristics, examples, and the over-specification recognition table,
 | Big-M too loose -> slow solve | Using arbitrary `999999` instead of data-driven bound | Use `M = capacity` or `M = max_demand` from entity properties |
 | Missing forcing requirement | MINIMIZE objective with no forcing constraint yields zero | Always identify what real-world requirement forces positive activity |
 | Constraint references unwired relationship | Relationship declared but no `define()` data binding | Verify all relationships in `.where()` joins have `define()` rules. Unwired relationships cause TyperError or silently match zero entities. |
-| `p.satisfy()` or `model.define()` in a Python loop | Defining constraints per entity in a for loop instead of declaratively | Use vectorized `.where().define()` or `p.satisfy()` with `.per()`. See `rai-pyrel-coding` Common Pitfalls for before/after examples |
-| `Duplicate relationship` / `FDError` on re-solve | Solving multiple scenarios with `populate=True` (default) writes conflicting results to the graph | Use `populate=False` + `p.variable_values().to_df()` to extract results. Create a fresh `Problem` per scenario. See Re-Solve Behavior section. |
-| `UnsupportedRecursionError` with Graph + Prescriptive | Graph algorithms on the same `Model` can conflict with `p.variable_values()` | Use a separate `Model` for graph analysis and write results back. See `rai-graph-analysis` [graph-construction.md](../rai-graph-analysis/references/graph-construction.md#graph-model-separation). |
-| `TyperError` at solve time with concept-type `identify_by` | Cross-product concept using `identify_by={"a": ConceptA, "b": ConceptB}` passes queries but fails during `p.solve()` type inference | Use flat identity keys (String or Integer). Encode composite keys as strings (e.g., `f"{a_id}_{b_id}"`) or use separate primitive properties for each dimension |
+| `problem.satisfy()` or `model.define()` in a Python loop | Defining constraints per entity in a for loop instead of declaratively | Use vectorized `.where().define()` or `problem.satisfy()` with `.per()`. See `rai-pyrel-coding` Common Pitfalls for before/after examples |
+| `Duplicate relationship` / `FDError` on re-solve | Solving multiple scenarios with `populate=True` (default) writes conflicting results to the graph | Use `populate=False` + `Variable.values()` to extract results. Create a fresh `Problem` per scenario. See Re-Solve Behavior section. |
+| `UnsupportedRecursionError` with Graph + Prescriptive | Graph algorithms on the same `Model` can conflict with prescriptive result extraction. **Fixed in SDK >= 1.0.13.** | In SDK >= 1.0.13, graph and prescriptive work on the same Model. For older SDKs, use a separate `Model` for graph analysis and write results back. See `rai-graph-analysis` [graph-construction.md](../rai-graph-analysis/references/graph-construction.md#graph-model-separation). |
+| `TyperError` at solve time with concept-type `identify_by` | Cross-product concept using `identify_by={"a": ConceptA, "b": ConceptB}` passes queries but fails during `problem.solve()` type inference | Use flat identity keys (String or Integer). Encode composite keys as strings (e.g., `f"{a_id}_{b_id}"`) or use separate primitive properties for each dimension |
 | `.per(Concept.property)` silently ignored in solver constraints | Property-value grouping (e.g., `.per(Slot.group_name)`) doesn't translate to solver constraints — produces all-zero "optimal" solution | Use entity-level `.per(ParentConcept)` with a relationship join: create a parent concept for the grouping dimension and link via Relationship, then group with `.per(Parent).where(Child.parent(Parent))` |
 | Forcing constraint added when objective already penalizes inaction | Adding `>= 1` forcing alongside a cost-penalty objective over-constrains the problem — turns an OPTIMAL-with-cost-tradeoff into INFEASIBLE. Distinct from rows above where forcing IS needed (no penalty mechanism) | Check: does the objective already penalize zero activity? If yes, forcing is redundant. Only add forcing constraints explicitly required by the problem statement |
 | Infeasible but not caught before solve | Feasibility arithmetic not validated — e.g., 50 entities need service, 4 periods, max 5/period = 20 slots < 50 needed | Before formulating, verify: `entity_count / periods / capacity_per_period` fits. If not, adjust parameters or confirm the problem allows partial coverage |
@@ -322,14 +323,14 @@ Do not use `+` to combine cost terms from independent concept groups — this ca
 
 ```python
 # CORRECT: per-entity cost expressions inside model.union()
-p.minimize(sum(model.union(
+problem.minimize(sum(model.union(
     FreightGroup.holding_cost * sum(x_inv).per(FreightGroup).where(...),  # per-FreightGroup
     Arc.transport_cost * Arc.x_flow,                                       # per-Arc
     Factory.unit_cost * Factory.x_production,                              # per-Factory
 )))
 
 # WRONG: scalar sums inside model.union()
-p.minimize(sum(model.union(
+problem.minimize(sum(model.union(
     sum(x * FreightGroup.cost),   # scalar — causes AssertionError
     sum(Arc.x_flow * Arc.cost),   # scalar — causes AssertionError
 )))
@@ -353,14 +354,14 @@ For constraint naming with lists, re-solve behavior (multi-scenario patterns), `
 
 ### PyRel is additive — nothing can be removed or modified in-place
 
-PyRel's model and problem APIs are **append-only**. Every call to `model.define()`, `model.Property()`, `model.Concept()`, `p.solve_for()`, `p.satisfy()`, `p.minimize()`/`p.maximize()` **adds** to the model or problem. There is no API to remove, replace, or modify any existing element.
+PyRel's model and problem APIs are **append-only**. Every call to `model.define()`, `model.Property()`, `model.Concept()`, `problem.solve_for()`, `problem.satisfy()`, `problem.minimize()`/`problem.maximize()` **adds** to the model or problem. There is no API to remove, replace, or modify any existing element.
 
 **This applies to the entire stack:**
 - **Attributes/properties:** Adding a new `model.Property()` or `model.Relationship()` grows the model. You cannot delete or rename an existing property.
 - **Concepts:** New `model.Concept()` calls add concepts. Existing concepts cannot be removed.
-- **Variables:** Each `p.solve_for()` registers an additional decision variable. You cannot unregister one.
-- **Constraints:** Each `p.satisfy()` accumulates. Adding a "corrected" version does not replace the original — both remain active, and the tighter one binds.
-- **Objectives:** Only one `p.minimize()` or `p.maximize()` per Problem.
+- **Variables:** Each `problem.solve_for()` registers an additional decision variable. You cannot unregister one.
+- **Constraints:** Each `problem.satisfy()` accumulates. Adding a "corrected" version does not replace the original — both remain active, and the tighter one binds.
+- **Objectives:** Only one `problem.minimize()` or `problem.maximize()` per Problem.
 
 **Practical impact:**
 - To change constraints or variables, you must create a **new Problem** and re-register all elements from scratch.

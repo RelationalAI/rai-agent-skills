@@ -3,13 +3,15 @@
 #   - After an epsilon constraint loop produces multiple Pareto points, analyze the
 #     frontier systematically: tradeoff table, marginal rates, knee detection,
 #     allocation shifts, and regime characterization.
-#   - Each Pareto point is a complete solution (variable_values df). No point is
+#   - Each Pareto point is a complete solution (Variable.values() df). No point is
 #     strictly better than another — present as a menu of operating points.
 #   - Parallels scenario_concept_extraction.py (multi-solution extraction)
 #     but for epsilon loop output rather than Scenario Concept output.
 #
 # This example uses a generic pareto_points list structure. The same analysis
 # pipeline applies regardless of problem type (QP, MILP, LP) or objective pair.
+# Variable DataFrames come from Variable.values() structured queries (see
+# epsilon_constraint_pareto.py for the extraction pattern).
 
 import builtins
 
@@ -24,7 +26,7 @@ import builtins
 #   ]
 # "primary" = the optimized objective value (from solve_info)
 # "secondary" = the constrained objective value (computed from variable df)
-# "variables" = variable_values().to_df() for this point
+# "variables" = structured query df from Variable.values() for this point
 
 # --- Example data (from a tested epsilon constraint sweep) ---
 pareto_points = [

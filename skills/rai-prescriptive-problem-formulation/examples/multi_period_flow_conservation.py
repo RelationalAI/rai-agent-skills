@@ -40,35 +40,46 @@ SiteSKU.x_inv = Property(
 )
 x_prod, x_inv = Float.ref(), Float.ref()
 
-p = Problem(model, Float)
-p.solve_for(SiteSKU.x_prod(t, x_prod), type="cont", lower=0,
-            upper=SiteSKU.max_prod, name=["prod", SiteSKU.site_id, SiteSKU.sku_id, t],
-            where=[t == weeks])
-p.solve_for(SiteSKU.x_inv(t, x_inv), type="cont", lower=0,
-            name=["inv", SiteSKU.site_id, SiteSKU.sku_id, t],
-            where=[t == std.common.range(0, num_weeks + 1)])  # week 0 = initial
+problem = Problem(model, Float)
+x_prod_var = problem.solve_for(
+    SiteSKU.x_prod(t, x_prod),
+    type="cont",
+    lower=0,
+    upper=SiteSKU.max_prod,
+    name=["prod", SiteSKU.site_id, SiteSKU.sku_id, t],
+    where=[t == weeks],
+)
+x_inv_var = problem.solve_for(
+    SiteSKU.x_inv(t, x_inv),
+    type="cont",
+    lower=0,
+    name=["inv", SiteSKU.site_id, SiteSKU.sku_id, t],
+    where=[t == std.common.range(0, num_weeks + 1)],
+)  # week 0 = initial
 
 # --- Initial condition: inventory at week 0 = starting stock ---
 x_inv0 = Float.ref()
-p.satisfy(model.where(SiteSKU.x_inv(0, x_inv0)).require(x_inv0 == SiteSKU.init_inv))
+problem.satisfy(
+    model.where(SiteSKU.x_inv(0, x_inv0)).require(x_inv0 == SiteSKU.init_inv)
+)
 
 # --- Flow conservation: inv[t] = inv[t-1] + produced[t] - demand[t] ---
 x_inv_prev, x_inv_curr = Float.ref(), Float.ref()
-p.satisfy(model.where(
-    SiteSKU.x_inv(t, x_inv_curr),
-    SiteSKU.x_inv(t - 1, x_inv_prev),
-    SiteSKU.x_prod(t, x_prod),
-    WeeklyDemand.site_id == SiteSKU.site_id,
-    WeeklyDemand.sku_id == SiteSKU.sku_id,
-    WeeklyDemand.week == t,
-    t >= 1,
-).require(
-    x_inv_curr == x_inv_prev + x_prod - WeeklyDemand.qty
-))
+problem.satisfy(
+    model.where(
+        SiteSKU.x_inv(t, x_inv_curr),
+        SiteSKU.x_inv(t - 1, x_inv_prev),
+        SiteSKU.x_prod(t, x_prod),
+        WeeklyDemand.site_id == SiteSKU.site_id,
+        WeeklyDemand.sku_id == SiteSKU.sku_id,
+        WeeklyDemand.week == t,
+        t >= 1,
+    ).require(x_inv_curr == x_inv_prev + x_prod - WeeklyDemand.qty)
+)
 
 # --- Objective: minimize production + holding cost via model.union() ---
 prod_cost_term = SiteSKU.prod_cost * sum(x_prod).per(SiteSKU).where(SiteSKU.x_prod(t, x_prod))
 hold_cost_term = SiteSKU.hold_cost * sum(x_inv).per(SiteSKU).where(SiteSKU.x_inv(t, x_inv), t >= 1)
-p.minimize(sum(model.union(prod_cost_term, hold_cost_term)))
+problem.minimize(sum(model.union(prod_cost_term, hold_cost_term)))
 
-p.solve("highs", time_limit_sec=60)
+problem.solve("highs", time_limit_sec=60)

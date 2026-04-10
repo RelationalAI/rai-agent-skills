@@ -76,18 +76,19 @@ quad_cost = sum(interaction_value * x_alloc * paired_alloc).per(Scenario).where(
 )
 
 # --- Solve all scenarios at once ---
-p = Problem(model, Float)
-p.solve_for(Item.x_allocation(Scenario, x_alloc),
-            name=[Scenario.name, "alloc", Item.index])
-p.satisfy(bounds)
-p.satisfy(budget_ok)
-p.satisfy(benefit_ok)
-p.minimize(sum(quad_cost))
+problem = Problem(model, Float)
+x_allocation_var = problem.solve_for(
+    Item.x_allocation(Scenario, x_alloc), name=[Scenario.name, "alloc", Item.index]
+)
+problem.satisfy(bounds)
+problem.satisfy(budget_ok)
+problem.satisfy(benefit_ok)
+problem.minimize(sum(quad_cost))
 
-p.display()
-p.solve("highs", time_limit_sec=60)
-model.require(p.termination_status() == "OPTIMAL")
-p.solve_info().display()
+problem.display()
+problem.solve("highs", time_limit_sec=60)
+model.require(problem.termination_status() == "OPTIMAL")
+problem.solve_info().display()
 
 # --- Results per scenario ---
 print("\nAllocations per scenario:")

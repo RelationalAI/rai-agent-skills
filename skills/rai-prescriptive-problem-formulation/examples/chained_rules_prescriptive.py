@@ -70,14 +70,16 @@ RISK_SURCHARGE = 5.0
 
 Supplier.x_flow = model.Property(f"{Supplier} has flow {Float:x}")
 
-p = Problem(model, Float)
-p.solve_for(Supplier.x_flow, lower=0, upper=Supplier.capacity, name=["flow", Supplier.name])
+problem = Problem(model, Float)
+x_flow_var = problem.solve_for(
+    Supplier.x_flow, lower=0, upper=Supplier.capacity, name=["flow", Supplier.name]
+)
 
 # Constraint: meet total demand
-p.satisfy(model.require(sum(Supplier.x_flow) >= TOTAL_DEMAND))
+problem.satisfy(model.require(sum(Supplier.x_flow) >= TOTAL_DEMAND))
 
 # Constraint: hard block unreliable suppliers (flag from Stage 1)
-p.satisfy(model.require(Supplier.x_flow == 0).where(Supplier.is_unreliable()))
+problem.satisfy(model.require(Supplier.x_flow == 0).where(Supplier.is_unreliable()))
 
 # Objective: minimize cost with risk surcharge for at-risk suppliers.
 # Base cost: unit_cost * flow for all suppliers.
@@ -87,13 +89,13 @@ base_cost = sum(Supplier.unit_cost * Supplier.x_flow)
 s_risk = Supplier.ref()
 risk_cost = RISK_SURCHARGE * sum(s_risk.x_flow).where(s_risk.is_at_risk())
 
-p.minimize(sum(model.union(base_cost, risk_cost)))
+problem.minimize(sum(model.union(base_cost, risk_cost)))
 
 # --- Solve ---
-p.display()
-p.solve("highs", time_limit_sec=60)
-model.require(p.termination_status() == "OPTIMAL")
-si = p.solve_info()
+problem.display()
+problem.solve("highs", time_limit_sec=60)
+model.require(problem.termination_status() == "OPTIMAL")
+si = problem.solve_info()
 si.display()
 print(f"Status: {si.termination_status}, Objective: {si.objective_value:.2f}")
 

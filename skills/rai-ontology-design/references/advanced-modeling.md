@@ -288,7 +288,7 @@ model.where(Project.x_approved(Scenario, x_approved)).require(
 )
 
 # In solve_for — pass the binding, include Scenario.name for labeling:
-p.solve_for(Project.x_approved(Scenario, x_approved),
+problem.solve_for(Project.x_approved(Scenario, x_approved),
             name=[Scenario.name, Project.name])
 
 # In result queries — filter on the bound reference:

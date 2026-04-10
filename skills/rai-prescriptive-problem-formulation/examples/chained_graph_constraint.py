@@ -83,30 +83,28 @@ MIN_CENTRALITY_FACTOR = 150  # minimum allocation = centrality * this factor
 
 Site.x_alloc = model.Property(f"{Site} has allocation {Float:x}")
 
-p = Problem(model, Float)
-p.solve_for(Site.x_alloc, lower=0, name=["alloc", Site.name])
+problem = Problem(model, Float)
+x_alloc_var = problem.solve_for(Site.x_alloc, lower=0, name=["alloc", Site.name])
 
 # Constraint: total allocation within budget
-p.satisfy(model.require(sum(Site.x_alloc) <= TOTAL_BUDGET))
+problem.satisfy(model.require(sum(Site.x_alloc) <= TOTAL_BUDGET))
 
 # Constraint: meet demand at each site
-p.satisfy(model.require(Site.x_alloc >= Site.demand))
+problem.satisfy(model.require(Site.x_alloc >= Site.demand))
 
 # Constraint (from graph): critical hubs get minimum proportional to centrality.
 # This is the key pattern -- centrality drives a hard lower bound, not a soft
 # objective weight. High-centrality sites MUST carry proportional inventory.
-p.satisfy(model.require(
-    Site.x_alloc >= Site.centrality * MIN_CENTRALITY_FACTOR
-))
+problem.satisfy(model.require(Site.x_alloc >= Site.centrality * MIN_CENTRALITY_FACTOR))
 
 # Objective: minimize total holding cost
-p.minimize(sum(Site.x_alloc * Site.holding_cost))
+problem.minimize(sum(Site.x_alloc * Site.holding_cost))
 
 # --- Solve ---
-p.display()
-p.solve("highs", time_limit_sec=60)
-model.require(p.termination_status() == "OPTIMAL")
-si = p.solve_info()
+problem.display()
+problem.solve("highs", time_limit_sec=60)
+model.require(problem.termination_status() == "OPTIMAL")
+si = problem.solve_info()
 si.display()
 print(f"Status: {si.termination_status}, Objective: {si.objective_value:.2f}")
 

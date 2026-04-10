@@ -38,32 +38,45 @@ model.define(FCUsage.new(fc=FC))
 
 AssignmentRef = Assignment.ref()
 
-p = Problem(model, Float)
-p.solve_for(Assignment.x_qty, lower=0,
-            name=["qty", Assignment.shipping.fc.name, Assignment.shipping.order.customer])
-p.solve_for(FCUsage.x_used, type="bin", name=["fc_used", FCUsage.fc.name])
+problem = Problem(model, Float)
+x_qty_var = problem.solve_for(
+    Assignment.x_qty,
+    lower=0,
+    name=["qty", Assignment.shipping.fc.name, Assignment.shipping.order.customer],
+)
+x_used_var = problem.solve_for(
+    FCUsage.x_used, type="bin", name=["fc_used", FCUsage.fc.name]
+)
 
 # Constraint: FC capacity
-p.satisfy(model.require(
-    sum(AssignmentRef.x_qty).where(AssignmentRef.shipping.fc == FC).per(FC)
-    <= FC.capacity
-))
+problem.satisfy(
+    model.require(
+        sum(AssignmentRef.x_qty).where(AssignmentRef.shipping.fc == FC).per(FC)
+        <= FC.capacity
+    )
+)
 
 # Constraint: linking — quantity only flows through used FCs
-p.satisfy(model.require(
-    sum(AssignmentRef.x_qty).where(AssignmentRef.shipping.fc == FCUsage.fc).per(FCUsage)
-    <= FCUsage.fc.capacity * FCUsage.x_used
-))
+problem.satisfy(
+    model.require(
+        sum(AssignmentRef.x_qty)
+        .where(AssignmentRef.shipping.fc == FCUsage.fc)
+        .per(FCUsage)
+        <= FCUsage.fc.capacity * FCUsage.x_used
+    )
+)
 
 # Constraint: each order fully fulfilled (forcing constraint)
-p.satisfy(model.require(
-    sum(AssignmentRef.x_qty).where(AssignmentRef.shipping.order == Order).per(Order)
-    == Order.quantity
-))
+problem.satisfy(
+    model.require(
+        sum(AssignmentRef.x_qty).where(AssignmentRef.shipping.order == Order).per(Order)
+        == Order.quantity
+    )
+)
 
 # Objective: minimize shipping + fixed facility costs
 shipping_cost = sum(Assignment.x_qty * Assignment.shipping.cost_per_unit)
 fixed_cost = sum(FCUsage.x_used * FCUsage.fc.fixed_cost)
-p.minimize(shipping_cost + fixed_cost)
+problem.minimize(shipping_cost + fixed_cost)
 
-p.solve("highs", time_limit_sec=60)
+problem.solve("highs", time_limit_sec=60)

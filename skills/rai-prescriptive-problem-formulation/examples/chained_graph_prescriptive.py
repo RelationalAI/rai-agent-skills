@@ -78,24 +78,24 @@ Site.centrality = graph.eigenvector_centrality()
 
 Site.x_invest = model.Property(f"{Site} investment is {Float:x}")
 
-p = Problem(model, Float)
-p.solve_for(Site.x_invest, lower=0, name=["invest", Site.name])
+problem = Problem(model, Float)
+x_invest_var = problem.solve_for(Site.x_invest, lower=0, name=["invest", Site.name])
 
 # Total budget constraint
 budget = 500.0
-p.satisfy(model.require(sum(Site.x_invest) <= budget))
+problem.satisfy(model.require(sum(Site.x_invest) <= budget))
 
 # Per-site cap: investment cannot exceed 10x the operating cost
-p.satisfy(model.require(Site.x_invest <= 10 * Site.operating_cost))
+problem.satisfy(model.require(Site.x_invest <= 10 * Site.operating_cost))
 
 # Objective: maximize centrality-weighted investment
-p.maximize(sum(Site.x_invest * Site.centrality))
+problem.maximize(sum(Site.x_invest * Site.centrality))
 
 # --- Solve ---
-p.display()
-p.solve("highs", time_limit_sec=60)
-model.require(p.termination_status() == "OPTIMAL")
-si = p.solve_info()
+problem.display()
+problem.solve("highs", time_limit_sec=60)
+model.require(problem.termination_status() == "OPTIMAL")
+si = problem.solve_info()
 si.display()
 print(f"Status: {si.termination_status}, Objective: {si.objective_value:.4f}")
 

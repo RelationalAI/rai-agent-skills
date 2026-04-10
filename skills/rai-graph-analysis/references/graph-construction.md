@@ -390,7 +390,9 @@ graph.is_connected().inspect()
 
 ## Graph Model Separation
 
-When graph algorithms on the same `Model` as another reasoner (e.g., Prescriptive) cause `UnsupportedRecursionError`, isolate the graph on a separate model and write results back. The known trigger is calling `p.variable_values()` after graph algorithms on the same model — though this is SDK-version-dependent and may not always reproduce.
+> **SDK >= 1.0.13:** The `UnsupportedRecursionError` when mixing graph algorithms and prescriptive reasoning on the same `Model` is **fixed**. You no longer need a separate graph Model. The pattern below remains valid for defensive isolation or for supporting older SDK versions.
+
+In SDK < 1.0.13, graph algorithms on the same `Model` as another reasoner (e.g., Prescriptive) could cause `UnsupportedRecursionError`. The known trigger was calling `problem.variable_values()` after graph algorithms on the same model.
 
 **Pattern:**
 
@@ -421,9 +423,9 @@ model.define(Site.filter_by(id=cent_src.site_id).centrality(cent_src.centrality)
 ```
 
 **When to use this pattern:**
-- You get `UnsupportedRecursionError` when combining Graph with another reasoner on one model
+- You are on SDK < 1.0.13 and get `UnsupportedRecursionError` when combining Graph with another reasoner on one model
 - You want defensive isolation in a multi-reasoner pipeline regardless of SDK version
 
 **When it's unnecessary:**
+- SDK >= 1.0.13 — graph and prescriptive work on the same Model without conflict
 - Graph-only scripts with no other reasoners
-- Pipelines where `model.select().to_df()` (not `p.variable_values()`) is used to extract solve results — this may avoid the conflict

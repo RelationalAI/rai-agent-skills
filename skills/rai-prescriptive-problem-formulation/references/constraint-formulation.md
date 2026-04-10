@@ -237,18 +237,18 @@ Demand is NOT simply "upper bound for maximize, lower bound for minimize." The c
 
 ```python
 # Each shift must have minimum coverage
-p.satisfy(model.where(Worker.x_assign(Shift, x)).require(
+problem.satisfy(model.where(Worker.x_assign(Shift, x)).require(
     sum(Worker, x).per(Shift) >= min_coverage
 ))
 
 # Nutritional bounds: total intake within [min, max]
 qty = Float.ref()
 total = sum(qty * Food.amount).where(Food.contains(Nutrient, qty)).per(Nutrient)
-p.satisfy(model.require(total >= Nutrient.min, total <= Nutrient.max))
+problem.satisfy(model.require(total >= Nutrient.min, total <= Nutrient.max))
 
 # Degree constraints: exactly one in-edge and one out-edge per node
 node_flow = sum(Edge.x).per(Node)
-p.satisfy(model.require(
+problem.satisfy(model.require(
     node_flow.where(Edge.j == Node.v) == 1,
     node_flow.where(Edge.i == Node.v) == 1
 ))
@@ -260,10 +260,10 @@ When choosing exactly one option from a discrete set per entity (e.g., one disco
 
 ```python
 # Binary: Product x Week x Discount selection
-p.solve_for(Product.x_select(w, d, x), type="bin")
+problem.solve_for(Product.x_select(w, d, x), type="bin")
 
 # Exactly one discount per (Product, Week)
-p.satisfy(model.where(Product.x_select(w, d, x)).require(
+problem.satisfy(model.where(Product.x_select(w, d, x)).require(
     sum(d, x).per(Product, w) == 1
 ))
 ```
@@ -276,11 +276,11 @@ For state that accumulates over time, use separate constraints for the base case
 
 ```python
 # Base case: first period
-p.satisfy(model.where(w.num == 1, Product.x_cuml(w, z), Product.x_sales(w, d, y)).require(
+problem.satisfy(model.where(w.num == 1, Product.x_cuml(w, z), Product.x_sales(w, d, y)).require(
     z == sum(d, y).per(Product, w)))
 
 # Recurrence: subsequent periods
-p.satisfy(model.where(
+problem.satisfy(model.where(
     w.num > 1, w_prev.num == w.num - 1,
     Product.x_cuml(w, z), Product.x_cuml(w_prev, z_prev),
     Product.x_sales(w, d, y),
@@ -294,7 +294,7 @@ The `w_prev.num == w.num - 1` join creates a two-period self-join on the time co
 To enforce that a selected option cannot decrease over consecutive periods, use mutual exclusion between lower values in the next period:
 
 ```python
-p.satisfy(model.where(
+problem.satisfy(model.where(
     Product.x_select(w, d, x), Product.x_select(w2, d2, x2),
     w2.num == w.num + 1, d2.level < d.level,
 ).require(x + x2 <= 1))
@@ -315,22 +315,22 @@ Self-defeating constraints force decision variables to zero universally, making 
 **Make zero-forcing conditional with `.where()`:**
 ```python
 # WRONG (self-defeating - blocks ALL production):
-p.satisfy(model.require(SiteProduction.x_quantity == 0))
+problem.satisfy(model.require(SiteProduction.x_quantity == 0))
 
 # CORRECT (conditional - only zero where no BOM exists):
-p.satisfy(model.require(SiteProduction.x_quantity == 0).where(~SiteProduction.site.has_bom))
+problem.satisfy(model.require(SiteProduction.x_quantity == 0).where(~SiteProduction.site.has_bom))
 
 # CORRECT (upper bound, not forcing to zero):
-p.satisfy(model.require(SiteProduction.x_quantity <= SiteProduction.capacity))
+problem.satisfy(model.require(SiteProduction.x_quantity <= SiteProduction.capacity))
 ```
 
 **Never nest `require()` calls:**
 ```python
 # WRONG:
-p.satisfy(model.require(model.require(x == 0).where(...)))
+problem.satisfy(model.require(model.require(x == 0).where(...)))
 
 # CORRECT:
-p.satisfy(model.require(x == 0).where(...))
+problem.satisfy(model.require(x == 0).where(...))
 ```
 
 ---
@@ -358,13 +358,13 @@ Decision variables must be referenced on the concept where they were defined. Mi
 ```python
 # Variable defined on DecisionConcept:
 DecisionConcept.x_assigned = Property(...)
-p.solve_for(DecisionConcept.x_assigned, ...)
+problem.solve_for(DecisionConcept.x_assigned, ...)
 
 # WRONG - references x_assigned on wrong concept:
-p.satisfy(model.require(sum(BaseConcept.x_assigned) >= 1))
+problem.satisfy(model.require(sum(BaseConcept.x_assigned) >= 1))
 
 # RIGHT - references x_assigned on defining concept:
-p.satisfy(model.require(sum(DecisionConcept.x_assigned).per(BaseConcept) >= 1))
+problem.satisfy(model.require(sum(DecisionConcept.x_assigned).per(BaseConcept) >= 1))
 ```
 
 **To link to base model entities**, navigate via relationships defined on the decision concept (e.g., `DecisionConcept.entity_a`, `DecisionConcept.entity_b`), not by referencing the variable on the base concept.
@@ -373,17 +373,17 @@ p.satisfy(model.require(sum(DecisionConcept.x_assigned).per(BaseConcept) >= 1))
 
 ```python
 # Total resource usage <= factory availability
-p.satisfy(model.require(
+problem.satisfy(model.require(
     sum(Product.quantity / Product.rate) <= Factory.avail
 ).where(this_product, Factory.name(factory_name)))
 
 # TL weight <= capacity (big-M with binary activation)
-p.satisfy(model.require(x_weight <= tl_cap * y_bin_tl).where(
+problem.satisfy(model.require(x_weight <= tl_cap * y_bin_tl).where(
     TransportType.name("tl"), TransportType.weight(t, x_weight), bin_tl(t, y_bin_tl),
 ))
 
 # Ship all-or-nothing: quantity = capacity * binary
-p.satisfy(model.require(x_qty_tra == FreightGroup.inv_start * y_bin_tra).where(
+problem.satisfy(model.require(x_qty_tra == FreightGroup.inv_start * y_bin_tra).where(
     TransportType.qty_tra(FreightGroup, t, x_qty_tra),
     TransportType.bin_tra(FreightGroup, t, y_bin_tra),
 ))
@@ -467,7 +467,7 @@ Before writing any constraint, check the CONCEPT JOINABILITY section in the mode
 **DIRECT joins** — concepts linked by a relationship:
 ```python
 # A.rel -> B (direct link): aggregate A's variable per B, compare to B's threshold
-p.satisfy(model.require(
+problem.satisfy(model.require(
     sum(A.x_var).where(A.rel(B)).per(B) >= B.threshold
 ))
 ```
@@ -481,7 +481,7 @@ model.define(AggConcept.new(dim_key=B.dim_link))
 # Aggregate each side per the shared dimension
 supply = sum(A.x_var).where(A.dim_link(AggConcept.dim_key)).per(AggConcept)
 demand = sum(B.quantity).where(B.dim_link(AggConcept.dim_key)).per(AggConcept)
-p.satisfy(model.require(supply + AggConcept.x_slack >= demand))
+problem.satisfy(model.require(supply + AggConcept.x_slack >= demand))
 ```
 
 **LINKING TWO CROSS-PRODUCT CONCEPTS through shared dimensions:**
@@ -504,7 +504,7 @@ assign_per_mp = sum(TMP_ref.x_assigned).where(
     TMP_ref.period == MP_ref.period
 ).per(MP_ref)
 
-p.satisfy(require(assign_per_mp == MP_ref.x_machine_maintained))
+problem.satisfy(require(assign_per_mp == MP_ref.x_machine_maintained))
 ```
 
 **Why:** `.ref()` creates a reference alias that the type inferencer can disambiguate. Without `.ref()`, when multiple concepts appear in the same expression, the inferencer can't resolve which entity maps to which. Always use `.ref()` when a constraint involves 2+ concepts.
@@ -514,7 +514,7 @@ p.satisfy(require(assign_per_mp == MP_ref.x_machine_maintained))
 # relationship == bare concept works for single-dimension joins:
 AssignmentRef = Assignment.ref()
 trip_coverage = sum(AssignmentRef.x_assigned).where(AssignmentRef.trip == Trip).per(Trip)
-p.satisfy(require(trip_coverage >= 1))
+problem.satisfy(require(trip_coverage >= 1))
 ```
 
 **Rule: When to use `.ref()`:**
@@ -529,14 +529,14 @@ This is the canonical pattern for network flow and supply chain problems where s
 ```python
 # 1. Variables: flow on edge concept + slack on aggregation dimension
 Operation.x_flow = model.Property(f"{Operation} has {Float:flow}")
-p.solve_for(Operation.x_flow, lower=0, upper=Operation.capacity_per_day,
+problem.solve_for(Operation.x_flow, lower=0, upper=Operation.capacity_per_day,
             name=["flow", Operation.id])
 
 UnmetDemand = model.Concept("UnmetDemand")
 UnmetDemand.sku = model.Property(f"{UnmetDemand} for {SKU:sku}")
 UnmetDemand.x_slack = model.Property(f"{UnmetDemand} of {Float:slack}")
 model.define(UnmetDemand.new(sku=Demand.sku))  # One per unique demanded SKU
-p.solve_for(UnmetDemand.x_slack, lower=0, name=["unmet", UnmetDemand.sku.id])
+problem.solve_for(UnmetDemand.x_slack, lower=0, name=["unmet", UnmetDemand.sku.id])
 
 # 2. Constraint: supply + slack >= demand, per shared dimension
 Op = Operation.ref()
@@ -544,11 +544,11 @@ D = Demand.ref()
 UD = UnmetDemand.ref()
 inflow_per_sku = sum(Op.x_flow).where(Op.output_sku == UD.sku).per(UD.sku)
 demand_per_sku = sum(D.quantity).where(D.sku == UD.sku).per(UD.sku)
-p.satisfy(model.require(inflow_per_sku + UD.x_slack >= demand_per_sku).where(UD))
+problem.satisfy(model.require(inflow_per_sku + UD.x_slack >= demand_per_sku).where(UD))
 
 # 3. Objective: minimize cost + penalty for unmet demand
 PENALTY = 1000.0
-p.minimize(sum(Operation.x_flow * Operation.cost_per_unit) + PENALTY * sum(UnmetDemand.x_slack))
+problem.minimize(sum(Operation.x_flow * Operation.cost_per_unit) + PENALTY * sum(UnmetDemand.x_slack))
 ```
 
 **Why this works:** Both sides aggregate `.per(UD.sku)` — the shared dimension. The slack variable ensures feasibility when supply < demand. The penalty in the objective drives the solver to satisfy demand when possible.
@@ -609,14 +609,14 @@ Never use: chained properties (2+ hops), relationship-to-relationship comparison
 
 **Rule 6: No multi-hop property traversals in solver expressions**
 
-`Concept.relationship.property` patterns in `p.satisfy()`, `p.minimize()`, `p.maximize()`, or `p.solve_for()` cause `UnresolvedOverload` TyperErrors. The solver type inferencer cannot resolve chained property access through relationships.
+`Concept.relationship.property` patterns in `problem.satisfy()`, `problem.minimize()`, `problem.maximize()`, or `problem.solve_for()` cause `UnresolvedOverload` TyperErrors. The solver type inferencer cannot resolve chained property access through relationships.
 
 ```python
 # WRONG — multi-hop traversal (TyperError):
-p.satisfy(model.require(sum(AB_ref.x_active * AB_ref.a.cost)))
+problem.satisfy(model.require(sum(AB_ref.x_active * AB_ref.a.cost)))
 
 # CORRECT — use an enriched flat property:
-p.satisfy(model.require(sum(AB_ref.x_active * AB_ref.a_cost)))
+problem.satisfy(model.require(sum(AB_ref.x_active * AB_ref.a_cost)))
 ```
 
 Multi-hop traversals work in `model.define()`, `model.select()`, and `model.where()` — the restriction applies only to solver expressions. If a property from a related concept is needed in a solver expression, it must first be denormalized onto the decision concept via enrichment. Report as a `model_gap` so enrichment can create it.
@@ -854,4 +854,4 @@ When two objectives exist, evaluate forcing constraints against BOTH:
 
 - **Forcing for primary:** Ensures primary objective is non-trivial (e.g., demand satisfaction forces cost > 0 when minimizing cost).
 - **Forcing for secondary:** Ensures secondary has a meaningful range (e.g., minimum activity constraint ensures coverage > 0 even when primary pushes toward zero activity).
-- **Cross-objective interaction:** A constraint that's non-binding for the primary may become binding as the secondary is pushed toward its extreme via the epsilon parameter. The epsilon constraint itself is generated by the loop — it's a regular `p.satisfy(model.require(...))` call, same syntax as any other constraint.
+- **Cross-objective interaction:** A constraint that's non-binding for the primary may become binding as the secondary is pushed toward its extreme via the epsilon parameter. The epsilon constraint itself is generated by the loop — it's a regular `problem.satisfy(model.require(...))` call, same syntax as any other constraint.

@@ -1,5 +1,5 @@
 # Pattern: loop-based result extraction — results live in Python DataFrames (outside the model)
-# Key ideas: variable_values().to_df() extracts solution when populate=False;
+# Key ideas: Variable.values() structured query extracts solution when populate=False;
 # solve_info().display() shows solver diagnostics; collect scenario results for comparison.
 # For Scenario Concept result extraction (results in the ontology via model.select()),
 # see scenario_concept_extraction.py.
@@ -42,23 +42,23 @@ total_budget = 1000
 
 def build_and_solve(min_benefit):
     """Build formulation, solve, and return results dict."""
-    p = Problem(model, Float)
+    problem = Problem(model, Float)
 
-    # Variables with populate=False — solution extracted via variable_values()
-    p.solve_for(Item.x_allocation, name=["alloc", Item.index], populate=False)
+    # Variables with populate=False — solution extracted via Variable.values()
+    alloc_var = problem.solve_for(Item.x_allocation, populate=False)
 
     # Constraints and objective
-    p.satisfy(model.require(Item.x_allocation >= 0))
-    p.satisfy(model.require(sum(Item.x_allocation) <= total_budget))
-    p.satisfy(model.require(sum(Item.value * Item.x_allocation) >= min_benefit))
+    problem.satisfy(model.require(Item.x_allocation >= 0))
+    problem.satisfy(model.require(sum(Item.x_allocation) <= total_budget))
+    problem.satisfy(model.require(sum(Item.value * Item.x_allocation) >= min_benefit))
     quad_cost = sum(c * Item.x_allocation * Item2.x_allocation).where(
         Item.interaction(Item2, c)
     )
-    p.minimize(quad_cost)
+    problem.minimize(quad_cost)
 
     # --- Solve and inspect ---
-    p.solve("highs", time_limit_sec=60)
-    si = p.solve_info()
+    problem.solve("highs", time_limit_sec=60)
+    si = problem.solve_info()
     si.display()  # prints solver stats: status, objective, gap, time
 
     # --- Result extraction ---
@@ -71,9 +71,16 @@ def build_and_solve(min_benefit):
         else "Objective: N/A"
     )
 
-    # variable_values().to_df() returns DataFrame with columns: name, value
-    var_df = p.variable_values().to_df()
-    allocation = var_df[var_df["value"] > 0.001]
+    # Variable.values() structured query via ProblemVariable back-pointers
+    value_ref = Float.ref()
+    allocation = (
+        model.select(
+            alloc_var.item.index.alias("item_index"),
+            value_ref.alias("value"),
+        )
+        .where(alloc_var.values(0, value_ref), value_ref > 0.001)
+        .to_df()
+    )
     print(f"Allocation:\n{allocation.to_string(index=False)}")
 
     return {

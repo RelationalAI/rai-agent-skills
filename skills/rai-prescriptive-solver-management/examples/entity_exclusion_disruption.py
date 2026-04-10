@@ -1,7 +1,7 @@
 # Pattern: Loop + where= filter — entity exclusion scenarios
 # Key ideas: each disruption scenario excludes a supplier via != filter in where=[];
 # fresh Problem per iteration; populate=False prevents cross-iteration contamination;
-# results extracted via variable_values().to_df() (outside the model).
+# results extracted via Variable.values() structured query (outside the model).
 
 from relationalai.semantics import Float, Integer, Model, String, sum
 from relationalai.semantics.reasoners.prescriptive import Problem
@@ -49,36 +49,42 @@ scenario_results = []
 for excluded in excluded_suppliers:
     label = "baseline" if excluded is None else f"without_{excluded}"
 
-    p = Problem(model, Float)
+    problem = Problem(model, Float)
 
     # where= filter excludes the supplier's orders
     if excluded is not None:
         active_orders = SupplyOrder.supplier.name != excluded
-        p.solve_for(SupplyOrder.x_quantity,
-                    name=["qty", SupplyOrder.supplier.name, SupplyOrder.product.name],
-                    lower=0, where=[active_orders], populate=False)
+        qty_var = problem.solve_for(
+            SupplyOrder.x_quantity, lower=0, where=[active_orders], populate=False
+        )
     else:
-        p.solve_for(SupplyOrder.x_quantity,
-                    name=["qty", SupplyOrder.supplier.name, SupplyOrder.product.name],
-                    lower=0, populate=False)
+        qty_var = problem.solve_for(SupplyOrder.x_quantity, lower=0, populate=False)
 
     # Constraints
-    p.satisfy(model.require(
-        sum(SupplyOrder.x_quantity).where(SupplyOrder.supplier == Supplier).per(Supplier)
-        <= Supplier.capacity
-    ))
-    p.satisfy(model.require(
-        sum(SupplyOrder.x_quantity).where(SupplyOrder.product == Product).per(Product)
-        >= Product.demand
-    ))
+    problem.satisfy(
+        model.require(
+            sum(SupplyOrder.x_quantity)
+            .where(SupplyOrder.supplier == Supplier)
+            .per(Supplier)
+            <= Supplier.capacity
+        )
+    )
+    problem.satisfy(
+        model.require(
+            sum(SupplyOrder.x_quantity)
+            .where(SupplyOrder.product == Product)
+            .per(Product)
+            >= Product.demand
+        )
+    )
 
     # Objective
-    p.minimize(sum(SupplyOrder.x_quantity * SupplyOrder.cost_per_unit))
+    problem.minimize(sum(SupplyOrder.x_quantity * SupplyOrder.cost_per_unit))
 
-    p.solve("highs", time_limit_sec=60)
+    problem.solve("highs", time_limit_sec=60)
 
     # Collect results per iteration (outside the model)
-    si = p.solve_info()
+    si = problem.solve_info()
     scenario_results.append(
         {
             "scenario": label,
@@ -87,8 +93,17 @@ for excluded in excluded_suppliers:
         }
     )
 
-    var_df = p.variable_values().to_df()
-    qty_df = var_df[var_df["name"].str.startswith("qty") & (var_df["value"] > 0.001)]
+    # Variable.values() structured query via ProblemVariable back-pointers
+    value_ref = Float.ref()
+    qty_df = (
+        model.select(
+            qty_var.supplyorder.supplier.name.alias("supplier"),
+            qty_var.supplyorder.product.name.alias("product"),
+            value_ref.alias("value"),
+        )
+        .where(qty_var.values(0, value_ref), value_ref > 0.001)
+        .to_df()
+    )
     print(f"\n{label}: {si.termination_status}, cost={si.objective_value}")
     print(qty_df.to_string(index=False))
 

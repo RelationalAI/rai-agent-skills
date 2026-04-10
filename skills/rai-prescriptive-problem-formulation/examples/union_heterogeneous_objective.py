@@ -38,25 +38,31 @@ model.define(Transport.warehouse(Warehouse)).where(Transport.origin == Warehouse
 Warehouse.x_open = model.Property(f"{Warehouse} has {Float:x_open}")
 Transport.x_ship = model.Property(f"{Transport} has {Float:x_ship}")
 
-p = Problem(model, Float)
+problem = Problem(model, Float)
 x_open = Float.ref()
 x_ship = Float.ref()
 
-p.solve_for(Warehouse.x_open(x_open), type="bin", name=["open", Warehouse.name])
-p.solve_for(Transport.x_ship(x_ship), lower=0, name=["ship", Transport.origin, Transport.dest])
+x_open_var = problem.solve_for(
+    Warehouse.x_open(x_open), type="bin", name=["open", Warehouse.name]
+)
+x_ship_var = problem.solve_for(
+    Transport.x_ship(x_ship), lower=0, name=["ship", Transport.origin, Transport.dest]
+)
 
 # --- Constraints ---
 # Demand satisfaction: each route must ship exactly its demand
-p.satisfy(model.require(x_ship == Transport.demand).where(Transport.x_ship(x_ship)))
+problem.satisfy(
+    model.require(x_ship == Transport.demand).where(Transport.x_ship(x_ship))
+)
 
 # Capacity: total shipped from a warehouse cannot exceed its capacity (if open)
-p.satisfy(model.where(
-    Transport.x_ship(x_ship),
-    Transport.warehouse(Warehouse),
-    Warehouse.x_open(x_open),
-).require(
-    sum(x_ship).per(Warehouse) <= Warehouse.capacity * x_open
-))
+problem.satisfy(
+    model.where(
+        Transport.x_ship(x_ship),
+        Transport.warehouse(Warehouse),
+        Warehouse.x_open(x_open),
+    ).require(sum(x_ship).per(Warehouse) <= Warehouse.capacity * x_open)
+)
 
 # --- Objective: model.union() combines costs from TWO different concept scopes ---
 # WHY union is needed: Warehouse.fixed_cost * x_open is scoped to Warehouse;
@@ -66,16 +72,20 @@ p.satisfy(model.where(
 warehouse_cost = Warehouse.fixed_cost * x_open  # per-Warehouse expression
 transport_cost = Transport.cost_per_unit * x_ship  # per-Transport expression
 
-p.minimize(sum(model.union(
-    warehouse_cost.where(Warehouse.x_open(x_open)),
-    transport_cost.where(Transport.x_ship(x_ship)),
-)))
+problem.minimize(
+    sum(
+        model.union(
+            warehouse_cost.where(Warehouse.x_open(x_open)),
+            transport_cost.where(Transport.x_ship(x_ship)),
+        )
+    )
+)
 
 # --- Solve ---
-p.display()
-p.solve("highs", time_limit_sec=60)
-model.require(p.termination_status() == "OPTIMAL")
-si = p.solve_info()
+problem.display()
+problem.solve("highs", time_limit_sec=60)
+model.require(problem.termination_status() == "OPTIMAL")
+si = problem.solve_info()
 si.display()
 print(f"Status: {si.termination_status}, Total cost: ${si.objective_value:.2f}")
 

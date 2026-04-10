@@ -319,7 +319,7 @@ model.where(t.amount >= 100.0).define(graph.Edge.new(src=t.payer, dst=t.payee))
 
 For detailed patterns (multi-intermediary, hierarchy, self-referencing, multi-graph, weight construction, validation), see [graph-construction.md](references/graph-construction.md).
 
-**Multi-reasoner warning:** If your pipeline combines graph algorithms with prescriptive optimization or other reasoners, define graph constructs on a **separate Model** and write results back via `model.data()`. Mixing graph algorithms and `p.variable_values()` on the same Model triggers `UnsupportedRecursionError`. See [graph_model_isolation.py](examples/graph_model_isolation.py) and Common Pitfalls below.
+**Multi-reasoner note:** In SDK >= 1.0.13, graph algorithms and prescriptive optimization work on the same `Model` without conflict. For older SDKs, mixing graph algorithms and prescriptive result extraction on the same `Model` could trigger `UnsupportedRecursionError` — the workaround was to define graph constructs on a **separate Model** and write results back via `model.data()`. That pattern is still valid for defensive isolation. See [graph_model_isolation.py](examples/graph_model_isolation.py) and Common Pitfalls below.
 
 ---
 
@@ -440,7 +440,7 @@ Graph outputs become model properties that other reasoning consumes:
 
 ```python
 # Graph metric feeds optimization
-p.maximize(aggregates.sum(x * Site.centrality_score))
+problem.maximize(aggregates.sum(x * Site.centrality_score))
 
 # Graph metric feeds rule
 Site.is_at_risk = model.Relationship(f"{Site} is at risk")
@@ -469,7 +469,7 @@ model.where(Site.centrality_score < 0.1).define(Site.is_at_risk())
 | Empty graph when extending existing model | Script creates `Model("name")` without importing base model definitions — concepts exist but have no instances | Import the base model module (e.g., `from my_model import model, Site`) so base `define()` rules are in scope |
 | `ValidationError: Unused variable` when using `rank()` with graph properties | Using `rank(desc(graph.Node.betweenness))` alongside other graph properties in `select()` triggers the unused variable validator | Sort in pandas instead: `.to_df().sort_values("betweenness", ascending=False).reset_index(drop=True)` — avoid `rank()` in graph queries |
 | `RAIException: Ungrounded variables` when mixing chained derived properties + Graph + boolean rules | Defining chained derived properties (e.g., `peak_forecast` → `future_headroom`) alongside Graph construction and boolean Relationship rules in the same model causes ungrounded variable errors | Query raw data via simple selects and compute derived values / rules in pandas. Root cause is related to the type inference limit noted above — chained derivations compound the issue |
-| `UnsupportedRecursionError` in multi-reasoner pipelines | Calling `p.variable_values()` after graph algorithms on the same `Model` can trigger recursion errors in some SDK versions | Use a separate `Model` for graph analysis and write results back via `model.data()`. See [graph-construction.md](references/graph-construction.md#graph-model-separation). |
+| `UnsupportedRecursionError` in multi-reasoner pipelines | In SDK < 1.0.13, mixing graph algorithms and prescriptive result extraction on the same `Model` could trigger recursion errors. **Fixed in SDK >= 1.0.13.** | Upgrade to SDK >= 1.0.13. For older SDKs, use a separate `Model` for graph analysis and write results back via `model.data()`. See [graph-construction.md](references/graph-construction.md#graph-model-separation). |
 
 ---
 
@@ -489,7 +489,7 @@ Each example targets a distinct combination of edge construction, topology, algo
 | Multiple graphs, same model | Multiple Graph instances on same node concept | Weighted + unweighted | Eigenvector + betweenness | Parallel graph views, separate Edge defs | [multi_graph_same_model.py](examples/multi_graph_same_model.py) |
 | Jaccard similarity | Co-occurrence edges via shared attribute | Undirected, unweighted | Jaccard similarity | Top-k similar pairs extraction | [similarity_jaccard.py](examples/similarity_jaccard.py) |
 | Shortest path + diameter | `edge_concept` with cost weight | Directed, weighted | Distance + diameter_range | All-pairs shortest paths, graph extent | [shortest_path_distance.py](examples/shortest_path_distance.py) |
-| Graph model isolation | Separate `Model()` for graph, results transferred to main model | Undirected, weighted | Eigenvector centrality | SDK recursion workaround for graph + prescriptive | [graph_model_isolation.py](examples/graph_model_isolation.py) |
+| Graph model isolation | Separate `Model()` for graph, results transferred to main model | Undirected, weighted | Eigenvector centrality | Defensive isolation for graph + prescriptive (required for SDK < 1.0.13, optional otherwise) | [graph_model_isolation.py](examples/graph_model_isolation.py) |
 
 ---
 

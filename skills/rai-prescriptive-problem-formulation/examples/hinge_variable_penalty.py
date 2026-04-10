@@ -81,39 +81,52 @@ model.define(Slot.new(
 ))
 
 # --- Problem setup ---
-p = Problem(model, Float)
-p.solve_for(Selection.x_assigned, type="bin",
-            name=["assigned", Selection.slot.worker.name, Selection.slot.task.name])
-p.solve_for(Worker.x_excess_hours, type="cont", name=["excess", Worker.name], lower=0)
-p.solve_for(Task.x_served, type="cont", name=["served", Task.name], lower=0)
-p.solve_for(Task.x_unmet, type="cont", name=["unmet", Task.name], lower=0)
+problem = Problem(model, Float)
+x_assigned_var = problem.solve_for(
+    Selection.x_assigned,
+    type="bin",
+    name=["assigned", Selection.slot.worker.name, Selection.slot.task.name],
+)
+x_excess_hours_var = problem.solve_for(
+    Worker.x_excess_hours, type="cont", name=["excess", Worker.name], lower=0
+)
+x_served_var = problem.solve_for(
+    Task.x_served, type="cont", name=["served", Task.name], lower=0
+)
+x_unmet_var = problem.solve_for(
+    Task.x_unmet, type="cont", name=["unmet", Task.name], lower=0
+)
 
 # Constraint: only assign available workers
-p.satisfy(model.require(Selection.x_assigned <= Selection.slot.available))
+problem.satisfy(model.require(Selection.x_assigned <= Selection.slot.available))
 
 # Constraint: minimum resources per task
 task_staff = sum(SelectionRef.x_assigned).where(SelectionRef.slot.task == Task).per(Task)
-p.satisfy(model.require(task_staff >= Task.min_resources))
+problem.satisfy(model.require(task_staff >= Task.min_resources))
 
 # Constraint: qualification-filtered coverage — at least one worker meeting qualification threshold
 qualified_coverage = sum(SelectionRef.x_assigned).where(
     SelectionRef.slot.task == Task,
     SelectionRef.slot.worker.qualification_level >= Task.min_qualification,
 ).per(Task)
-p.satisfy(model.require(qualified_coverage >= 1))
+problem.satisfy(model.require(qualified_coverage >= 1))
 
 # Constraint: excess hours = hinge(total_hours - standard_hours)
-total_hours = sum(SelectionRef.x_assigned * SelectionRef.slot.task.duration).where(
-    SelectionRef.slot.worker == Worker
-).per(Worker)
-p.satisfy(model.require(Worker.x_excess_hours >= total_hours - Worker.standard_hours))
+total_hours = (
+    sum(SelectionRef.x_assigned * SelectionRef.slot.task.duration)
+    .where(SelectionRef.slot.worker == Worker)
+    .per(Worker)
+)
+problem.satisfy(
+    model.require(Worker.x_excess_hours >= total_hours - Worker.standard_hours)
+)
 
 # Constraint: unmet demand >= workload - served (soft constraint via penalty)
-p.satisfy(model.require(Task.x_unmet >= Task.workload - Task.x_served))
+problem.satisfy(model.require(Task.x_unmet >= Task.workload - Task.x_served))
 
 # Objective: minimize excess-hours cost + unmet-demand penalty
 excess_cost = sum(Worker.x_excess_hours * Worker.unit_cost * Worker.excess_cost_multiplier)
 unmet_penalty = penalty_per_unmet * sum(Task.x_unmet)
-p.minimize(excess_cost + unmet_penalty)
+problem.minimize(excess_cost + unmet_penalty)
 
-p.solve("highs", time_limit_sec=60)
+problem.solve("highs", time_limit_sec=60)

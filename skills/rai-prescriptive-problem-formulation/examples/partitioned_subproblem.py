@@ -1,6 +1,7 @@
 # Pattern: partitioned sub-problem solving with populate=False and where=[filter]
 # Key ideas: fresh Problem per partition; where= restricts variable scope to one factory;
-# populate=False prevents cross-scenario overwrites; results collected via variable_values().
+# populate=False prevents cross-scenario overwrites; results collected via Variable.values()
+# structured query.
 
 from relationalai.semantics import Float, Integer, Model, String, sum
 from relationalai.semantics.reasoners.prescriptive import Problem
@@ -29,35 +30,44 @@ for factory_name in factory_names:
     this_product = Product.factory.name(factory_name)
 
     # Fresh Problem for each partition (clean separation)
-    p = Problem(model, Float)
+    problem = Problem(model, Float)
 
     # Variable: quantity per product, bounded by demand, scoped by where=
-    p.solve_for(
+    qty_var = problem.solve_for(
         Product.x_quantity,
         lower=0, upper=Product.demand,
-        name=Product.name,
         where=[this_product],   # restricts to this factory's products
         populate=False,         # don't write back — avoids cross-partition collision
     )
 
     # Objective: maximize profit
-    p.maximize(sum(Product.profit * Product.x_quantity).where(this_product))
+    problem.maximize(sum(Product.profit * Product.x_quantity).where(this_product))
 
     # Constraint: total resource usage <= factory availability
-    p.satisfy(model.require(
-        sum(Product.x_quantity / Product.rate) <= Factory.avail
-    ).where(this_product, Factory.name(factory_name)))
+    problem.satisfy(
+        model.require(sum(Product.x_quantity / Product.rate) <= Factory.avail).where(
+            this_product, Factory.name(factory_name)
+        )
+    )
 
-    p.solve("highs", time_limit_sec=60)
+    problem.solve("highs", time_limit_sec=60)
 
-    # Extract results via variable_values() (not model.select — populate=False)
-    si = p.solve_info()
-    var_df = p.variable_values().to_df()
+    # Extract results via Variable.values() structured query (not model.select — populate=False)
+    si = problem.solve_info()
+    value_ref = Float.ref()
+    plan_df = (
+        model.select(
+            qty_var.product.name.alias("product"),
+            value_ref.alias("value"),
+        )
+        .where(qty_var.values(0, value_ref))
+        .to_df()
+    )
     results.append(
         {
             "factory": factory_name,
             "status": si.termination_status,
             "profit": si.objective_value,
-            "plan": var_df,
+            "plan": plan_df,
         }
     )
