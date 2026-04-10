@@ -99,7 +99,7 @@ pareto = []
 consecutive_infeasible = 0
 for eps in epsilon_values:
     problem = Problem(model, Float)
-    problem.solve_for(..., populate=False)      # fresh Problem each iteration
+    var = problem.solve_for(..., populate=False)  # capture ProblemVariable
     problem.satisfy(original_constraints)
     problem.satisfy(model.require(secondary >= eps))   # epsilon constraint
     problem.minimize(primary_objective)
@@ -210,6 +210,7 @@ for eps in epsilon_values:
     value_ref = Float.ref()
     variables_df = model.select(
         var.entity.name.alias("entity"),
+        var.entity.secondary_coeff.alias("coefficient"),  # include coefficient for secondary
         value_ref.alias("value"),
     ).where(var.values(0, value_ref)).to_df()
 
