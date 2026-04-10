@@ -59,7 +59,7 @@ for excluded in [None, "SupplierC", "SupplierB"]:
         problem.solve_for(Order.x_qty, populate=False)
     problem.maximize(...)
     problem.solve(solver, time_limit_sec=60)
-    # Use Variable.values() or variable_values().to_df() for per-iteration results
+    # Use Variable.values() for per-iteration results
 ```
 
 ## When to use which
@@ -69,7 +69,7 @@ for excluded in [None, "SupplierC", "SupplierB"]:
 | What varies | Parameter values (budget, demand, thresholds) | Which entities participate (exclude supplier, solve per factory) |
 | Problem structure | Same constraints, same entities, different parameter values | Constraints or entity sets change between scenarios |
 | Number of solves | One (all scenarios simultaneously) | One per scenario |
-| Where results live | **In the ontology** — queryable via `model.select()`, composable with other model queries, available for downstream derived properties | In Python DataFrames via `Variable.values()` or `variable_values().to_df()` — outside the model |
+| Where results live | **In the ontology** — queryable via `model.select()`, composable with other model queries, available for downstream derived properties | In Python DataFrames via `Variable.values()` — outside the model |
 | Problem size | Cross-product of entities x scenarios (can be large) | Each sub-problem is small and independent |
 
 **Decision rule:**

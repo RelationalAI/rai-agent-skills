@@ -39,8 +39,7 @@ v1 supports multiple solutions natively:
 
 - **Request multiple solutions:** `problem.solve("minizinc", solution_limit=10)` — `solution_limit` is a first-class parameter
 - **Check count:** `problem.num_points()` (Relationship) or `problem.solve_info().num_points` (Python)
-- **Extract solution values:** Use `Variable.values(sol_index, value_ref)` on the `ProblemVariable` returned by `solve_for()` for structured access via back-pointers (preferred). `variable_values()` still works but is deprecated and emits `DeprecationWarning`.
-- **`load_point()` is deprecated:** `load_point(0)` is a no-op with `DeprecationWarning`; `load_point(k>0)` raises `NotImplementedError`. For multi-solution access, use `Variable.values(sol_index, value_ref)` with different `sol_index` values.
+- **Extract solution values:** Use `Variable.values(sol_index, value_ref)` on the `ProblemVariable` returned by `solve_for()` for structured access via back-pointers. For multi-solution access, use different `sol_index` values.
 
 ```python
 # Solve with multiple solutions
@@ -64,9 +63,6 @@ sol2_df = model.select(
     value_ref.alias("amount"),
 ).where(amount_var.values(2, value_ref), value_ref > 0.001).to_df()
 
-# Legacy approach (deprecated):
-# all_df = problem.variable_values(multiple=True).to_df()
-# problem.load_point(2)  # deprecated: load_point(0) is a no-op; load_point(k>0) raises NotImplementedError
 ```
 
 **How many solutions to request:**
@@ -87,4 +83,4 @@ Constraints defined over concepts automatically apply to new data added between 
 
 **Scenario Concept (parameter variations) — preferred when applicable:** Results from a single solve are incorporated into the ontology — queryable via `model.select(Scenario.name, ...).where(Entity.x_var(Scenario, x_ref), x_ref > threshold)`, composable with other model queries, and available for downstream derived properties. Group by `Scenario.name` for comparison tables. Variables are multi-argument Properties indexed by (Entity, Scenario) — the scenario column is part of the variable identity. Use when only parameter values change between scenarios (budget, demand, thresholds). See [examples/scenario_concept_extraction.py](../examples/scenario_concept_extraction.py).
 
-**Loop + where= (entity exclusion):** Each iteration produces results via `Variable.values()` (preferred) or `variable_values().to_df()` (deprecated) — results live in Python DataFrames, outside the model. Collect per-iteration results in a list, label by scenario. Use `populate=False` to prevent cross-iteration contamination. Required when the problem *structure* changes between scenarios (entities added/removed, constraint graph differs). See [examples/loop_based_extraction.py](../examples/loop_based_extraction.py).
+**Loop + where= (entity exclusion):** Each iteration produces results via `Variable.values()` — results live in Python DataFrames, outside the model. Collect per-iteration results in a list, label by scenario. Use `populate=False` to prevent cross-iteration contamination. Required when the problem *structure* changes between scenarios (entities added/removed, constraint graph differs). See [examples/loop_based_extraction.py](../examples/loop_based_extraction.py).

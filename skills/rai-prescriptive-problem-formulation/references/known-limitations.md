@@ -23,7 +23,7 @@ Re-solving the same `Problem` instance is safe. Result import uses `experimental
 
 **Multi-scenario re-solve pattern:**
 
-When solving multiple scenarios in a loop (e.g., varying parameters, what-if analysis), create a **fresh `Problem` per iteration**, use `populate=False` on `solve_for`, and extract results via `Variable.values()` (preferred) or `variable_values().to_df()` (deprecated). This avoids `Duplicate relationship` / `FDError` caused by writing conflicting results back to the graph on each iteration.
+When solving multiple scenarios in a loop (e.g., varying parameters, what-if analysis), create a **fresh `Problem` per iteration**, use `populate=False` on `solve_for`, and extract results via `Variable.values()`. This avoids `Duplicate relationship` / `FDError` caused by writing conflicting results back to the graph on each iteration.
 
 ```python
 results = []

@@ -1,7 +1,7 @@
 # Pattern: Scenario Concept result extraction — results live in the ontology
 # Key ideas: after a single solve with Scenario as a Concept, results are queryable
 # via model.select() like any other property; per-scenario aggregation uses the same
-# .where()/.per() patterns as constraints; no variable_values().to_df() needed.
+# .where()/.per() patterns as constraints.
 
 from relationalai.semantics import Float, Integer, Model, String, sum
 from relationalai.semantics.reasoners.prescriptive import Problem

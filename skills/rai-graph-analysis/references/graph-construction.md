@@ -392,7 +392,7 @@ graph.is_connected().inspect()
 
 > **SDK >= 1.0.13:** The `UnsupportedRecursionError` when mixing graph algorithms and prescriptive reasoning on the same `Model` is **fixed**. You no longer need a separate graph Model. The pattern below remains valid for defensive isolation or for supporting older SDK versions.
 
-In SDK < 1.0.13, graph algorithms on the same `Model` as another reasoner (e.g., Prescriptive) could cause `UnsupportedRecursionError`. The known trigger was calling `problem.variable_values()` after graph algorithms on the same model.
+In SDK < 1.0.13, graph algorithms on the same `Model` as another reasoner (e.g., Prescriptive) could cause `UnsupportedRecursionError`. The known trigger was prescriptive result extraction after graph algorithms on the same model.
 
 **Pattern:**
 

@@ -77,7 +77,7 @@ problem.solve("ipopt", log_to_console=True)
 Two patterns for exploring how solutions change under different assumptions:
 
 - **Scenario Concept** — parameter variations (budget, demand, thresholds) solved in a single solve. Results live in the ontology.
-- **Loop + where= filter** — entity exclusion or partitioned sub-problems. Each iteration is independent. Use `populate=False` + `Variable.values()` (preferred) or `variable_values().to_df()` (deprecated).
+- **Loop + where= filter** — entity exclusion or partitioned sub-problems. Each iteration is independent. Use `populate=False` + `Variable.values()`.
 
 **Decision rule:** Only parameter values change -> Scenario Concept. Entities or constraint structure change -> Loop + where=.
 

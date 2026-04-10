@@ -51,8 +51,7 @@ problem = Problem(model, Float)
 | `maximize` | `(expr, name=)` | Set maximization objective. Returns `ProblemObjective` (a Concept). |
 | `solve` | `(solver, time_limit_sec=, ...)` | Execute solve. Solvers: `"highs"`, `"minizinc"`, `"ipopt"`, `"gurobi"` |
 | `verify` | `(*fragments)` | Post-solve constraint verification |
-| `variable_values` | `(multiple=False)` | Extract solution values as Fragment. **Deprecated** — prefer `Variable.values(sol_index, value_ref)` on the `ProblemVariable` returned by `solve_for()`. See `rai-prescriptive-results-interpretation`. |
-| `Variable.values` | `(sol_index, value_ref)` | **SDK >= 1.0.13.** Property on `ProblemVariable`. Extracts solution values at `sol_index` (0-based), binding each value to `value_ref` (a `Float.ref()` or `Integer.ref()`). Use inside `model.select(...).where(var.values(sol_index, value_ref))`. Primary pattern for `populate=False` workflows. On older SDKs, use `variable_values().to_df()` with `name=[]`. |
+| `Variable.values` | `(sol_index, value_ref)` | Property on `ProblemVariable`. Extracts solution values at `sol_index` (0-based), binding each value to `value_ref` (a `Float.ref()` or `Integer.ref()`). Use inside `model.select(...).where(var.values(sol_index, value_ref))`. Primary pattern for `populate=False` workflows. |
 | `display` | `(part=)` | Print formulation summary |
 
 ---

@@ -151,9 +151,7 @@ model.select(
 ).where(Edge.x_edge > 0.5).inspect()
 ```
 
-**`populate=False` approach: `Variable.values()` on ProblemVariable (SDK >= 1.0.13)**
-
-> **SDK version note:** `Variable.values()` and the `ProblemVariable` return type from `solve_for()` require `relationalai >= 1.0.13`. On older SDKs, use `problem.variable_values().to_df()` with `name=[]` for extraction — see `rai-configuration/references/v013-migration.md`.
+**`populate=False` approach: `Variable.values()` on ProblemVariable**
 
 Use `populate=False` + `Variable.values()` for loop-based entity exclusion/partition scenarios. For Scenario Concept workflows, use `model.select()` — the scenario dimension is part of the variable identity. For loop workflows where multiple Problems share decision variables, `populate=False` prevents one solve from overwriting another's results.
 
@@ -176,8 +174,6 @@ df = model.select(
 # For multiple solutions (e.g., from MiniZinc with solution_limit),
 # pass different sol_index values (0-based)
 ```
-
-> **Note:** The legacy `problem.variable_values()` API still works but emits a `DeprecationWarning`. Prefer `Variable.values()` for new code. The `load_point()` method is also deprecated: `load_point(0)` is a no-op; `load_point(k>0)` raises `NotImplementedError`. Use `Variable.values(sol_index, value_ref)` for multi-solution access.
 
 **Key rules:**
 - Use `model.select()` by default — it gives entity-aware results with proper identity columns
