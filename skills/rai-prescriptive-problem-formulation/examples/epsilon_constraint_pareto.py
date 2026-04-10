@@ -24,8 +24,6 @@
 #   Bi-objective: problem.minimize(cost) with problem.satisfy(model.require(sum(slack) <= eps))
 #   Same loop structure -- the epsilon constraint replaces the penalty term.
 
-import builtins
-
 from relationalai.semantics import Float, Integer, Model, String, sum
 from relationalai.semantics.reasoners.prescriptive import Problem
 
@@ -119,19 +117,23 @@ problem1.solve("ipopt", time_limit_sec=60)
 si1 = problem1.solve_info()
 assert si1.termination_status in ("OPTIMAL", "LOCALLY_SOLVED"), f"Anchor 1 failed: {si1.termination_status}"
 
-# Evaluate benefit at min-cost solution (secondary value at anchor 1)
-# Variable.values() structured query: extract item value * allocation, then sum in Python
+# Evaluate per-scenario benefit rates at min-cost solution
+# Must compute rates per scenario because the epsilon constraint is per-scenario.
 value_ref1 = Float.ref()
 df1 = (
     model.select(
-        alloc_var1.item.index.alias("item_index"),
+        alloc_var1.scenario.name.alias("scenario"),
+        alloc_var1.scenario.capacity.alias("capacity"),
         alloc_var1.item.value.alias("item_value"),
         value_ref1.alias("allocation"),
     )
     .where(alloc_var1.values(0, value_ref1))
     .to_df()
 )
-benefit_at_min_cost = builtins.sum(df1["item_value"] * df1["allocation"])
+df1["benefit_contribution"] = df1["item_value"] * df1["allocation"]
+rates_at_min_cost = df1.groupby("scenario").apply(
+    lambda g: g["benefit_contribution"].sum() / g["capacity"].iloc[0]
+)
 
 # --- Anchor 2: maximize benefit only -> get max achievable benefit ---
 problem2 = Problem(model, Float)
@@ -155,23 +157,27 @@ assert si2.termination_status in ("OPTIMAL", "LOCALLY_SOLVED"), f"Anchor 2 faile
 value_ref2 = Float.ref()
 df2 = (
     model.select(
-        alloc_var2.item.index.alias("item_index"),
+        alloc_var2.scenario.name.alias("scenario"),
+        alloc_var2.scenario.capacity.alias("capacity"),
         alloc_var2.item.value.alias("item_value"),
         value_ref2.alias("allocation"),
     )
     .where(alloc_var2.values(0, value_ref2))
     .to_df()
 )
-benefit_at_max_benefit = builtins.sum(df2["item_value"] * df2["allocation"])
+df2["benefit_contribution"] = df2["item_value"] * df2["allocation"]
+rates_at_max_benefit = df2.groupby("scenario").apply(
+    lambda g: g["benefit_contribution"].sum() / g["capacity"].iloc[0]
+)
 
 # =============================================================================
 # EPSILON SWEEP: minimize quadratic cost subject to linear benefit >= eps (per scenario)
 # =============================================================================
-# Compute epsilon grid from anchor-derived range (as benefit rates per unit capacity)
-# Using a representative capacity to normalize; rates are capacity-independent
-representative_capacity = 100  # any scenario capacity works for rate normalization
-benefit_rate_min = benefit_at_min_cost / representative_capacity
-benefit_rate_max = benefit_at_max_benefit / representative_capacity
+# Compute epsilon grid from anchor-derived per-scenario benefit rates.
+# The epsilon constraint is per-scenario (rate * Scenario.capacity), so the binding
+# scenario (lowest rate) determines feasibility. Use min across scenarios for both ends.
+benefit_rate_min = rates_at_min_cost.min()
+benefit_rate_max = rates_at_max_benefit.min()
 n_interior = 5
 epsilon_rates = [
     benefit_rate_min + i * (benefit_rate_max - benefit_rate_min) / (n_interior + 1) for i in range(1, n_interior + 1)

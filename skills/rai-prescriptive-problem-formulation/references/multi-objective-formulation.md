@@ -210,7 +210,7 @@ for eps in epsilon_values:
     value_ref = Float.ref()
     variables_df = model.select(
         var.<concept>.name.alias("entity"),          # replace <concept> with your concept name
-        var.<concept>.secondary_coeff.alias("coeff"), # secondary objective coefficient via back-pointer
+        var.<concept>.secondary_coeff.alias("coefficient"), # secondary objective coefficient via back-pointer
         value_ref.alias("value"),
     ).where(var.values(0, value_ref)).to_df()
 
