@@ -124,7 +124,7 @@ Where solved values appear depends on the `populate` parameter in `solve_for()`:
 | `populate` setting | Where results live | How to access | When to use |
 |---|---|---|---|
 | `populate=True` (default) | Written back into model properties | `model.select()` queries | Standard single-solve workflows |
-| `populate=False` | Solver-level only | `Variable.values(sol_index, value_ref)` on the `ProblemVariable` returned by `solve_for()` | Scenario loops, multi-solve workflows with shared variables |
+| `populate=False` | Solver-level only | `Variable.values(sol_index, value_ref)` on the `ProblemVariable` returned by `solve_for()` (**SDK >= 1.0.13**) | Scenario loops, multi-solve workflows with shared variables |
 
 **Primary approach: `model.select()` with `populate=True` (default, recommended)**
 

@@ -13,8 +13,6 @@
 # Variable DataFrames come from Variable.values() structured queries (see
 # epsilon_constraint_pareto.py for the extraction pattern).
 
-import builtins
-
 # =============================================================================
 # INPUT: pareto_points from epsilon loop
 # =============================================================================
@@ -153,7 +151,7 @@ for r in range(height):
         print(f"{'':>10} | {''.join(grid[r])}")
 print(f"{'':>10} +{'—' * width}→")
 print(f"{'':>12}{secondary_name}")
-print(f"\n  A = anchor 1, B = anchor 2, K = knee, * = interior point")
+print("\n  A = anchor 1, B = anchor 2, K = knee, * = interior point")
 
 # =============================================================================
 # 5. BUSINESS NARRATIVE (template for agent to adapt to domain)

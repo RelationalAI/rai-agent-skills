@@ -78,7 +78,7 @@ problem.solve_info().display()
 - **Status summary:** `problem.solve_info().display()` prints a human-readable solve summary.
 - **Status properties:** `problem.solve_info().termination_status` (str), `problem.solve_info().objective_value` (float).
 - **Solution values (populate=True):** Query via `model.select()` — solved values are written back into model properties.
-- **Solution values (populate=False):** Use `Variable.values(sol_index, value_ref)` on the `ProblemVariable` returned by `solve_for()`.
+- **Solution values (populate=False):** Use `Variable.values(sol_index, value_ref)` on the `ProblemVariable` returned by `solve_for()` (**SDK >= 1.0.13**).
 
 ```python
 # CORRECT usage

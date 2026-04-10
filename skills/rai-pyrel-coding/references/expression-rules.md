@@ -258,9 +258,9 @@ These rules apply when generating constraint expressions and objective expressio
 
 ### Expression Format
 
-- **Constraints:** Provide ONLY the constraint condition — the code generator wraps it with `problem.satisfy(require(...))`
+- **Constraints:** Provide ONLY the constraint condition — the code generator wraps it with `problem.satisfy(model.require(...))`
   - CORRECT: `sum(DecisionConcept.x_quantity) <= Entity.limit`
-  - WRONG: `problem.satisfy(require(sum(DecisionConcept.x_quantity) <= Entity.limit))`
+  - WRONG: `problem.satisfy(model.require(sum(DecisionConcept.x_quantity) <= Entity.limit))`
 - **Objectives:** Provide JUST the expression — the code generator wraps it with `problem.minimize(...)` or `problem.maximize(...)`
   - CORRECT: `sum(Entity.cost * DecisionConcept.x_quantity)`
   - WRONG: `problem.minimize(sum(Entity.cost * DecisionConcept.x_quantity))`

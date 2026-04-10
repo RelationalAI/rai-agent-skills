@@ -388,9 +388,9 @@ graph.is_connected().inspect()
 
 ---
 
-## Graph Model Separation (legacy — SDK < 1.0.13 only)
+## Graph Model Separation
 
-> **SDK >= 1.0.13:** The `UnsupportedRecursionError` when mixing graph algorithms and prescriptive reasoning on the same `Model` is **fixed**. Build the graph directly on the main `Model` using a domain concept as `node_concept` — no separate graph Model or mirror concepts. The pattern below is preserved only for users on older SDK versions.
+> **Legacy pattern — SDK < 1.0.13 only.** In SDK >= 1.0.13, the `UnsupportedRecursionError` when mixing graph algorithms and prescriptive reasoning on the same `Model` is **fixed**. Build the graph directly on the main `Model` using a domain concept as `node_concept` — no separate graph Model or mirror concepts. The pattern below is preserved only for users on older SDK versions.
 
 In SDK < 1.0.13, graph algorithms on the same `Model` as another reasoner (e.g., Prescriptive) could cause `UnsupportedRecursionError`. The known trigger was prescriptive result extraction after graph algorithms on the same model.
 
