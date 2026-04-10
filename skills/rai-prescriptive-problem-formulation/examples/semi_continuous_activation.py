@@ -55,23 +55,12 @@ x_active_var = problem.solve_for(
 
 # --- Semi-continuous linking: spend is 0 or within [min, max] of channel ---
 # Lower bound when active: spend >= min_spend * active  (0 when inactive)
-problem.satisfy(
-    model.require(
-        Allocation.x_spend
-        >= Allocation.effectiveness.channel.min_spend * Allocation.x_active
-    )
-)
+problem.satisfy(model.require(Allocation.x_spend >= Allocation.effectiveness.channel.min_spend * Allocation.x_active))
 # Upper bound when active: spend <= max_spend * active  (0 when inactive)
-problem.satisfy(
-    model.require(
-        Allocation.x_spend
-        <= Allocation.effectiveness.channel.max_spend * Allocation.x_active
-    )
-)
+problem.satisfy(model.require(Allocation.x_spend <= Allocation.effectiveness.channel.max_spend * Allocation.x_active))
 
 # Per-campaign budget
-campaign_spend = sum(Allocation.x_spend).where(
-    Allocation.effectiveness.campaign == Campaign).per(Campaign)
+campaign_spend = sum(Allocation.x_spend).where(Allocation.effectiveness.campaign == Campaign).per(Campaign)
 problem.satisfy(model.require(campaign_spend <= Campaign.budget))
 
 # Global budget

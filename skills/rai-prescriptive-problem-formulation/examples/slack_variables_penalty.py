@@ -23,17 +23,23 @@ Demand.location = model.Property(f"{Demand} has {String:location}")
 Demand.product = model.Property(f"{Demand} has {String:product}")
 
 # --- Data ---
-route_data = model.data([
-    {"id": "R1", "cost": 2.0, "capacity": 100, "destination": "NYC", "product": "A"},
-    {"id": "R2", "cost": 3.5, "capacity": 80, "destination": "NYC", "product": "A"},
-    {"id": "R3", "cost": 1.5, "capacity": 50, "destination": "LA", "product": "B"},
-], columns=["id", "cost", "capacity", "destination", "product"])
+route_data = model.data(
+    [
+        {"id": "R1", "cost": 2.0, "capacity": 100, "destination": "NYC", "product": "A"},
+        {"id": "R2", "cost": 3.5, "capacity": 80, "destination": "NYC", "product": "A"},
+        {"id": "R3", "cost": 1.5, "capacity": 50, "destination": "LA", "product": "B"},
+    ],
+    columns=["id", "cost", "capacity", "destination", "product"],
+)
 model.define(Route.new(route_data.to_schema()))
 
-demand_data = model.data([
-    {"id": "D1", "quantity": 200, "location": "NYC", "product": "A"},  # exceeds capacity!
-    {"id": "D2", "quantity": 30, "location": "LA", "product": "B"},
-], columns=["id", "quantity", "location", "product"])
+demand_data = model.data(
+    [
+        {"id": "D1", "quantity": 200, "location": "NYC", "product": "A"},  # exceeds capacity!
+        {"id": "D2", "quantity": 30, "location": "LA", "product": "B"},
+    ],
+    columns=["id", "quantity", "location", "product"],
+)
 model.define(Demand.new(demand_data.to_schema()))
 
 # --- Formulation ---
@@ -41,9 +47,7 @@ problem = Problem(model, Float)
 
 # Decision: flow on each route
 Route.x_flow = model.Property(f"{Route} has {Float:flow}")
-x_flow_var = problem.solve_for(
-    Route.x_flow, name=["flow", Route.id], lower=0, upper=Route.capacity
-)
+x_flow_var = problem.solve_for(Route.x_flow, name=["flow", Route.id], lower=0, upper=Route.capacity)
 
 # Slack: unmet demand per demand order
 Demand.x_unmet = model.Property(f"{Demand} has {Float:unmet}")

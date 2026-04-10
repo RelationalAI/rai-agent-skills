@@ -16,9 +16,7 @@ Edge.cap = model.Property(f"{Edge} has {Float:cap}")
 # Flow on each edge, non-negative and bounded by capacity
 Edge.x_flow = model.Property(f"{Edge} has {Float:flow}")
 problem = Problem(model, Float)
-x_flow_var = problem.solve_for(
-    Edge.x_flow, name=["x", Edge.i, Edge.j], lower=0, upper=Edge.cap
-)
+x_flow_var = problem.solve_for(Edge.x_flow, name=["x", Edge.i, Edge.j], lower=0, upper=Edge.cap)
 
 # --- Flow conservation constraint ---
 # Two independent refs scan all edges: Ei for outflow, Ej for inflow
@@ -43,6 +41,4 @@ si = problem.solve_info()
 si.display()
 print(f"Max flow: {si.objective_value:.2f}")
 # Extract solution — properties populated after solve (populate=True default)
-model.select(Edge.i.alias("from"), Edge.j.alias("to"), Edge.x_flow.alias("flow")).where(
-    Edge.x_flow > 0.001
-).inspect()
+model.select(Edge.i.alias("from"), Edge.j.alias("to"), Edge.x_flow.alias("flow")).where(Edge.x_flow > 0.001).inspect()

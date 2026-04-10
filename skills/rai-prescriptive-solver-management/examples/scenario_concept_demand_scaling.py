@@ -40,9 +40,7 @@ scenario_data = model.data(
 model.define(DemandLevel.new(scenario_data.to_schema()))
 
 # --- Decision variable: allocation per (Facility, Customer, DemandLevel) ---
-Facility.x_alloc = model.Property(
-    f"{Facility} ships to {Customer} under {DemandLevel} quantity {Float:alloc}"
-)
+Facility.x_alloc = model.Property(f"{Facility} ships to {Customer} under {DemandLevel} quantity {Float:alloc}")
 x_alloc = Float.ref()
 
 problem = Problem(model, Float)
@@ -57,10 +55,7 @@ x_alloc_var = problem.solve_for(
 problem.satisfy(
     model.where(
         Facility.x_alloc(Customer, DemandLevel, x_alloc),
-    ).require(
-        sum(x_alloc).per(Customer, DemandLevel)
-        >= Customer.base_demand * DemandLevel.demand_multiplier
-    )
+    ).require(sum(x_alloc).per(Customer, DemandLevel) >= Customer.base_demand * DemandLevel.demand_multiplier)
 )
 
 # Capacity: each facility's total shipments cannot exceed capacity (per scenario)
@@ -71,11 +66,7 @@ problem.satisfy(
 )
 
 # --- Objective: minimize total cost across all scenarios ---
-problem.minimize(
-    sum(Facility.cost_per_unit * x_alloc).where(
-        Facility.x_alloc(Customer, DemandLevel, x_alloc)
-    )
-)
+problem.minimize(sum(Facility.cost_per_unit * x_alloc).where(Facility.x_alloc(Customer, DemandLevel, x_alloc)))
 
 # --- Solve all scenarios at once ---
 problem.display()
@@ -85,9 +76,7 @@ problem.solve_info().display()
 
 # --- Results: extract per scenario ---
 print("\nAll allocations:")
-model.select(
-    DemandLevel.name, Facility.name, Customer.name, Facility.x_alloc
-).where(
+model.select(DemandLevel.name, Facility.name, Customer.name, Facility.x_alloc).where(
     Facility.x_alloc(Customer, DemandLevel, x_alloc), x_alloc > 0.001
 ).inspect()
 
@@ -101,7 +90,7 @@ model.select(Facility.name, Customer.name, Facility.x_alloc).where(
 
 # Total cost per scenario
 print("\nCost per scenario:")
-cost_per_scenario = sum(Facility.cost_per_unit * x_alloc).per(DemandLevel).where(
-    Facility.x_alloc(Customer, DemandLevel, x_alloc)
+cost_per_scenario = (
+    sum(Facility.cost_per_unit * x_alloc).per(DemandLevel).where(Facility.x_alloc(Customer, DemandLevel, x_alloc))
 )
 model.select(DemandLevel.name, cost_per_scenario).inspect()

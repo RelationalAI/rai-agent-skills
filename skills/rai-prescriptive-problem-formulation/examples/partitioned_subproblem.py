@@ -35,10 +35,11 @@ for factory_name in factory_names:
     # Variable: quantity per product, bounded by demand, scoped by where=
     qty_var = problem.solve_for(
         Product.x_quantity,
-        lower=0, upper=Product.demand,
+        lower=0,
+        upper=Product.demand,
         name=Product.name,
-        where=[this_product],   # restricts to this factory's products
-        populate=False,         # don't write back — avoids cross-partition collision
+        where=[this_product],  # restricts to this factory's products
+        populate=False,  # don't write back — avoids cross-partition collision
     )
 
     # Objective: maximize profit

@@ -46,6 +46,4 @@ model.require(problem.termination_status() == "OPTIMAL")
 problem.solve_info().display()
 
 # Extract solution — properties populated after solve (populate=True default)
-model.select(Food.name.alias("food"), Food.x_amount.alias("amount")).where(
-    Food.x_amount > 0.001
-).inspect()
+model.select(Food.name.alias("food"), Food.x_amount.alias("amount")).where(Food.x_amount > 0.001).inspect()

@@ -26,9 +26,14 @@ wh_data = model.data(
 model.define(Warehouse.new(wh_data.to_schema()))
 
 tr_data = model.data(
-    [("W1", "CustA", 4.0, 40), ("W1", "CustB", 6.0, 30),
-     ("W2", "CustA", 5.0, 40), ("W2", "CustB", 3.0, 30),
-     ("W3", "CustA", 7.0, 40), ("W3", "CustB", 2.0, 30)],
+    [
+        ("W1", "CustA", 4.0, 40),
+        ("W1", "CustB", 6.0, 30),
+        ("W2", "CustA", 5.0, 40),
+        ("W2", "CustB", 3.0, 30),
+        ("W3", "CustA", 7.0, 40),
+        ("W3", "CustB", 2.0, 30),
+    ],
     columns=["origin", "dest", "cost_per_unit", "demand"],
 )
 model.define(Transport.new(tr_data.to_schema()))
@@ -42,18 +47,12 @@ problem = Problem(model, Float)
 x_open = Float.ref()
 x_ship = Float.ref()
 
-x_open_var = problem.solve_for(
-    Warehouse.x_open(x_open), type="bin", name=["open", Warehouse.name]
-)
-x_ship_var = problem.solve_for(
-    Transport.x_ship(x_ship), lower=0, name=["ship", Transport.origin, Transport.dest]
-)
+x_open_var = problem.solve_for(Warehouse.x_open(x_open), type="bin", name=["open", Warehouse.name])
+x_ship_var = problem.solve_for(Transport.x_ship(x_ship), lower=0, name=["ship", Transport.origin, Transport.dest])
 
 # --- Constraints ---
 # Demand satisfaction: each route must ship exactly its demand
-problem.satisfy(
-    model.require(x_ship == Transport.demand).where(Transport.x_ship(x_ship))
-)
+problem.satisfy(model.require(x_ship == Transport.demand).where(Transport.x_ship(x_ship)))
 
 # Capacity: total shipped from a warehouse cannot exceed its capacity (if open)
 problem.satisfy(

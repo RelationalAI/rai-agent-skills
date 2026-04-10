@@ -33,24 +33,16 @@ x_assign_var = problem.solve_for(
 )
 
 # Parameters
-min_coverage = 2   # workers required per shift
-max_shifts = 1     # shifts per worker
+min_coverage = 2  # workers required per shift
+max_shifts = 1  # shifts per worker
 
 # --- Coverage constraint: each shift must have at least min_coverage workers ---
 # sum(Worker, x).per(Shift) counts workers assigned to each shift
-problem.satisfy(
-    model.where(Worker.x_assign(Shift, x)).require(
-        sum(Worker, x).per(Shift) >= min_coverage
-    )
-)
+problem.satisfy(model.where(Worker.x_assign(Shift, x)).require(sum(Worker, x).per(Shift) >= min_coverage))
 
 # --- Load constraint: each worker assigned to at most max_shifts shifts ---
 # sum(Shift, x).per(Worker) counts shifts per worker
-problem.satisfy(
-    model.where(Worker.x_assign(Shift, x)).require(
-        sum(Shift, x).per(Worker) <= max_shifts
-    )
-)
+problem.satisfy(model.where(Worker.x_assign(Shift, x)).require(sum(Shift, x).per(Worker) <= max_shifts))
 
 # --- Solve ---
 problem.display()
@@ -60,6 +52,4 @@ si = problem.solve_info()
 si.display()
 print(f"Status: {si.termination_status}")
 # Extract solution — properties populated after solve (populate=True default)
-model.select(Worker.name.alias("worker"), Shift.name.alias("shift")).where(
-    Worker.x_assign(Shift, x), x > 0.5
-).inspect()
+model.select(Worker.name.alias("worker"), Shift.name.alias("shift")).where(Worker.x_assign(Shift, x), x > 0.5).inspect()

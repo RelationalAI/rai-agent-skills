@@ -20,24 +20,26 @@ Supplier.capacity = model.Property(f"{Supplier} has capacity {Integer:capacity}"
 
 # --- Inline data ---
 
-supplier_data = model.data([
-    {"id": 1, "name": "Alpha",   "reliability": 0.95, "unit_cost": 10.0, "capacity": 200},
-    {"id": 2, "name": "Beta",    "reliability": 0.60, "unit_cost":  8.0, "capacity": 300},  # unreliable
-    {"id": 3, "name": "Gamma",   "reliability": 0.78, "unit_cost": 12.0, "capacity": 150},  # at risk
-    {"id": 4, "name": "Delta",   "reliability": 0.92, "unit_cost": 11.0, "capacity": 250},
-    {"id": 5, "name": "Epsilon", "reliability": 0.55, "unit_cost":  7.0, "capacity": 400},  # unreliable
-    {"id": 6, "name": "Zeta",    "reliability": 0.82, "unit_cost": 14.0, "capacity": 180},  # at risk
-    {"id": 7, "name": "Eta",     "reliability": 0.97, "unit_cost": 13.0, "capacity": 220},
-    {"id": 8, "name": "Theta",   "reliability": 0.88, "unit_cost":  9.0, "capacity": 350},
-])
+supplier_data = model.data(
+    [
+        {"id": 1, "name": "Alpha", "reliability": 0.95, "unit_cost": 10.0, "capacity": 200},
+        {"id": 2, "name": "Beta", "reliability": 0.60, "unit_cost": 8.0, "capacity": 300},  # unreliable
+        {"id": 3, "name": "Gamma", "reliability": 0.78, "unit_cost": 12.0, "capacity": 150},  # at risk
+        {"id": 4, "name": "Delta", "reliability": 0.92, "unit_cost": 11.0, "capacity": 250},
+        {"id": 5, "name": "Epsilon", "reliability": 0.55, "unit_cost": 7.0, "capacity": 400},  # unreliable
+        {"id": 6, "name": "Zeta", "reliability": 0.82, "unit_cost": 14.0, "capacity": 180},  # at risk
+        {"id": 7, "name": "Eta", "reliability": 0.97, "unit_cost": 13.0, "capacity": 220},
+        {"id": 8, "name": "Theta", "reliability": 0.88, "unit_cost": 9.0, "capacity": 350},
+    ]
+)
 model.define(Supplier.new(supplier_data.to_schema()))
 
 # =============================================================================
 # Stage 1: Rules -- derive risk flags from reliability thresholds
 # =============================================================================
 
-UNRELIABLE_THRESHOLD = 0.70   # below this -> hard block
-AT_RISK_THRESHOLD = 0.85      # below this (but above unreliable) -> cost surcharge
+UNRELIABLE_THRESHOLD = 0.70  # below this -> hard block
+AT_RISK_THRESHOLD = 0.85  # below this (but above unreliable) -> cost surcharge
 
 # Flag: unreliable suppliers are completely blocked from receiving flow.
 Supplier.is_unreliable = model.Relationship(f"{Supplier} is unreliable")
@@ -52,10 +54,12 @@ model.where(
 
 # Display flags
 model.where(Supplier.is_unreliable()).select(
-    Supplier.name.alias("supplier"), Supplier.reliability.alias("reliability"),
+    Supplier.name.alias("supplier"),
+    Supplier.reliability.alias("reliability"),
 ).inspect()
 model.where(Supplier.is_at_risk()).select(
-    Supplier.name.alias("supplier"), Supplier.reliability.alias("reliability"),
+    Supplier.name.alias("supplier"),
+    Supplier.reliability.alias("reliability"),
 ).inspect()
 
 # =============================================================================
@@ -71,9 +75,7 @@ RISK_SURCHARGE = 5.0
 Supplier.x_flow = model.Property(f"{Supplier} has flow {Float:x}")
 
 problem = Problem(model, Float)
-x_flow_var = problem.solve_for(
-    Supplier.x_flow, lower=0, upper=Supplier.capacity, name=["flow", Supplier.name]
-)
+x_flow_var = problem.solve_for(Supplier.x_flow, lower=0, upper=Supplier.capacity, name=["flow", Supplier.name])
 
 # Constraint: meet total demand
 problem.satisfy(model.require(sum(Supplier.x_flow) >= TOTAL_DEMAND))

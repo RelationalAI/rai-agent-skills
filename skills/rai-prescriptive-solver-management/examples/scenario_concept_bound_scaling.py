@@ -44,10 +44,8 @@ problem.satisfy(
         Food.x_amount(Scenario, x_amt),
         Food.contains(Nutrient, nutrient_qty),
     ).require(
-        sum(nutrient_qty * x_amt).per(Nutrient, Scenario)
-        >= Nutrient.min * Scenario.nutrient_scaling,
-        sum(nutrient_qty * x_amt).per(Nutrient, Scenario)
-        <= Nutrient.max * Scenario.nutrient_scaling,
+        sum(nutrient_qty * x_amt).per(Nutrient, Scenario) >= Nutrient.min * Scenario.nutrient_scaling,
+        sum(nutrient_qty * x_amt).per(Nutrient, Scenario) <= Nutrient.max * Scenario.nutrient_scaling,
     )
 )
 
@@ -66,6 +64,4 @@ model.select(
     Food.name.alias("food"),
     Food.cost,
     x_amt.alias("amount"),
-).where(
-    Food.x_amount(Scenario, x_amt), x_amt > 0.001
-).inspect()
+).where(Food.x_amount(Scenario, x_amt), x_amt > 0.001).inspect()

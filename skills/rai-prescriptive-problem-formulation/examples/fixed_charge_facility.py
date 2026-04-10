@@ -44,34 +44,22 @@ x_qty_var = problem.solve_for(
     lower=0,
     name=["qty", Assignment.shipping.fc.name, Assignment.shipping.order.customer],
 )
-x_used_var = problem.solve_for(
-    FCUsage.x_used, type="bin", name=["fc_used", FCUsage.fc.name]
-)
+x_used_var = problem.solve_for(FCUsage.x_used, type="bin", name=["fc_used", FCUsage.fc.name])
 
 # Constraint: FC capacity
-problem.satisfy(
-    model.require(
-        sum(AssignmentRef.x_qty).where(AssignmentRef.shipping.fc == FC).per(FC)
-        <= FC.capacity
-    )
-)
+problem.satisfy(model.require(sum(AssignmentRef.x_qty).where(AssignmentRef.shipping.fc == FC).per(FC) <= FC.capacity))
 
 # Constraint: linking — quantity only flows through used FCs
 problem.satisfy(
     model.require(
-        sum(AssignmentRef.x_qty)
-        .where(AssignmentRef.shipping.fc == FCUsage.fc)
-        .per(FCUsage)
+        sum(AssignmentRef.x_qty).where(AssignmentRef.shipping.fc == FCUsage.fc).per(FCUsage)
         <= FCUsage.fc.capacity * FCUsage.x_used
     )
 )
 
 # Constraint: each order fully fulfilled (forcing constraint)
 problem.satisfy(
-    model.require(
-        sum(AssignmentRef.x_qty).where(AssignmentRef.shipping.order == Order).per(Order)
-        == Order.quantity
-    )
+    model.require(sum(AssignmentRef.x_qty).where(AssignmentRef.shipping.order == Order).per(Order) == Order.quantity)
 )
 
 # Objective: minimize shipping + fixed facility costs

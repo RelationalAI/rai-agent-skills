@@ -27,8 +27,8 @@ model.define(num_weeks(count(Week)))
 # --- Refs: bind specific fields of multiarity properties ---
 w = Week.ref()
 d = Discount.ref()
-x = Float.ref()   # bound to selection indicator
-y = Float.ref()   # bound to sales quantity
+x = Float.ref()  # bound to selection indicator
+y = Float.ref()  # bound to sales quantity
 
 # Multiarity decision variable: 4-arity (Product, Week, Discount, Float)
 Product.x_select = model.Property(f"{Product} in {Week} has {Discount} if {Float:x}")
@@ -68,9 +68,9 @@ problem.satisfy(
 )
 
 # --- Objective using .where() on multiarity properties ---
-revenue = sum(
-    Product.initial_price * (1 - d.discount_pct / 100) * x
-).where(Product.x_sales(w, d, x))   # binds x to sales quantity here
+revenue = sum(Product.initial_price * (1 - d.discount_pct / 100) * x).where(
+    Product.x_sales(w, d, x)
+)  # binds x to sales quantity here
 
 problem.maximize(revenue)
 problem.solve("highs", time_limit_sec=60)

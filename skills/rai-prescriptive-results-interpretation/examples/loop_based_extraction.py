@@ -16,20 +16,31 @@ Item.interaction = model.Property(f"{Item} and {Item} have {Float:interaction}")
 Item.x_allocation = model.Property(f"{Item} allocation is {Float:x}")
 
 # --- Sample data (3 items with value and interaction matrix) ---
-item_data = model.data([
-    {"index": 1, "value": 5.0},
-    {"index": 2, "value": 8.0},
-    {"index": 3, "value": 3.0},
-])
+item_data = model.data(
+    [
+        {"index": 1, "value": 5.0},
+        {"index": 2, "value": 8.0},
+        {"index": 3, "value": 3.0},
+    ]
+)
 model.define(Item.new(item_data.to_schema()))
 
 # Symmetric interaction matrix (quadratic cost coefficients)
 PairedItem = Item.ref()
-interaction_raw = model.data([
-    {"i": 1, "j": 1, "w": 2.0}, {"i": 1, "j": 2, "w": 0.5}, {"i": 1, "j": 3, "w": 0.3},
-    {"i": 2, "j": 1, "w": 0.5}, {"i": 2, "j": 2, "w": 3.0}, {"i": 2, "j": 3, "w": 0.7},
-    {"i": 3, "j": 1, "w": 0.3}, {"i": 3, "j": 2, "w": 0.7}, {"i": 3, "j": 3, "w": 1.5},
-], columns=["i", "j", "w"])
+interaction_raw = model.data(
+    [
+        {"i": 1, "j": 1, "w": 2.0},
+        {"i": 1, "j": 2, "w": 0.5},
+        {"i": 1, "j": 3, "w": 0.3},
+        {"i": 2, "j": 1, "w": 0.5},
+        {"i": 2, "j": 2, "w": 3.0},
+        {"i": 2, "j": 3, "w": 0.7},
+        {"i": 3, "j": 1, "w": 0.3},
+        {"i": 3, "j": 2, "w": 0.7},
+        {"i": 3, "j": 3, "w": 1.5},
+    ],
+    columns=["i", "j", "w"],
+)
 model.where(
     Item.index(interaction_raw.i),
     PairedItem.index(interaction_raw.j),
@@ -45,17 +56,13 @@ def build_and_solve(min_benefit):
     problem = Problem(model, Float)
 
     # Variables with populate=False — solution extracted via Variable.values()
-    alloc_var = problem.solve_for(
-        Item.x_allocation, name=["alloc", Item.index], populate=False
-    )
+    alloc_var = problem.solve_for(Item.x_allocation, name=["alloc", Item.index], populate=False)
 
     # Constraints and objective
     problem.satisfy(model.require(Item.x_allocation >= 0))
     problem.satisfy(model.require(sum(Item.x_allocation) <= total_budget))
     problem.satisfy(model.require(sum(Item.value * Item.x_allocation) >= min_benefit))
-    quad_cost = sum(c * Item.x_allocation * Item2.x_allocation).where(
-        Item.interaction(Item2, c)
-    )
+    quad_cost = sum(c * Item.x_allocation * Item2.x_allocation).where(Item.interaction(Item2, c))
     problem.minimize(quad_cost)
 
     # --- Solve and inspect ---
@@ -68,9 +75,7 @@ def build_and_solve(min_benefit):
     # objective_value: best objective found (None if infeasible)
     print(f"Status: {si.termination_status}")
     print(
-        f"Objective (quadratic cost): {si.objective_value:.6f}"
-        if si.objective_value is not None
-        else "Objective: N/A"
+        f"Objective (quadratic cost): {si.objective_value:.6f}" if si.objective_value is not None else "Objective: N/A"
     )
 
     # Variable.values() structured query via ProblemVariable back-pointers

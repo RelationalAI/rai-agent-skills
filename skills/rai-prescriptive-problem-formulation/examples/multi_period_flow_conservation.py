@@ -35,9 +35,7 @@ t = Integer.ref()
 
 # --- Decision variables (multiarity: time-indexed) ---
 SiteSKU.x_prod = Property(f"{SiteSKU} in week {Integer:t} produces {Float:production}")
-SiteSKU.x_inv = Property(
-    f"{SiteSKU} at end of week {Integer:t} has inventory {Float:inv}"
-)
+SiteSKU.x_inv = Property(f"{SiteSKU} at end of week {Integer:t} has inventory {Float:inv}")
 x_prod, x_inv = Float.ref(), Float.ref()
 
 problem = Problem(model, Float)
@@ -59,9 +57,7 @@ x_inv_var = problem.solve_for(
 
 # --- Initial condition: inventory at week 0 = starting stock ---
 x_inv0 = Float.ref()
-problem.satisfy(
-    model.where(SiteSKU.x_inv(0, x_inv0)).require(x_inv0 == SiteSKU.init_inv)
-)
+problem.satisfy(model.where(SiteSKU.x_inv(0, x_inv0)).require(x_inv0 == SiteSKU.init_inv))
 
 # --- Flow conservation: inv[t] = inv[t-1] + produced[t] - demand[t] ---
 x_inv_prev, x_inv_curr = Float.ref(), Float.ref()

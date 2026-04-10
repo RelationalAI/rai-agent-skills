@@ -80,12 +80,7 @@ problem.satisfy(
 problem.satisfy(
     model.where(
         Upgrade.x_selected(Scenario, x_selected),
-    ).require(
-        sum(x_selected)
-        .where(Upgrade.substation == Substation)
-        .per(Substation, Scenario)
-        <= 1
-    )
+    ).require(sum(x_selected).where(Upgrade.substation == Substation).per(Substation, Scenario) <= 1)
 )
 
 # --- Constraint: budget limit (per Scenario) — spans both variable types ---
@@ -94,16 +89,14 @@ problem.satisfy(
         Project.x_approved(Scenario, x_approved),
         Upgrade.x_selected(Scenario, x_selected),
     ).require(
-        sum(x_approved * Project.connection_cost).per(Scenario)
-        + sum(x_selected * Upgrade.upgrade_cost).per(Scenario)
+        sum(x_approved * Project.connection_cost).per(Scenario) + sum(x_selected * Upgrade.upgrade_cost).per(Scenario)
         <= Scenario.budget
     )
 )
 
 # --- Objective: maximize net revenue ---
 problem.maximize(
-    sum(x_approved * (Project.revenue - Project.connection_cost))
-    .where(Project.x_approved(Scenario, x_approved))
+    sum(x_approved * (Project.revenue - Project.connection_cost)).where(Project.x_approved(Scenario, x_approved))
 )
 
 # --- Solve all budget scenarios at once ---
@@ -118,9 +111,7 @@ model.select(
     Project.name.alias("project"),
     Project.revenue,
     Project.connection_cost,
-).where(
-    Project.x_approved(Scenario, x_approved), x_approved > 0.5
-).inspect()
+).where(Project.x_approved(Scenario, x_approved), x_approved > 0.5).inspect()
 
 print("\nSelected upgrades per scenario:")
 model.select(
@@ -128,6 +119,4 @@ model.select(
     Upgrade.substation.name.alias("substation"),
     Upgrade.capacity_added,
     Upgrade.upgrade_cost,
-).where(
-    Upgrade.x_selected(Scenario, x_selected), x_selected > 0.5
-).inspect()
+).where(Upgrade.x_selected(Scenario, x_selected), x_selected > 0.5).inspect()

@@ -27,9 +27,7 @@ x_var = problem.solve_for(Edge.x, type="bin", name=["x", Edge.i, Edge.j])
 
 # Integer: u[v] = MTZ auxiliary ordering (upper bound from Relationship)
 Node.u = model.Property(f"{Node} has auxiliary value {Float:u}")
-u_var = problem.solve_for(
-    Node.u, name=["u", Node.v], type="int", lower=1, upper=node_count
-)
+u_var = problem.solve_for(Node.u, name=["u", Node.v], type="int", lower=1, upper=node_count)
 
 # --- Objective ---
 problem.minimize(sum(Edge.dist * Edge.x))
@@ -66,5 +64,6 @@ problem.solve("highs", time_limit_sec=60)
 
 # Extract tour edges
 model.select(
-    Edge.i.alias("from"), Edge.j.alias("to"),
+    Edge.i.alias("from"),
+    Edge.j.alias("to"),
 ).where(Edge.x > 0.5).inspect()

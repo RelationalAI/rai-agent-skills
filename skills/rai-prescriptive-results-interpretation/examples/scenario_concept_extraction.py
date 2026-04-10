@@ -23,10 +23,22 @@ model.define(Item.new(item_data.to_schema()))
 # Interaction matrix (symmetric): interaction[i,j] contributes quadratic cost
 interaction_data = model.data(
     [
-        (1, 1, 4.0), (1, 2, 1.0), (1, 3, 0.5), (1, 4, 0.2),
-        (2, 1, 1.0), (2, 2, 3.0), (2, 3, 0.8), (2, 4, 0.3),
-        (3, 1, 0.5), (3, 2, 0.8), (3, 3, 2.0), (3, 4, 0.6),
-        (4, 1, 0.2), (4, 2, 0.3), (4, 3, 0.6), (4, 4, 5.0),
+        (1, 1, 4.0),
+        (1, 2, 1.0),
+        (1, 3, 0.5),
+        (1, 4, 0.2),
+        (2, 1, 1.0),
+        (2, 2, 3.0),
+        (2, 3, 0.8),
+        (2, 4, 0.3),
+        (3, 1, 0.5),
+        (3, 2, 0.8),
+        (3, 3, 2.0),
+        (3, 4, 0.6),
+        (4, 1, 0.2),
+        (4, 2, 0.3),
+        (4, 3, 0.6),
+        (4, 4, 5.0),
     ],
     columns=["item_a", "item_b", "interaction"],
 )
@@ -59,25 +71,23 @@ total_budget = 1000
 
 # --- Formulation ---
 problem = Problem(model, Float)
-x_allocation_var = problem.solve_for(
-    Item.x_allocation(Scenario, x_alloc), name=[Scenario.name, "alloc", Item.index]
-)
+x_allocation_var = problem.solve_for(Item.x_allocation(Scenario, x_alloc), name=[Scenario.name, "alloc", Item.index])
 problem.satisfy(model.where(Item.x_allocation(Scenario, x_alloc)).require(x_alloc >= 0))
-problem.satisfy(
-    model.where(Item.x_allocation(Scenario, x_alloc)).require(
-        sum(x_alloc).per(Scenario) <= total_budget
-    )
-)
+problem.satisfy(model.where(Item.x_allocation(Scenario, x_alloc)).require(sum(x_alloc).per(Scenario) <= total_budget))
 problem.satisfy(
     model.where(Item.x_allocation(Scenario, x_alloc)).require(
         sum(x_alloc * Item.value).per(Scenario) >= Scenario.min_benefit
     )
 )
 
-quad_cost = sum(interaction_value * x_alloc * paired_alloc).per(Scenario).where(
-    Item.x_allocation(Scenario, x_alloc),
-    PairedItem.x_allocation(Scenario, paired_alloc),
-    Item.interaction(PairedItem, interaction_value),
+quad_cost = (
+    sum(interaction_value * x_alloc * paired_alloc)
+    .per(Scenario)
+    .where(
+        Item.x_allocation(Scenario, x_alloc),
+        PairedItem.x_allocation(Scenario, paired_alloc),
+        Item.interaction(PairedItem, interaction_value),
+    )
 )
 problem.minimize(sum(quad_cost))
 
@@ -98,9 +108,7 @@ model.select(
     Item.index.alias("item"),
     Item.value,
     x_alloc.alias("allocation"),
-).where(
-    Item.x_allocation(Scenario, x_alloc), x_alloc > 0.001
-).inspect()
+).where(Item.x_allocation(Scenario, x_alloc), x_alloc > 0.001).inspect()
 
 # 3. Per-scenario aggregation — composable with other model queries
 print("\nQuadratic cost by scenario:")
@@ -113,9 +121,7 @@ model.select(Scenario.name, total_alloc.alias("total_allocated")).inspect()
 
 # 5. Per-scenario achieved benefit
 print("\nAchieved benefit by scenario:")
-achieved_benefit = sum(x_alloc * Item.value).per(Scenario).where(
-    Item.x_allocation(Scenario, x_alloc)
-)
+achieved_benefit = sum(x_alloc * Item.value).per(Scenario).where(Item.x_allocation(Scenario, x_alloc))
 model.select(
     Scenario.name,
     Scenario.min_benefit.alias("target"),

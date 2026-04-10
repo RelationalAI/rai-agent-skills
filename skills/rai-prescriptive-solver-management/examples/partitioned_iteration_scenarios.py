@@ -32,7 +32,8 @@ for factory_name in factory_names:
     # 3. solve_for with where= and populate=False
     qty_var = problem.solve_for(
         Product.x_quantity,
-        lower=0, upper=Product.demand,
+        lower=0,
+        upper=Product.demand,
         name=Product.name,
         where=[this_product],
         populate=False,

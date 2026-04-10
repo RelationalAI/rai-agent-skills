@@ -48,15 +48,11 @@ x_sales_var = problem.solve_for(
 
 # Continuous: cumulative sales[product, week]
 Product.x_cuml = model.Property(f"{Product} up to {Week} has {Float:z}")
-x_cuml_var = problem.solve_for(
-    Product.x_cuml(w, z), type="cont", lower=0, name=["cuml", Product.name, w.num]
-)
+x_cuml_var = problem.solve_for(Product.x_cuml(w, z), type="cont", lower=0, name=["cuml", Product.name, w.num])
 
 # --- Constraints ---
 # One-hot: exactly one discount level per product-week
-problem.satisfy(
-    model.where(Product.x_select(w, d, x)).require(sum(d, x).per(Product, w) == 1)
-)
+problem.satisfy(model.where(Product.x_select(w, d, x)).require(sum(d, x).per(Product, w) == 1))
 
 # Price ladder: discounts can only increase week-over-week
 d2, w2, x2 = Discount.ref(), Week.ref(), Float.ref()
@@ -99,17 +95,13 @@ problem.satisfy(
 )
 
 # Cumulative sales cannot exceed initial inventory
-problem.satisfy(
-    model.where(Product.x_cuml(w, z)).require(z <= Product.initial_inventory)
-)
+problem.satisfy(model.where(Product.x_cuml(w, z)).require(z <= Product.initial_inventory))
 
 # --- Objective ---
-revenue = sum(
-    Product.initial_price * (1 - d.discount_pct / 100) * x
-).where(Product.x_sales(w, d, x))
-salvage = sum(
-    Product.initial_price * Product.salvage_rate * (Product.initial_inventory - z)
-).where(Product.x_cuml(w, z), w.num == count(Week))
+revenue = sum(Product.initial_price * (1 - d.discount_pct / 100) * x).where(Product.x_sales(w, d, x))
+salvage = sum(Product.initial_price * Product.salvage_rate * (Product.initial_inventory - z)).where(
+    Product.x_cuml(w, z), w.num == count(Week)
+)
 problem.maximize(revenue + salvage)
 
 # --- Solve ---

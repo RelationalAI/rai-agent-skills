@@ -30,12 +30,12 @@ Connection.destination = model.Relationship(f"{Connection} delivers to {Site}")
 # --- Inline data ---
 
 sites = [
-    {"id": 1, "name": "Atlanta",   "operating_cost": 10.0},
-    {"id": 2, "name": "Boston",    "operating_cost": 14.0},
-    {"id": 3, "name": "Chicago",   "operating_cost": 12.0},
-    {"id": 4, "name": "Denver",    "operating_cost":  9.0},
-    {"id": 5, "name": "El Paso",   "operating_cost":  8.0},
-    {"id": 6, "name": "Fresno",    "operating_cost": 11.0},
+    {"id": 1, "name": "Atlanta", "operating_cost": 10.0},
+    {"id": 2, "name": "Boston", "operating_cost": 14.0},
+    {"id": 3, "name": "Chicago", "operating_cost": 12.0},
+    {"id": 4, "name": "Denver", "operating_cost": 9.0},
+    {"id": 5, "name": "El Paso", "operating_cost": 8.0},
+    {"id": 6, "name": "Fresno", "operating_cost": 11.0},
 ]
 
 connections = [

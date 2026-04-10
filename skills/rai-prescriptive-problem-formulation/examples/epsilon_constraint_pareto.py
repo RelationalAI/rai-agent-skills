@@ -39,25 +39,30 @@ Item.interaction = model.Property(f"{Item} and {Item} have {Float:interaction}")
 PairedItem = Item.ref()
 
 # --- Inline sample data via model.data() ---
-item_data = model.data([
-    {"index": 1, "value": 0.08},
-    {"index": 2, "value": 0.15},
-    {"index": 3, "value": 0.05},
-])
+item_data = model.data(
+    [
+        {"index": 1, "value": 0.08},
+        {"index": 2, "value": 0.15},
+        {"index": 3, "value": 0.05},
+    ]
+)
 model.define(Item.new(item_data.to_schema()))
 
 # Symmetric interaction matrix (3x3)
-interaction_raw = model.data([
-    {"i": 1, "j": 1, "w": 0.04},
-    {"i": 1, "j": 2, "w": 0.01},
-    {"i": 1, "j": 3, "w": 0.005},
-    {"i": 2, "j": 1, "w": 0.01},
-    {"i": 2, "j": 2, "w": 0.09},
-    {"i": 2, "j": 3, "w": 0.02},
-    {"i": 3, "j": 1, "w": 0.005},
-    {"i": 3, "j": 2, "w": 0.02},
-    {"i": 3, "j": 3, "w": 0.01},
-], columns=["i", "j", "w"])
+interaction_raw = model.data(
+    [
+        {"i": 1, "j": 1, "w": 0.04},
+        {"i": 1, "j": 2, "w": 0.01},
+        {"i": 1, "j": 3, "w": 0.005},
+        {"i": 2, "j": 1, "w": 0.01},
+        {"i": 2, "j": 2, "w": 0.09},
+        {"i": 2, "j": 3, "w": 0.02},
+        {"i": 3, "j": 1, "w": 0.005},
+        {"i": 3, "j": 2, "w": 0.02},
+        {"i": 3, "j": 3, "w": 0.01},
+    ],
+    columns=["i", "j", "w"],
+)
 model.where(
     Item.index(interaction_raw.i),
     PairedItem.index(interaction_raw.j),
@@ -68,10 +73,12 @@ model.where(
 Scenario = model.Concept("Scenario", identify_by={"name": String})
 Scenario.capacity = model.Property(f"{Scenario} has {Float:capacity}")
 
-scenario_data = model.data([
-    {"name": "capacity_50", "capacity": 50.0},
-    {"name": "capacity_100", "capacity": 100.0},
-])
+scenario_data = model.data(
+    [
+        {"name": "capacity_50", "capacity": 50.0},
+        {"name": "capacity_100", "capacity": 100.0},
+    ]
+)
 model.define(Scenario.new(scenario_data.to_schema()))
 
 # --- Decision variable indexed by Scenario ---
@@ -94,18 +101,12 @@ alloc_var1 = problem1.solve_for(
     name=["alloc", Scenario.name, Item.index],
     populate=False,
 )
+problem1.satisfy(model.where(Item.x_allocation(Scenario, x_alloc)).require(x_alloc >= 0))
 problem1.satisfy(
-    model.where(Item.x_allocation(Scenario, x_alloc)).require(x_alloc >= 0)
+    model.where(Item.x_allocation(Scenario, x_alloc)).require(sum(x_alloc).per(Scenario) <= Scenario.capacity)
 )
 problem1.satisfy(
-    model.where(Item.x_allocation(Scenario, x_alloc)).require(
-        sum(x_alloc).per(Scenario) <= Scenario.capacity
-    )
-)
-problem1.satisfy(
-    model.where(Item.x_allocation(Scenario, x_alloc)).require(
-        sum(x_alloc).per(Scenario) >= Scenario.capacity
-    )
+    model.where(Item.x_allocation(Scenario, x_alloc)).require(sum(x_alloc).per(Scenario) >= Scenario.capacity)
 )
 problem1.minimize(
     sum(interaction_val * x_alloc * x_alloc_paired).where(
@@ -139,18 +140,12 @@ alloc_var2 = problem2.solve_for(
     name=["alloc", Scenario.name, Item.index],
     populate=False,
 )
+problem2.satisfy(model.where(Item.x_allocation(Scenario, x_alloc)).require(x_alloc >= 0))
 problem2.satisfy(
-    model.where(Item.x_allocation(Scenario, x_alloc)).require(x_alloc >= 0)
+    model.where(Item.x_allocation(Scenario, x_alloc)).require(sum(x_alloc).per(Scenario) <= Scenario.capacity)
 )
 problem2.satisfy(
-    model.where(Item.x_allocation(Scenario, x_alloc)).require(
-        sum(x_alloc).per(Scenario) <= Scenario.capacity
-    )
-)
-problem2.satisfy(
-    model.where(Item.x_allocation(Scenario, x_alloc)).require(
-        sum(x_alloc).per(Scenario) >= Scenario.capacity
-    )
+    model.where(Item.x_allocation(Scenario, x_alloc)).require(sum(x_alloc).per(Scenario) >= Scenario.capacity)
 )
 problem2.maximize(sum(Item.value * x_alloc).where(Item.x_allocation(Scenario, x_alloc)))
 problem2.solve("ipopt", time_limit_sec=60)
@@ -179,8 +174,7 @@ benefit_rate_min = benefit_at_min_cost / representative_capacity
 benefit_rate_max = benefit_at_max_benefit / representative_capacity
 n_interior = 5
 epsilon_rates = [
-    benefit_rate_min + i * (benefit_rate_max - benefit_rate_min) / (n_interior + 1)
-    for i in range(1, n_interior + 1)
+    benefit_rate_min + i * (benefit_rate_max - benefit_rate_min) / (n_interior + 1) for i in range(1, n_interior + 1)
 ]
 
 pareto_points = []
@@ -192,18 +186,12 @@ for rate in epsilon_rates:
         name=["alloc", Scenario.name, Item.index],
         populate=False,
     )
+    problem.satisfy(model.where(Item.x_allocation(Scenario, x_alloc)).require(x_alloc >= 0))
     problem.satisfy(
-        model.where(Item.x_allocation(Scenario, x_alloc)).require(x_alloc >= 0)
+        model.where(Item.x_allocation(Scenario, x_alloc)).require(sum(x_alloc).per(Scenario) <= Scenario.capacity)
     )
     problem.satisfy(
-        model.where(Item.x_allocation(Scenario, x_alloc)).require(
-            sum(x_alloc).per(Scenario) <= Scenario.capacity
-        )
-    )
-    problem.satisfy(
-        model.where(Item.x_allocation(Scenario, x_alloc)).require(
-            sum(x_alloc).per(Scenario) >= Scenario.capacity
-        )
+        model.where(Item.x_allocation(Scenario, x_alloc)).require(sum(x_alloc).per(Scenario) >= Scenario.capacity)
     )
 
     # EPSILON CONSTRAINT: benefit rate >= target (scaled by capacity per scenario)

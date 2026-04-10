@@ -21,10 +21,22 @@ model.define(Item.new(item_data.to_schema()))
 
 interaction_data = model.data(
     [
-        (1, 1, 4.0), (1, 2, 1.0), (1, 3, 0.5), (1, 4, 0.2),
-        (2, 1, 1.0), (2, 2, 6.0), (2, 3, 1.5), (2, 4, 0.8),
-        (3, 1, 0.5), (3, 2, 1.5), (3, 3, 3.0), (3, 4, 0.4),
-        (4, 1, 0.2), (4, 2, 0.8), (4, 3, 0.4), (4, 4, 5.0),
+        (1, 1, 4.0),
+        (1, 2, 1.0),
+        (1, 3, 0.5),
+        (1, 4, 0.2),
+        (2, 1, 1.0),
+        (2, 2, 6.0),
+        (2, 3, 1.5),
+        (2, 4, 0.8),
+        (3, 1, 0.5),
+        (3, 2, 1.5),
+        (3, 3, 3.0),
+        (3, 4, 0.4),
+        (4, 1, 0.2),
+        (4, 2, 0.8),
+        (4, 3, 0.4),
+        (4, 4, 5.0),
     ],
     columns=["item_a", "item_b", "interaction"],
 )
@@ -69,17 +81,19 @@ benefit_ok = model.where(
 ).require(sum(x_alloc * Item.value).per(Scenario) >= Scenario.min_benefit)
 
 # Quadratic cost: pairwise interaction cost per scenario
-quad_cost = sum(interaction_value * x_alloc * paired_alloc).per(Scenario).where(
-    Item.x_allocation(Scenario, x_alloc),
-    PairedItem.x_allocation(Scenario, paired_alloc),
-    Item.interaction(PairedItem, interaction_value),
+quad_cost = (
+    sum(interaction_value * x_alloc * paired_alloc)
+    .per(Scenario)
+    .where(
+        Item.x_allocation(Scenario, x_alloc),
+        PairedItem.x_allocation(Scenario, paired_alloc),
+        Item.interaction(PairedItem, interaction_value),
+    )
 )
 
 # --- Solve all scenarios at once ---
 problem = Problem(model, Float)
-x_allocation_var = problem.solve_for(
-    Item.x_allocation(Scenario, x_alloc), name=[Scenario.name, "alloc", Item.index]
-)
+x_allocation_var = problem.solve_for(Item.x_allocation(Scenario, x_alloc), name=[Scenario.name, "alloc", Item.index])
 problem.satisfy(bounds)
 problem.satisfy(budget_ok)
 problem.satisfy(benefit_ok)

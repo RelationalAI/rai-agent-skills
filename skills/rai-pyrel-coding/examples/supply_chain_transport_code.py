@@ -39,9 +39,7 @@ x_inv_var = problem.solve_for(
 # Standalone Property (not attached to any concept) — per-day TL indicator
 bin_tl = model.Property(f"departure day {Integer:t} has {Float:bin_tl}")
 y_bin_tl = Float.ref()
-y_bin_tl_var = problem.solve_for(
-    bin_tl(t, y_bin_tl), type="bin", name=["y_bin_tl", t], where=[t == departure_days]
-)
+y_bin_tl_var = problem.solve_for(bin_tl(t, y_bin_tl), type="bin", name=["y_bin_tl", t], where=[t == departure_days])
 
 # --- LTL piecewise cost with self-join on segment refs ---
 LTLSegment.x_rem_ltl = model.Property(f"{LTLSegment} on day {Integer:t} has {Float:rem_ltl}")
@@ -57,18 +55,16 @@ LTLSegment2 = LTLSegment.ref()
 inv_cost_rate = 0.001
 tl_fixed_cost = 2000.0
 
-total_inv_cost = inv_cost_rate * sum(x_inv).where(
-    FreightGroup.x_inv(t, x_inv), t > FreightGroup.inv_start_t)
+total_inv_cost = inv_cost_rate * sum(x_inv).where(FreightGroup.x_inv(t, x_inv), t > FreightGroup.inv_start_t)
 
 total_tl_cost = tl_fixed_cost * sum(y_bin_tl).where(bin_tl(Integer.ref(), y_bin_tl))
 
 total_ltl_rem_cost = LTLSegment.cost * sum(x_rem_ltl).per(LTLSegment).where(
-    LTLSegment.x_rem_ltl(Integer.ref(), x_rem_ltl))
+    LTLSegment.x_rem_ltl(Integer.ref(), x_rem_ltl)
+)
 
 # Self-join: previous segment's limit * current segment's binary
-total_ltl_bin_cost = (LTLSegment1.cost * LTLSegment1.limit) * sum(
-    y_bin_ltl_ref
-).per(LTLSegment1).where(
+total_ltl_bin_cost = (LTLSegment1.cost * LTLSegment1.limit) * sum(y_bin_ltl_ref).per(LTLSegment1).where(
     LTLSegment2.y_bin_ltl(Integer.ref(), y_bin_ltl_ref),
     LTLSegment1.seg == LTLSegment2.seg - 1,
 )

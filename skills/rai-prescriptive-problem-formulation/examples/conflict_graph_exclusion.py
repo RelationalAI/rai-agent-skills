@@ -43,12 +43,7 @@ x_assigned_var = problem.solve_for(
 )
 
 # Constraint: each machine scheduled exactly once
-problem.satisfy(
-    model.require(
-        sum(ScheduleRef.x_assigned).where(ScheduleRef.machine == Machine).per(Machine)
-        == 1
-    )
-)
+problem.satisfy(model.require(sum(ScheduleRef.x_assigned).where(ScheduleRef.machine == Machine).per(Machine) == 1))
 
 # Constraint: crew hours per slot not exceeded
 problem.satisfy(
@@ -70,12 +65,6 @@ problem.satisfy(
 )
 
 # Objective: minimize total maintenance cost
-problem.minimize(
-    sum(
-        Schedule.x_assigned
-        * Schedule.machine.failure_cost
-        * Schedule.slot.cost_multiplier
-    )
-)
+problem.minimize(sum(Schedule.x_assigned * Schedule.machine.failure_cost * Schedule.slot.cost_multiplier))
 
 problem.solve("highs", time_limit_sec=60)

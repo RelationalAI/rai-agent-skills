@@ -30,17 +30,11 @@ model.define(SupplyOrder.new(option=SupplyOption))
 
 # Derived relationships for direct access
 SupplyOrder.supplier = Property(f"{SupplyOrder} has {Supplier}", short_name="supplier")
-model.define(SupplyOrder.supplier(Supplier)).where(
-    SupplyOrder.option(SupplyOption), SupplyOption.supplier(Supplier)
-)
+model.define(SupplyOrder.supplier(Supplier)).where(SupplyOrder.option(SupplyOption), SupplyOption.supplier(Supplier))
 SupplyOrder.product = Property(f"{SupplyOrder} has {Product}", short_name="product")
-model.define(SupplyOrder.product(Product)).where(
-    SupplyOrder.option(SupplyOption), SupplyOption.product(Product)
-)
+model.define(SupplyOrder.product(Product)).where(SupplyOrder.option(SupplyOption), SupplyOption.product(Product))
 SupplyOrder.cost_per_unit = Property(f"{SupplyOrder} has {Float:cost_per_unit}")
-model.define(SupplyOrder.cost_per_unit(SupplyOption.cost_per_unit)).where(
-    SupplyOrder.option(SupplyOption)
-)
+model.define(SupplyOrder.cost_per_unit(SupplyOption.cost_per_unit)).where(SupplyOrder.option(SupplyOption))
 
 # --- Disruption scenarios: exclude suppliers one at a time ---
 excluded_suppliers = [None, "SupplierC", "SupplierB"]
@@ -72,19 +66,11 @@ for excluded in excluded_suppliers:
     # Constraints
     problem.satisfy(
         model.require(
-            sum(SupplyOrder.x_quantity)
-            .where(SupplyOrder.supplier == Supplier)
-            .per(Supplier)
-            <= Supplier.capacity
+            sum(SupplyOrder.x_quantity).where(SupplyOrder.supplier == Supplier).per(Supplier) <= Supplier.capacity
         )
     )
     problem.satisfy(
-        model.require(
-            sum(SupplyOrder.x_quantity)
-            .where(SupplyOrder.product == Product)
-            .per(Product)
-            >= Product.demand
-        )
+        model.require(sum(SupplyOrder.x_quantity).where(SupplyOrder.product == Product).per(Product) >= Product.demand)
     )
 
     # Objective

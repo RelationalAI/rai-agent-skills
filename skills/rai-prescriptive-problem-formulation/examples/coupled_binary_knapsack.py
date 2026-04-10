@@ -34,34 +34,24 @@ budget = 2_000_000_000
 
 problem = Problem(model, Float)
 x_approved_var = problem.solve_for(Project.x_approved, type="bin", name=Project.name)
-x_selected_var = problem.solve_for(
-    Upgrade.x_selected, type="bin", name=["upg", Upgrade.substation.name]
-)
+x_selected_var = problem.solve_for(Upgrade.x_selected, type="bin", name=["upg", Upgrade.substation.name])
 
 # --- Capacity expansion constraint ---
 # Approved project demand at each substation <= existing capacity + upgrade capacity
 project_demand = (
-    sum(ProjectRef.x_approved * ProjectRef.capacity_needed)
-    .where(ProjectRef.substation == Substation)
-    .per(Substation)
+    sum(ProjectRef.x_approved * ProjectRef.capacity_needed).where(ProjectRef.substation == Substation).per(Substation)
 )
 upgrade_cap = (
-    sum(UpgradeRef.x_selected * UpgradeRef.capacity_added)
-    .where(UpgradeRef.substation == Substation)
-    .per(Substation)
+    sum(UpgradeRef.x_selected * UpgradeRef.capacity_added).where(UpgradeRef.substation == Substation).per(Substation)
 )
-problem.satisfy(
-    model.require(project_demand <= Substation.current_capacity + upgrade_cap)
-)
+problem.satisfy(model.require(project_demand <= Substation.current_capacity + upgrade_cap))
 
 # At most one upgrade per substation
-upgrades_per_sub = sum(UpgradeRef.x_selected).where(
-    UpgradeRef.substation == Substation).per(Substation)
+upgrades_per_sub = sum(UpgradeRef.x_selected).where(UpgradeRef.substation == Substation).per(Substation)
 problem.satisfy(model.require(upgrades_per_sub <= 1))
 
 # Budget knapsack: total investment across both decision sets
-total_invest = (sum(Project.x_approved * Project.connection_cost)
-                + sum(Upgrade.x_selected * Upgrade.upgrade_cost))
+total_invest = sum(Project.x_approved * Project.connection_cost) + sum(Upgrade.x_selected * Upgrade.upgrade_cost)
 problem.satisfy(model.require(total_invest <= budget))
 
 # Objective: maximize net revenue from approved projects

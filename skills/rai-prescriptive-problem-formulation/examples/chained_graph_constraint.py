@@ -25,28 +25,32 @@ Route.destination = model.Relationship(f"{Route} delivers to {Site}")
 
 # --- Inline data ---
 
-site_data = model.data([
-    {"id": 1, "name": "Hub-West",    "holding_cost": 2.0, "demand": 80},
-    {"id": 2, "name": "Hub-Central", "holding_cost": 3.0, "demand": 120},
-    {"id": 3, "name": "Hub-East",    "holding_cost": 2.5, "demand": 100},
-    {"id": 4, "name": "Depot-NW",    "holding_cost": 4.0, "demand": 40},
-    {"id": 5, "name": "Depot-SW",    "holding_cost": 3.5, "demand": 60},
-    {"id": 6, "name": "Depot-NE",    "holding_cost": 4.5, "demand": 50},
-    {"id": 7, "name": "Depot-SE",    "holding_cost": 3.0, "demand": 70},
-])
+site_data = model.data(
+    [
+        {"id": 1, "name": "Hub-West", "holding_cost": 2.0, "demand": 80},
+        {"id": 2, "name": "Hub-Central", "holding_cost": 3.0, "demand": 120},
+        {"id": 3, "name": "Hub-East", "holding_cost": 2.5, "demand": 100},
+        {"id": 4, "name": "Depot-NW", "holding_cost": 4.0, "demand": 40},
+        {"id": 5, "name": "Depot-SW", "holding_cost": 3.5, "demand": 60},
+        {"id": 6, "name": "Depot-NE", "holding_cost": 4.5, "demand": 50},
+        {"id": 7, "name": "Depot-SE", "holding_cost": 3.0, "demand": 70},
+    ]
+)
 model.define(Site.new(site_data.to_schema()))
 
-route_data = model.data([
-    {"id": 1,  "origin_id": 1, "dest_id": 2, "capacity": 200},
-    {"id": 2,  "origin_id": 2, "dest_id": 3, "capacity": 180},
-    {"id": 3,  "origin_id": 1, "dest_id": 4, "capacity": 100},
-    {"id": 4,  "origin_id": 1, "dest_id": 5, "capacity": 120},
-    {"id": 5,  "origin_id": 2, "dest_id": 4, "capacity": 90},
-    {"id": 6,  "origin_id": 2, "dest_id": 6, "capacity": 110},
-    {"id": 7,  "origin_id": 3, "dest_id": 6, "capacity": 80},
-    {"id": 8,  "origin_id": 3, "dest_id": 7, "capacity": 150},
-    {"id": 9,  "origin_id": 5, "dest_id": 7, "capacity": 70},
-])
+route_data = model.data(
+    [
+        {"id": 1, "origin_id": 1, "dest_id": 2, "capacity": 200},
+        {"id": 2, "origin_id": 2, "dest_id": 3, "capacity": 180},
+        {"id": 3, "origin_id": 1, "dest_id": 4, "capacity": 100},
+        {"id": 4, "origin_id": 1, "dest_id": 5, "capacity": 120},
+        {"id": 5, "origin_id": 2, "dest_id": 4, "capacity": 90},
+        {"id": 6, "origin_id": 2, "dest_id": 6, "capacity": 110},
+        {"id": 7, "origin_id": 3, "dest_id": 6, "capacity": 80},
+        {"id": 8, "origin_id": 3, "dest_id": 7, "capacity": 150},
+        {"id": 9, "origin_id": 5, "dest_id": 7, "capacity": 70},
+    ]
+)
 model.define(
     Route.new(
         id=route_data.id,
@@ -64,9 +68,7 @@ graph = Graph(model, directed=False, weighted=True, node_concept=Site, aggregato
 
 r = Route.ref()
 s1, s2 = Site.ref(), Site.ref()
-model.where(r.origin(s1), r.destination(s2)).define(
-    graph.Edge.new(src=s1, dst=s2, weight=r.capacity)
-)
+model.where(r.origin(s1), r.destination(s2)).define(graph.Edge.new(src=s1, dst=s2, weight=r.capacity))
 
 # Centrality is stored directly on Site (because node_concept=Site).
 Site.centrality = graph.eigenvector_centrality()

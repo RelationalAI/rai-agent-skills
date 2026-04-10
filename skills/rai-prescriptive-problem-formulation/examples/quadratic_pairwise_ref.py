@@ -19,26 +19,31 @@ Item.interaction = model.Property(f"{Item} and {Item} have {Float:interaction}")
 
 # --- Inline data ---
 
-item_data = model.data([
-    {"index": 1, "value": 5.0},
-    {"index": 2, "value": 8.0},
-    {"index": 3, "value": 6.0},
-])
+item_data = model.data(
+    [
+        {"index": 1, "value": 5.0},
+        {"index": 2, "value": 8.0},
+        {"index": 3, "value": 6.0},
+    ]
+)
 model.define(Item.new(item_data.to_schema()))
 
 # Symmetric 3x3 interaction matrix
 Item2 = Item.ref()
-interaction_data = model.data([
-    {"i": 1, "j": 1, "w": 4.0},
-    {"i": 1, "j": 2, "w": 1.5},
-    {"i": 1, "j": 3, "w": 0.5},
-    {"i": 2, "j": 1, "w": 1.5},
-    {"i": 2, "j": 2, "w": 9.0},
-    {"i": 2, "j": 3, "w": 2.0},
-    {"i": 3, "j": 1, "w": 0.5},
-    {"i": 3, "j": 2, "w": 2.0},
-    {"i": 3, "j": 3, "w": 3.0},
-], columns=["i", "j", "w"])
+interaction_data = model.data(
+    [
+        {"i": 1, "j": 1, "w": 4.0},
+        {"i": 1, "j": 2, "w": 1.5},
+        {"i": 1, "j": 3, "w": 0.5},
+        {"i": 2, "j": 1, "w": 1.5},
+        {"i": 2, "j": 2, "w": 9.0},
+        {"i": 2, "j": 3, "w": 2.0},
+        {"i": 3, "j": 1, "w": 0.5},
+        {"i": 3, "j": 2, "w": 2.0},
+        {"i": 3, "j": 3, "w": 3.0},
+    ],
+    columns=["i", "j", "w"],
+)
 model.where(
     Item.index(interaction_data.i),
     Item2.index(interaction_data.j),
@@ -74,6 +79,4 @@ si = problem.solve_info()
 si.display()
 print(f"Status: {si.termination_status}, Objective: {si.objective_value:.6f}")
 # Extract solution -- properties populated after solve (populate=True default)
-model.select(Item.index.alias("item"), Item.x_allocation.alias("allocation")).where(
-    Item.x_allocation > 0.001
-).inspect()
+model.select(Item.index.alias("item"), Item.x_allocation.alias("allocation")).where(Item.x_allocation > 0.001).inspect()
