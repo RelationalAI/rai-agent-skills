@@ -153,9 +153,11 @@ model.select(
 
 **`populate=False` approach: `Variable.values()` on ProblemVariable (SDK >= 1.0.13)**
 
+> **SDK version note:** `Variable.values()` and the `ProblemVariable` return type from `solve_for()` require `relationalai >= 1.0.13`. On older SDKs, use `problem.variable_values().to_df()` with `name=[]` for extraction — see `rai-configuration/references/v013-migration.md`.
+
 Use `populate=False` + `Variable.values()` for loop-based entity exclusion/partition scenarios. For Scenario Concept workflows, use `model.select()` — the scenario dimension is part of the variable identity. For loop workflows where multiple Problems share decision variables, `populate=False` prevents one solve from overwriting another's results.
 
-`solve_for()` returns a `ProblemVariable` — a Concept that can be used in `model.define()`, `model.select()`, and `.ref()`. Call `.values(sol_index, value_ref)` on it to extract solution values:
+`solve_for()` returns a `ProblemVariable` — a Concept that can be used in `model.define()`, `model.select()`, and `.ref()`. Call `.values(sol_index, value_ref)` on it to extract solution values. Back-pointers on `ProblemVariable` use the lowercase concept name from the Property definition: for `solve_for(Assignment.x, ...)` where `x` is defined as `f"{Assignment} has {Float:x}"`, the back-pointer is `var.assignment`:
 
 ```python
 # solve_for() returns a ProblemVariable concept

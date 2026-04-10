@@ -1,10 +1,12 @@
 # Pattern: Separate Model() for graph analysis to avoid SDK UnsupportedRecursionError.
+# NOTE: Fixed in SDK >= 1.0.13 — this pattern remains valid for defensive isolation.
 # Key ideas: graph algorithms create recursive definitions internally; when combined
 # with prescriptive post-solve queries (Variable.values() or model.select()) on the
-# same model, the SDK raises UnsupportedRecursionError. The workaround: run graph on
-# a dedicated graph_model = Model("graph_stage"), extract results to a DataFrame, then
-# load them back into the main model via model.data() + model.define(). The main model
-# can then use graph-enriched properties in prescriptive or rules stages without conflict.
+# same model, older SDK versions raise UnsupportedRecursionError. The workaround: run
+# graph on a dedicated graph_model = Model("graph_stage"), extract results to a
+# DataFrame, then load them back into the main model via model.data() + model.define().
+# The main model can then use graph-enriched properties in prescriptive or rules
+# stages without conflict.
 
 from relationalai.semantics import Float, Integer, Model, String, sum
 from relationalai.semantics.reasoners.graph import Graph
@@ -114,7 +116,7 @@ BUDGET = 300.0
 Site.x_invest = model.Property(f"{Site} investment is {Float:x}")
 
 problem = Problem(model, Float)
-problem.solve_for(Site.x_invest, lower=0, name=["invest", Site.name])
+x_invest_var = problem.solve_for(Site.x_invest, lower=0, name=["invest", Site.name])
 
 problem.satisfy(model.require(sum(Site.x_invest) <= BUDGET))
 problem.satisfy(model.require(Site.x_invest <= 10 * Site.operating_cost))

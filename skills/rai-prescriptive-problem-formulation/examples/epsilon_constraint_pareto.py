@@ -89,7 +89,11 @@ x_alloc_paired = Float.ref()
 # non-binding (wasted solves) or infeasible.
 
 problem1 = Problem(model, Float)
-alloc_var1 = problem1.solve_for(Item.x_allocation(Scenario, x_alloc), populate=False)
+alloc_var1 = problem1.solve_for(
+    Item.x_allocation(Scenario, x_alloc),
+    name=["alloc", Scenario.name, Item.index],
+    populate=False,
+)
 problem1.satisfy(
     model.where(Item.x_allocation(Scenario, x_alloc)).require(x_alloc >= 0)
 )
@@ -130,7 +134,11 @@ benefit_at_min_cost = builtins.sum(df1["item_value"] * df1["allocation"])
 
 # --- Anchor 2: maximize benefit only -> get max achievable benefit ---
 problem2 = Problem(model, Float)
-alloc_var2 = problem2.solve_for(Item.x_allocation(Scenario, x_alloc), populate=False)
+alloc_var2 = problem2.solve_for(
+    Item.x_allocation(Scenario, x_alloc),
+    name=["alloc", Scenario.name, Item.index],
+    populate=False,
+)
 problem2.satisfy(
     model.where(Item.x_allocation(Scenario, x_alloc)).require(x_alloc >= 0)
 )
@@ -179,7 +187,11 @@ pareto_points = []
 consecutive_infeasible = 0
 for rate in epsilon_rates:
     problem = Problem(model, Float)
-    alloc_var = problem.solve_for(Item.x_allocation(Scenario, x_alloc), populate=False)
+    alloc_var = problem.solve_for(
+        Item.x_allocation(Scenario, x_alloc),
+        name=["alloc", Scenario.name, Item.index],
+        populate=False,
+    )
     problem.satisfy(
         model.where(Item.x_allocation(Scenario, x_alloc)).require(x_alloc >= 0)
     )

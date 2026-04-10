@@ -45,7 +45,7 @@ v1 supports multiple solutions natively:
 ```python
 # Solve with multiple solutions
 problem = Problem(model, Float)
-assign_var = problem.solve_for(Food.x_amount, lower=0)
+amount_var = problem.solve_for(Food.x_amount, lower=0)
 problem.minimize(sum(Food.cost * Food.x_amount))
 problem.solve("minizinc", solution_limit=5)
 si = problem.solve_info()
@@ -54,15 +54,15 @@ print(f"Found {si.num_points} solutions")
 # Extract solution at index 0 (preferred: Variable.values())
 value_ref = Float.ref()
 sol0_df = model.select(
-    assign_var.food.name.alias("food"),
+    amount_var.food.name.alias("food"),
     value_ref.alias("amount"),
-).where(assign_var.values(0, value_ref), value_ref > 0.001).to_df()
+).where(amount_var.values(0, value_ref), value_ref > 0.001).to_df()
 
 # Extract solution at index 2
 sol2_df = model.select(
-    assign_var.food.name.alias("food"),
+    amount_var.food.name.alias("food"),
     value_ref.alias("amount"),
-).where(assign_var.values(2, value_ref), value_ref > 0.001).to_df()
+).where(amount_var.values(2, value_ref), value_ref > 0.001).to_df()
 
 # Legacy approach (deprecated):
 # all_df = problem.variable_values(multiple=True).to_df()

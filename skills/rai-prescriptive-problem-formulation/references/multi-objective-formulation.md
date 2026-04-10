@@ -113,10 +113,17 @@ for eps in epsilon_values:
         continue  # skip this point but try the next (non-convex gaps)
     consecutive_infeasible = 0
 
+    # Extract solution via Variable.values() structured query
+    value_ref = Float.ref()
+    variables_df = model.select(
+        var.entity.name.alias("entity"),  # back-pointer from ProblemVariable
+        value_ref.alias("value"),
+    ).where(var.values(0, value_ref)).to_df()
+
     pareto.append({
         "eps": eps,
         "primary": si.objective_value,
-        "variables": problem.variable_values().to_df(),  # deprecated; prefer Variable.values() for new code
+        "variables": variables_df,
     })
 ```
 
@@ -147,42 +154,29 @@ epsilon_values = [
 ## Evaluating the Secondary Objective
 
 The solver only reports the primary (optimized) objective value. To get both objectives at each
-Pareto point, evaluate the secondary expression on the variable values DataFrame (from `variable_values()` or `Variable.values()`):
+Pareto point, evaluate the secondary expression using the `Variable.values()` results. Since
+`solve_for()` returns a `ProblemVariable` with back-pointers to entity properties, you can
+include the secondary coefficient directly in the structured query:
 
 ```python
 import builtins  # RAI `sum` shadows Python's built-in
 
-def evaluate_secondary(var_df, entity_data):
-    """Compute secondary objective from variable values and entity coefficients.
+# Extract variable values with entity coefficients via back-pointers
+value_ref = Float.ref()
+point_df = model.select(
+    var.stock.index.alias("stock"),
+    var.stock.returns.alias("returns"),   # secondary coefficient via back-pointer
+    var.scenario.name.alias("scenario"),
+    value_ref.alias("quantity"),
+).where(var.values(0, value_ref)).to_df()
 
-    entity_data maps variable names (as they appear in var_df) to the secondary
-    objective coefficient for that variable. Build this BEFORE the loop from model data.
-    """
-    total = 0.0
-    for _, row in var_df.iterrows():
-        name, val = str(row.iloc[0]), float(row.iloc[1])
-        if name not in entity_data:
-            raise KeyError(f"Variable '{name}' not found in entity_data — "
-                           "check that name= pattern in solve_for matches the keys")
-        total += entity_data[name] * val
-    return total
+# Compute secondary objective in Python
+secondary_value = builtins.sum(point_df["returns"] * point_df["quantity"])
 ```
 
-**Building `entity_data`**: Variable names follow the `name=` pattern from `solve_for()`.
-If `name=["qty", Scenario.name, Stock.index]`, variable names are `"qty_budget_500_1"`,
-`"qty_budget_500_2"`, etc. Build the mapping to match:
-
-```python
-# Build entity_data keyed by the same name pattern used in solve_for
-stock_df = model.select(Stock.index, Stock.returns).to_df()
-stock_returns = dict(zip(stock_df["index"], stock_df["returns"]))
-
-# For scenario-indexed variables, build per-scenario mappings
-entity_data = {}
-for scenario_name in ["budget_500", "budget_1000", "budget_2000"]:
-    for idx, ret in stock_returns.items():
-        entity_data[f"qty_{scenario_name}_{idx}"] = ret
-```
+This replaces the old pattern of building `entity_data` dictionaries keyed by string variable
+names. Back-pointers on `ProblemVariable` give direct access to entity properties, eliminating
+fragile name-string parsing.
 
 **Pitfall**: `from relationalai.semantics import sum` shadows Python's built-in `sum`.
 Use `builtins.sum` for Python-side aggregation over DataFrames.
@@ -213,11 +207,17 @@ N epsilon solves (not N x M). This is optional -- multi-objective does not requi
 pareto_points = []
 for eps in epsilon_values:
     ...
+    value_ref = Float.ref()
+    variables_df = model.select(
+        var.entity.name.alias("entity"),
+        value_ref.alias("value"),
+    ).where(var.values(0, value_ref)).to_df()
+
     pareto_points.append({
         "eps": eps,
         "primary": si.objective_value,
-        "secondary": evaluate_secondary(df, ...),
-        "variables": problem.variable_values().to_df(),  # deprecated; prefer Variable.values() for new code
+        "secondary": builtins.sum(variables_df["coefficient"] * variables_df["value"]),
+        "variables": variables_df,
     })
 ```
 

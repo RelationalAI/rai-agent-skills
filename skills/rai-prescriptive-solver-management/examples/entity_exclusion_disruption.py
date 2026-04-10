@@ -55,10 +55,19 @@ for excluded in excluded_suppliers:
     if excluded is not None:
         active_orders = SupplyOrder.supplier.name != excluded
         qty_var = problem.solve_for(
-            SupplyOrder.x_quantity, lower=0, where=[active_orders], populate=False
+            SupplyOrder.x_quantity,
+            name=["qty", SupplyOrder.supplier.name, SupplyOrder.product.name],
+            lower=0,
+            where=[active_orders],
+            populate=False,
         )
     else:
-        qty_var = problem.solve_for(SupplyOrder.x_quantity, lower=0, populate=False)
+        qty_var = problem.solve_for(
+            SupplyOrder.x_quantity,
+            name=["qty", SupplyOrder.supplier.name, SupplyOrder.product.name],
+            lower=0,
+            populate=False,
+        )
 
     # Constraints
     problem.satisfy(

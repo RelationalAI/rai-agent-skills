@@ -45,7 +45,9 @@ def build_and_solve(min_benefit):
     problem = Problem(model, Float)
 
     # Variables with populate=False — solution extracted via Variable.values()
-    alloc_var = problem.solve_for(Item.x_allocation, populate=False)
+    alloc_var = problem.solve_for(
+        Item.x_allocation, name=["alloc", Item.index], populate=False
+    )
 
     # Constraints and objective
     problem.satisfy(model.require(Item.x_allocation >= 0))
