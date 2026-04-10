@@ -504,7 +504,7 @@ assign_per_mp = sum(TMP_ref.x_assigned).where(
     TMP_ref.period == MP_ref.period
 ).per(MP_ref)
 
-problem.satisfy(require(assign_per_mp == MP_ref.x_machine_maintained))
+problem.satisfy(model.require(assign_per_mp == MP_ref.x_machine_maintained))
 ```
 
 **Why:** `.ref()` creates a reference alias that the type inferencer can disambiguate. Without `.ref()`, when multiple concepts appear in the same expression, the inferencer can't resolve which entity maps to which. Always use `.ref()` when a constraint involves 2+ concepts.
@@ -514,7 +514,7 @@ problem.satisfy(require(assign_per_mp == MP_ref.x_machine_maintained))
 # relationship == bare concept works for single-dimension joins:
 AssignmentRef = Assignment.ref()
 trip_coverage = sum(AssignmentRef.x_assigned).where(AssignmentRef.trip == Trip).per(Trip)
-problem.satisfy(require(trip_coverage >= 1))
+problem.satisfy(model.require(trip_coverage >= 1))
 ```
 
 **Rule: When to use `.ref()`:**
