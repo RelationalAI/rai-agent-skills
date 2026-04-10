@@ -8,6 +8,8 @@
 # The main model can then use graph-enriched properties in prescriptive or rules
 # stages without conflict.
 
+import pandas as pd
+
 from relationalai.semantics import Float, Integer, Model, String, sum
 from relationalai.semantics.reasoners.graph import Graph
 from relationalai.semantics.reasoners.prescriptive import Problem
@@ -104,7 +106,15 @@ print(centrality_df.sort_values("centrality", ascending=False).to_string(index=F
 # Load centrality scores as data on the main model and define as a Site property.
 
 Site.centrality = model.Property(f"{Site} has centrality {Float:centrality}")
-cent_data = model.data(centrality_df[["id", "centrality"]])
+# Convert to standard Python types: to_df() returns Int128Dtype for integer columns,
+# which causes TyperError when passed to model.data() on a different model.
+centrality_clean = pd.DataFrame(
+    {
+        "id": centrality_df["id"].astype(int).tolist(),
+        "centrality": centrality_df["centrality"].tolist(),
+    }
+)
+cent_data = model.data(centrality_clean)
 model.where(Site.id == cent_data["id"]).define(Site.centrality(cent_data["centrality"]))
 
 # =============================================================================

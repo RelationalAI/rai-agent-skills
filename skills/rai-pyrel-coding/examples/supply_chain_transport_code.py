@@ -47,6 +47,20 @@ LTLSegment.y_bin_ltl = model.Property(f"{LTLSegment} on day {Integer:t} has {Flo
 x_rem_ltl = Float.ref()
 y_bin_ltl_ref = Float.ref()
 
+x_rem_ltl_var = problem.solve_for(
+    LTLSegment.x_rem_ltl(t, x_rem_ltl),
+    type="cont",
+    lower=0,
+    name=["rem_ltl", LTLSegment.seg, t],
+    where=[t == departure_days],
+)
+y_bin_ltl_var = problem.solve_for(
+    LTLSegment.y_bin_ltl(t, y_bin_ltl_ref),
+    type="bin",
+    name=["bin_ltl", LTLSegment.seg, t],
+    where=[t == departure_days],
+)
+
 # Self-join refs for predecessor segment lookup
 LTLSegment1 = LTLSegment.ref()
 LTLSegment2 = LTLSegment.ref()
