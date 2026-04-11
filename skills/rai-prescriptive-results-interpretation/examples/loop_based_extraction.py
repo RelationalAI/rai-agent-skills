@@ -74,9 +74,19 @@ def build_and_solve(min_benefit):
     # termination_status: "OPTIMAL", "INFEASIBLE", "TIME_LIMIT", etc.
     # objective_value: best objective found (None if infeasible)
     print(f"Status: {si.termination_status}")
-    print(
-        f"Objective (quadratic cost): {si.objective_value:.6f}" if si.objective_value is not None else "Objective: N/A"
-    )
+
+    # Guard: skip result extraction on non-optimal solves. Without this,
+    # si.objective_value is None and Variable.values() yields an empty DataFrame.
+    if si.termination_status not in ("OPTIMAL", "LOCALLY_SOLVED"):
+        print("Objective: N/A — skipping result extraction")
+        return {
+            "min_benefit": min_benefit,
+            "status": si.termination_status,
+            "quad_cost": None,
+            "allocation": None,
+        }
+
+    print(f"Objective (quadratic cost): {si.objective_value:.6f}")
 
     # Variable.values() structured query via ProblemVariable back-pointers
     value_ref = Float.ref()
@@ -105,4 +115,7 @@ print("\n=== Scenario Comparison ===")
 print(f"{'Min Benefit':>12} {'Status':>10} {'Quad Cost':>14}")
 print("-" * 40)
 for r in scenario_results:
-    print(f"{r['min_benefit']:>12} {r['status']:>10} {r['quad_cost']:>14.6f}")
+    cost_str = (
+        f"{r['quad_cost']:>14.6f}" if r["quad_cost"] is not None else f"{'N/A':>14}"
+    )
+    print(f"{r['min_benefit']:>12} {r['status']:>10} {cost_str}")

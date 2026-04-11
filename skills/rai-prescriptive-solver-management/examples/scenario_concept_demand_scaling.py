@@ -22,7 +22,7 @@ DemandLevel.demand_multiplier = model.Property(f"{DemandLevel} has {Float:demand
 
 # --- Data ---
 fac_data = model.data(
-    [("PlantA", 200, 3.0), ("PlantB", 150, 5.0), ("PlantC", 100, 2.0)],
+    [("PlantA", 300, 3.0), ("PlantB", 150, 5.0), ("PlantC", 100, 2.0)],
     columns=["name", "capacity", "cost_per_unit"],
 )
 model.define(Facility.new(fac_data.to_schema()))

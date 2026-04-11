@@ -114,9 +114,12 @@ for eps in epsilon_values:
     consecutive_infeasible = 0
 
     # Extract solution via Variable.values() structured query
+    # Back-pointer name = lowercased concept from the format string (see results-interpretation SKILL.md)
+    # Example for f"{Stock} in {Scenario} has {Float:quantity}":
     value_ref = Float.ref()
     variables_df = model.select(
-        var.<concept>.name.alias("entity"),  # replace <concept> with your concept name
+        var.stock.name.alias("entity"),       # back-pointer to Stock concept
+        var.scenario.name.alias("scenario"),  # back-pointer to Scenario concept
         value_ref.alias("value"),
     ).where(var.values(0, value_ref)).to_df()
 
@@ -207,10 +210,12 @@ N epsilon solves (not N x M). This is optional -- multi-objective does not requi
 pareto_points = []
 for eps in epsilon_values:
     ...
+    # Example for f"{Stock} in {Scenario} has {Float:quantity}":
     value_ref = Float.ref()
     variables_df = model.select(
-        var.<concept>.name.alias("entity"),          # replace <concept> with your concept name
-        var.<concept>.secondary_coeff.alias("coefficient"), # secondary objective coefficient via back-pointer
+        var.stock.name.alias("entity"),          # back-pointer to Stock
+        var.stock.returns.alias("coefficient"),   # secondary coefficient via back-pointer
+        var.scenario.name.alias("scenario"),
         value_ref.alias("value"),
     ).where(var.values(0, value_ref)).to_df()
 

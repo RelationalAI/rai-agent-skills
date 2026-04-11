@@ -82,8 +82,24 @@ for factory_name in factory_names:
 
     problem.solve("highs", time_limit_sec=60)
 
-    # Extract results via Variable.values() structured query (not model.select — populate=False)
     si = problem.solve_info()
+
+    # Guard: skip result extraction on non-optimal partitions (infeasible /
+    # time-limited / etc). Without this, si.objective_value is None and the
+    # Variable.values() query yields an empty DataFrame — both silent.
+    if si.termination_status not in ("OPTIMAL", "LOCALLY_SOLVED"):
+        print(f"{factory_name}: {si.termination_status} — no profit value")
+        results.append(
+            {
+                "factory": factory_name,
+                "status": si.termination_status,
+                "profit": None,
+                "plan": None,
+            }
+        )
+        continue
+
+    # Extract results via Variable.values() structured query (not model.select — populate=False)
     value_ref = Float.ref()
     plan_df = (
         model.select(
