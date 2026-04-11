@@ -91,18 +91,23 @@ graph.num_nodes().inspect()
 graph.num_edges().inspect()
 
 # --- WCC: dependency clusters ---
+# Use the direct-query pattern (not the shorthand graph.Node.component_id = ...) so
+# the component column arrives as Int128 castable to int. The shorthand path would
+# serialize as opaque node-hash strings, which are hard to display and compare.
 
-graph.Node.component_id = graph.weakly_connected_component()
-
+machine_ref = Machine.ref()
+comp_ref = graph.Node.ref("comp")
 wcc_df = (
-    model.select(
-        Machine.id.alias("machine_id"),
-        Machine.name.alias("machine_name"),
-        Machine.facility.alias("facility"),
-        Machine.component_id.alias("component_id"),
+    model.where(graph.weakly_connected_component()(machine_ref, comp_ref))
+    .select(
+        machine_ref.id.alias("machine_id"),
+        machine_ref.name.alias("machine_name"),
+        machine_ref.facility.alias("facility"),
+        comp_ref.id.alias("component_id"),
     )
     .to_df()
 )
+wcc_df["component_id"] = wcc_df["component_id"].astype(int)
 print("=== Dependency Clusters ===")
 for comp_id in sorted(wcc_df["component_id"].unique()):
     comp_df = wcc_df[wcc_df["component_id"] == comp_id]

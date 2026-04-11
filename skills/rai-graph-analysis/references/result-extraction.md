@@ -222,15 +222,19 @@ The Louvain / Infomap pattern above works directly because community labels are 
 
 ## Type Handling
 
-### Int128Array from RAI (Louvain, Infomap, and direct-query WCC)
+### Int128Array from RAI
 
-Integer graph outputs — Louvain / Infomap community labels, and WCC component IDs accessed via the **direct query** pattern (`select(comp_ref.id, ...)`) — return as `Int128Array` in DataFrames. This type is incompatible with most pandas operations and with `model.data()` type inference (Int128Dtype maps to `"Any"` instead of `"Integer"`, causing `TyperError`).
+**Scope:**
+- **Always** for Louvain / Infomap community labels — these are reasoner-generated integer labels regardless of node ID type.
+- **Only** for WCC component IDs accessed via the direct-query pattern (`select(comp_ref.id, ...)`) **when the node concept uses an integer-typed `identify_by`** (e.g., `identify_by={"id": Integer}`). If the node concept uses `identify_by={"id": String}`, then `comp_ref.id` arrives as an ordinary string column — no cast is needed (and `.astype(int)` will raise `ValueError`).
 
-**Always cast Louvain/Infomap/direct-query-WCC integer columns before further use:**
+These integer graph outputs return as `Int128Array` in DataFrames. `Int128Array` is incompatible with most pandas operations and with `model.data()` type inference (Int128Dtype maps to `"Any"` instead of `"Integer"`, causing `TyperError`).
+
+**Cast the integer columns before further use:**
 
 ```python
-df["community"] = df["community"].astype(int)      # louvain / infomap
-df["component_int"] = df["component_int"].astype(int)  # WCC via direct query on comp_ref.id
+df["community"] = df["community"].astype(int)      # louvain / infomap — always
+df["component_int"] = df["component_int"].astype(int)  # WCC via direct query — ONLY if node identify_by uses Integer
 ```
 
 **Failure symptoms without casting:**

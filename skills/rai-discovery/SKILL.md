@@ -171,7 +171,7 @@ Each reasoner adds new concepts and properties to the ontology. Discovery should
 |----------------|--------------------------|---------------------------|
 | Graph centrality | `node.centrality_score` | Predictive: centrality as feature. Prescriptive: weight allocation by node importance. |
 | Graph reachability | impact_count, affected flags | Prescriptive: minimize disruption to high-impact nodes. Rules: alert on critical dependencies. |
-| Graph WCC / community | `node.component_id`, `node.community_label` | Prescriptive: optimize within-cluster vs cross-cluster. Rules: flag isolated components. |
+| Graph WCC / community | WCC: `(node, component_id_node)` membership (access `.id` to get its identifying value; cast to `int` only for integer-identified nodes); community: `node.community_label` (int) | Prescriptive: optimize within-cluster vs cross-cluster. Rules: flag isolated components. |
 | Predictive forecasting | `Forecast.predicted_value` | Prescriptive: optimize against predicted demand/delays. |
 | Predictive classification | `Entity.risk_probability` | Rules: flag above threshold. Prescriptive: incorporate risk as constraint. |
 
