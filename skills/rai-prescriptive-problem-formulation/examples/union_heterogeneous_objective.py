@@ -64,21 +64,17 @@ problem.satisfy(
 )
 
 # --- Objective: model.union() combines costs from TWO different concept scopes ---
-# WHY union is needed: Warehouse.fixed_cost * x_open is scoped to Warehouse;
-# Transport.cost_per_unit * x_ship is scoped to Transport. These are different
+# WHY union is needed: sum(Warehouse.fixed_cost * x_open) is scoped to Warehouse;
+# sum(Transport.cost_per_unit * x_ship) is scoped to Transport. These are different
 # concept groups -- using + would cause AssertionError. model.union() merges them
 # so the outer sum() can aggregate across both.
-warehouse_cost = Warehouse.fixed_cost * x_open  # per-Warehouse expression
-transport_cost = Transport.cost_per_unit * x_ship  # per-Transport expression
+#
+# Note: each branch wraps its expression in `sum(...).where(...)` — `.where()` is a
+# Fragment method, not an Expression method, so you must go through sum() first.
+warehouse_cost = sum(Warehouse.fixed_cost * x_open).where(Warehouse.x_open(x_open))
+transport_cost = sum(Transport.cost_per_unit * x_ship).where(Transport.x_ship(x_ship))
 
-problem.minimize(
-    sum(
-        model.union(
-            warehouse_cost.where(Warehouse.x_open(x_open)),
-            transport_cost.where(Transport.x_ship(x_ship)),
-        )
-    )
-)
+problem.minimize(sum(model.union(warehouse_cost, transport_cost)))
 
 # --- Solve ---
 problem.display()

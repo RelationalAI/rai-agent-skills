@@ -87,16 +87,24 @@ problem.solve("highs", time_limit_sec=60)
 si = problem.solve_info()
 si.display()                    # Print status summary
 print(si.termination_status)    # "OPTIMAL", "INFEASIBLE", etc.
-print(si.objective_value)       # Objective function value
 
-# For populate=False workflows, use Variable.values():
+# Always check termination_status before reading objective_value or extracting
+# results — si.objective_value is None on infeasible / unbounded solves and will
+# silently render as "None" in print() / math / comparisons otherwise.
+if si.termination_status in ("OPTIMAL", "LOCALLY_SOLVED"):
+    print(si.objective_value)   # Objective function value
+
+# For populate=False workflows, use Variable.values() (gate the extraction on
+# termination_status for the same reason):
 assign_var = problem.solve_for(Assignment.x, type="bin", populate=False)
 problem.solve("highs")
-value_ref = Float.ref()
-df = model.select(
-    assign_var.assignment.worker.name.alias("worker"),
-    value_ref.alias("value"),
-).where(assign_var.values(0, value_ref), value_ref > 0.5).to_df()
+si = problem.solve_info()
+if si.termination_status in ("OPTIMAL", "LOCALLY_SOLVED"):
+    value_ref = Float.ref()
+    df = model.select(
+        assign_var.assignment.worker.name.alias("worker"),
+        value_ref.alias("value"),
+    ).where(assign_var.values(0, value_ref), value_ref > 0.5).to_df()
 ```
 
 > **Warning:** `result = problem.solve(...); result.status` fails because `solve()` returns `None` regardless of solver. Accessing any attribute on `None` raises `AttributeError`. Always call `problem.solve()` on its own line, then use `problem.solve_info()` separately.

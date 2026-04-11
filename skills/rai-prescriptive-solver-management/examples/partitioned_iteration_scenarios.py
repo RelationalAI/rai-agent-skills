@@ -72,9 +72,23 @@ for factory_name in factory_names:
 
     # 5. Solve
     problem.solve("highs", time_limit_sec=60)
+    si = problem.solve_info()
+
+    # Guard: skip result extraction on non-optimal partitions (infeasible /
+    # time-limited / etc). Without this guard, si.objective_value is None and
+    # the Variable.values() query yields an empty DataFrame — both silent.
+    if si.termination_status not in ("OPTIMAL", "LOCALLY_SOLVED"):
+        scenario_results.append(
+            {
+                "factory": factory_name,
+                "status": si.termination_status,
+                "profit": None,
+                "plan": None,
+            }
+        )
+        continue
 
     # 6. Collect results — Variable.values() structured query (works with populate=False)
-    si = problem.solve_info()
     value_ref = Float.ref()
     plan_df = (
         model.select(
@@ -95,4 +109,7 @@ for factory_name in factory_names:
 
 # 7. Summary across all partitions
 for r in scenario_results:
-    print(f"{r['factory']}: {r['status']}, profit=${r['profit']:.2f}")
+    if r["profit"] is None:
+        print(f"{r['factory']}: {r['status']} — no profit value")
+    else:
+        print(f"{r['factory']}: {r['status']}, profit=${r['profit']:.2f}")

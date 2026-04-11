@@ -2,6 +2,10 @@
 # Key ideas: graph reasoner writes centrality as a property on the node concept; prescriptive
 # reasoner references that property directly in its objective -- no manual data transfer;
 # the ontology carries enrichment forward across reasoning stages.
+#
+# Requires PyRel SDK >= 1.0.13 — graph and prescriptive run on the same Model here.
+# On older SDKs, this combination raises UnsupportedRecursionError; use the legacy
+# separate-model workaround in rai-graph-analysis/examples/graph_model_isolation.py.
 
 from relationalai.semantics import Float, Integer, Model, String, sum
 from relationalai.semantics.reasoners.graph import Graph

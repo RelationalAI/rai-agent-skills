@@ -416,7 +416,7 @@ model.where(graph.Node == Customer).define(
 
 ### Type handling
 
-**Critical:** Community detection IDs (Louvain, Infomap) return as `Int128Array` — cast before pandas operations **and** before `model.data()`: `df["community"] = df["community"].astype(int)`. Int128Dtype is unrecognized by `model.data()` type inference (maps to `"Any"`, causing `TyperError`). WCC component IDs return as **string hashes** — use `.astype(str)`, not `.astype(int)`.
+**Critical:** Community detection IDs (Louvain, Infomap) return as `Int128Array` — cast before pandas operations **and** before `model.data()`: `df["community"] = df["community"].astype(int)`. Int128Dtype is unrecognized by `model.data()` type inference (maps to `"Any"`, causing `TyperError`). **WCC is different:** its output is a Node, not an integer. Via the shorthand (`graph.Node.component = g.weakly_connected_component()` then `model.select(Site.component).to_df()`), the column arrives as **string hashes** — use `.astype(str)`. For an integer component ID, use the direct-query pattern with `graph.Node.ref()` on both sides and select `comp_ref.id` — that column is Int128 and needs `.astype(int)`. See [result-extraction.md](references/result-extraction.md#int128array-from-rai).
 
 ### Validation
 
@@ -455,7 +455,7 @@ model.where(Site.centrality_score < 0.1).define(Site.is_at_risk())
 |---------|-------|-----|
 | `louvain()` fails on directed graph | Louvain requires undirected | Set `directed=False` or use `infomap()` for directed |
 | Empty graph (no edges) | Edge definition doesn't match data — wrong relationship or join path | Verify edge source/destination properties exist and have data; query edge count before running algorithms |
-| `Int128Array` errors in pandas or `model.data()` | Community detection IDs (Louvain, Infomap) are Int128 — incompatible with pandas ops and `model.data()` type inference | Cast: `df["col"] = df["col"].astype(int)` before pandas operations and before passing to `model.data()`. Note: WCC component IDs are string hashes — use `.astype(str)` instead |
+| `Int128Array` errors in pandas or `model.data()` | Community detection IDs (Louvain, Infomap) are Int128 — incompatible with pandas ops and `model.data()` type inference | Cast: `df["col"] = df["col"].astype(int)` before pandas operations and before passing to `model.data()`. WCC is different — its output is a Node, not an integer: via shorthand the column arrives as string hashes (`.astype(str)`), via direct-query `comp_ref.id` it is Int128 (`.astype(int)`). See [result-extraction.md](references/result-extraction.md#int128array-from-rai) |
 | Duplicate/self-loop edges | Missing guard in co-occurrence pattern | Add `left.id < right.id` to `.where()` clause |
 | `aggregator` missing | Weighted graph with multi-edges requires aggregator for parallel edges | Add `aggregator="sum"` — but only when multi-edges are expected (see [Aggregator guidance](#graph-constructor-aggregator-parameter-guidance)) |
 | Parallel edges mask bridges | Two edges between the same node pair mean removing one doesn't disconnect the pair — neither is a true bridge | Before reporting bridges, check whether the underlying data has parallel edges between the same endpoints. Do not collapse with `aggregator="sum"` before bridge detection — that merges parallel edges into one, making the single result appear to be a bridge when physically it isn't |

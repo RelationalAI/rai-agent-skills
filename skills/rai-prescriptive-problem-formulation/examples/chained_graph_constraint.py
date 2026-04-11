@@ -4,6 +4,10 @@
 # this guarantees critical hubs receive proportional allocation regardless of
 # cost tradeoffs. Contrasts with chained_graph_prescriptive.py which
 # uses centrality in the objective only.
+#
+# Requires PyRel SDK >= 1.0.13 — graph and prescriptive run on the same Model here.
+# On older SDKs, this combination raises UnsupportedRecursionError; use the legacy
+# separate-model workaround in rai-graph-analysis/examples/graph_model_isolation.py.
 
 from relationalai.semantics import Float, Integer, Model, String, sum
 from relationalai.semantics.reasoners.graph import Graph

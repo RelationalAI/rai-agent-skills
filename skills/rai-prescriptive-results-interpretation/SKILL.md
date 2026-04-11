@@ -155,7 +155,27 @@ model.select(
 
 Use `populate=False` + `Variable.values()` for loop-based entity exclusion/partition scenarios. For Scenario Concept workflows, use `model.select()` — the scenario dimension is part of the variable identity. For loop workflows where multiple Problems share decision variables, `populate=False` prevents one solve from overwriting another's results.
 
-`solve_for()` returns a `ProblemVariable` — a Concept that can be used in `model.define()`, `model.select()`, and `.ref()`. Call `.values(sol_index, value_ref)` on it to extract solution values. Back-pointers on `ProblemVariable` use the lowercase concept name from the Property definition: for `solve_for(Assignment.x, ...)` where `x` is defined as `f"{Assignment} has {Float:x}"`, the back-pointer is `var.assignment`:
+`solve_for()` returns a `ProblemVariable` — a Concept that can be used in `model.define()`, `model.select()`, and `.ref()`. Call `.values(sol_index, value_ref)` on it to extract solution values.
+
+**Back-pointer naming rule:** each **non-value** field in the Property's format string becomes a back-pointer attribute on the `ProblemVariable`. The **last** field is the value field — you read it via `var.values(sol_idx, val_ref)` and it is NOT a back-pointer. For each non-value field, the back-pointer attribute name is the **explicit `:name` from the format string if present**, otherwise the **lowercased type name**. Examples:
+
+| Property definition | Back-pointers on the returned var | Value field |
+|---|---|---|
+| `f"{Assignment} has {Float:x}"` | `var.assignment` (lowercased type) | `x` |
+| `f"{Edge:e} has {Float:flow}"` | `var.e` (explicit `:e` overrides `edge`) | `flow` |
+| `f"{Queen} is in {Integer:column}"` | `var.queen` | `column` |
+| `f"{Player} in {Integer:week} is in {Integer:group}"` | `var.player`, `var.week` | `group` |
+| `f"cell {Integer:i} {Integer:j} is {Integer:x}"` | `var.i`, `var.j` (no entity concept) | `x` |
+| `f"{Float:x}"` | none — call `var.values(sol_idx, val)` directly | `x` |
+
+**Silent-failure warning:** `ProblemVariable` is a Concept subclass, and Concepts return a `Chain` from `__getattr__` for unknown attribute names instead of raising. Two common mistakes both silently return a `Chain` and produce empty or garbage results (not an `AttributeError`):
+
+1. Writing `var.edge` when the format string said `{Edge:e}` (explicit `:name` was `:e`).
+2. Writing `var.column` or `var.group` when the name is a **value** field — those are not back-pointers; read them through `var.values(sol_idx, val_ref)`.
+
+Always match the attribute name to a non-value field name in the format string.
+
+For `solve_for(Assignment.x, ...)` where `x` is defined as `f"{Assignment} has {Float:x}"`, the back-pointer is `var.assignment`:
 
 ```python
 # solve_for() returns a ProblemVariable concept
@@ -462,6 +482,8 @@ For parameter sweep patterns, scenario comparison tables, and Pareto frontier co
 | Zero objective on minimize | Missing forcing constraints | Add `sum(x).per(Entity) >= Entity.demand` or equivalent |
 | All-zero from join mismatch | Forcing constraints exist but `.where()` joins match zero rows | Verify constraint joins match actual data |
 | Infeasible: demand > capacity | Total demand exceeds supply | Add slack/penalty variables or relax demand constraints |
+| Silent: `problem.termination_status == "OPTIMAL"` (no parens) — always False | `termination_status` on the `Problem` object is a bound method, not a property; comparing a method to a string is never equal and the bug is silent | Read status Python-side: `problem.solve_info().termination_status == "OPTIMAL"` (no parens — `solve_info()` returns a dataclass-like value with a string field). Engine-side inside `model.require(...)`: `problem.termination_status() == "OPTIMAL"` (with parens — that's the engine-side Relationship) |
+| Silent: non-OPTIMAL result extraction returns empty DataFrame / None objective | Loop / scenario workflows extract `Variable.values()` or read `si.objective_value` without checking status first. Infeasible / time-limited solves produce an empty query and `None` objective, silently propagated into downstream code | Always guard: `if si.termination_status not in ("OPTIMAL", "LOCALLY_SOLVED"): continue` (or raise) before touching `si.objective_value` or the extraction query |
 
 For the full pitfalls table (14 entries covering numerical instability, degenerate solutions, wrong aggregation scope, and more), see [references/common-pitfalls.md](references/common-pitfalls.md).
 
