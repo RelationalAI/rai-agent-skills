@@ -166,12 +166,16 @@ Use `populate=False` + `Variable.values()` for loop-based entity exclusion/parti
 | `f"{Queen} is in {Integer:column}"` | `var.queen` | `column` |
 | `f"{Player} in {Integer:week} is in {Integer:group}"` | `var.player`, `var.week` | `group` |
 | `f"cell {Integer:i} {Integer:j} is {Integer:x}"` | `var.i`, `var.j` (no entity concept) | `x` |
+| `f"{MachinePeriod} has {Float:x}"` | `var.machineperiod` (lowercased as-is, NOT `machine_period`) | `x` |
 | `f"{Float:x}"` | none — call `var.values(sol_idx, val)` directly | `x` |
+
+The lowercased type name is the type name converted to lowercase **as-is** — no underscores or snake_case conversion. `MachinePeriod` becomes `machineperiod`, not `machine_period`.
 
 **Silent-failure warning:** `ProblemVariable` is a Concept subclass, and Concepts return a `Chain` from `__getattr__` for unknown attribute names instead of raising. Two common mistakes both silently return a `Chain` and produce empty or garbage results (not an `AttributeError`):
 
 1. Writing `var.edge` when the format string said `{Edge:e}` (explicit `:name` was `:e`).
 2. Writing `var.column` or `var.group` when the name is a **value** field — those are not back-pointers; read them through `var.values(sol_idx, val_ref)`.
+3. Writing `var.machine_period` when the concept is `MachinePeriod` — the correct name is `var.machineperiod` (lowercased, no underscores).
 
 Always match the attribute name to a non-value field name in the format string.
 
