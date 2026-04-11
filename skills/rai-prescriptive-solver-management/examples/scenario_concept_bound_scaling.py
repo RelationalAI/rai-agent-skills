@@ -66,7 +66,7 @@ Food.x_amount = model.Property(f"{Food} in {Scenario} has {Float:amount}")
 x_amt = Float.ref()
 
 problem = Problem(model, Float)
-x_amount_var = problem.solve_for(
+problem.solve_for(
     Food.x_amount(Scenario, x_amt),
     name=["amt", Scenario.scenario_name, Food.name],
     lower=0,

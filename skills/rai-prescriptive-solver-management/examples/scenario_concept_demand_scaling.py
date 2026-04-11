@@ -44,7 +44,7 @@ Facility.x_alloc = model.Property(f"{Facility} ships to {Customer} under {Demand
 x_alloc = Float.ref()
 
 problem = Problem(model, Float)
-x_alloc_var = problem.solve_for(
+problem.solve_for(
     Facility.x_alloc(Customer, DemandLevel, x_alloc),
     lower=0,
     name=[DemandLevel.name, "alloc", Facility.name, Customer.name],

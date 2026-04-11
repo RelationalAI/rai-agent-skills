@@ -47,8 +47,8 @@ problem = Problem(model, Float)
 x_open = Float.ref()
 x_ship = Float.ref()
 
-x_open_var = problem.solve_for(Warehouse.x_open(x_open), type="bin", name=["open", Warehouse.name])
-x_ship_var = problem.solve_for(Transport.x_ship(x_ship), lower=0, name=["ship", Transport.origin, Transport.dest])
+problem.solve_for(Warehouse.x_open(x_open), type="bin", name=["open", Warehouse.name])
+problem.solve_for(Transport.x_ship(x_ship), lower=0, name=["ship", Transport.origin, Transport.dest])
 
 # --- Constraints ---
 # Demand satisfaction: each route must ship exactly its demand

@@ -39,12 +39,12 @@ model.define(FCUsage.new(fc=FC))
 AssignmentRef = Assignment.ref()
 
 problem = Problem(model, Float)
-x_qty_var = problem.solve_for(
+problem.solve_for(
     Assignment.x_qty,
     lower=0,
     name=["qty", Assignment.shipping.fc.name, Assignment.shipping.order.customer],
 )
-x_used_var = problem.solve_for(FCUsage.x_used, type="bin", name=["fc_used", FCUsage.fc.name])
+problem.solve_for(FCUsage.x_used, type="bin", name=["fc_used", FCUsage.fc.name])
 
 # Constraint: FC capacity
 problem.satisfy(model.require(sum(AssignmentRef.x_qty).where(AssignmentRef.shipping.fc == FC).per(FC) <= FC.capacity))

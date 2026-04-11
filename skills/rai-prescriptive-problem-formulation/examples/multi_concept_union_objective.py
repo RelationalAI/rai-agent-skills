@@ -52,7 +52,7 @@ problem = Problem(model, Float)
 # Inventory level per (freight group, day)
 FreightGroup.x_inv = Property(f"{FreightGroup} on day {Integer:t} has {Float:inv}")
 x_inv = Float.ref()
-x_inv_var = problem.solve_for(
+problem.solve_for(
     FreightGroup.x_inv(t, x_inv),
     lower=0,
     name=["x_inv", FreightGroup.name, t],
@@ -64,13 +64,13 @@ TransportType.x_qty_tra = Property(f"{TransportType} for {FreightGroup} on day {
 TransportType.y_bin_tra = Property(f"{TransportType} for {FreightGroup} on day {Integer:t} has {Float:bin_tra}")
 x_qty_tra = Float.ref()
 y_bin_tra = Float.ref()
-x_qty_tra_var = problem.solve_for(
+problem.solve_for(
     TransportType.x_qty_tra(fg, t, x_qty_tra),
     lower=0,
     name=["x_qty_tra", TransportType.name, fg.name, t],
     where=[t == std.common.range(fg.tra_start_t, fg.tra_end_t + 1)],
 )
-y_bin_tra_var = problem.solve_for(
+problem.solve_for(
     TransportType.y_bin_tra(fg, t, y_bin_tra),
     type="bin",
     name=["y_bin_tra", TransportType.name, fg.name, t],

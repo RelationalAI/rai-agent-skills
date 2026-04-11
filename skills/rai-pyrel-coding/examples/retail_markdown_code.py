@@ -36,12 +36,12 @@ Product.x_sales = model.Property(f"{Product} in {Week} at {Discount} has {Float:
 
 # --- .where() joins binding multiple refs in one fragment ---
 problem = Problem(model, Float)
-x_select_var = problem.solve_for(
+problem.solve_for(
     Product.x_select(w, d, x),
     type="bin",
     name=["select", Product.name, w.num, d.discount_pct],
 )
-x_sales_var = problem.solve_for(
+problem.solve_for(
     Product.x_sales(w, d, y),
     type="cont",
     lower=0,

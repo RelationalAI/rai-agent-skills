@@ -34,7 +34,7 @@ model.define(Allocation.new(effectiveness=Effectiveness))
 total_budget = 45_000
 
 problem = Problem(model, Float)
-x_spend_var = problem.solve_for(
+problem.solve_for(
     Allocation.x_spend,
     lower=0,
     name=[
@@ -43,7 +43,7 @@ x_spend_var = problem.solve_for(
         Allocation.effectiveness.campaign.name,
     ],
 )
-x_active_var = problem.solve_for(
+problem.solve_for(
     Allocation.x_active,
     type="bin",
     name=[

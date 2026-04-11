@@ -118,14 +118,14 @@ model.define(
 
 # --- Problem setup ---
 problem = Problem(model, Float)
-x_assigned_var = problem.solve_for(
+problem.solve_for(
     Selection.x_assigned,
     type="bin",
     name=["assigned", Selection.slot.worker.name, Selection.slot.task.name],
 )
-x_excess_hours_var = problem.solve_for(Worker.x_excess_hours, type="cont", name=["excess", Worker.name], lower=0)
-x_served_var = problem.solve_for(Task.x_served, type="cont", name=["served", Task.name], lower=0)
-x_unmet_var = problem.solve_for(Task.x_unmet, type="cont", name=["unmet", Task.name], lower=0)
+problem.solve_for(Worker.x_excess_hours, type="cont", name=["excess", Worker.name], lower=0)
+problem.solve_for(Task.x_served, type="cont", name=["served", Task.name], lower=0)
+problem.solve_for(Task.x_unmet, type="cont", name=["unmet", Task.name], lower=0)
 
 # Constraint: only assign available workers
 problem.satisfy(model.require(Selection.x_assigned <= Selection.slot.available))

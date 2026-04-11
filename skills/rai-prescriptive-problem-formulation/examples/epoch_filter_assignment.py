@@ -59,7 +59,7 @@ model.define(Assignment.new(developer=Developer, issue=Issue, sprint=Sprint)).wh
 
 # --- Problem ---
 problem = Problem(model, Float)
-x_assigned_var = problem.solve_for(
+problem.solve_for(
     Assignment.x_assigned,
     type="bin",
     name=[

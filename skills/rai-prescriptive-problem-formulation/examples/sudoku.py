@@ -30,7 +30,7 @@ problem = Problem(model, Integer)
 # --- Variable: cell[i,j] = value at row i, column j (1-9) ---
 i, j, x = Integer.ref().alias("i"), Integer.ref().alias("j"), Integer.ref().alias("x")
 cell = model.Property(f"cell {Integer:i} {Integer:j} is {Integer:x}")
-cell_var = problem.solve_for(
+problem.solve_for(
     cell(i, j, x),
     type="int",
     lower=1,

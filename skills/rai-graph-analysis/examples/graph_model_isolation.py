@@ -122,7 +122,7 @@ BUDGET = 300.0
 Site.x_invest = model.Property(f"{Site} investment is {Float:x}")
 
 problem = Problem(model, Float)
-x_invest_var = problem.solve_for(Site.x_invest, lower=0, name=["invest", Site.name])
+problem.solve_for(Site.x_invest, lower=0, name=["invest", Site.name])
 
 problem.satisfy(model.require(sum(Site.x_invest) <= BUDGET))
 problem.satisfy(model.require(Site.x_invest <= 10 * Site.operating_cost))

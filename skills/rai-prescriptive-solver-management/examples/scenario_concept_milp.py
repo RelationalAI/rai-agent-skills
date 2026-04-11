@@ -86,12 +86,12 @@ ProjectRef = Project.ref()
 UpgradeRef = Upgrade.ref()
 
 problem = Problem(model, Float)
-x_approved_var = problem.solve_for(
+problem.solve_for(
     Project.x_approved(Scenario, x_approved),
     type="bin",
     name=["proj", Scenario.name, Project.name],
 )
-x_selected_var = problem.solve_for(
+problem.solve_for(
     Upgrade.x_selected(Scenario, x_selected),
     type="bin",
     name=["upg", Scenario.name, Upgrade.substation.name, Upgrade.capacity_added],

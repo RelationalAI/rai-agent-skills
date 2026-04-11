@@ -85,7 +85,7 @@ Site.centrality = graph.eigenvector_centrality()
 Site.x_invest = model.Property(f"{Site} investment is {Float:x}")
 
 problem = Problem(model, Float)
-x_invest_var = problem.solve_for(Site.x_invest, lower=0, name=["invest", Site.name])
+problem.solve_for(Site.x_invest, lower=0, name=["invest", Site.name])
 
 # Total budget constraint
 budget = 500.0

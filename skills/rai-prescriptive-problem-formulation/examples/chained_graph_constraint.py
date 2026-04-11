@@ -90,7 +90,7 @@ MIN_CENTRALITY_FACTOR = 150  # minimum allocation = centrality * this factor
 Site.x_alloc = model.Property(f"{Site} has allocation {Float:x}")
 
 problem = Problem(model, Float)
-x_alloc_var = problem.solve_for(Site.x_alloc, lower=0, name=["alloc", Site.name])
+problem.solve_for(Site.x_alloc, lower=0, name=["alloc", Site.name])
 
 # Constraint: total allocation within budget
 problem.satisfy(model.require(sum(Site.x_alloc) <= TOTAL_BUDGET))

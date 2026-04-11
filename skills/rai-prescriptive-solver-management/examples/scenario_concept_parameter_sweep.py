@@ -91,7 +91,7 @@ quad_cost = (
 
 # --- Solve all scenarios at once ---
 problem = Problem(model, Float)
-x_allocation_var = problem.solve_for(Item.x_allocation(Scenario, x_alloc), name=[Scenario.name, "alloc", Item.index])
+problem.solve_for(Item.x_allocation(Scenario, x_alloc), name=[Scenario.name, "alloc", Item.index])
 problem.satisfy(bounds)
 problem.satisfy(budget_ok)
 problem.satisfy(benefit_ok)

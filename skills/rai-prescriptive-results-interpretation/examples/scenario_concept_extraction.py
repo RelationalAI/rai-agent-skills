@@ -67,7 +67,7 @@ total_budget = 1000
 
 # --- Formulation ---
 problem = Problem(model, Float)
-x_allocation_var = problem.solve_for(Item.x_allocation(Scenario, x_alloc), name=[Scenario.name, "alloc", Item.index])
+problem.solve_for(Item.x_allocation(Scenario, x_alloc), name=[Scenario.name, "alloc", Item.index])
 problem.satisfy(model.where(Item.x_allocation(Scenario, x_alloc)).require(x_alloc >= 0))
 problem.satisfy(model.where(Item.x_allocation(Scenario, x_alloc)).require(sum(x_alloc).per(Scenario) <= total_budget))
 problem.satisfy(

@@ -25,7 +25,7 @@ Worker.available_for = model.Relationship(f"{Worker} is available for {Shift}")
 Worker.x_assign = model.Property(f"{Worker} has {Shift} if {Integer:assigned}")
 x = Integer.ref()
 problem = Problem(model, Integer)
-x_assign_var = problem.solve_for(
+problem.solve_for(
     Worker.x_assign(Shift, x),
     type="bin",
     name=["x", Worker.name, Shift.name],

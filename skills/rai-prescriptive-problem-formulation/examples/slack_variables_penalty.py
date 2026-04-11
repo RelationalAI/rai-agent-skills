@@ -47,11 +47,11 @@ problem = Problem(model, Float)
 
 # Decision: flow on each route
 Route.x_flow = model.Property(f"{Route} has {Float:flow}")
-x_flow_var = problem.solve_for(Route.x_flow, name=["flow", Route.id], lower=0, upper=Route.capacity)
+problem.solve_for(Route.x_flow, name=["flow", Route.id], lower=0, upper=Route.capacity)
 
 # Slack: unmet demand per demand order
 Demand.x_unmet = model.Property(f"{Demand} has {Float:unmet}")
-x_unmet_var = problem.solve_for(Demand.x_unmet, name=["unmet", Demand.id], lower=0)
+problem.solve_for(Demand.x_unmet, name=["unmet", Demand.id], lower=0)
 
 # Forcing constraint: flow into location/product + slack >= demand
 D, R = Demand.ref(), Route.ref()

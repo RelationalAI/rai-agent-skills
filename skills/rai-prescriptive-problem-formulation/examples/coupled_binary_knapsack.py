@@ -33,8 +33,8 @@ UpgradeRef = Upgrade.ref()
 budget = 2_000_000_000
 
 problem = Problem(model, Float)
-x_approved_var = problem.solve_for(Project.x_approved, type="bin", name=Project.name)
-x_selected_var = problem.solve_for(Upgrade.x_selected, type="bin", name=["upg", Upgrade.substation.name])
+problem.solve_for(Project.x_approved, type="bin", name=Project.name)
+problem.solve_for(Upgrade.x_selected, type="bin", name=["upg", Upgrade.substation.name])
 
 # --- Capacity expansion constraint ---
 # Approved project demand at each substation <= existing capacity + upgrade capacity

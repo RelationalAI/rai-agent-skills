@@ -68,7 +68,7 @@ SiteSKU.x_inv = Property(f"{SiteSKU} at end of week {Integer:t} has inventory {F
 x_prod, x_inv = Float.ref(), Float.ref()
 
 problem = Problem(model, Float)
-x_prod_var = problem.solve_for(
+problem.solve_for(
     SiteSKU.x_prod(t, x_prod),
     type="cont",
     lower=0,
@@ -76,7 +76,7 @@ x_prod_var = problem.solve_for(
     name=["prod", SiteSKU.site_id, SiteSKU.sku_id, t],
     where=[t == weeks],
 )
-x_inv_var = problem.solve_for(
+problem.solve_for(
     SiteSKU.x_inv(t, x_inv),
     type="cont",
     lower=0,

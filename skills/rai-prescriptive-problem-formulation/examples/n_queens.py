@@ -38,7 +38,7 @@ no_attacks = model.where(Qi.row < Qj.row).require(
 
 # --- Problem setup ---
 problem = Problem(model, Integer)
-column_var = problem.solve_for(Queen.column, name=["x", Queen.row], type="int", lower=0, upper=n - 1)
+problem.solve_for(Queen.column, name=["x", Queen.row], type="int", lower=0, upper=n - 1)
 problem.satisfy(no_attacks, name=["no_attack", Qi.row, Qj.row])
 
 # --- Solve ---

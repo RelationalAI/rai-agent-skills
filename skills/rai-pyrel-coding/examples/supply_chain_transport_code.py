@@ -28,7 +28,7 @@ departure_days = std.common.range(1, 5)
 # Inventory variable per freight group per day
 FreightGroup.x_inv = model.Property(f"{FreightGroup} on day {Integer:t} has {Float:inv}")
 x_inv = Float.ref()
-x_inv_var = problem.solve_for(
+problem.solve_for(
     FreightGroup.x_inv(t, x_inv),
     type="cont",
     lower=0,
@@ -39,7 +39,7 @@ x_inv_var = problem.solve_for(
 # Standalone Property (not attached to any concept) — per-day TL indicator
 bin_tl = model.Property(f"departure day {Integer:t} has {Float:bin_tl}")
 y_bin_tl = Float.ref()
-y_bin_tl_var = problem.solve_for(bin_tl(t, y_bin_tl), type="bin", name=["y_bin_tl", t], where=[t == departure_days])
+problem.solve_for(bin_tl(t, y_bin_tl), type="bin", name=["y_bin_tl", t], where=[t == departure_days])
 
 # --- LTL piecewise cost with self-join on segment refs ---
 LTLSegment.x_rem_ltl = model.Property(f"{LTLSegment} on day {Integer:t} has {Float:rem_ltl}")
@@ -47,14 +47,14 @@ LTLSegment.y_bin_ltl = model.Property(f"{LTLSegment} on day {Integer:t} has {Flo
 x_rem_ltl = Float.ref()
 y_bin_ltl_ref = Float.ref()
 
-x_rem_ltl_var = problem.solve_for(
+problem.solve_for(
     LTLSegment.x_rem_ltl(t, x_rem_ltl),
     type="cont",
     lower=0,
     name=["rem_ltl", LTLSegment.seg, t],
     where=[t == departure_days],
 )
-y_bin_ltl_var = problem.solve_for(
+problem.solve_for(
     LTLSegment.y_bin_ltl(t, y_bin_ltl_ref),
     type="bin",
     name=["bin_ltl", LTLSegment.seg, t],

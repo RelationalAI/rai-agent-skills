@@ -75,7 +75,7 @@ RISK_SURCHARGE = 5.0
 Supplier.x_flow = model.Property(f"{Supplier} has flow {Float:x}")
 
 problem = Problem(model, Float)
-x_flow_var = problem.solve_for(Supplier.x_flow, lower=0, upper=Supplier.capacity, name=["flow", Supplier.name])
+problem.solve_for(Supplier.x_flow, lower=0, upper=Supplier.capacity, name=["flow", Supplier.name])
 
 # Constraint: meet total demand
 problem.satisfy(model.require(sum(Supplier.x_flow) >= TOTAL_DEMAND))

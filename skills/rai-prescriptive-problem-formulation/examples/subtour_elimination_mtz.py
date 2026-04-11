@@ -43,11 +43,11 @@ problem = Problem(model, Float)
 
 # Binary: x[i,j] = 1 if edge (i,j) is in the tour
 Edge.x = model.Property(f"{Edge} is selected if {Float:x}")
-x_var = problem.solve_for(Edge.x, type="bin", name=["x", Edge.i, Edge.j])
+problem.solve_for(Edge.x, type="bin", name=["x", Edge.i, Edge.j])
 
 # Integer: u[v] = MTZ auxiliary ordering (upper bound from Relationship)
 Node.u = model.Property(f"{Node} has auxiliary value {Float:u}")
-u_var = problem.solve_for(Node.u, name=["u", Node.v], type="int", lower=1, upper=node_count)
+problem.solve_for(Node.u, name=["u", Node.v], type="int", lower=1, upper=node_count)
 
 # --- Objective ---
 problem.minimize(sum(Edge.dist * Edge.x))

@@ -52,7 +52,7 @@ model.where(
 # --- Decision variable ---
 Item.x_allocation = model.Property(f"{Item} allocation is {Float:x}")
 problem = Problem(model, Float)
-x_allocation_var = problem.solve_for(Item.x_allocation, name=["alloc", Item.index])
+problem.solve_for(Item.x_allocation, name=["alloc", Item.index])
 
 # --- Constraints ---
 # Non-negative allocations

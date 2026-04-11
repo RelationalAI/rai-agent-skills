@@ -31,7 +31,7 @@ problem = Problem(model, Float)
 
 # Binary: select[product, week, discount] = 1 if that discount is active
 Product.x_select = model.Property(f"{Product} in {Week} has {Discount} if {Float:x}")
-x_select_var = problem.solve_for(
+problem.solve_for(
     Product.x_select(w, d, x),
     type="bin",
     name=["select", Product.name, w.num, d.discount_pct],
@@ -39,7 +39,7 @@ x_select_var = problem.solve_for(
 
 # Continuous: sales[product, week, discount] = units sold at that discount level
 Product.x_sales = model.Property(f"{Product} in {Week} at {Discount} has {Float:y}")
-x_sales_var = problem.solve_for(
+problem.solve_for(
     Product.x_sales(w, d, y),
     type="cont",
     lower=0,
@@ -48,7 +48,7 @@ x_sales_var = problem.solve_for(
 
 # Continuous: cumulative sales[product, week]
 Product.x_cuml = model.Property(f"{Product} up to {Week} has {Float:z}")
-x_cuml_var = problem.solve_for(Product.x_cuml(w, z), type="cont", lower=0, name=["cuml", Product.name, w.num])
+problem.solve_for(Product.x_cuml(w, z), type="cont", lower=0, name=["cuml", Product.name, w.num])
 
 # --- Constraints ---
 # One-hot: exactly one discount level per product-week

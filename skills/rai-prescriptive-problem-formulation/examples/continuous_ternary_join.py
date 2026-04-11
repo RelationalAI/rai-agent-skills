@@ -21,7 +21,7 @@ Food.contains = model.Property(f"{Food} contains {Nutrient} in {Float:qty}")
 # Continuous quantity of each food; lower=0 enforces non-negativity
 Food.x_amount = model.Property(f"{Food} has {Float:amount}")
 problem = Problem(model, Float)
-x_amount_var = problem.solve_for(Food.x_amount, name=Food.name, lower=0)
+problem.solve_for(Food.x_amount, name=Food.name, lower=0)
 
 # --- Nutritional constraint ---
 # qty binds the third field of the ternary property Food.contains(Nutrient, qty)

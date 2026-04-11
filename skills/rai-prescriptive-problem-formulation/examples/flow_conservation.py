@@ -23,7 +23,7 @@ model.define(Edge.new(edge_data.to_schema()))
 # Flow on each edge, non-negative and bounded by capacity
 Edge.x_flow = model.Property(f"{Edge} has {Float:flow}")
 problem = Problem(model, Float)
-x_flow_var = problem.solve_for(Edge.x_flow, name=["x", Edge.i, Edge.j], lower=0, upper=Edge.cap)
+problem.solve_for(Edge.x_flow, name=["x", Edge.i, Edge.j], lower=0, upper=Edge.cap)
 
 # --- Flow conservation constraint ---
 # Two independent refs scan all edges: Ei for outflow, Ej for inflow

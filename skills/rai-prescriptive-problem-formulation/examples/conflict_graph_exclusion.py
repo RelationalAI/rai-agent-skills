@@ -36,7 +36,7 @@ ScheduleA = Schedule.ref()
 ScheduleB = Schedule.ref()
 
 problem = Problem(model, Float)
-x_assigned_var = problem.solve_for(
+problem.solve_for(
     Schedule.x_assigned,
     type="bin",
     name=["sched", Schedule.machine.name, Schedule.slot.day],
