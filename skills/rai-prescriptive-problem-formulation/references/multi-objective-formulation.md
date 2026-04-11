@@ -115,13 +115,13 @@ for eps in epsilon_values:
 
     # Extract solution via Variable.values() structured query
     # Back-pointer name = lowercased concept from the format string (see results-interpretation SKILL.md)
-    # Example for f"{Stock} in {Scenario} has {Float:quantity}":
+    # Example for f"{Stock} has {Float:quantity}":
     value_ref = Float.ref()
     variables_df = model.select(
-        var.stock.name.alias("entity"),       # back-pointer to Stock concept
-        var.scenario.name.alias("scenario"),  # back-pointer to Scenario concept
+        var.stock.name.alias("entity"),  # back-pointer to Stock concept
         value_ref.alias("value"),
     ).where(var.values(0, value_ref)).to_df()
+    # If Scenario-indexed: add var.scenario.name.alias("scenario") to the select
 
     pareto.append({
         "eps": eps,

@@ -77,6 +77,8 @@ def build_and_solve(min_benefit):
 
     # Guard: skip result extraction on non-optimal solves. Without this,
     # si.objective_value is None and Variable.values() yields an empty DataFrame.
+    # Note: TIME_LIMIT / SOLUTION_LIMIT may have a valid incumbent — for production
+    # code, also check `si.objective_value is not None` to preserve usable solutions.
     if si.termination_status not in ("OPTIMAL", "LOCALLY_SOLVED"):
         print("Objective: N/A — skipping result extraction")
         return {
