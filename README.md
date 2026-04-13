@@ -21,6 +21,26 @@ The skills in this repo instruct your agent **how to use the `relationalai` Pyth
 - Generating PyRel enables the agent to create the RelationalAI ontology, extend it with reasoners, and use its outputs. 
 - By executing PyRel, the agent can then query the ontology to answer questions, resolve issues, or help with setup.
 
+## Usage
+**Invoke the skills using the `/rai-` command.**
+
+| # | Skill | Area | Description |
+|:--|:------|:-----|:---------------------------------------------------------------------|
+| 1 | [rai-onboarding](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-onboarding) | Setup | First-time setup — install, connect to Snowflake, validate |
+| 2 | [rai-configuration](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-configuration) | Setup | Config files, connections, authentication, model and engine settings |
+| 3 | [rai-pyrel-coding](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-pyrel-coding) | Development | Language syntax — imports, types, concepts, properties, data loading |
+| 4 | [rai-build-starter-ontology](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-build-starter-ontology) | Ontology | Build a first ontology from Snowflake tables or local data |
+| 5 | [rai-ontology-design](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-ontology-design) | Ontology | Domain modeling — concepts, relationships, data mapping, enrichment |
+| 6 | [rai-rules-authoring](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-rules-authoring) | Ontology | Business rules as PyRel derived properties — validation, classification, alerting |
+| 7 | [rai-querying](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-querying) | Reasoning | Query construction — aggregation, filtering, joins, ordering, export |
+| 8 | [rai-discovery](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-discovery) | Reasoning | Surface answerable questions, classify by reasoner type, route to workflow |
+| 9 | [rai-graph-analysis](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-graph-analysis) | Reasoning | Graph algorithms — centrality, community detection, reachability, similarity |
+| 10 | [rai-prescriptive-problem-formulation](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-prescriptive-problem-formulation) | Reasoning | Formulate optimization — decision variables, constraints, objectives |
+| 11 | [rai-prescriptive-solver-management](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-prescriptive-solver-management) | Reasoning | Solver lifecycle — selection, creation, execution, diagnostics |
+| 12 | [rai-prescriptive-results-interpretation](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-prescriptive-results-interpretation) | Reasoning | Post-solve — solution extraction, status codes, quality, sensitivity |
+| 13 | [rai-cortex-integration](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-cortex-integration) | Operations | Deploy RAI models as Snowflake Cortex Agents |
+| 14 | [rai-health-skill](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-health-skill) | Operations | Diagnose engine performance — memory, CPU, demand metrics, remediation |
+
 ## Prerequisites
 **Assumes `relationalai` (PyRel) v1.0.12+**
 
@@ -94,23 +114,3 @@ In short, download this repo's contents and ask your agent to copy the skills re
 Alternatively, you can download this repo's contents and copy the skills into the Claude app.
 
 ![Claude Desktop plugin directory](doc/claude-desktop-directory.png)
-
-## Usage
-**Invoke the skills using the `/rai-` command.**
-
-| #   | Skill | Workflow Area |
-|-----|-------|----------------|
-| 1   | rai-onboarding | Setup |
-| 2   | rai-configuration | Setup |
-| 3   | rai-pyrel-coding | Development Reference |
-| 4   | rai-build-starter-ontology | Ontology |
-| 5   | rai-ontology-design | Ontology |
-| 6   | rai-rules-authoring | Ontology |
-| 7   | rai-querying | Reasoning |
-| 8   | rai-discovery | Reasoning |
-| 9   | rai-graph-analysis | Reasoning |
-| 10  | rai-prescriptive-problem-formulation | Reasoning |
-| 11  | rai-prescriptive-solver-management | Reasoning |
-| 12  | rai-prescriptive-results-interpretation | Reasoning |
-| 13  | rai-cortex-integration | Integration & Operations |
-| 14  | rai-health-skill | Integration & Operations |
