@@ -2,7 +2,7 @@
 
 - [Solver-Specific Parameters](#solver-specific-parameters)
 - [Solve Pipeline](#solve-pipeline)
-- [Re-Solve Behavior](#re-solve-behavior-103)
+- [Re-Solve Behavior](#re-solve-behavior-sdk--103)
 - [Warm Starting](#warm-starting)
 - [Scenario Analysis](#scenario-analysis-what-if)
 
@@ -51,7 +51,7 @@ problem.solve("ipopt", time_limit_sec=60, max_iter=1000, tol=1e-8, mu_strategy="
 
 Solving requires network connectivity — `problem.solve()` dispatches to the RAI solver service, which runs the selected backend (HiGHS, Gurobi, Ipopt, MiniZinc) and returns results. There is no local solver.
 
-## Re-Solve Behavior (1.0.3+)
+## Re-Solve Behavior (SDK >= 1.0.3)
 
 Re-solving the same `Problem` instance is safe. Result import uses replace semantics — if a second solve's result import fails, previous results remain intact. No degraded state.
 
