@@ -156,7 +156,7 @@ Some questions require multiple reasoners in sequence. Each stage's output enric
 Each stage enriches the shared ontology with new properties. Downstream stages consume those properties as if they were base data.
 
 - **Enrichment write-back:** A stage's output becomes a new `Property` or `Relationship` on an existing concept via `model.define()`. Downstream stages reference it like any other property.
-- **DataFrame bridge (SDK < 1.0.13 only):** When a stage runs on a separate `Model` (see `rai-graph-analysis` [graph-construction.md](../rai-graph-analysis/references/graph-construction.md#graph-model-separation)), extract results to a DataFrame and load into the main model via `model.data()`. In SDK >= 1.0.13, graph and prescriptive work on the same Model — no DataFrame bridge needed.
+- **DataFrame bridge:** When a stage produces results as a pandas DataFrame (e.g., from an external API), load into the model via `model.data()` and bind with `model.define()`.
 - **Fallback operator (`|`):** Allows downstream stages to degrade gracefully when an upstream enrichment is missing for some entities — e.g., `Entity.predicted_value | Entity.current_value`.
 
 ---
