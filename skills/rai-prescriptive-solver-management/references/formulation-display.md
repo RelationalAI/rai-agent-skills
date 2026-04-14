@@ -152,7 +152,7 @@ Use `print_only=True` to inspect the formulation without actually solving. Works
 
 ## Re-solving the Same Problem
 
-The same `Problem` instance can be solved multiple times. Constraints accumulate (cannot be removed), but results are properly versioned. Each `solve()` call gets a fresh model ID and imports results with solve-counter offsets to avoid conflicts.
+The same `Problem` instance can be solved multiple times. Constraints accumulate (cannot be removed). Each `solve()` call produces fresh results — previous results are properly replaced.
 
 ```python
 # First solve

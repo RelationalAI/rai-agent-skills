@@ -469,7 +469,6 @@ model.where(Site.centrality_score < 0.1).define(Site.is_at_risk())
 | Empty graph when extending existing model | Script creates `Model("name")` without importing base model definitions — concepts exist but have no instances | Import the base model module (e.g., `from my_model import model, Site`) so base `define()` rules are in scope |
 | `ValidationError: Unused variable` when using `rank()` with graph properties | Using `rank(desc(graph.Node.betweenness))` alongside other graph properties in `select()` triggers the unused variable validator | Sort in pandas instead: `.to_df().sort_values("betweenness", ascending=False).reset_index(drop=True)` — avoid `rank()` in graph queries |
 | `RAIException: Ungrounded variables` when mixing chained derived properties + Graph + boolean rules | Defining chained derived properties (e.g., `peak_forecast` → `future_headroom`) alongside Graph construction and boolean Relationship rules in the same model causes ungrounded variable errors | Query raw data via simple selects and compute derived values / rules in pandas. Root cause is related to the type inference limit noted above — chained derivations compound the issue |
-| `UnsupportedRecursionError` in multi-reasoner pipelines | Mixing graph algorithms and prescriptive result extraction on the same `Model` triggered recursion errors. **Fixed in SDK >= 1.0.13.** | Upgrade to SDK >= 1.0.13 and use domain concepts directly as `node_concept` on a single model. |
 
 ---
 
