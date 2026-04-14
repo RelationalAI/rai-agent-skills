@@ -1,5 +1,3 @@
-from typing import Any
-
 import relationalai.semantics as rai
 
 model = rai.Model("customers_orders")
@@ -44,5 +42,4 @@ order.define(
 Order.cogs = model.Property(f"{Order} had total cost of goods sold {rai.Float}")
 order.define(
     Order.cogs(order_source.cogs))
-
 

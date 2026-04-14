@@ -1,5 +1,5 @@
 import relationalai.semantics as rai
-from cortex.model.core import model, Customer, Order
+from .core import model, Customer, Order
 
 Customer.ltv = model.Property(f"{Customer} has lifetime value {rai.Float}")
 model.define(
@@ -10,11 +10,11 @@ model.define(
 
 Customer.ValueSegment = model.Concept("CustomerValueSegment", identify_by={"name": rai.String})
 CVS = Customer.ValueSegment
-CVS.Low = model.Concept("CustomerValueSegmentLow", extends=[CVS])
+CVS.Low = model.Concept("CustomerValueSegmentLow", extends=[CVS])  # type: ignore[reportAttributeAccessIssue, reportArgumentType]
 model.define(CVS.Low.new(name="low"))
-CVS.Medium = model.Concept("CustomerValueSegmentMedium", extends=[CVS])
+CVS.Medium = model.Concept("CustomerValueSegmentMedium", extends=[CVS])  # type: ignore[reportAttributeAccessIssue, reportArgumentType]
 model.define(CVS.Medium.new(name="medium"))
-CVS.High = model.Concept("CustomerValueSegmentHigh", extends=[CVS])
+CVS.High = model.Concept("CustomerValueSegmentHigh", extends=[CVS])  # type: ignore[reportAttributeAccessIssue, reportArgumentType]
 model.define(CVS.High.new(name="high"))
 Customer.value_segment = model.Property(f"{Customer} comprises {CVS}")
 model.define(

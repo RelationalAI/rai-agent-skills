@@ -1,6 +1,5 @@
 **/.DS_Store
 .claude/
-
 # PyRel local execution artifacts (produced by running examples against the SDK)
 **/__pycache__/
 debug.jsonl
