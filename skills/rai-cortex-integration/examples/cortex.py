@@ -3,7 +3,6 @@
 # capabilities of the RAI Model.
 from snowflake import snowpark
 
-from relationalai.semantics import Model
 from relationalai.config import SnowflakeConnection, create_config
 from relationalai.agent.cortex import CortexAgentManager, DeploymentConfig, discover_imports, ToolRegistry
 
@@ -24,9 +23,9 @@ manager = CortexAgentManager(
 # - This function is executed during each sproc invocation
 #   It must be self-contained — don't close over local
 #   runtime state (sessions, connections, dataframes, etc.).
-def init_tools(model: Model):
+def init_tools():
     # IMPORTANT only import your RelationalAI Model and dependent code
-    #           inside init_tools handler
+    #           inside init_tools so it runs within the sproc session.
     from .model.core import model
     return ToolRegistry().add(
         model=model,  # Expose model through tools
