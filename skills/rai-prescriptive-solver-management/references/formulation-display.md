@@ -143,7 +143,7 @@ After calling `problem.solve()` with `print_format=`, access the text representa
 problem.solve("highs", print_format="lp", print_only=True)
 print(problem.solve_info().printed_model)
 
-# Available formats: "moi" (default text), "latex", "mof" (JSON), "lp", "mps", "nl" (AMPL)
+# Available formats: "moi" (MathOptInterface human-readable), "latex", "mof" (MathOptInterface JSON), "lp", "mps", "nl" (AMPL)
 ```
 
 Use `print_only=True` to inspect the formulation without actually solving. Works with or without `print_only`.

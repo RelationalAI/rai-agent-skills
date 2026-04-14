@@ -297,7 +297,7 @@ Compilation or solver errors prevented a solution.
 **What to tell users:** "The model could not be solved due to a technical error: [error message]. This needs to be fixed before we can get results."
 **Next steps:** Check compilation output, fix expression syntax, verify all referenced properties exist.
 
-### Re-Solve Behavior
+### Re-Solve Behavior (1.0.3+)
 
 Re-solving the same `Problem` instance is safe (replace semantics). See `rai-prescriptive-solver-management` for details.
 
