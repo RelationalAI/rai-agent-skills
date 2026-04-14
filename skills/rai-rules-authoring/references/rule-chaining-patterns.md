@@ -53,13 +53,13 @@ model.where(Order.customer(Customer), Order.amount <= Customer.credit_limit).def
 Order.x_assign = model.Property(f"{Order} has {Float:x_assign}")
 
 # from relationalai.semantics.reasoners.prescriptive import Problem
-p = Problem(model, Float)
-p.solve_for(Order.x_assign, type="bin", where=[Order.is_compliant()])
+problem = Problem(model, Float)
+problem.solve_for(Order.x_assign, type="bin", where=[Order.is_compliant()])
 
 # Derived value as objective weight
 Customer.ltv = model.Property(f"{Customer} has {Float:ltv}")
 model.define(Customer.ltv(aggregates.sum(Order.amount).per(Customer).where(Order.customer(Customer))))
-p.maximize(aggregates.sum(Order.x_assign * Customer.ltv).where(Order.customer(Customer)))
+problem.maximize(aggregates.sum(Order.x_assign * Customer.ltv).where(Order.customer(Customer)))
 ```
 
 ### Graph → Rules

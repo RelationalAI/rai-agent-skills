@@ -130,7 +130,7 @@ from relationalai.semantics.std.aggregates import string_join, rank, desc, asc
 # Query: average order value per customer
 aggs.avg(Order.total).per(Customer).alias("avg_order_value")
 
-# WILL RAISE NotImplementedError if used in p.satisfy() or p.minimize/maximize
+# WILL RAISE NotImplementedError if used in problem.satisfy() or problem.minimize/maximize
 # Solver-supported aggregates: sum, min, max, count only
 ```
 
@@ -358,10 +358,10 @@ model.where(Order.amount > 0).require(Order.customer)
 
 **Requirements fire at `to_df()` / `exec()` time** — not at definition time. There is no `.check()` or `.validate()` method.
 
-**In solver context:** `p.satisfy(model.require(expr))` promotes the requirement to a solver constraint:
+**In solver context:** `problem.satisfy(model.require(expr))` promotes the requirement to a solver constraint:
 
 ```python
-p.satisfy(model.require(supply >= demand))  # hard constraint in the solver
+problem.satisfy(model.require(supply >= demand))  # hard constraint in the solver
 ```
 
 ---

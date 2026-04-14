@@ -9,7 +9,7 @@ Additional known limitations for the prescriptive problem formulation skill. For
 Name constraints with list expressions for readable debug output:
 
 ```python
-p.satisfy(model.require(
+problem.satisfy(model.require(
     Edge.x_flow <= Edge.capacity
 ), name=["capacity", Edge.i, Edge.j])
 # Produces names like: "capacity_1_3", "capacity_2_5"
@@ -17,23 +17,28 @@ p.satisfy(model.require(
 
 List elements are joined with underscores. Use entity identifiers (IDs, names) in the list for per-entity constraint names.
 
-## Re-Solve Behavior (1.0.3+)
+## Re-Solve Behavior (SDK >= 1.0.3)
 
-Re-solving the same `Problem` instance is safe. Result import uses `experimental.load_data` with replace semantics — previous results remain intact if a subsequent solve fails. The inline formulation pattern (fresh `Problem` per scenario loop iteration) is still useful for clean separation of scenarios, but is no longer required for error recovery.
+Re-solving the same `Problem` instance is safe. Result import uses replace semantics — previous results remain intact if a subsequent solve fails. The inline formulation pattern (fresh `Problem` per scenario loop iteration) is still useful for clean separation of scenarios, but is no longer required for error recovery.
 
 **Multi-scenario re-solve pattern:**
 
-When solving multiple scenarios in a loop (e.g., varying parameters, what-if analysis), create a **fresh `Problem` per iteration**, use `populate=False` on `solve_for`, and extract results via `variable_values().to_df()`. This avoids `Duplicate relationship` / `FDError` caused by writing conflicting results back to the graph on each iteration.
+When solving multiple scenarios in a loop (e.g., varying parameters, what-if analysis), create a **fresh `Problem` per iteration**, use `populate=False` on `solve_for`, and extract results via `Variable.values()`. This avoids `Duplicate relationship` / `FDError` caused by writing conflicting results back to the graph on each iteration.
 
 ```python
 results = []
 for scenario in scenarios:
-    p = Problem(model, Float)               # fresh Problem each iteration
-    p.solve_for(Entity.x_var, populate=False, ...)
-    p.satisfy(...)
-    p.minimize(...)
-    p.solve(solver, ...)
-    df = p.variable_values().to_df()        # extract without populating graph
+    problem = Problem(model, Float)               # fresh Problem each iteration
+    var = problem.solve_for(Entity.x_var, populate=False, ...)
+    problem.satisfy(...)
+    problem.minimize(...)
+    problem.solve(solver, ...)
+    # Preferred: use Variable.values() for structured access via back-pointers
+    value_ref = Float.ref()
+    df = model.select(
+        var.entity.name.alias("entity"),
+        value_ref.alias("value"),
+    ).where(var.values(0, value_ref)).to_df()
     df["scenario"] = scenario
     results.append(df)
 all_results = pd.concat(results)
@@ -43,11 +48,11 @@ See [examples/partitioned_subproblem.py](../examples/partitioned_subproblem.py) 
 
 ## `| 0` Fallback in Solver Constraints
 
-The `| 0` (default-value) operator inside `p.satisfy(model.require(...))` with nested `sum().per().where()` aggregation causes `TyperError: Type errors detected during type inference`. This occurs when the RHS of a constraint combines a property with a conditional aggregation that uses `| 0` as a fallback.
+The `| 0` (default-value) operator inside `problem.satisfy(model.require(...))` with nested `sum().per().where()` aggregation causes `TyperError: Type errors detected during type inference`. This occurs when the RHS of a constraint combines a property with a conditional aggregation that uses `| 0` as a fallback.
 
 ```python
 # BROKEN — | 0 inside solver constraint with nested aggregation
-p.satisfy(model.require(
+problem.satisfy(model.require(
     Entity.supply >= sum(Flow.x_qty).per(Entity).where(Flow.dest(Entity)) | 0
 ))
 
@@ -55,7 +60,7 @@ p.satisfy(model.require(
 combos = pd.merge(entity_df, flow_df, how="left", on="entity_id")
 combos["inflow"] = combos.groupby("entity_id")["qty"].transform("sum").fillna(0)
 model.define(Entity.filter_by(id=entity_data.entity_id).inflow(entity_data.inflow))
-p.satisfy(model.require(Entity.supply >= Entity.inflow))
+problem.satisfy(model.require(Entity.supply >= Entity.inflow))
 ```
 
 **Workaround:** Pre-compute the aggregation in Python (e.g., enumerate combinations and build a denormalized parameter DataFrame), then pass the result as a flat property on the decision concept. Avoid nested `per().where() | 0` inside solver constraints.

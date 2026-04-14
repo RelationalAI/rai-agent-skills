@@ -59,10 +59,10 @@ After a solve completes, interpret results in this order:
 ## Quick Reference
 
 ```python
-si = p.solve_info()
+si = problem.solve_info()
 if si.termination_status == "OPTIMAL":
-    df = p.variable_values().to_df()
-    df = df[df["value"].astype(float) > 1e-6]  # filter solver noise
+    # With populate=True (default): query via model.select()
+    # With populate=False: use Variable.values() — see Solution Extraction below
     print(f"Objective: {si.objective_value}")
 ```
 
@@ -74,21 +74,21 @@ After a successful solve, extract results using result attributes and model quer
 
 ### Result Attributes
 
-After `p.solve()`, result attributes are available via two interfaces:
+After `problem.solve()`, result attributes are available via two interfaces:
 
 **Engine-side (Relationships)** — usable in `model.require()`, `model.select()`, and solver expressions:
 
 | Method | Return type | Description |
 |--------|-------------|-------------|
-| `p.termination_status()` | Relationship | `"OPTIMAL"`, `"INFEASIBLE"`, `"DUAL_INFEASIBLE"`, `"TIME_LIMIT"`, `"LOCALLY_SOLVED"`, `"SOLUTION_LIMIT"` |
-| `p.objective_value()` | Relationship | Optimal objective value |
-| `p.num_points()` | Relationship | Number of solutions returned |
-| `p.error()` | Relationship | Error message tuple (if solve failed) |
-| `p.printed_model()` | Relationship | Text representation (with `print_format=`) |
-| `p.num_variables()` | Relationship | Total registered variables |
-| `p.num_constraints()` | Relationship | Total constraints |
-| `p.num_min_objectives()` | Relationship | Number of minimize objectives |
-| `p.num_max_objectives()` | Relationship | Number of maximize objectives |
+| `problem.termination_status()` | Relationship | `"OPTIMAL"`, `"INFEASIBLE"`, `"DUAL_INFEASIBLE"`, `"TIME_LIMIT"`, `"LOCALLY_SOLVED"`, `"SOLUTION_LIMIT"` |
+| `problem.objective_value()` | Relationship | Optimal objective value |
+| `problem.num_points()` | Relationship | Number of solutions returned |
+| `problem.error()` | Relationship | Error message tuple (if solve failed) |
+| `problem.printed_model()` | Relationship | Text representation (with `print_format=`) |
+| `problem.num_variables()` | Relationship | Total registered variables |
+| `problem.num_constraints()` | Relationship | Total constraints |
+| `problem.num_min_objectives()` | Relationship | Number of minimize objectives |
+| `problem.num_max_objectives()` | Relationship | Number of maximize objectives |
 
 **Python-side (`solve_info()`)** — for formatted output, scenario loops, and Python logic:
 
@@ -103,13 +103,13 @@ After `p.solve()`, result attributes are available via two interfaces:
 | `si.printed_model` | `str` | Solver model text (if `print_format=` was set) |
 
 ```python
-p.solve("highs", time_limit_sec=60)
+problem.solve("highs", time_limit_sec=60)
 
 # Engine-side: integrity constraint on status
-model.require(p.termination_status() == "OPTIMAL")
+model.require(problem.termination_status() == "OPTIMAL")
 
 # Python-side: formatted output
-si = p.solve_info()
+si = problem.solve_info()
 si.display()
 print("status:", si.termination_status)
 print("objective:", si.objective_value)
@@ -124,7 +124,7 @@ Where solved values appear depends on the `populate` parameter in `solve_for()`:
 | `populate` setting | Where results live | How to access | When to use |
 |---|---|---|---|
 | `populate=True` (default) | Written back into model properties | `model.select()` queries | Standard single-solve workflows |
-| `populate=False` | Solver-level only | `p.variable_values()` | Scenario loops, multi-solve workflows with shared variables |
+| `populate=False` | Solver-level only | `Variable.values(sol_index, value_ref)` on the `ProblemVariable` returned by `solve_for()` | Scenario loops, multi-solve workflows with shared variables |
 
 **Primary approach: `model.select()` with `populate=True` (default, recommended)**
 
@@ -151,39 +151,64 @@ model.select(
 ).where(Edge.x_edge > 0.5).inspect()
 ```
 
-**Fallback approach: `p.variable_values()` with `populate=False`**
+**`populate=False` approach: `Variable.values()` on ProblemVariable**
 
-Use `populate=False` + `variable_values()` only for loop-based entity exclusion/partition scenarios. For Scenario Concept workflows, use `model.select()` — the scenario dimension is part of the variable identity. For loop workflows where multiple Problems share decision variables, `populate=False` prevents one solve from overwriting another's results:
+Use `populate=False` + `Variable.values()` for loop-based entity exclusion/partition scenarios. For Scenario Concept workflows, use `model.select()` — the scenario dimension is part of the variable identity. For loop workflows where multiple Problems share decision variables, `populate=False` prevents one solve from overwriting another's results.
+
+`solve_for()` returns a `ProblemVariable` — a Concept that can be used in `model.define()`, `model.select()`, and `.ref()`. Call `.values(sol_index, value_ref)` on it to extract solution values.
+
+**Back-pointer naming rule:** each **non-value** field in the Property's format string becomes a back-pointer attribute on the `ProblemVariable`. The **last** field is the value field — you read it via `var.values(sol_idx, val_ref)` and it is NOT a back-pointer. For each non-value field, the back-pointer attribute name is the **explicit `:name` from the format string if present**, otherwise the **lowercased type name**. Examples:
+
+| Property definition | Back-pointers on the returned var | Value field |
+|---|---|---|
+| `f"{Assignment} has {Float:x}"` | `var.assignment` (lowercased type) | `x` |
+| `f"{Edge:e} has {Float:flow}"` | `var.e` (explicit `:e` overrides `edge`) | `flow` |
+| `f"{Queen} is in {Integer:column}"` | `var.queen` | `column` |
+| `f"{Player} in {Integer:week} is in {Integer:group}"` | `var.player`, `var.week` | `group` |
+| `f"cell {Integer:i} {Integer:j} is {Integer:x}"` | `var.i`, `var.j` (no entity concept) | `x` |
+| `f"{MachinePeriod} has {Float:x}"` | `var.machineperiod` (lowercased as-is, NOT `machine_period`) | `x` |
+| `f"{Float:x}"` | none — call `var.values(sol_idx, val)` directly | `x` |
+
+The lowercased type name is the type name converted to lowercase **as-is** — no underscores or snake_case conversion. `MachinePeriod` becomes `machineperiod`, not `machine_period`.
+
+**Silent-failure warning:** `ProblemVariable` is a Concept subclass, and Concepts return a `Chain` from `__getattr__` for unknown attribute names instead of raising. Two common mistakes both silently return a `Chain` and produce empty or garbage results (not an `AttributeError`):
+
+1. Writing `var.edge` when the format string said `{Edge:e}` (explicit `:name` was `:e`).
+2. Writing `var.column` or `var.group` when the name is a **value** field — those are not back-pointers; read them through `var.values(sol_idx, val_ref)`.
+3. Writing `var.machine_period` when the concept is `MachinePeriod` — the correct name is `var.machineperiod` (lowercased, no underscores).
+
+Always match the attribute name to a non-value field name in the format string.
+
+For `solve_for(Assignment.x, ...)` where `x` is defined as `f"{Assignment} has {Float:x}"`, the back-pointer is `var.assignment`:
 
 ```python
-# Must use name=[] for meaningful labels (otherwise all names are "_")
-p.solve_for(Worker.x_assign, type="bin", populate=False,
-            name=["x_assign", Worker.id])
+# solve_for() returns a ProblemVariable concept
+assign_var = problem.solve_for(Assignment.x, type="bin", populate=False)
 
-p.solve("highs")
+problem.solve("highs")
 
-# Solver-level summary
-values_df = p.variable_values().to_df()
-# Returns: name | value
-#          x_assign_1 | 1.0
-#          x_assign_2 | 0.0
+# Extract solution values using Variable.values()
+value_ref = Float.ref()
+df = model.select(
+    assign_var.assignment.worker.name.alias("worker"),
+    value_ref.alias("value"),
+).where(assign_var.values(0, value_ref), value_ref > 0.5).to_df()
+# Returns entity-aware results with proper identity columns
 
-# Multiple solutions (e.g., from MiniZinc with solution_limit)
-all_df = p.variable_values(multiple=True).to_df()
-# Returns: sol_index | name | value (0-based sol_index)
+# For multiple solutions (e.g., from MiniZinc with solution_limit),
+# pass different sol_index values (0-based)
 ```
 
 **Key rules:**
 - Use `model.select()` by default — it gives entity-aware results with proper identity columns
-- Use `variable_values()` only for scenario loops or when you need solver-level inspection
-- With `variable_values()`, always provide `name=[]` using **primitive identity fields** (String/Integer), never relationship refs
-- `name=[]` with relationship refs (e.g., `MachinePeriod.machine`) causes TyperError — use `MachinePeriod.machine.machine_id` or just a string label
-- `variable_values().to_df()` columns are `name` and `value` — not `variable_name`. Check with `df.columns` if unsure
+- Use `Variable.values()` for scenario loops or when you need per-variable extraction with `populate=False`
+- The `ProblemVariable` returned by `solve_for()` is a Concept — you can traverse its relationships in `model.select()` for entity context
+- `satisfy()` returns `ProblemConstraint` and `minimize()`/`maximize()` return `ProblemObjective` — also Concepts usable with `model.define()`, `model.select()`, `.ref()`
 
 **Extraction principles:**
 - **Binary variables:** Filter with `> 0.5`, not `== 1` (numeric tolerance in MIP solvers)
 - **Continuous variables:** Filter with `> 1e-6` to remove near-zero solver noise
-- **Scalar extraction:** `p.solve_info().objective_value` for single values (no query needed)
+- **Scalar extraction:** `problem.solve_info().objective_value` for single values (no query needed)
 - **Always alias:** Use `.alias()` on every output column for clean DataFrames
 
 **Int128 handling:** RAI may return `Int128Array` (nullable). Cast with `.astype(float)` before filtering or `.groupby().agg()`.
@@ -192,7 +217,7 @@ For exporting to Snowflake, multiple solution extraction, iterative solving, and
 
 ### Post-solve constraint verification
 
-`p.verify(*fragments)` checks that the solver's solution satisfies constraints post-solve. Particularly useful for exact solvers (HiGHS MIP, MiniZinc). See `rai-prescriptive-solver-management` for full `verify()` documentation and examples.
+`problem.verify(*fragments)` checks that the solver's solution satisfies constraints post-solve. Particularly useful for exact solvers (HiGHS MIP, MiniZinc). See `rai-prescriptive-solver-management` for full `verify()` documentation and examples.
 
 ---
 
@@ -218,7 +243,7 @@ No solution satisfies all constraints simultaneously. The problem as stated is i
 **Next steps:** Identify the binding conflict, present trade-off options, add slack/penalty variables. A common and valuable path is moving the conflicting hard constraint to the objective with a penalty — feasibility restoration through softening is often more useful than pure diagnosis.
 
 ### Unbounded (DUAL_INFEASIBLE)
-The objective can improve infinitely — the solver can keep making the solution "better" without limit. The MOI status is `"DUAL_INFEASIBLE"` (not `"UNBOUNDED"`).
+The objective can improve infinitely — the solver can keep making the solution "better" without limit. The termination status is `"DUAL_INFEASIBLE"` (not `"UNBOUNDED"`).
 
 **Diagnosis steps:**
 1. Check that all variables have appropriate bounds (especially upper bounds for maximize, lower bounds for minimize).
@@ -272,7 +297,7 @@ Compilation or solver errors prevented a solution.
 **What to tell users:** "The model could not be solved due to a technical error: [error message]. This needs to be fixed before we can get results."
 **Next steps:** Check compilation output, fix expression syntax, verify all referenced properties exist.
 
-### Re-Solve Behavior (1.0.3+)
+### Re-Solve Behavior (SDK >= 1.0.3)
 
 Re-solving the same `Problem` instance is safe (replace semantics). See `rai-prescriptive-solver-management` for details.
 
@@ -286,9 +311,9 @@ The solvability ladder defines progressive quality gates for an optimization for
 |-------|------|---------------|-------|
 | **generates** | Code generates | LLM produced syntactically valid PyRel | Code parses without syntax errors |
 | **compiles** | Compiles | `display()` succeeds — formulation converts to solver-ready form | `display()` returns without error; variables, constraints, objective all registered |
-| **solves** | Solves | Solver accepts the problem and returns a result (any status, no crash/error) | `solve()` completes without exception; `p.solve_info()` returns a status |
-| **optimal** | OPTIMAL | Solver found a proven optimum (or TIME_LIMIT with acceptable gap <5%) | `p.termination_status() == "OPTIMAL"` or `(status == "TIME_LIMIT" and gap < 0.05)` |
-| **non-trivial** | Non-trivial | Solution has meaningful activity — not all zeros, not vacuous | `p.objective_value() != 0`, `non_zero_ratio > 0.01`, not all variables at bounds |
+| **solves** | Solves | Solver accepts the problem and returns a result (any status, no crash/error) | `solve()` completes without exception; `problem.solve_info()` returns a status |
+| **optimal** | OPTIMAL | Solver found a proven optimum (or TIME_LIMIT with acceptable gap <5%) | `problem.termination_status() == "OPTIMAL"` or `(status == "TIME_LIMIT" and gap < 0.05)` |
+| **non-trivial** | Non-trivial | Solution has meaningful activity — not all zeros, not vacuous | `problem.objective_value() != 0`, `non_zero_ratio > 0.01`, not all variables at bounds |
 | **meaningful** | Meaningful | Decisions are actionable — right scale, distribution, entity coverage | Domain-specific: quantities match demand scale, assignments cover tasks, flows balance |
 
 **How to use the ladder:**
@@ -461,6 +486,8 @@ For parameter sweep patterns, scenario comparison tables, and Pareto frontier co
 | Zero objective on minimize | Missing forcing constraints | Add `sum(x).per(Entity) >= Entity.demand` or equivalent |
 | All-zero from join mismatch | Forcing constraints exist but `.where()` joins match zero rows | Verify constraint joins match actual data |
 | Infeasible: demand > capacity | Total demand exceeds supply | Add slack/penalty variables or relax demand constraints |
+| Silent: `problem.termination_status == "OPTIMAL"` (no parens) — always False | `termination_status` on the `Problem` object is a bound method, not a property; comparing a method to a string is never equal and the bug is silent | Read status Python-side: `problem.solve_info().termination_status == "OPTIMAL"` (no parens — `solve_info()` returns a dataclass-like value with a string field). Engine-side inside `model.require(...)`: `problem.termination_status() == "OPTIMAL"` (with parens — that's the engine-side Relationship) |
+| Silent: non-OPTIMAL result extraction returns empty DataFrame / None objective | Loop / scenario workflows extract `Variable.values()` or read `si.objective_value` without checking status first. Infeasible / time-limited solves produce an empty query and `None` objective, silently propagated into downstream code | Always guard: `if si.termination_status not in ("OPTIMAL", "LOCALLY_SOLVED"): continue` (or raise) before touching `si.objective_value` or the extraction query |
 
 For the full pitfalls table (14 entries covering numerical instability, degenerate solutions, wrong aggregation scope, and more), see [references/common-pitfalls.md](references/common-pitfalls.md).
 
@@ -486,7 +513,7 @@ Use this after every solve to ensure result quality:
 | Pattern | Description | File |
 |---|---|---|
 | Scenario Concept results | Results in ontology via `model.select(Scenario.name, ...)`, per-scenario aggregation, comparison queries | [examples/scenario_concept_extraction.py](examples/scenario_concept_extraction.py) |
-| Loop-based results | `variable_values().to_df()`, `solve_info().display()`, status/objective access, scenario comparison table | [examples/loop_based_extraction.py](examples/loop_based_extraction.py) |
+| Loop-based results | `Variable.values()`, `solve_info().display()`, status/objective access, scenario comparison table | [examples/loop_based_extraction.py](examples/loop_based_extraction.py) |
 | Pareto frontier analysis | Tradeoff table, marginal rates + knee detection, allocation shifts + regime detection, ASCII frontier visualization | [examples/pareto_frontier_analysis.py](examples/pareto_frontier_analysis.py) |
 
 ---

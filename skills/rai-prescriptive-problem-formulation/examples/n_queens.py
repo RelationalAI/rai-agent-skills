@@ -37,10 +37,10 @@ no_attacks = model.where(Qi.row < Qj.row).require(
 )
 
 # --- Problem setup ---
-p = Problem(model, Integer)
-p.solve_for(Queen.column, name=["x", Queen.row], type="int", lower=0, upper=n - 1)
-p.satisfy(no_attacks, name=["no_attack", Qi.row, Qj.row])
+problem = Problem(model, Integer)
+problem.solve_for(Queen.column, name=["x", Queen.row], type="int", lower=0, upper=n - 1)
+problem.satisfy(no_attacks, name=["no_attack", Qi.row, Qj.row])
 
 # --- Solve ---
-p.solve("minizinc", time_limit_sec=30)
+problem.solve("minizinc", time_limit_sec=30)
 model.select(Queen.row, Queen.column).inspect()

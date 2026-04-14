@@ -200,7 +200,7 @@ graph.Node.community = graph.louvain()
 
 **Interpretation:** Nodes with the same community label are more densely connected to each other than to nodes in other communities.
 
-**Type note:** Community labels are `Int128Array` — cast with `.astype(int)` before pandas operations.
+**Type note:** Community labels are `Int128Array` — cast with `.astype(int)` before pandas operations and before passing to `model.data()` (Int128Dtype is unrecognized by `model.data()` type inference).
 
 **Non-deterministic:** Louvain may produce different community assignments, counts, and sizes across runs on the same data. Report results as ranges or structural assertions, not exact values.
 
@@ -266,15 +266,17 @@ graph.Node.community = graph.label_propagation()
 
 **Parameters:** None required. Works on directed and undirected.
 
-**Output:** `(node, component_id)` — integer component ID per node.
+**Output:** `(node, component_id_node)` — binary relation. The `component_id` side is itself a **`Node`** (the min-id node of the component), not a raw integer.
 
 ```python
 graph.Node.component = graph.weakly_connected_component()
 ```
 
-**Interpretation:** All nodes with the same component_id can reach each other. A single large component suggests good connectivity; many small components suggest fragmentation.
+**Interpretation:** All nodes with the same `component_id_node` can reach each other. A single large component suggests good connectivity; many small components suggest fragmentation.
 
-**Type note:** Component IDs are `Int128Array` — cast before pandas operations.
+**Type note:** Because the component ID is a Node, how it surfaces in DataFrames depends on the query pattern:
+- **Shorthand / property-assignment pattern** (`graph.Node.component = graph.weakly_connected_component()`, then `model.select(Site.component).to_df()`): the component column arrives as **string hashes** (serialized entity IDs). Use `.astype(str)` if any cast is needed.
+- **Direct query pattern** — use `graph.Node.ref()` for BOTH sides, then select `.id` from the component ref to get the underlying integer (min-id node). That integer comes through as `Int128` — cast with `.astype(int)` before pandas ops and before passing to `model.data()`. Using `Integer.ref()` for the component side raises `TyperError`.
 
 ---
 
