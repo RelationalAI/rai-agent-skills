@@ -12,11 +12,18 @@ model = Model("flow_conservation")
 Edge = model.Concept("Edge", identify_by={"i": Integer, "j": Integer})
 Edge.cap = model.Property(f"{Edge} has {Float:cap}")
 
+# --- Inline data: small directed graph for max-flow (source=1, sink=4) ---
+edge_data = model.data(
+    [(1, 2, 10.0), (1, 3, 8.0), (2, 3, 5.0), (2, 4, 7.0), (3, 4, 10.0)],
+    columns=["i", "j", "cap"],
+)
+model.define(Edge.new(edge_data.to_schema()))
+
 # --- Decision variable ---
 # Flow on each edge, non-negative and bounded by capacity
 Edge.x_flow = model.Property(f"{Edge} has {Float:flow}")
-p = Problem(model, Float)
-p.solve_for(Edge.x_flow, name=["x", Edge.i, Edge.j], lower=0, upper=Edge.cap)
+problem = Problem(model, Float)
+problem.solve_for(Edge.x_flow, name=["x", Edge.i, Edge.j], lower=0, upper=Edge.cap)
 
 # --- Flow conservation constraint ---
 # Two independent refs scan all edges: Ei for outflow, Ej for inflow
@@ -27,20 +34,18 @@ flow_out = per(Ei.i).sum(Ei.x_flow)
 flow_in = per(Ej.j).sum(Ej.x_flow)
 # Join on Ei.i == Ej.j selects nodes that appear as both source and destination (interior nodes)
 balance = model.require(flow_in == flow_out).where(Ei.i == Ej.j)
-p.satisfy(balance)
+problem.satisfy(balance)
 
 # --- Objective: maximize total flow leaving the source node ---
 total_flow = sum(Edge.x_flow).where(Edge.i(1))
-p.maximize(total_flow)
+problem.maximize(total_flow)
 
 # --- Solve ---
-p.display()
-p.solve("highs", time_limit_sec=60)
-model.require(p.termination_status() == "OPTIMAL")
-si = p.solve_info()
+problem.display()
+problem.solve("highs", time_limit_sec=60)
+model.require(problem.termination_status() == "OPTIMAL")
+si = problem.solve_info()
 si.display()
 print(f"Max flow: {si.objective_value:.2f}")
 # Extract solution — properties populated after solve (populate=True default)
-model.select(Edge.i.alias("from"), Edge.j.alias("to"), Edge.x_flow.alias("flow")).where(
-    Edge.x_flow > 0.001
-).inspect()
+model.select(Edge.i.alias("from"), Edge.j.alias("to"), Edge.x_flow.alias("flow")).where(Edge.x_flow > 0.001).inspect()

@@ -20,7 +20,7 @@
 | `louvain()` | Binary | `(node, label)` | `Node.ref(), Integer.ref()` |
 | `infomap()` | Binary | `(node, label)` | `Node.ref(), Integer.ref()` |
 | `label_propagation()` | Binary | `(node, label)` | `Node.ref(), Integer.ref()` |
-| `weakly_connected_component()` | Binary | `(node, component_id)` | `Node.ref(), Integer.ref()` |
+| `weakly_connected_component()` | Binary | `(node, component_id_node)` | `Node.ref(), Node.ref()` (the component ID is itself the min-id node of the component) |
 | `reachable()` | Binary | `(source, target)` | `Node.ref(), Node.ref()` |
 | `distance()` | Ternary | `(start, end, length)` | `Node.ref(), Node.ref(), Float.ref()` |
 | `jaccard_similarity()` | Ternary | `(node1, node2, score)` | `Node.ref(), Node.ref(), Float.ref()` |
@@ -140,10 +140,11 @@ When `node_concept` is set (e.g., `node_concept=User`), `graph.Node` IS the conc
 
 ```python
 # graph.Node IS User when node_concept=User — property is automatically available on User
-graph.Node.community = graph.weakly_connected_component()
+graph.Node.component = graph.weakly_connected_component()
 
-# Query directly via User — no explicit binding needed
-df = model.select(User.name, User.community).to_df()
+# Query directly via User — no explicit binding needed.
+# Note: WCC stores a Node per user; User.component serializes as a string hash in to_df().
+df = model.select(User.name, User.component).to_df()
 ```
 
 Use this shorthand when you need a simple property binding. Use the explicit three-step pattern (declare `model.Property`, bind via `define()`) when you need more control (e.g., custom property type declarations, or binding results to a concept different from `node_concept`).
@@ -188,19 +189,34 @@ segment_stats = (
 
 ### Component IDs → Component concept
 
-Same pattern for WCC components:
+**WCC components cannot be turned into a new concept via the shorthand pattern** the way Louvain labels can. `graph.weakly_connected_component()` returns a Node-typed relation, so `graph.Node.component_id` is itself a Node — not an integer — and `NetworkComponent.new(id=graph.Node.component_id)` fails type inference regardless of whether `NetworkComponent.id` is declared `Integer` or `String`.
 
-```python
-graph.Node.component_id = graph.weakly_connected_component()
+Two workable alternatives:
 
-NetworkComponent = model.Concept("NetworkComponent", identify_by={"id": Integer})
-model.define(NetworkComponent.new(id=graph.Node.component_id))
+1. **Use the existing Node as the component entity.** A component is already represented by its min-id node. You can attach per-component properties to `Site` directly, using the component_id node as a grouping key:
 
-Site.network_component = model.Relationship(f"{Site} in {NetworkComponent}")
-model.where(graph.Node == Site).define(
-    Site.network_component(NetworkComponent.filter_by(id=graph.Node.component_id))
-)
-```
+   ```python
+   graph.Node.component_id = graph.weakly_connected_component()
+   # Now query "how many sites in the same component as Site X?" etc.
+   ```
+
+2. **Round-trip through pandas** to create a separate `NetworkComponent` concept with integer IDs:
+
+   ```python
+   node_ref, comp_ref = graph.Node.ref(), graph.Node.ref()
+   rows = (
+       model.select(node_ref.id.alias("node_id"), comp_ref.id.alias("comp_id"))
+       .where(graph.weakly_connected_component()(node_ref, comp_ref))
+       .to_df()
+   )
+   rows["comp_id"] = rows["comp_id"].astype(int)          # Int128 -> int
+   comp_df = rows[["comp_id"]].drop_duplicates().rename(columns={"comp_id": "id"})
+   comp_data = model.data(comp_df)
+   NetworkComponent = model.Concept("NetworkComponent", identify_by={"id": Integer})
+   model.define(NetworkComponent.new(id=comp_data.id))
+   ```
+
+The Louvain / Infomap pattern above works directly because community labels are integer-valued, not node-valued.
 
 ---
 
@@ -208,19 +224,37 @@ model.where(graph.Node == Site).define(
 
 ### Int128Array from RAI
 
-Community labels, component IDs, and other integer graph outputs return as `Int128Array` in DataFrames. This type is incompatible with most pandas operations.
+**Scope:**
+- **Always** for Louvain / Infomap community labels — these are reasoner-generated integer labels regardless of node ID type.
+- **Only** for WCC component IDs accessed via the direct-query pattern (`select(comp_ref.id, ...)`) **when the node concept uses an integer-typed `identify_by`** (e.g., `identify_by={"id": Integer}`). If the node concept uses `identify_by={"id": String}`, then `comp_ref.id` arrives as an ordinary string column — no cast is needed (and `.astype(int)` will raise `ValueError`).
 
-**Always cast before pandas operations:**
+These integer graph outputs return as `Int128Array` in DataFrames. `Int128Array` is incompatible with most pandas operations and with `model.data()` type inference (Int128Dtype maps to `"Any"` instead of `"Integer"`, causing `TyperError`).
+
+**Cast the integer columns before further use:**
 
 ```python
-df["community"] = df["community"].astype(int)
-df["component_id"] = df["component_id"].astype(int)
+df["community"] = df["community"].astype(int)      # louvain / infomap — always
+df["component_int"] = df["component_int"].astype(int)  # WCC via direct query — ONLY if node identify_by uses Integer
 ```
 
 **Failure symptoms without casting:**
-- `TypeError` on groupby, merge, or comparison operations
+- `TyperError` from `model.data()` type inference (Int128Dtype → `"Any"`)
+- `TypeError` on pandas groupby, merge, or comparison operations
 - Silent wrong results on equality checks
 - JSON serialization errors
+
+### WCC via shorthand — string hashes, not integers
+
+`graph.weakly_connected_component()` is different from Louvain/Infomap: its output side is a **Node**, not an integer. When accessed via the shorthand `graph.Node.component = graph.weakly_connected_component()` and queried with `model.select(Site.component).to_df()`, the column arrives as **string hashes** (serialized entity IDs like `'hQFeq4Qx/oM955jyw1adGg'`) with `dtype=str`.
+
+```python
+graph.Node.component = graph.weakly_connected_component()
+df = model.select(Site.id, Site.component).to_df()
+df["component"] = df["component"].astype(str)   # OK — already strings
+# df["component"] = df["component"].astype(int) # ValueError: invalid literal for int()
+```
+
+To get an integer component ID from WCC, use the direct query pattern (select `comp_ref.id`, cast to int).
 
 ### Float scores
 

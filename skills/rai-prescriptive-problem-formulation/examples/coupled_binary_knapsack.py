@@ -32,29 +32,29 @@ ProjectRef = Project.ref()
 UpgradeRef = Upgrade.ref()
 budget = 2_000_000_000
 
-p = Problem(model, Float)
-p.solve_for(Project.x_approved, type="bin", name=Project.name)
-p.solve_for(Upgrade.x_selected, type="bin", name=["upg", Upgrade.substation.name])
+problem = Problem(model, Float)
+problem.solve_for(Project.x_approved, type="bin", name=Project.name)
+problem.solve_for(Upgrade.x_selected, type="bin", name=["upg", Upgrade.substation.name])
 
 # --- Capacity expansion constraint ---
 # Approved project demand at each substation <= existing capacity + upgrade capacity
-project_demand = sum(ProjectRef.x_approved * ProjectRef.capacity_needed).where(
-    ProjectRef.substation == Substation).per(Substation)
-upgrade_cap = sum(UpgradeRef.x_selected * UpgradeRef.capacity_added).where(
-    UpgradeRef.substation == Substation).per(Substation)
-p.satisfy(model.require(project_demand <= Substation.current_capacity + upgrade_cap))
+project_demand = (
+    sum(ProjectRef.x_approved * ProjectRef.capacity_needed).where(ProjectRef.substation == Substation).per(Substation)
+)
+upgrade_cap = (
+    sum(UpgradeRef.x_selected * UpgradeRef.capacity_added).where(UpgradeRef.substation == Substation).per(Substation)
+)
+problem.satisfy(model.require(project_demand <= Substation.current_capacity + upgrade_cap))
 
 # At most one upgrade per substation
-upgrades_per_sub = sum(UpgradeRef.x_selected).where(
-    UpgradeRef.substation == Substation).per(Substation)
-p.satisfy(model.require(upgrades_per_sub <= 1))
+upgrades_per_sub = sum(UpgradeRef.x_selected).where(UpgradeRef.substation == Substation).per(Substation)
+problem.satisfy(model.require(upgrades_per_sub <= 1))
 
 # Budget knapsack: total investment across both decision sets
-total_invest = (sum(Project.x_approved * Project.connection_cost)
-                + sum(Upgrade.x_selected * Upgrade.upgrade_cost))
-p.satisfy(model.require(total_invest <= budget))
+total_invest = sum(Project.x_approved * Project.connection_cost) + sum(Upgrade.x_selected * Upgrade.upgrade_cost)
+problem.satisfy(model.require(total_invest <= budget))
 
 # Objective: maximize net revenue from approved projects
-p.maximize(sum(Project.x_approved * (Project.revenue - Project.connection_cost)))
+problem.maximize(sum(Project.x_approved * (Project.revenue - Project.connection_cost)))
 
-p.solve("highs", time_limit_sec=60)
+problem.solve("highs", time_limit_sec=60)

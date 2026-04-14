@@ -3,15 +3,15 @@
 #   - After an epsilon constraint loop produces multiple Pareto points, analyze the
 #     frontier systematically: tradeoff table, marginal rates, knee detection,
 #     allocation shifts, and regime characterization.
-#   - Each Pareto point is a complete solution (variable_values df). No point is
+#   - Each Pareto point is a complete solution (Variable.values() df). No point is
 #     strictly better than another — present as a menu of operating points.
 #   - Parallels scenario_concept_extraction.py (multi-solution extraction)
 #     but for epsilon loop output rather than Scenario Concept output.
 #
 # This example uses a generic pareto_points list structure. The same analysis
 # pipeline applies regardless of problem type (QP, MILP, LP) or objective pair.
-
-import builtins
+# Variable DataFrames come from Variable.values() structured queries (see
+# epsilon_constraint_pareto.py for the extraction pattern).
 
 # =============================================================================
 # INPUT: pareto_points from epsilon loop
@@ -24,17 +24,17 @@ import builtins
 #   ]
 # "primary" = the optimized objective value (from solve_info)
 # "secondary" = the constrained objective value (computed from variable df)
-# "variables" = variable_values().to_df() for this point
+# "variables" = structured query df from Variable.values() for this point
 
 # --- Example data (from a tested epsilon constraint sweep) ---
 pareto_points = [
     {"label": "min_risk", "primary": 18704.12, "secondary": 137.25},
-    {"label": "eps_1",    "primary": 19906.79, "secondary": 147.71},
-    {"label": "eps_2",    "primary": 23514.78, "secondary": 158.17},
-    {"label": "eps_3",    "primary": 30698.48, "secondary": 168.63},
-    {"label": "eps_4",    "primary": 44122.28, "secondary": 179.08},
-    {"label": "eps_5",    "primary": 63889.45, "secondary": 189.54},
-    {"label": "max_ret",  "primary": 90000.00, "secondary": 200.00},
+    {"label": "eps_1", "primary": 19906.79, "secondary": 147.71},
+    {"label": "eps_2", "primary": 23514.78, "secondary": 158.17},
+    {"label": "eps_3", "primary": 30698.48, "secondary": 168.63},
+    {"label": "eps_4", "primary": 44122.28, "secondary": 179.08},
+    {"label": "eps_5", "primary": 63889.45, "secondary": 189.54},
+    {"label": "max_ret", "primary": 90000.00, "secondary": 200.00},
 ]
 primary_name = "Risk (minimize)"
 secondary_name = "Return (maximize)"
@@ -48,14 +48,14 @@ print("-" * 62)
 marginal_rates = []
 for i, pt in enumerate(pareto_points):
     if i > 0:
-        dp = pt["primary"] - pareto_points[i-1]["primary"]
-        ds = pt["secondary"] - pareto_points[i-1]["secondary"]
+        dp = pt["primary"] - pareto_points[i - 1]["primary"]
+        ds = pt["secondary"] - pareto_points[i - 1]["secondary"]
         rate = dp / ds if abs(ds) > 1e-6 else float("inf")
         marginal_rates.append(rate)
         rate_str = f"{rate:.1f}"
     else:
         rate_str = "—"
-    print(f"{i+1:>3} {pt['label']:>10} {pt['secondary']:>16.2f} {pt['primary']:>16.2f} {rate_str:>12}")
+    print(f"{i + 1:>3} {pt['label']:>10} {pt['secondary']:>16.2f} {pt['primary']:>16.2f} {rate_str:>12}")
 
 # =============================================================================
 # 2. KNEE DETECTION: where marginal rate RATIO jumps most
@@ -70,17 +70,18 @@ if len(marginal_rates) >= 2:
     max_jump = 0
     for i in range(len(marginal_rates) - 1):
         if marginal_rates[i] > 1e-6:
-            jump = marginal_rates[i+1] / marginal_rates[i]
+            jump = marginal_rates[i + 1] / marginal_rates[i]
         else:
-            jump = marginal_rates[i+1] if marginal_rates[i+1] > 0 else 0
+            jump = marginal_rates[i + 1] if marginal_rates[i + 1] > 0 else 0
         if jump > max_jump:
             max_jump = jump
             knee_idx = i + 1
 
     if knee_idx is not None:
         knee_pt = pareto_points[knee_idx]
-        print(f"\nKnee: Point {knee_idx + 1} ({knee_pt['label']}) — "
-              f"marginal cost jumps {max_jump:.1f}x beyond this point")
+        print(
+            f"\nKnee: Point {knee_idx + 1} ({knee_pt['label']}) — marginal cost jumps {max_jump:.1f}x beyond this point"
+        )
         print(f"  {secondary_name}: {knee_pt['secondary']:.2f}")
         print(f"  {primary_name}: {knee_pt['primary']:.2f}")
     else:
@@ -121,8 +122,10 @@ x_min, x_max = min(secondaries), max(secondaries)
 y_min, y_max = min(primaries), max(primaries)
 x_pad = (x_max - x_min) * 0.05 or 1
 y_pad = (y_max - y_min) * 0.05 or 1
-x_min -= x_pad; x_max += x_pad
-y_min -= y_pad; y_max += y_pad
+x_min -= x_pad
+x_max += x_pad
+y_min -= y_pad
+y_max += y_pad
 
 grid = [[" " for _ in range(width)] for _ in range(height)]
 for i, (x, y) in enumerate(zip(secondaries, primaries)):
@@ -131,11 +134,11 @@ for i, (x, y) in enumerate(zip(secondaries, primaries)):
     col = max(0, min(width - 1, col))
     row = max(0, min(height - 1, row))
     if i == 0:
-        grid[row][col] = "A"    # first anchor
+        grid[row][col] = "A"  # first anchor
     elif i == len(pareto_points) - 1:
-        grid[row][col] = "B"    # second anchor
+        grid[row][col] = "B"  # second anchor
     elif knee_idx is not None and i == knee_idx:
-        grid[row][col] = "K"    # knee
+        grid[row][col] = "K"  # knee
     else:
         grid[row][col] = "*"
 
@@ -148,7 +151,7 @@ for r in range(height):
         print(f"{'':>10} | {''.join(grid[r])}")
 print(f"{'':>10} +{'—' * width}→")
 print(f"{'':>12}{secondary_name}")
-print(f"\n  A = anchor 1, B = anchor 2, K = knee, * = interior point")
+print("\n  A = anchor 1, B = anchor 2, K = knee, * = interior point")
 
 # =============================================================================
 # 5. BUSINESS NARRATIVE (template for agent to adapt to domain)

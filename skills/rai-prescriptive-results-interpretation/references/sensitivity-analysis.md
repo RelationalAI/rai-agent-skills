@@ -29,7 +29,7 @@ Sensitivity analysis uses one of two PyRel patterns, chosen based on what is bei
   Constraints use `.per(Scenario)` for per-scenario aggregation and `Scenario.param` for
   scenario-specific values. See `rai-prescriptive-solver-management/examples/scenario_concept_parameter_sweep.py`.
 - **Entity exclusion** (remove a supplier, disable a facility): Loop + `where=[]` filter —
-  multiple solves, results collected per iteration via `variable_values().to_df()`.
+  multiple solves, results collected per iteration via `Variable.values()`.
   See `rai-prescriptive-solver-management/examples/partitioned_iteration_scenarios.py`.
 
 Both produce the same output format for stakeholders: comparison tables with business language.
@@ -140,7 +140,7 @@ Frame in business terms: "Each point on the frontier is a valid solution represe
 
 Produce all of these for any Pareto frontier result:
 
-1. **Tradeoff table**: both objectives at each point + marginal rate between consecutive points. The secondary objective must be computed from the variable_values DataFrame (solver only reports the primary).
+1. **Tradeoff table**: both objectives at each point + marginal rate between consecutive points. The secondary objective must be computed from the Variable.values() results (solver only reports the primary).
 
 2. **Marginal rate + knee detection**: The marginal rate is Δprimary / Δsecondary between consecutive points. The **knee** is where the marginal rate RATIO jumps most: `rates[i+1] / rates[i]`. The knee is NOT where the absolute rate is highest — that's always the last point. The knee is where diminishing returns begin.
 
@@ -160,7 +160,7 @@ Present the frontier as a menu of operating points, not a single answer. The use
 ### Export Patterns
 
 - **Pareto summary**: one row per point (epsilon, primary_value, secondary_value, status)
-- **Per-point variables**: full variable_values DataFrame for each point (user can compare allocations)
+- **Per-point variables**: full Variable.values() DataFrame for each point (user can compare allocations)
 - Same pattern as scenario result export (one DataFrame per scenario → one DataFrame per Pareto point)
 - To populate the chosen operating point back into the ontology, see `rai-prescriptive-problem-formulation` > [multi-objective-formulation.md](../../rai-prescriptive-problem-formulation/references/multi-objective-formulation.md) > Storing Results
 

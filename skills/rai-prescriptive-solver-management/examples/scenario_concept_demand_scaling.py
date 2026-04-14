@@ -22,7 +22,7 @@ DemandLevel.demand_multiplier = model.Property(f"{DemandLevel} has {Float:demand
 
 # --- Data ---
 fac_data = model.data(
-    [("PlantA", 200, 3.0), ("PlantB", 150, 5.0), ("PlantC", 100, 2.0)],
+    [("PlantA", 300, 3.0), ("PlantB", 150, 5.0), ("PlantC", 100, 2.0)],
     columns=["name", "capacity", "cost_per_unit"],
 )
 model.define(Facility.new(fac_data.to_schema()))
@@ -40,13 +40,11 @@ scenario_data = model.data(
 model.define(DemandLevel.new(scenario_data.to_schema()))
 
 # --- Decision variable: allocation per (Facility, Customer, DemandLevel) ---
-Facility.x_alloc = model.Property(
-    f"{Facility} ships to {Customer} under {DemandLevel} quantity {Float:alloc}"
-)
+Facility.x_alloc = model.Property(f"{Facility} ships to {Customer} under {DemandLevel} quantity {Float:alloc}")
 x_alloc = Float.ref()
 
-p = Problem(model, Float)
-p.solve_for(
+problem = Problem(model, Float)
+problem.solve_for(
     Facility.x_alloc(Customer, DemandLevel, x_alloc),
     lower=0,
     name=[DemandLevel.name, "alloc", Facility.name, Customer.name],
@@ -54,35 +52,31 @@ p.solve_for(
 
 # --- Constraints ---
 # Demand satisfaction: total shipped to each customer meets scaled demand per scenario
-p.satisfy(model.where(
-    Facility.x_alloc(Customer, DemandLevel, x_alloc),
-).require(
-    sum(x_alloc).per(Customer, DemandLevel) >= Customer.base_demand * DemandLevel.demand_multiplier
-))
+problem.satisfy(
+    model.where(
+        Facility.x_alloc(Customer, DemandLevel, x_alloc),
+    ).require(sum(x_alloc).per(Customer, DemandLevel) >= Customer.base_demand * DemandLevel.demand_multiplier)
+)
 
 # Capacity: each facility's total shipments cannot exceed capacity (per scenario)
-p.satisfy(model.where(
-    Facility.x_alloc(Customer, DemandLevel, x_alloc),
-).require(
-    sum(x_alloc).per(Facility, DemandLevel) <= Facility.capacity
-))
+problem.satisfy(
+    model.where(
+        Facility.x_alloc(Customer, DemandLevel, x_alloc),
+    ).require(sum(x_alloc).per(Facility, DemandLevel) <= Facility.capacity)
+)
 
 # --- Objective: minimize total cost across all scenarios ---
-p.minimize(sum(Facility.cost_per_unit * x_alloc).where(
-    Facility.x_alloc(Customer, DemandLevel, x_alloc)
-))
+problem.minimize(sum(Facility.cost_per_unit * x_alloc).where(Facility.x_alloc(Customer, DemandLevel, x_alloc)))
 
 # --- Solve all scenarios at once ---
-p.display()
-p.solve("highs", time_limit_sec=60)
-model.require(p.termination_status() == "OPTIMAL")
-p.solve_info().display()
+problem.display()
+problem.solve("highs", time_limit_sec=60)
+model.require(problem.termination_status() == "OPTIMAL")
+problem.solve_info().display()
 
 # --- Results: extract per scenario ---
 print("\nAll allocations:")
-model.select(
-    DemandLevel.name, Facility.name, Customer.name, Facility.x_alloc
-).where(
+model.select(DemandLevel.name, Facility.name, Customer.name, Facility.x_alloc).where(
     Facility.x_alloc(Customer, DemandLevel, x_alloc), x_alloc > 0.001
 ).inspect()
 
@@ -96,7 +90,7 @@ model.select(Facility.name, Customer.name, Facility.x_alloc).where(
 
 # Total cost per scenario
 print("\nCost per scenario:")
-cost_per_scenario = sum(Facility.cost_per_unit * x_alloc).per(DemandLevel).where(
-    Facility.x_alloc(Customer, DemandLevel, x_alloc)
+cost_per_scenario = (
+    sum(Facility.cost_per_unit * x_alloc).per(DemandLevel).where(Facility.x_alloc(Customer, DemandLevel, x_alloc))
 )
 model.select(DemandLevel.name, cost_per_scenario).inspect()

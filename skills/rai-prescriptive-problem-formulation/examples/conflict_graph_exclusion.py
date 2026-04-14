@@ -35,31 +35,36 @@ ScheduleRef = Schedule.ref()
 ScheduleA = Schedule.ref()
 ScheduleB = Schedule.ref()
 
-p = Problem(model, Float)
-p.solve_for(Schedule.x_assigned, type="bin",
-            name=["sched", Schedule.machine.name, Schedule.slot.day])
+problem = Problem(model, Float)
+problem.solve_for(
+    Schedule.x_assigned,
+    type="bin",
+    name=["sched", Schedule.machine.name, Schedule.slot.day],
+)
 
 # Constraint: each machine scheduled exactly once
-p.satisfy(model.require(
-    sum(ScheduleRef.x_assigned).where(ScheduleRef.machine == Machine).per(Machine) == 1
-))
+problem.satisfy(model.require(sum(ScheduleRef.x_assigned).where(ScheduleRef.machine == Machine).per(Machine) == 1))
 
 # Constraint: crew hours per slot not exceeded
-p.satisfy(model.require(
-    sum(ScheduleRef.x_assigned * ScheduleRef.machine.maintenance_hours)
-    .where(ScheduleRef.slot == TimeSlot).per(TimeSlot) <= TimeSlot.crew_hours
-))
+problem.satisfy(
+    model.require(
+        sum(ScheduleRef.x_assigned * ScheduleRef.machine.maintenance_hours)
+        .where(ScheduleRef.slot == TimeSlot)
+        .per(TimeSlot)
+        <= TimeSlot.crew_hours
+    )
+)
 
 # Constraint: conflicting machines cannot share the same slot (dual ref pattern)
-p.satisfy(model.require(
-    ScheduleA.x_assigned + ScheduleB.x_assigned <= 1
-).where(
-    ScheduleA.machine == Conflict.machine1,
-    ScheduleB.machine == Conflict.machine2,
-    ScheduleA.slot == ScheduleB.slot,
-))
+problem.satisfy(
+    model.require(ScheduleA.x_assigned + ScheduleB.x_assigned <= 1).where(
+        ScheduleA.machine == Conflict.machine1,
+        ScheduleB.machine == Conflict.machine2,
+        ScheduleA.slot == ScheduleB.slot,
+    )
+)
 
 # Objective: minimize total maintenance cost
-p.minimize(sum(Schedule.x_assigned * Schedule.machine.failure_cost * Schedule.slot.cost_multiplier))
+problem.minimize(sum(Schedule.x_assigned * Schedule.machine.failure_cost * Schedule.slot.cost_multiplier))
 
-p.solve("highs", time_limit_sec=60)
+problem.solve("highs", time_limit_sec=60)

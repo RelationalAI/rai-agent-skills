@@ -123,7 +123,7 @@ model.where(model.union(Person.age < 18, Person.age >= 65)).select(Person.name)
 
 ```python
 total = sum(model.union(term_a, term_b, term_c))
-p.minimize(total)
+problem.minimize(total)
 ```
 
 Each term may involve different concepts and `.where()` conditions. Required when building multi-component objectives or aggregations that span concept boundaries.
@@ -220,12 +220,12 @@ UD = UnmetDemand.ref()
 D = Demand.ref()
 inflow_per_sku = sum(Op.x_flow).where(Op.output_sku == UD.sku).per(UD.sku)
 demand_per_sku = sum(D.quantity).where(D.sku == UD.sku).per(UD.sku)
-p.satisfy(model.require(inflow_per_sku + UD.x_slack >= demand_per_sku).where(UD))
+problem.satisfy(model.require(inflow_per_sku + UD.x_slack >= demand_per_sku).where(UD))
 
 # RIGHT: For flow conservation at a site, aggregate inflows and outflows separately:
 inflow = sum(Op.x_flow).where(Op.output_site == Site).per(Site)
 outflow = sum(Op.x_flow).where(Op.source_site == Site).per(Site)
-p.satisfy(model.require(inflow >= outflow).where(Site))
+problem.satisfy(model.require(inflow >= outflow).where(Site))
 ```
 
 **Key rule:** If you need to relate entities of the SAME concept (e.g., flow conservation between operations), restructure the constraint to aggregate through a shared dimension (Site, SKU, Period) instead of self-joining.
@@ -258,12 +258,12 @@ These rules apply when generating constraint expressions and objective expressio
 
 ### Expression Format
 
-- **Constraints:** Provide ONLY the constraint condition — the code generator wraps it with `p.satisfy(require(...))`
+- **Constraints:** Provide ONLY the constraint condition — the code generator wraps it with `problem.satisfy(model.require(...))`
   - CORRECT: `sum(DecisionConcept.x_quantity) <= Entity.limit`
-  - WRONG: `p.satisfy(require(sum(DecisionConcept.x_quantity) <= Entity.limit))`
-- **Objectives:** Provide JUST the expression — the code generator wraps it with `p.minimize(...)` or `p.maximize(...)`
+  - WRONG: `problem.satisfy(model.require(sum(DecisionConcept.x_quantity) <= Entity.limit))`
+- **Objectives:** Provide JUST the expression — the code generator wraps it with `problem.minimize(...)` or `problem.maximize(...)`
   - CORRECT: `sum(Entity.cost * DecisionConcept.x_quantity)`
-  - WRONG: `p.minimize(sum(Entity.cost * DecisionConcept.x_quantity))`
+  - WRONG: `problem.minimize(sum(Entity.cost * DecisionConcept.x_quantity))`
 
 ### Operator Rules
 

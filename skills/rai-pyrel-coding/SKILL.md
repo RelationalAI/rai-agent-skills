@@ -59,11 +59,11 @@ print(Product.cost > 10)   # → Product.cost > 10
 Product.cost.inspect()     # → executes query, prints DataFrame to stdout
 
 # Solver
-p = Problem(model, Float)
-p.solve_for(Product.x_qty, type="cont", lower=0, name=["qty", Product.id])
-p.satisfy(model.require(sum(Product.x_qty) <= 100))
-p.minimize(sum(Product.cost * Product.x_qty))
-p.solve("highs")
+problem = Problem(model, Float)
+problem.solve_for(Product.x_qty, type="cont", lower=0, name=["qty", Product.id])
+problem.satisfy(model.require(sum(Product.x_qty) <= 100))
+problem.minimize(sum(Product.cost * Product.x_qty))
+problem.solve("highs")
 ```
 
 ---
@@ -213,10 +213,10 @@ x = model.Relationship(f"{Float:x}")
 y = model.Relationship(f"{Float:y}")
 
 # Use in solver:
-p = Problem(model, Float)
-p.solve_for(x, name="x", lower=-100.0, upper=5.0, start=0.0)
-p.solve_for(y, name="y", lower=-100.0, upper=5.0, start=0.0)
-p.minimize((1 - x) ** 2 + 100 * (y - x**2) ** 2)
+problem = Problem(model, Float)
+problem.solve_for(x, name="x", lower=-100.0, upper=5.0, start=0.0)
+problem.solve_for(y, name="y", lower=-100.0, upper=5.0, start=0.0)
+problem.minimize((1 - x) ** 2 + 100 * (y - x**2) ** 2)
 ```
 
 **Global counts/values:** Assign to a Python variable (`NODE_COUNT = count(Node)`). Use a model Relationship only when the value must be available in downstream `define()` rules or solver expressions: `model.define(node_count(count(Node)))`.

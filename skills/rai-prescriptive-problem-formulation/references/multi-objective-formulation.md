@@ -51,16 +51,16 @@ When the secondary objective is currently modeled as a constraint with a fixed b
 
 ```python
 # BEFORE (single-objective): return is a fixed constraint
-p.satisfy(model.require(sum(Stock.returns * x_qty).per(Scenario) >= min_return))
-p.minimize(risk_expr)
+problem.satisfy(model.require(sum(Stock.returns * x_qty).per(Scenario) >= min_return))
+problem.minimize(risk_expr)
 
 # AFTER (bi-objective): return target becomes the loop parameter
 for rate in epsilon_rates:
-    p = Problem(model, Float)
-    p.solve_for(..., populate=False)
-    p.satisfy(model.require(sum(Stock.returns * x_qty).per(Scenario) >= rate * Scenario.budget))
-    p.minimize(risk_expr)
-    p.solve(...)
+    problem = Problem(model, Float)
+    problem.solve_for(..., populate=False)
+    problem.satisfy(model.require(sum(Stock.returns * x_qty).per(Scenario) >= rate * Scenario.budget))
+    problem.minimize(risk_expr)
+    problem.solve(...)
 ```
 
 ### Entry 2: Bundled Penalty to Unbundle
@@ -70,15 +70,15 @@ When two concerns are combined via penalty weight in a single objective.
 ```python
 # BEFORE (single-objective): cost + penalty bundled
 PENALTY = 10000
-p.minimize(sum(Route.cost * Route.x_flow) + PENALTY * sum(Demand.x_unmet))
+problem.minimize(sum(Route.cost * Route.x_flow) + PENALTY * sum(Demand.x_unmet))
 
 # AFTER (bi-objective): split into primary objective + epsilon constraint
 for eps in epsilon_values:
-    p = Problem(model, Float)
-    p.solve_for(..., populate=False)
-    p.satisfy(model.require(sum(Demand.x_unmet) <= eps))  # secondary as constraint
-    p.minimize(sum(Route.cost * Route.x_flow))              # primary only
-    p.solve(...)
+    problem = Problem(model, Float)
+    problem.solve_for(..., populate=False)
+    problem.satisfy(model.require(sum(Demand.x_unmet) <= eps))  # secondary as constraint
+    problem.minimize(sum(Route.cost * Route.x_flow))              # primary only
+    problem.solve(...)
 ```
 
 ## Epsilon Constraint Method
@@ -98,14 +98,14 @@ Without anchors, epsilon values may be non-binding (wasted solves) or infeasible
 pareto = []
 consecutive_infeasible = 0
 for eps in epsilon_values:
-    p = Problem(model, Float)
-    p.solve_for(..., populate=False)      # fresh Problem each iteration
-    p.satisfy(original_constraints)
-    p.satisfy(model.require(secondary >= eps))   # epsilon constraint
-    p.minimize(primary_objective)
-    p.solve(solver, time_limit_sec=60)
+    problem = Problem(model, Float)
+    var = problem.solve_for(..., populate=False)  # capture ProblemVariable
+    problem.satisfy(original_constraints)
+    problem.satisfy(model.require(secondary >= eps))   # epsilon constraint
+    problem.minimize(primary_objective)
+    problem.solve(solver, time_limit_sec=60)
 
-    si = p.solve_info()
+    si = problem.solve_info()
     if si.termination_status not in ("OPTIMAL", "LOCALLY_SOLVED"):
         consecutive_infeasible += 1
         if consecutive_infeasible >= 2:
@@ -113,10 +113,20 @@ for eps in epsilon_values:
         continue  # skip this point but try the next (non-convex gaps)
     consecutive_infeasible = 0
 
+    # Extract solution via Variable.values() structured query
+    # Back-pointer name = lowercased concept from the format string (see results-interpretation SKILL.md)
+    # Example for f"{Stock} has {Float:quantity}":
+    value_ref = Float.ref()
+    variables_df = model.select(
+        var.stock.name.alias("entity"),  # back-pointer to Stock concept
+        value_ref.alias("value"),
+    ).where(var.values(0, value_ref)).to_df()
+    # If Scenario-indexed: add var.scenario.name.alias("scenario") to the select
+
     pareto.append({
         "eps": eps,
         "primary": si.objective_value,
-        "variables": p.variable_values().to_df(),
+        "variables": variables_df,
     })
 ```
 
@@ -147,42 +157,29 @@ epsilon_values = [
 ## Evaluating the Secondary Objective
 
 The solver only reports the primary (optimized) objective value. To get both objectives at each
-Pareto point, evaluate the secondary expression on the `variable_values` DataFrame:
+Pareto point, evaluate the secondary expression using the `Variable.values()` results. Since
+`solve_for()` returns a `ProblemVariable` with back-pointers to entity properties, you can
+include the secondary coefficient directly in the structured query:
 
 ```python
 import builtins  # RAI `sum` shadows Python's built-in
 
-def evaluate_secondary(var_df, entity_data):
-    """Compute secondary objective from variable values and entity coefficients.
+# Extract variable values with entity coefficients via back-pointers
+value_ref = Float.ref()
+point_df = model.select(
+    var.stock.index.alias("stock"),
+    var.stock.returns.alias("returns"),   # secondary coefficient via back-pointer
+    var.scenario.name.alias("scenario"),
+    value_ref.alias("quantity"),
+).where(var.values(0, value_ref)).to_df()
 
-    entity_data maps variable names (as they appear in var_df) to the secondary
-    objective coefficient for that variable. Build this BEFORE the loop from model data.
-    """
-    total = 0.0
-    for _, row in var_df.iterrows():
-        name, val = str(row.iloc[0]), float(row.iloc[1])
-        if name not in entity_data:
-            raise KeyError(f"Variable '{name}' not found in entity_data — "
-                           "check that name= pattern in solve_for matches the keys")
-        total += entity_data[name] * val
-    return total
+# Compute secondary objective in Python
+secondary_value = builtins.sum(point_df["returns"] * point_df["quantity"])
 ```
 
-**Building `entity_data`**: Variable names follow the `name=` pattern from `solve_for()`.
-If `name=["qty", Scenario.name, Stock.index]`, variable names are `"qty_budget_500_1"`,
-`"qty_budget_500_2"`, etc. Build the mapping to match:
-
-```python
-# Build entity_data keyed by the same name pattern used in solve_for
-stock_df = model.select(Stock.index, Stock.returns).to_df()
-stock_returns = dict(zip(stock_df["index"], stock_df["returns"]))
-
-# For scenario-indexed variables, build per-scenario mappings
-entity_data = {}
-for scenario_name in ["budget_500", "budget_1000", "budget_2000"]:
-    for idx, ret in stock_returns.items():
-        entity_data[f"qty_{scenario_name}_{idx}"] = ret
-```
+This replaces the old pattern of building `entity_data` dictionaries keyed by string variable
+names. Back-pointers on `ProblemVariable` give direct access to entity properties, eliminating
+fragile name-string parsing.
 
 **Pitfall**: `from relationalai.semantics import sum` shadows Python's built-in `sum`.
 Use `builtins.sum` for Python-side aggregation over DataFrames.
@@ -194,12 +191,12 @@ can be used INSIDE the epsilon loop:
 
 ```python
 for eps in epsilon_values:
-    p = Problem(model, Float)
+    problem = Problem(model, Float)
     # Scenario Concept handles parameter variations -- one solve, all scenarios
-    p.solve_for(Entity.x_var(Scenario, x), ..., populate=False)
-    p.satisfy(model.require(secondary >= eps).per(Scenario))
-    p.minimize(primary_objective)  # aggregated across scenarios
-    p.solve(...)
+    problem.solve_for(Entity.x_var(Scenario, x), ..., populate=False)
+    problem.satisfy(model.require(secondary >= eps).per(Scenario))
+    problem.minimize(primary_objective)  # aggregated across scenarios
+    problem.solve(...)
     # all scenarios solved at this epsilon level
 ```
 
@@ -213,11 +210,20 @@ N epsilon solves (not N x M). This is optional -- multi-objective does not requi
 pareto_points = []
 for eps in epsilon_values:
     ...
+    # Example for f"{Stock} in {Scenario} has {Float:quantity}":
+    value_ref = Float.ref()
+    variables_df = model.select(
+        var.stock.name.alias("entity"),          # back-pointer to Stock
+        var.stock.returns.alias("coefficient"),   # secondary coefficient via back-pointer
+        var.scenario.name.alias("scenario"),
+        value_ref.alias("value"),
+    ).where(var.values(0, value_ref)).to_df()
+
     pareto_points.append({
         "eps": eps,
         "primary": si.objective_value,
-        "secondary": evaluate_secondary(df, ...),
-        "variables": p.variable_values().to_df(),
+        "secondary": builtins.sum(variables_df["coefficient"] * variables_df["value"]),
+        "variables": variables_df,
     })
 ```
 
@@ -228,12 +234,12 @@ for eps in epsilon_values:
 chosen_eps = pareto_points[knee_idx]["eps"]
 
 # Re-solve with populate=True — results written to model properties
-p_final = Problem(model, Float)
-p_final.solve_for(Entity.x_var, populate=True)  # writes back to ontology
-p_final.satisfy(original_constraints)
-p_final.satisfy(model.require(secondary >= chosen_eps))
-p_final.minimize(primary)
-p_final.solve(solver, time_limit_sec=60)
+problem_final = Problem(model, Float)
+problem_final.solve_for(Entity.x_var, populate=True)  # writes back to ontology
+problem_final.satisfy(original_constraints)
+problem_final.satisfy(model.require(secondary >= chosen_eps))
+problem_final.minimize(primary)
+problem_final.solve(solver, time_limit_sec=60)
 
 # Results now queryable via model.select(), composable with other model queries
 model.select(Entity.id, Entity.x_var).where(Entity.x_var > 0.001).inspect()
