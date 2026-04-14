@@ -243,7 +243,7 @@ No solution satisfies all constraints simultaneously. The problem as stated is i
 **Next steps:** Identify the binding conflict, present trade-off options, add slack/penalty variables. A common and valuable path is moving the conflicting hard constraint to the objective with a penalty — feasibility restoration through softening is often more useful than pure diagnosis.
 
 ### Unbounded (DUAL_INFEASIBLE)
-The objective can improve infinitely — the solver can keep making the solution "better" without limit. The MOI status is `"DUAL_INFEASIBLE"` (not `"UNBOUNDED"`).
+The objective can improve infinitely — the solver can keep making the solution "better" without limit. The termination status is `"DUAL_INFEASIBLE"` (not `"UNBOUNDED"`).
 
 **Diagnosis steps:**
 1. Check that all variables have appropriate bounds (especially upper bounds for maximize, lower bounds for minimize).
@@ -297,7 +297,7 @@ Compilation or solver errors prevented a solution.
 **What to tell users:** "The model could not be solved due to a technical error: [error message]. This needs to be fixed before we can get results."
 **Next steps:** Check compilation output, fix expression syntax, verify all referenced properties exist.
 
-### Re-Solve Behavior (1.0.3+)
+### Re-Solve Behavior
 
 Re-solving the same `Problem` instance is safe (replace semantics). See `rai-prescriptive-solver-management` for details.
 

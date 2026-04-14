@@ -301,7 +301,7 @@ model.require(problem.termination_status() == "OPTIMAL")
 problem.solve_info().display()
 ```
 
-**Termination status:** `problem.termination_status()` (Relationship) returns a MOI `TerminationStatusCode` string. Common values: `"OPTIMAL"`, `"INFEASIBLE"`, `"DUAL_INFEASIBLE"` (unbounded), `"LOCALLY_SOLVED"` (NLP), `"TIME_LIMIT"`, `"SOLUTION_LIMIT"`. Use in `model.require()` for engine-side checks. For Python-side access: `si = problem.solve_info()` then `si.termination_status`.
+**Termination status:** `problem.termination_status()` (Relationship) returns a status string. Common values: `"OPTIMAL"`, `"INFEASIBLE"`, `"DUAL_INFEASIBLE"` (unbounded), `"LOCALLY_SOLVED"` (NLP), `"TIME_LIMIT"`, `"SOLUTION_LIMIT"`. Use in `model.require()` for engine-side checks. For Python-side access: `si = problem.solve_info()` then `si.termination_status`.
 
 **Debugging failed solves:** After a non-optimal solve, check `problem.error()` (Relationship) or `si.error` (Python tuple) for the solver-level error message:
 

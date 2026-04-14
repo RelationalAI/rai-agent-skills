@@ -17,9 +17,9 @@ problem.satisfy(model.require(
 
 List elements are joined with underscores. Use entity identifiers (IDs, names) in the list for per-entity constraint names.
 
-## Re-Solve Behavior (1.0.3+)
+## Re-Solve Behavior
 
-Re-solving the same `Problem` instance is safe. Result import uses `experimental.load_data` with replace semantics — previous results remain intact if a subsequent solve fails. The inline formulation pattern (fresh `Problem` per scenario loop iteration) is still useful for clean separation of scenarios, but is no longer required for error recovery.
+Re-solving the same `Problem` instance is safe. Result import uses replace semantics — previous results remain intact if a subsequent solve fails. The inline formulation pattern (fresh `Problem` per scenario loop iteration) is still useful for clean separation of scenarios, but is no longer required for error recovery.
 
 **Multi-scenario re-solve pattern:**
 

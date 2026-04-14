@@ -18,7 +18,7 @@ When a formulation fails at a level, the root cause falls into specific categori
 | **compiles** | `unresolved_overload` | `name=[]` traverses relationships or has multi-hop paths | Use primitive identity fields in `name=[]`; single-hop only |
 | **compiles** | `missing_registration` | Variables/constraints defined but not registered with Problem | Ensure all `solve_for`, `satisfy`, `minimize`/`maximize` calls reference the Problem instance |
 | **solves** | `solver_crash` | Solver errors out (license, memory, malformed problem) | Check solver logs; simplify problem size; verify solver availability |
-| **solves** | `solve_error` | Solver returned error (license, timeout, numerical) | Check solver logs; re-solve is safe on same Problem instance (1.0.3+) |
+| **solves** | `solve_error` | Solver returned error (license, timeout, numerical) | Check solver logs; re-solve is safe on same Problem instance |
 | **optimal** | `infeasible` | No solution satisfies all constraints | Over-constrained — relax bounds, remove conflicting constraints, add slack |
 | **optimal** | `dual_infeasible` | Objective can improve infinitely (unbounded) | Missing bounds or capacity constraints; check objective direction |
 | **optimal** | `time_limit_large_gap` | Solver timed out with >5% gap | Increase time, tighten Big-M, add symmetry breaking, reduce problem size |

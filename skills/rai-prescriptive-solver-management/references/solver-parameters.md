@@ -1,7 +1,7 @@
 # Table of Contents
 
 - [Solver-Specific Parameters](#solver-specific-parameters)
-- [Cloud-Based Solve Pipeline](#cloud-based-solve-pipeline)
+- [Solve Pipeline](#solve-pipeline)
 - [Re-Solve Behavior](#re-solve-behavior-103)
 - [Warm Starting](#warm-starting)
 - [Scenario Analysis](#scenario-analysis-what-if)
@@ -47,13 +47,13 @@ problem.solve("ipopt", time_limit_sec=60, max_iter=1000, tol=1e-8, mu_strategy="
 - Large LP is slow -> try `presolve="on"`, increase `threads`
 - NLP converges to poor local optimum -> try different `start=` values, adjust `mu_strategy`
 
-## Cloud-Based Solve Pipeline
+## Solve Pipeline
 
-v1 solve is cloud-based: the Problem serializes variable/constraint/objective data as CSV, uploads to the solver service, which reconstructs the problem in MathOptInterface (MOI) form, dispatches to the selected backend (HiGHS, Gurobi, Ipopt, MiniZinc), and returns results as CSV for import back into the model. There is no local solver — all solve calls require network connectivity to the RAI solver service.
+Solving requires network connectivity — `problem.solve()` dispatches to the RAI solver service, which runs the selected backend (HiGHS, Gurobi, Ipopt, MiniZinc) and returns results. There is no local solver.
 
-## Re-Solve Behavior (1.0.3+)
+## Re-Solve Behavior
 
-Re-solving the same `Problem` instance is safe. Result import uses `experimental.load_data` with replace semantics — if a second solve's result import fails, previous results remain intact. No degraded state.
+Re-solving the same `Problem` instance is safe. Result import uses replace semantics — if a second solve's result import fails, previous results remain intact. No degraded state.
 
 ## Warm Starting
 
