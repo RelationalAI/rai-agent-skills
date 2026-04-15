@@ -32,11 +32,11 @@ return_ok = model.where(
 )
 
 # Single solve — all scenarios simultaneously
-p = Problem(model, Float)
-p.solve_for(Stock.x_quantity(Scenario, x_qty), name=[Scenario.name, "qty", Stock.index])
-p.satisfy(return_ok)
-p.minimize(sum(Stock.x_quantity))
-p.solve(solver, time_limit_sec=60)
+problem = Problem(model, Float)
+problem.solve_for(Stock.x_quantity(Scenario, x_qty), name=[Scenario.name, "qty", Stock.index])
+problem.satisfy(return_ok)
+problem.minimize(sum(Stock.x_quantity))
+problem.solve(solver, time_limit_sec=60)
 
 # Results: query with scenario filter
 model.select(Scenario.name, Stock.index, Stock.x_quantity).where(
@@ -51,15 +51,15 @@ loop with `where=[]` scoping. Each iteration is an independent sub-problem:
 
 ```python
 for excluded in [None, "SupplierC", "SupplierB"]:
-    p = Problem(model, Float)
+    problem = Problem(model, Float)
     if excluded:
         active = Order.supplier.name != excluded
-        p.solve_for(Order.x_qty, where=[active], populate=False)
+        problem.solve_for(Order.x_qty, where=[active], populate=False)
     else:
-        p.solve_for(Order.x_qty, populate=False)
-    p.maximize(...)
-    p.solve(solver, time_limit_sec=60)
-    # variable_values().to_df() for per-iteration results
+        problem.solve_for(Order.x_qty, populate=False)
+    problem.maximize(...)
+    problem.solve(solver, time_limit_sec=60)
+    # Use Variable.values() for per-iteration results
 ```
 
 ## When to use which
@@ -69,7 +69,7 @@ for excluded in [None, "SupplierC", "SupplierB"]:
 | What varies | Parameter values (budget, demand, thresholds) | Which entities participate (exclude supplier, solve per factory) |
 | Problem structure | Same constraints, same entities, different parameter values | Constraints or entity sets change between scenarios |
 | Number of solves | One (all scenarios simultaneously) | One per scenario |
-| Where results live | **In the ontology** — queryable via `model.select()`, composable with other model queries, available for downstream derived properties | In Python DataFrames via `variable_values().to_df()` — outside the model |
+| Where results live | **In the ontology** — queryable via `model.select()`, composable with other model queries, available for downstream derived properties | In Python DataFrames via `Variable.values()` — outside the model |
 | Problem size | Cross-product of entities x scenarios (can be large) | Each sub-problem is small and independent |
 
 **Decision rule:**

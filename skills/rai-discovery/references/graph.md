@@ -62,7 +62,7 @@ Which subset of nodes to reach to/from. Defined as a `model.Relationship` with a
 ### output_binding
 How results are bound via `Graph.Node.ref()`:
 - Centrality: `(node, score)` — ternary relation
-- WCC: `(node, component_id)` — component_id is min node ID in component
+- WCC: `(node, component_id_node)` — component_id is itself the min-id **Node** of the component, not an integer. Access `.id` on the component node to get its identifying value (cast to `int` only when the node concept uses an integer `identify_by`; string-identified nodes give a string column directly). See `rai-graph-analysis` result extraction reference.
 - Reachability: `(source, target)` — binary relation of reachable pairs
 - Community: `(node, community_label)` — binary relation
 - Distance: `(start, end, length)` — ternary relation
@@ -140,7 +140,7 @@ Graph reasoning adds properties to the ontology that downstream reasoners can co
 | Algorithm | Output | Downstream Use |
 |-----------|--------|----------------|
 | Centrality | `node.centrality_score` (float) | Prescriptive: weight allocation by importance. Predictive: use as feature. |
-| WCC | `node.component_id` (int) | Prescriptive: optimize within-cluster vs cross-cluster. Rules: flag isolated components. |
+| WCC | `(node, component_id_node)` — component_id is the min-id node itself; extract `.id` to get its identifying value (cast to `int` only when the node concept uses an integer `identify_by`) | Prescriptive: optimize within-cluster vs cross-cluster. Rules: flag isolated components. |
 | Reachability | `(source, target)` pairs | Prescriptive: constrain to reachable alternatives. Rules: alert on high-impact dependencies. |
 | Community | `node.community_label` | Prescriptive: per-community optimization. Predictive: community as feature. |
 | Distance | `(start, end, length)` | Prescriptive: use as cost parameter. Predictive: use as feature. |

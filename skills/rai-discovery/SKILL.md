@@ -156,7 +156,7 @@ Some questions require multiple reasoners in sequence. Each stage's output enric
 Each stage enriches the shared ontology with new properties. Downstream stages consume those properties as if they were base data.
 
 - **Enrichment write-back:** A stage's output becomes a new `Property` or `Relationship` on an existing concept via `model.define()`. Downstream stages reference it like any other property.
-- **DataFrame bridge:** When a stage runs on a separate `Model` (see `rai-graph-analysis` [graph-construction.md](../rai-graph-analysis/references/graph-construction.md#graph-model-separation)), extract results to a DataFrame and load into the main model via `model.data()`.
+- **DataFrame bridge:** When a stage produces results as a pandas DataFrame (e.g., from an external API), load into the model via `model.data()` and bind with `model.define()`.
 - **Fallback operator (`|`):** Allows downstream stages to degrade gracefully when an upstream enrichment is missing for some entities — e.g., `Entity.predicted_value | Entity.current_value`.
 
 ---
@@ -171,7 +171,7 @@ Each reasoner adds new concepts and properties to the ontology. Discovery should
 |----------------|--------------------------|---------------------------|
 | Graph centrality | `node.centrality_score` | Predictive: centrality as feature. Prescriptive: weight allocation by node importance. |
 | Graph reachability | impact_count, affected flags | Prescriptive: minimize disruption to high-impact nodes. Rules: alert on critical dependencies. |
-| Graph WCC / community | `node.component_id`, `node.community_label` | Prescriptive: optimize within-cluster vs cross-cluster. Rules: flag isolated components. |
+| Graph WCC / community | WCC: `(node, component_id_node)` membership (access `.id` to get its identifying value; cast to `int` only for integer-identified nodes); community: `node.community_label` (int) | Prescriptive: optimize within-cluster vs cross-cluster. Rules: flag isolated components. |
 | Predictive forecasting | `Forecast.predicted_value` | Prescriptive: optimize against predicted demand/delays. |
 | Predictive classification | `Entity.risk_probability` | Rules: flag above threshold. Prescriptive: incorporate risk as constraint. |
 

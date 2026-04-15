@@ -334,7 +334,7 @@ reasoners:
         external_access_integration: gurobi_integration
 ```
 
-If `p.solve("gurobi")` returns `Solver 'gurobi' is not enabled or not properly configured`, check:
+If `problem.solve("gurobi")` returns `Solver 'gurobi' is not enabled or not properly configured`, check:
 - The `name` field is set and the engine exists (`rai reasoners:list --type Prescriptive`)
 - The secret exists (`SHOW SECRETS IN SCHEMA SOLVERS.SECRETS`)
 - The integration exists and is enabled (`DESCRIBE INTEGRATION gurobi_integration`)

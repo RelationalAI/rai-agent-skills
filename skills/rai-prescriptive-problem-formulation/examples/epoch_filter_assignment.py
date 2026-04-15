@@ -51,35 +51,39 @@ Assignment.sprint = Property(f"{Assignment} has {Sprint}", short_name="sprint")
 Assignment.x_assigned = Property(f"{Assignment} is {Float:assigned}")
 
 # Build domain: developer has matching skill AND sprint >= target sprint
-model.define(
-    Assignment.new(developer=Developer, issue=Issue, sprint=Sprint)
-).where(
+model.define(Assignment.new(developer=Developer, issue=Issue, sprint=Sprint)).where(
     Skill.developer_id == Developer.id,
     Skill.team == Issue.team,
     Sprint.number >= Issue.target_sprint_number,
 )
 
 # --- Problem ---
-p = Problem(model, Float)
-p.solve_for(Assignment.x_assigned, type="bin",
-            name=["assign", Assignment.issue.key, Assignment.developer.name, Assignment.sprint.name])
+problem = Problem(model, Float)
+problem.solve_for(
+    Assignment.x_assigned,
+    type="bin",
+    name=[
+        "assign",
+        Assignment.issue.key,
+        Assignment.developer.name,
+        Assignment.sprint.name,
+    ],
+)
 
 # Constraint: each issue assigned exactly once
-p.satisfy(model.require(
-    sum(Assignment.x_assigned).per(Issue) == 1
-).where(Assignment.issue == Issue))
+problem.satisfy(model.require(sum(Assignment.x_assigned).per(Issue) == 1).where(Assignment.issue == Issue))
 
 # Constraint: developer capacity per sprint
 capacity_multiplier = 1.0
-p.satisfy(model.require(
-    sum(Assignment.x_assigned * Assignment.issue.story_points).per(Developer, Sprint)
-    <= Developer.capacity_points_per_sprint * capacity_multiplier
-).where(Assignment.developer == Developer, Assignment.sprint == Sprint))
+problem.satisfy(
+    model.require(
+        sum(Assignment.x_assigned * Assignment.issue.story_points).per(Developer, Sprint)
+        <= Developer.capacity_points_per_sprint * capacity_multiplier
+    ).where(Assignment.developer == Developer, Assignment.sprint == Sprint)
+)
 
 # Objective: minimize weighted completion time (higher priority = higher delay cost)
 max_priority = 3
-p.minimize(
-    sum(Assignment.x_assigned * (max_priority + 1 - Assignment.issue.priority) * Assignment.sprint.number)
-)
+problem.minimize(sum(Assignment.x_assigned * (max_priority + 1 - Assignment.issue.priority) * Assignment.sprint.number))
 
-p.solve("highs", time_limit_sec=60)
+problem.solve("highs", time_limit_sec=60)

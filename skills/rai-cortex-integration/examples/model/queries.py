@@ -1,5 +1,5 @@
 import relationalai.semantics as rai
-from cortex.model.core import model, Customer, Order
+from .core import model, Customer, Order
 
 
 def segment_summary() -> rai.Fragment:

@@ -156,7 +156,7 @@ TransportType.qty_tra = model.Property(
 )
 fg = FreightGroup.ref()
 x = Float.ref()
-p.solve_for(
+problem.solve_for(
     TransportType.qty_tra(fg, x), lower=0,
     name=["qty_tra", TransportType.name, fg.name],
     where=[TransportType.available_for(fg)],  # Grounded by existing relationship
@@ -172,13 +172,13 @@ p.solve_for(
 
 ```python
 # Ground by existing relationship (only create variables where relationship exists)
-p.solve_for(
+problem.solve_for(
     Worker.hours(Shift, x), lower=0,
     where=[Worker.available_for(Shift)],  # Uses existing availability relationship
 )
 
 # Ground by data range (parametric/time-indexed)
-p.solve_for(
+problem.solve_for(
     FreightGroup.inv(t, x_inv), lower=0,
     where=[t == std.common.range(FreightGroup.inv_start_t, FreightGroup.inv_end_t + 1)],
 )
@@ -231,14 +231,14 @@ Use the most restrictive type that fits. Binary is a special case of integer. Co
 - Linear/quadratic expressions dominate
 
 ```python
-p = Problem(model, Float)    # Continuous/MIP (diet, portfolio, flow, scheduling)
-p = Problem(model, Integer)  # Pure combinatorial (sudoku, n-queens, graph coloring)
+problem = Problem(model, Float)    # Continuous/MIP (diet, portfolio, flow, scheduling)
+problem = Problem(model, Integer)  # Pure combinatorial (sudoku, n-queens, graph coloring)
 ```
 
 ### `solve_for` parameter reference
 
 ```python
-p.solve_for(
+var = problem.solve_for(
     property_or_binding,   # Property or multiarity binding like Prop(ref1, ref2, x)
     type="cont",           # "cont" (default), "int", or "bin"
     name=...,              # String or list for variable naming
@@ -248,6 +248,7 @@ p.solve_for(
     start=...,             # Warm start value (for nonlinear solvers like Ipopt)
     populate=True,         # If False, solution values not written back to model (for parametric solving)
 )
+# var is a ProblemVariable concept — usable with model.select(), .ref(), Variable.values()
 ```
 
 ### Bounds guidance
@@ -284,22 +285,22 @@ Use the ATTRIBUTES & STATISTICS section to set meaningful bounds:
 
 ### Variable naming (`name=[]`)
 
-The `name=[]` parameter labels variables in solver output (`variable_values()`). Use **primitive identity fields** (String, Integer) only — relationship refs cause TyperError.
+The `name=[]` parameter labels variables in solver output. Use **primitive identity fields** (String, Integer) only — relationship refs cause TyperError. With `Variable.values()` (see below), structured access via back-pointers is preferred for result extraction; `name=[]` remains useful for solver-output labeling and debugging.
 
 ```python
 # CORRECT — primitive identity fields:
-p.solve_for(Food.x_amount, lower=0, name=["x_amount", Food.name])
-p.solve_for(Edge.x_edge, type="bin", name=["x", Edge.i, Edge.j])
+problem.solve_for(Food.x_amount, lower=0, name=["x_amount", Food.name])
+problem.solve_for(Edge.x_edge, type="bin", name=["x", Edge.i, Edge.j])
 
 # WRONG — relationship refs (cause TyperError):
-p.solve_for(MachinePeriod.x_maintain, type="bin",
+problem.solve_for(MachinePeriod.x_maintain, type="bin",
             name=["x_maintain", MachinePeriod.machine])  # machine is a relationship!
 
 # SAFE for cross-product concepts — use just the variable name:
-p.solve_for(MachinePeriod.x_maintain, type="bin", name=["x_maintain"])
+problem.solve_for(MachinePeriod.x_maintain, type="bin", name=["x_maintain"])
 ```
 
-With `populate=True` (default), results are accessible via `model.select()` which provides entity-aware output regardless of `name=[]`. Use `name=[]` primarily when `populate=False` (scenario/loop workflows).
+With `populate=True` (default), results are accessible via `model.select()` which provides entity-aware output regardless of `name=[]`. The preferred approach for result extraction is `Variable.values(sol_index, value_ref)` on the `ProblemVariable` returned by `solve_for()`, which provides structured access via back-pointers to the original entity. Use `name=[]` primarily for solver-output labeling and when `populate=False` (scenario/loop workflows).
 
 ### Variable bounds from data vs literals
 
@@ -307,12 +308,12 @@ Prefer data-driven bounds over hardcoded literals. Bounds from properties automa
 
 ```python
 # Data-driven bounds (preferred)
-p.solve_for(Product.quantity, lower=0, upper=Product.demand, name=["x_qty", Product.name])
-p.solve_for(Node.u, type="int", lower=1, upper=node_count, name=["u", Node.v])
+problem.solve_for(Product.quantity, lower=0, upper=Product.demand, name=["x_qty", Product.name])
+problem.solve_for(Node.u, type="int", lower=1, upper=node_count, name=["u", Node.v])
 
 # Literal bounds
-p.solve_for(Food.amount, lower=0, name=["x_amount", Food.name])  # No upper bound
-p.solve_for(Queen.column, type="int", lower=0, upper=n - 1, name=["x", Queen.row])
+problem.solve_for(Food.amount, lower=0, name=["x_amount", Food.name])  # No upper bound
+problem.solve_for(Queen.column, type="int", lower=0, upper=n - 1, name=["x", Queen.row])
 ```
 
 ### Derived scalar bounds via stored Relationship
@@ -323,7 +324,7 @@ When a bound depends on a derived value (e.g., count of entities), store it as a
 # count() in solver bounds requires a stored Relationship
 node_count = model.Relationship(f"node count is {Integer}")
 model.define(node_count(count(Node)))
-p.solve_for(Node.u, type="int", lower=1, upper=node_count)
+problem.solve_for(Node.u, type="int", lower=1, upper=node_count)
 ```
 
 This pattern applies whenever a bound is computed from data (counts, max values, sums) rather than a property on the variable's concept. See `../examples/subtour_elimination_mtz.py`.
@@ -335,7 +336,7 @@ For variables indexed by a primitive type rather than a named concept, use a sta
 ```python
 # Standalone property — created via model.Property(), not attached to a concept
 bin_tl = model.Property(f"departure day {Integer:t} has {Float:bin_tl}")
-p.solve_for(bin_tl(t, y_bin_tl), type="bin", name=["y_bin_tl", t],
+problem.solve_for(bin_tl(t, y_bin_tl), type="bin", name=["y_bin_tl", t],
             where=[t == departure_days])
 ```
 
@@ -354,21 +355,21 @@ Create variables only where they are meaningful. This reduces problem size and p
 
 ```python
 # Only create assignment variables for available worker-shift pairs
-p.solve_for(
+problem.solve_for(
     Worker.x_assign(Shift, x), type="bin",
     name=["x", Worker.name, Shift.name],
     where=[Worker.available_for(Shift)]
 )
 
 # Only create inventory variables for valid time windows per freight group
-p.solve_for(
+problem.solve_for(
     FreightGroup.inv(t, x_inv), lower=0,
     name=["x_inv", FreightGroup.name, t],
     where=[t == std.common.range(FreightGroup.inv_start_t, FreightGroup.inv_end_t + 1)]
 )
 
 # Scope to a specific factory's products
-p.solve_for(
+problem.solve_for(
     Product.quantity, lower=0, upper=Product.demand,
     name=Product.name, where=[Product.factory.name("steel_factory")],
 )
@@ -420,16 +421,16 @@ Variable names are lists of components that produce readable solver output. Use 
 
 ```python
 # Single-index: property name as identifier
-p.solve_for(Food.amount, name=Food.name, lower=0)
+problem.solve_for(Food.amount, name=Food.name, lower=0)
 
 # Multi-index: prefix + identifiers
-p.solve_for(Edge.flow, name=["x", Edge.i, Edge.j], lower=0, upper=Edge.cap)
-p.solve_for(FreightGroup.inv(t, x_inv), name=["x_inv", FreightGroup.name, t])
+problem.solve_for(Edge.flow, name=["x", Edge.i, Edge.j], lower=0, upper=Edge.cap)
+problem.solve_for(FreightGroup.inv(t, x_inv), name=["x_inv", FreightGroup.name, t])
 
 # Named constraints and objectives
-p.satisfy(fix_node, name="fix0")
-p.satisfy(diff_colors, name=["diff", Edge.i, Edge.j])
-p.minimize(chromatic_number, name="chromatic_number")
+problem.satisfy(fix_node, name="fix0")
+problem.satisfy(diff_colors, name=["diff", Edge.i, Edge.j])
+problem.minimize(chromatic_number, name="chromatic_number")
 ```
 
 ### Self-check: variables
@@ -456,7 +457,7 @@ p.minimize(chromatic_number, name="chromatic_number")
   "upper": "None",
   "pattern": "existing",
   "property_definition": "USE_EXISTING",
-  "solver_registration": "p.solve_for(Entity.x_quantity, name=['qty', Entity.name], lower=0, type='cont')",
+  "solver_registration": "problem.solve_for(Entity.x_quantity, name=['qty', Entity.name], lower=0, type='cont')",
   "rationale": "Determines how many units to allocate per entity, letting the optimizer balance cost and coverage",
   "business_mapping": "Quantity allocated per entity",
   "parameters": []
@@ -475,7 +476,7 @@ p.minimize(chromatic_number, name="chromatic_number")
   "concept_definition": "Decision = model.Concept('Decision')\nDecision.source = model.Relationship(f'{Decision} from {ConceptA:source}')\nDecision.target = model.Relationship(f'{Decision} to {ConceptB:target}')\nDecision.x_active = model.Property(f'{Decision} is {Float:active}')",
   "property_definition": "Decision.x_active = model.Property(f'{Decision} is {Float:active}')",
   "entity_creation": "model.define(Decision.new(source=ConceptA, target=ConceptB))",
-  "solver_registration": "p.solve_for(Decision.x_active, type='bin', name=['active', Decision.source.id, Decision.target.id])",
+  "solver_registration": "problem.solve_for(Decision.x_active, type='bin', name=['active', Decision.source.id, Decision.target.id])",
   "rationale": "Decides whether each source-target pairing is active, enabling the optimizer to select the best combinations",
   "business_mapping": "Whether each source-target pairing is selected",
   "parameters": []
@@ -495,7 +496,7 @@ For variables indexed by multiple dimensions, define a multiarity property and b
 ```python
 # Assignment: player -> week -> group
 Player.assign = model.Property(f"{Player} in {Integer:week} is in {Integer:group}")
-p.solve_for(
+problem.solve_for(
     Player.assign(w, x), type="int", lower=0, upper=n_groups - 1,
     name=["x", Player.p, w], where=[w == std.common.range(n_weeks)],
 )
@@ -510,7 +511,7 @@ For variables not attached to any concept (e.g., grid cells), use `model.Propert
 ```python
 i, j, x = Integer.ref().alias("i"), Integer.ref().alias("j"), Integer.ref().alias("x")
 cell = model.Property(f"cell {Integer:i} {Integer:j} is {Integer:x}")
-p.solve_for(
+problem.solve_for(
     cell(i, j, x), type="int", lower=1, upper=n,
     name=["x", i, j],
     where=[i == std.common.range(1, n + 1), j == std.common.range(1, n + 1)],
@@ -523,7 +524,7 @@ p.solve_for(
 
 ```python
 # Two players: limit shared groups across weeks
-p.satisfy(model.where(
+problem.satisfy(model.where(
     p0 := Player.ref(), p1 := Player.ref(), p0.p < p1.p,
     x0 := Integer.ref(), x1 := Integer.ref(),
     p0.assign(w, x0), p1.assign(w, x1),
@@ -549,9 +550,9 @@ model.require(Node.u == 1).where(Node.v(1))                          # Fix TSP o
 ### Conditional fixing from data
 
 ```python
-p.satisfy(model.require(x == fixed.fix).where(cell(fixed.i, fixed.j, x)))  # Sudoku known cells
-p.satisfy(model.require(x_inv == 0).where(FreightGroup.inv(FreightGroup.inv_end_t, x_inv)))  # End inventory
-p.satisfy(model.require(x_inv == FreightGroup.inv_start).where(
+problem.satisfy(model.require(x == fixed.fix).where(cell(fixed.i, fixed.j, x)))  # Sudoku known cells
+problem.satisfy(model.require(x_inv == 0).where(FreightGroup.inv(FreightGroup.inv_end_t, x_inv)))  # End inventory
+problem.satisfy(model.require(x_inv == FreightGroup.inv_start).where(
     FreightGroup.inv(FreightGroup.inv_start_t, x_inv)
 ))  # Start inventory
 ```
@@ -570,17 +571,17 @@ PlacementSegment.slope = model.Property(f"{PlacementSegment} has {Float:slope}")
 PlacementSegment.seg_len = model.Property(f"{PlacementSegment} has {Float:seg_len}")
 
 # Segment-level variable: allocation within each segment
-p.solve_for(PlacementSegment.x_alloc, lower=0, upper=PlacementSegment.seg_len,
+problem.solve_for(PlacementSegment.x_alloc, lower=0, upper=PlacementSegment.seg_len,
             name=["seg", PlacementSegment.placement.id, PlacementSegment.seg_idx])
 
 # Link: total allocation = sum of segment allocations
-p.satisfy(model.require(
+problem.satisfy(model.require(
     Placement.x_total == sum(PlacementSegment.x_alloc)
         .where(PlacementSegment.placement(Placement)).per(Placement)
 ))
 
 # Objective: sum of slope * segment_allocation (concave -> LP-solvable)
-p.maximize(sum(PlacementSegment.slope * PlacementSegment.x_alloc))
+problem.maximize(sum(PlacementSegment.slope * PlacementSegment.x_alloc))
 ```
 
 ### Derived properties for intermediate computations
@@ -634,7 +635,7 @@ model.where(Route.x_flow(Scenario, x_flow)).require(
 )
 
 # solve_for with Scenario binding
-p.solve_for(Route.x_flow(Scenario, x_flow), name=[Scenario.name, Route.origin, Route.dest])
+problem.solve_for(Route.x_flow(Scenario, x_flow), name=[Scenario.name, Route.origin, Route.dest])
 ```
 
 **Key rules:**
@@ -664,13 +665,13 @@ When excluding entities or solving independent partitions:
 
 ```python
 for excluded in [None, "SupplierC", "SupplierB"]:
-    p = Problem(model, Float)
+    problem = Problem(model, Float)
     if excluded:
-        p.solve_for(Order.x_qty, where=[Order.supplier.name != excluded], populate=False)
+        problem.solve_for(Order.x_qty, where=[Order.supplier.name != excluded], populate=False)
     else:
-        p.solve_for(Order.x_qty, populate=False)
-    p.maximize(sum(Order.x_qty * Order.profit))
-    p.solve("highs", time_limit_sec=60)
+        problem.solve_for(Order.x_qty, populate=False)
+    problem.maximize(sum(Order.x_qty * Order.profit))
+    problem.solve("highs", time_limit_sec=60)
 ```
 
 Key flags: `where=[]` scopes variables; `populate=False` prevents cross-iteration contamination.
@@ -680,11 +681,11 @@ Key flags: `where=[]` scopes variables; `populate=False` prevents cross-iteratio
 ```python
 for factory_name in factory_names:
     this_product = Product.factory.name(factory_name)
-    p = Problem(model, Float)
-    p.solve_for(Product.x_quantity, lower=0, upper=Product.demand,
+    problem = Problem(model, Float)
+    problem.solve_for(Product.x_quantity, lower=0, upper=Product.demand,
                 name=Product.name, where=[this_product], populate=False)
-    p.maximize(sum(Product.profit * Product.x_quantity).where(this_product))
-    p.solve("highs", time_limit_sec=60)
+    problem.maximize(sum(Product.profit * Product.x_quantity).where(this_product))
+    problem.solve("highs", time_limit_sec=60)
 ```
 
 See `rai-prescriptive-solver-management/examples/partitioned_iteration_scenarios.py`.

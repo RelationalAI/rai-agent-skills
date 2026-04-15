@@ -1,5 +1,5 @@
 """
-Deployment script — deploy, update, status, chat, or teardown a Cortex agent.
+Deployment script - deploy, update, status, chat, or teardown a Cortex agent.
 
 Usage:
     python -m <package>.deploy deploy
@@ -9,11 +9,9 @@ Usage:
     python -m <package>.deploy teardown
 """
 import argparse
-import sys
 
 from snowflake import snowpark
 
-from relationalai.semantics import Model
 from relationalai.config import create_config, SnowflakeConnection
 from relationalai.agent.cortex import (
     CortexAgentManager,
@@ -30,7 +28,12 @@ from relationalai.agent.cortex import (
 AGENT_NAME = "EXAMPLE_VERBALIZER_QUERIES"
 DATABASE = "EXAMPLE"
 SCHEMA = "CORTEX_VERBALIZER_QUERIES"
+AGENT_SCHEMA = None  # e.g. "SNOWFLAKE_INTELLIGENCE.AGENTS"
 WAREHOUSE = "TEAM_ECO"
+
+
+def _agent_location() -> str:
+    return AGENT_SCHEMA or f"{DATABASE}.{SCHEMA}"
 
 
 def _build_manager() -> CortexAgentManager:
@@ -41,6 +44,7 @@ def _build_manager() -> CortexAgentManager:
             agent_name=AGENT_NAME,
             database=DATABASE,
             schema=SCHEMA,
+            agent_schema=AGENT_SCHEMA,
             warehouse=WAREHOUSE,
             allow_preview=True,
         ),
@@ -48,19 +52,14 @@ def _build_manager() -> CortexAgentManager:
 
 
 # ---------------------------------------------------------------------------
-# init_tools — executed inside each sproc with a fresh Model
+# init_tools - executed inside each sproc invocation.
 #
+# Recommended form: zero-arg init_tools() that imports model modules inside
+# the function so they initialize within the sproc session.
 # Must be self-contained: don't close over local runtime state
 # (sessions, connections, dataframes, etc.).
 # ---------------------------------------------------------------------------
-def init_tools(model: Model):
-    # Workaround for v1.0.2: redirect schema cache to /tmp so it works in
-    # the Snowflake UDF sandbox, which does not allow writing to the default
-    # relative 'build/cache/' path.
-    import relationalai.util.schema as _schema_mod
-    from pathlib import Path
-    _schema_mod.CACHE_PATH = Path("/tmp/rai_cache/schemas.json")
-
+def init_tools():
     # IMPORTANT: import your model code inside init_tools so it is
     #            resolved from the packaged sproc code, not local state.
     from .model import core, computed, queries
@@ -77,7 +76,10 @@ def init_tools(model: Model):
 # CLI commands
 # ---------------------------------------------------------------------------
 def cmd_deploy(manager: CortexAgentManager) -> None:
-    print(f"Deploying agent {AGENT_NAME} to {DATABASE}.{SCHEMA} ...")
+    print(
+        f"Deploying sprocs to {DATABASE}.{SCHEMA} "
+        f"and agent {AGENT_NAME} to {_agent_location()} ..."
+    )
     manager.deploy(init_tools=init_tools, imports=discover_imports())
     print(manager.status())
 
@@ -99,7 +101,10 @@ def cmd_chat(manager: CortexAgentManager, message: str) -> None:
 
 
 def cmd_teardown(manager: CortexAgentManager) -> None:
-    print(f"Tearing down agent {AGENT_NAME} from {DATABASE}.{SCHEMA} ...")
+    print(
+        f"Tearing down agent {AGENT_NAME} from {_agent_location()} "
+        f"and sprocs from {DATABASE}.{SCHEMA} ..."
+    )
     print("WARNING: this permanently deletes SI conversation history.")
     manager.cleanup()
     print(manager.status())

@@ -34,10 +34,10 @@ Each pattern shows the minimal skeleton. Key heuristic in bold.
 **Key:** Binary variables scoped to valid pairs only (`where=[availability_relationship]`). Needs both per-slot coverage AND per-resource limits.
 
 ```python
-p.solve_for(Worker.x_assign(Shift, x), type="bin",
+problem.solve_for(Worker.x_assign(Shift, x), type="bin",
             where=[Worker.available_for(Shift)])
-p.satisfy(model.require(sum(Worker, x).per(Shift) >= min_coverage))   # forcing
-p.satisfy(model.require(sum(Shift, x).per(Worker) <= max_shifts))     # capacity
+problem.satisfy(model.require(sum(Worker, x).per(Shift) >= min_coverage))   # forcing
+problem.satisfy(model.require(sum(Shift, x).per(Worker) <= max_shifts))     # capacity
 ```
 
 ### Network flow
@@ -45,9 +45,9 @@ p.satisfy(model.require(sum(Shift, x).per(Worker) <= max_shifts))     # capacity
 **Key:** Flow conservation (inflow == outflow at interior nodes) via `.ref()` on Edge concept. Two refs iterate independently.
 
 ```python
-p.solve_for(Edge.flow, lower=0, upper=Edge.cap)
+problem.solve_for(Edge.flow, lower=0, upper=Edge.cap)
 Ei, Ej = Edge.ref(), Edge.ref()
-p.satisfy(model.require(per(Ej.j).sum(Ej.flow) == per(Ei.i).sum(Ei.flow)).where(Ei.i == Ej.j))
+problem.satisfy(model.require(per(Ej.j).sum(Ej.flow) == per(Ei.i).sum(Ei.flow)).where(Ei.i == Ej.j))
 ```
 
 **Anti-pattern: Item x Edge cross-product.**
@@ -65,7 +65,7 @@ model.define(ShipmentRouting.new(shipment=Shipment, operation=Operation))
 **RIGHT (use flow-on-edges):**
 ```python
 # Put flow variable directly on the edge concept
-p.solve_for(Operation.flow_quantity, type='cont', lower=0, upper=Operation.capacity)
+problem.solve_for(Operation.flow_quantity, type='cont', lower=0, upper=Operation.capacity)
 # Add conservation constraints at nodes via model.require()
 # Add source/sink constraints for supply/demand
 ```
@@ -81,10 +81,10 @@ p.solve_for(Operation.flow_quantity, type='cont', lower=0, upper=Operation.capac
 **Key:** Multiarity property binding (`Food.contains(Nutrient, qty)`) for ternary data. Constraints are per-nutrient bounds.
 
 ```python
-p.solve_for(Food.amount, lower=0)
+problem.solve_for(Food.amount, lower=0)
 qty = Float.ref()
 total = sum(qty * Food.amount).where(Food.contains(Nutrient, qty)).per(Nutrient)
-p.satisfy(model.require(total >= Nutrient.min, total <= Nutrient.max))
+problem.satisfy(model.require(total >= Nutrient.min, total <= Nutrient.max))
 ```
 
 ### Facility location
@@ -92,11 +92,11 @@ p.satisfy(model.require(total >= Nutrient.min, total <= Nutrient.max))
 **Key:** Binary open/close variable linked to flow via capacity constraint (`flow <= capacity * x_open`). Multi-component objective via `model.union()`.
 
 ```python
-p.solve_for(Facility.x_open, type="bin")
-p.solve_for(Route.x_flow, lower=0)
-p.satisfy(model.require(sum(Route.x_flow).per(Facility) <= Facility.capacity * Facility.x_open))
-p.satisfy(model.require(sum(Route.x_flow).per(Customer) >= Customer.demand))  # forcing
-p.minimize(sum(model.union(sum(Facility.fixed_cost * Facility.x_open),
+problem.solve_for(Facility.x_open, type="bin")
+problem.solve_for(Route.x_flow, lower=0)
+problem.satisfy(model.require(sum(Route.x_flow).per(Facility) <= Facility.capacity * Facility.x_open))
+problem.satisfy(model.require(sum(Route.x_flow).per(Customer) >= Customer.demand))  # forcing
+problem.minimize(sum(model.union(sum(Facility.fixed_cost * Facility.x_open),
                            sum(Route.transport_cost * Route.x_flow))))
 ```
 
@@ -105,8 +105,8 @@ p.minimize(sum(model.union(sum(Facility.fixed_cost * Facility.x_open),
 **Key:** Degree constraints (exactly 1 in-edge, 1 out-edge per node). MTZ subtour elimination with auxiliary ordering variable `u`. Symmetry breaking fixes one node.
 
 ```python
-p.solve_for(Edge.x, type="bin")
-p.solve_for(Node.u, type="int", lower=1, upper=node_count)
+problem.solve_for(Edge.x, type="bin")
+problem.solve_for(Node.u, type="int", lower=1, upper=node_count)
 # Degree: sum(Edge.x).per(Node) == 1 for both in-edges and out-edges
 # MTZ: Ni.u - Nj.u + node_count * Edge.x <= node_count - 1 (for non-depot nodes)
 # Symmetry: model.require(Node.u == 1).where(Node.v(1))
@@ -119,7 +119,7 @@ p.solve_for(Node.u, type="int", lower=1, upper=node_count)
 **Inventory balance** links consecutive time steps:
 
 ```python
-p.satisfy(model.where(
+problem.satisfy(model.where(
     x_inv1 := Float.ref(), x_inv2 := Float.ref(),
     FreightGroup.inv(t, x_inv1), FreightGroup.inv(t + 1, x_inv2),
     TransportType.qty_tra(FreightGroup, t, x_qty_tra),
@@ -141,19 +141,19 @@ model.where(Tx.pid <= Ty.pid).define(
 
 ```python
 # One-hot: exactly one discount level per (Product, Week)
-p.solve_for(Product.x_select(w, d, x), type="bin")
-p.satisfy(model.where(Product.x_select(w, d, x)).require(
+problem.solve_for(Product.x_select(w, d, x), type="bin")
+problem.satisfy(model.where(Product.x_select(w, d, x)).require(
     sum(d, x).per(Product, w) == 1))
 
 # Price ladder: discount cannot decrease week-over-week
-p.satisfy(model.where(
+problem.satisfy(model.where(
     Product.x_select(w, d, x), Product.x_select(w2, d2, x2),
     w2.num == w.num + 1, d2.level < d.level,
 ).require(x + x2 <= 1))
 
 # Cumulative sales (base case + recurrence)
-p.satisfy(model.where(w.num == 1, ...).require(z == sum(d, y).per(Product, w)))
-p.satisfy(model.where(w.num > 1, w_prev.num == w.num - 1, ...).require(
+problem.satisfy(model.where(w.num == 1, ...).require(z == sum(d, y).per(Product, w)))
+problem.satisfy(model.where(w.num > 1, w_prev.num == w.num - 1, ...).require(
     z == z_prev + sum(d, y).per(Product, w)))
 ```
 
@@ -165,11 +165,11 @@ See `../examples/one_hot_temporal_recurrence.py`.
 
 ```python
 # Segment activation: exactly one active
-p.satisfy(model.require(sum(y_bin).per(t) == 1).where(...))
+problem.satisfy(model.require(sum(y_bin).per(t) == 1).where(...))
 # Remainder within limit
-p.satisfy(model.require(x_rem <= Segment.limit * y_bin).where(...))
+problem.satisfy(model.require(x_rem <= Segment.limit * y_bin).where(...))
 # Weight decomposition: active remainder + lower segments' full capacities
-p.satisfy(model.where(...).require(
+problem.satisfy(model.where(...).require(
     x_weight == sum(x_rem).per(t) +
     sum(Seg1.limit * y_bin).where(Seg1.seg == Seg2.seg - 1).per(t)))
 ```
@@ -199,7 +199,7 @@ define(ShipmentRouting.new(shipment=Shipment, operation=Operation))
 **RIGHT (use flow-on-edges):**
 ```python
 # Put flow variable directly on the edge concept
-p.solve_for(Operation.flow_quantity, type='cont', lower=0, upper=Operation.capacity)
+problem.solve_for(Operation.flow_quantity, type='cont', lower=0, upper=Operation.capacity)
 # Add conservation constraints at nodes
 # Add source/sink constraints for supply/demand
 ```
@@ -253,7 +253,7 @@ Time-scoped constraints restrict optimization to a specific time window by apply
 ### Date column filtering
 
 ```python
-p.satisfy(model.require(
+problem.satisfy(model.require(
     sum(Demand.x_fulfilled).per(Product) >= sum(Demand.quantity).per(Product)
 ).where(Demand.due_date >= '2025-11-01', Demand.due_date <= '2025-11-30'))
 ```
@@ -261,7 +261,7 @@ p.satisfy(model.require(
 ### Epoch timestamp filtering
 
 ```python
-p.satisfy(model.require(
+problem.satisfy(model.require(
     sum(PullRequest.x_selected).per(Repo) <= max_reviews
 ).where(PullRequest.created_at >= 1759302000, PullRequest.created_at <= 1761894000))
 ```

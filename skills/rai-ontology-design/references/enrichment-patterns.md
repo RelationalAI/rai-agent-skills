@@ -146,7 +146,7 @@ FulfillmentAssignment.assigned = model.Property(
 model.define(FulfillmentAssignment.new(demand=CustomerDemand, site=Site))
 
 # 3. Register the decision property
-p.solve_for(
+problem.solve_for(
     FulfillmentAssignment.assigned, type="bin",
     name=["assign", FulfillmentAssignment.demand.id, FulfillmentAssignment.site.id]
 )
