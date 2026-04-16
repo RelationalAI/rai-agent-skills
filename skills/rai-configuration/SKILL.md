@@ -477,6 +477,8 @@ See [engine-management.md](references/engine-management.md) for full API referen
 | Auth fails with `externalbrowser` in CI | Browser auth requires interactive session | Use `jwt` or `username_password` for non-interactive environments |
 | Both `raiconfig.toml` and `.yaml` present | Toml may take precedence in some code paths | Remove `.toml` and use `.yaml` as canonical |
 | Engine not provisioned | Reasoner config references an engine size not available on account | Check `reasoners.prescriptive.size` matches available sizes for your platform |
+| Unicode errors on Windows (`UnicodeEncodeError` in output) | Windows console defaults to a non-UTF-8 encoding | Set `PYTHONIOENCODING=utf-8` environment variable before running |
+| `rai` CLI or scripts fail to run on PowerShell | PowerShell execution policy blocks scripts | Run `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned` and retry |
 
 ---
 
