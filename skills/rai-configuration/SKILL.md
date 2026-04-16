@@ -148,7 +148,7 @@ profile:
 
 **Fallback sources** (when no `raiconfig.yaml` found): `raiconfig.toml` (deprecated) -> `~/.snowflake/config.toml` -> `~/.dbt/profiles.yml`.
 
-**Transition note (as of Feb 2026):** New features (install mode, SQL backend) require `raiconfig.yaml`. However, the old code path still looks for `raiconfig.toml` — a minimal dummy toml may be needed alongside yaml during the transition. When both files are present, toml may take precedence in some code paths. This is being fixed upstream.
+**Transition note (as of Feb 2026):** Use `raiconfig.yaml` for all new projects. If you encounter errors about missing config while a `raiconfig.yaml` exists, check for a leftover `raiconfig.toml` — remove it, as the toml file may take precedence in some code paths.
 
 ---
 
