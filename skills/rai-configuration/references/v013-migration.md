@@ -10,11 +10,11 @@ raiconfig.toml  -->  raiconfig.yaml
 
 ```python
 # v0.13
-model = Model(f"name_{time_ns()}", config=config, use_lqp=False)
+model = Model(f"name_{time_ns()}", config=config)
 
 # v1
-model = Model("name")          # auto-discovers config
-model = Model("name", config=cfg)  # explicit config; use_lqp is in config now
+model = Model("name")              # auto-discovers config
+model = Model("name", config=cfg)  # explicit config
 ```
 
 ### Problem Creation
@@ -57,7 +57,6 @@ from relationalai.config import create_config
 
 | Parameter | Location | Action |
 |---|---|---|
-| `use_lqp` | `Model()` | Moved to `reasoners.logic.use_lqp` in config |
 | `use_pb` | `SolverModel()` / `Problem()` | Removed entirely |
 | `resources` | `Solver()` | Removed; pass solver name as string to `s.solve()` |
 | `strict` | `Model()` | Removed; use `model.implicit_properties: false` in `raiconfig.yaml` |
