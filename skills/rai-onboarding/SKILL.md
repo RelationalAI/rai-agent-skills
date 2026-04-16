@@ -47,7 +47,7 @@ The RelationalAI Native App for Snowflake must be installed in your account by a
 - Request access [here](https://app.snowflake.com/marketplace/listing/GZTYZOOIX8H/relationalai-relationalai). 
 - See the [RAI Native App docs](https://docs.relational.ai/manage/install) for details.
 
-The `rai_developer` role is needed to execute PyRel programs.
+The `rai_developer` role is the standard role for running PyRel programs. Custom Snowflake roles can also work if granted the `rai_user` application role — see [User Access](https://docs.relational.ai/manage/user-access) for details.
 
 ## Contact
 - support@relational.ai
@@ -99,7 +99,7 @@ Propose either
 
 | Mistake                                           | Cause                                                                    | Fix                                                                 |
 |---------------------------------------------------|--------------------------------------------------------------------------|---------------------------------------------------------------------|
-| Errors about RelationalAI Native App not existing | Either the NA hasn't been installed, or the user is using the wrong role | ensure the current role has usage or rai_developer role |
+| Errors about RelationalAI Native App not existing | Either the NA hasn't been installed, or the user's current role lacks access | Verify the Native App is installed and the current role has `rai_developer` or a custom role granted the `rai_user` application role |
 
 ---
 
