@@ -159,7 +159,27 @@ Wire the manager methods into CLI subcommands using `argparse`. Each command map
 
 **`imports`** — `discover_imports()` recursively discovers all local Python imports from the calling file and packages them into the stored procedure. It excludes standard library and installed packages. The `relationalai` package is included automatically.
 
-**`extra_packages`** — optional parameter on `deploy()`/`update()` that specifies additional PyPI packages Snowflake installs in the sproc environment.
+When model code lives **outside** the deploy script's directory (e.g., an `ontology/` package at the project root), `discover_imports()` may not find it because it walks from the calling file's location. In this case, build an explicit imports list instead:
+
+```python
+def _imports():
+    return [
+        os.path.join(_AGENT_DIR, "queries.py"),
+        (os.path.join(_PROJECT_ROOT, "ontology"), "ontology"),  # (path, module_name) tuple
+    ]
+```
+
+Directories are passed as `(path, module_name)` tuples so Snowpark registers them as importable packages. Additionally, `init_tools()` must add the project root to `sys.path` so cross-directory imports resolve inside the sproc sandbox:
+
+```python
+def init_tools():
+    project_root = str(Path(__file__).resolve().parent.parent)
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+    from ontology.Ontology import ...
+```
+
+**`extra_packages`** — optional parameter on `deploy()`/`update()` that specifies additional PyPI packages Snowflake installs in the sproc environment. `httpx` is a known required entry — it is a dependency of `relationalai.agent.cortex` but is not auto-installed as a transitive dependency in the sproc environment.
 
 If `agent_schema` is set, `deploy()`, `status()`, `chat()`, and `cleanup()` operate on the agent in that schema while the stored procedures and stage remain in `database`.`schema`.
 
@@ -219,6 +239,9 @@ SI users need:
 | `RAI_QUERY_MODEL` not available | `allow_preview` not set | Set `allow_preview=True` in `DeploymentConfig` |
 | `init_tools` is rejected or fails with stale state | Closed over local runtime objects or declared 2+ required parameters | Keep `init_tools` self-contained and use only the supported 0-param (recommended) or 1-param (legacy) forms |
 | Agent can't explain business rules | No verbalizer configured | Add `SourceCodeVerbalizer` with all relevant model modules |
+| `discover_imports()` misses model code | Model package lives outside the deploy script's directory | Use an explicit imports list with `(path, module_name)` tuples and add `sys.path` insertion in `init_tools()` — see Step 6 |
+| Sproc fails with `ModuleNotFoundError: httpx` | `httpx` is a transitive dependency not auto-installed in sproc environment | Add `"httpx"` to `extra_packages` on `deploy()`/`update()` |
+| Deploy returns 404 on Azure-hosted Snowflake | `_hostname()` uses only the account locator, missing the Azure regional hostname | Known SDK issue — workaround: monkey-patch `relationalai.agent.cortex.api.client._hostname` to return the full regional hostname (e.g., `account.east-us-2.azure.snowflakecomputing.com`) |
 
 ---
 
