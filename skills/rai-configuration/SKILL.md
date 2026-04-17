@@ -148,7 +148,7 @@ profile:
 
 **Fallback sources** (when no `raiconfig.yaml` found): `raiconfig.toml` (deprecated) -> `~/.snowflake/config.toml` -> `~/.dbt/profiles.yml`.
 
-**Transition note (as of Feb 2026):** Use `raiconfig.yaml` for all new projects. If you encounter errors about missing config while a `raiconfig.yaml` exists, check for a leftover `raiconfig.toml` — remove it, as the toml file may take precedence in some code paths.
+**Transition note (as of Feb 2026):** Use `raiconfig.yaml` for all new projects. See the `Both raiconfig.toml and .yaml present` pitfall below for the precedence gotcha.
 
 ---
 
@@ -477,8 +477,8 @@ See [engine-management.md](references/engine-management.md) for full API referen
 | Auth fails with `externalbrowser` in CI | Browser auth requires interactive session | Use `jwt` or `username_password` for non-interactive environments |
 | Both `raiconfig.toml` and `.yaml` present | Toml may take precedence in some code paths | Remove `.toml` and use `.yaml` as canonical |
 | Engine not provisioned | Reasoner config references an engine size not available on account | Check `reasoners.prescriptive.size` matches available sizes for your platform |
-| Unicode errors on Windows (`UnicodeEncodeError` in output) | Windows console defaults to a non-UTF-8 encoding | Set `PYTHONIOENCODING=utf-8` environment variable before running |
-| `rai` CLI or scripts fail to run on PowerShell | PowerShell execution policy blocks scripts | Run `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned` and retry |
+| Unicode errors on Windows (`UnicodeEncodeError` in output) | Windows console defaults to a non-UTF-8 encoding | Set `PYTHONIOENCODING=utf-8` before running. PowerShell: `$env:PYTHONIOENCODING = "utf-8"`. cmd: `set PYTHONIOENCODING=utf-8` |
+| `rai` CLI or scripts fail to run on PowerShell | PowerShell execution policy blocks scripts | The user should run `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned`. `RemoteSigned` allows local scripts while still requiring signatures on scripts downloaded from the internet |
 
 ---
 
