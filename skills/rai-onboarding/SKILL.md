@@ -47,7 +47,7 @@ The RelationalAI Native App for Snowflake must be installed in your account by a
 - Request access [here](https://app.snowflake.com/marketplace/listing/GZTYZOOIX8H/relationalai-relationalai). 
 - See the [RAI Native App docs](https://docs.relational.ai/manage/install) for details.
 
-The `rai_developer` role is needed to execute PyRel programs.
+The `rai_developer` role is the standard role for running PyRel programs. Custom Snowflake roles can also work if granted the `rai_user` application role — see [User Access](https://docs.relational.ai/manage/user-access) for details.
 
 ## Contact
 - support@relational.ai
@@ -73,13 +73,15 @@ uv add relationalai
 ```
 
 ### Step 2. Establish the connection
-There are 2 options:
-1) Rely on an existing Snowflake (`~/.snowflake/config.toml`) or DBT (`~/.dbt/profiles.yml`) connection. Simply run `rai` or a PyRel program and the connection will be automatically picked up.
-2) Use `rai init` to create a `raiconfig.yaml` which needs to be filled in. Use the `rai-configuration` skill to help the user fill out the fields.
+Check if the user has an existing Snowflake connection (`~/.snowflake/config.toml`) or DBT connection (`~/.dbt/profiles.yml`).
+
+- **If yes:** Skip config creation — PyRel auto-discovers these. Run `rai` or a PyRel program directly.
+- **If no:** Run `rai init` to create a `raiconfig.yaml`. Use the `rai-configuration` skill to help the user fill out the required fields (account, warehouse, user, authenticator).
 
 ### Step 3. Validate the connection
-Run this command to validate the basic configuration works:
-`rai connect`. Remind the user to check their MFA. Revisit Step 2 if there are issues.
+Run `rai connect` to validate the configuration.
+- Remind the user to check their MFA device if using `username_password_mfa` or `externalbrowser`.
+- If the connection fails, check: (1) credentials are correct, (2) the Snowflake account identifier is valid, (3) the warehouse exists and the role has access, (4) the RelationalAI Native App is installed. Use the `rai-configuration` skill for connection troubleshooting.
 
 ### Step 4. Create a sample
 Offer to create a small sample program using inline data.
@@ -99,7 +101,7 @@ Propose either
 
 | Mistake                                           | Cause                                                                    | Fix                                                                 |
 |---------------------------------------------------|--------------------------------------------------------------------------|---------------------------------------------------------------------|
-| Errors about RelationalAI Native App not existing | Either the NA hasn't been installed, or the user is using the wrong role | ensure the current role has usage or rai_developer role |
+| Errors about RelationalAI Native App not existing | Either the NA hasn't been installed, or the user's current role lacks access | Verify the Native App is installed and the current role has `rai_developer` or a custom role granted the `rai_user` application role |
 
 ---
 

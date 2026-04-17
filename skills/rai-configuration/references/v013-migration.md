@@ -10,11 +10,11 @@ raiconfig.toml  -->  raiconfig.yaml
 
 ```python
 # v0.13
-model = Model(f"name_{time_ns()}", config=config, use_lqp=False)
+model = Model(f"name_{time_ns()}", config=config)
 
 # v1
-model = Model("name")          # auto-discovers config
-model = Model("name", config=cfg)  # explicit config; use_lqp is in config now
+model = Model("name")              # auto-discovers config
+model = Model("name", config=cfg)  # explicit config
 ```
 
 ### Problem Creation

@@ -157,9 +157,39 @@ Wire the manager methods into CLI subcommands using `argparse`. Each command map
 | `chat` | `manager.chat().send(message)` | Test the deployed agent |
 | `teardown` | `manager.cleanup()` | Removes all resources — **permanently loses SI conversation history** |
 
-**`imports`** — `discover_imports()` recursively discovers all local Python imports from the calling file and packages them into the stored procedure. It excludes standard library and installed packages. The `relationalai` package is included automatically.
+**`imports`** — `discover_imports()` recursively discovers local Python imports and packages them into the stored procedure. It excludes standard library and installed packages; the `relationalai` package is included automatically. It uses the **current working directory** as the project root and filters out anything outside it.
 
-**`extra_packages`** — optional parameter on `deploy()`/`update()` that specifies additional PyPI packages Snowflake installs in the sproc environment.
+**The deploy script is designed to run from the project root that contains all your user modules** — e.g., `python -m si_integration.deploy deploy` invoked from the repo root. With that layout, sibling packages like `ontology/` are visible to `discover_imports()` and no extra wiring is needed. This is the intended pattern; use it whenever possible.
+
+For cases `discover_imports()` can't cover — e.g., a package that must be registered under a specific sproc-visible module name — build an explicit imports list:
+
+```python
+from pathlib import Path
+
+_AGENT_DIR = Path(__file__).resolve().parent
+_PROJECT_ROOT = _AGENT_DIR.parent
+
+def _imports():
+    return [
+        str(_AGENT_DIR / "queries.py"),
+        (str(_PROJECT_ROOT / "ontology"), "ontology"),  # (path, module_name) tuple
+    ]
+```
+
+Pass this in place of `discover_imports()`: `manager.deploy(init_tools=init_tools, imports=_imports())`. Directory entries use `(path, module_name)` tuples so Snowpark registers them as top-level importable packages inside the sproc. `init_tools()` itself stays self-contained per Step 3 — **no `sys.path` manipulation inside `init_tools()`**. The tuple form already makes the package importable in the sproc; mutating `sys.path` there is a no-op inside the sproc and masks the real fix for local invocation.
+
+**Workaround if you ignore the run-from-project-root guidance:** if you must invoke the deploy script from somewhere else and local imports fail, add a one-time `sys.path` fix at the *top of the deploy module* — not inside `init_tools()`:
+
+```python
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+```
+
+This is a local-invocation crutch, not a deploy requirement. Prefer running from the project root.
+
+**`extra_packages`** — optional parameter on `deploy()`/`update()` that specifies additional PyPI packages Snowflake installs in the sproc environment. `httpx` is a known required entry — it is a dependency of `relationalai.agent.cortex` but is not auto-installed as a transitive dependency in the sproc environment.
 
 If `agent_schema` is set, `deploy()`, `status()`, `chat()`, and `cleanup()` operate on the agent in that schema while the stored procedures and stage remain in `database`.`schema`.
 
@@ -219,6 +249,8 @@ SI users need:
 | `RAI_QUERY_MODEL` not available | `allow_preview` not set | Set `allow_preview=True` in `DeploymentConfig` |
 | `init_tools` is rejected or fails with stale state | Closed over local runtime objects or declared 2+ required parameters | Keep `init_tools` self-contained and use only the supported 0-param (recommended) or 1-param (legacy) forms |
 | Agent can't explain business rules | No verbalizer configured | Add `SourceCodeVerbalizer` with all relevant model modules |
+| `discover_imports()` misses model code | Model package lives outside CWD, or needs a specific sproc-visible module name | Run the deploy script from the project root; for exceptions, use an explicit `_imports()` list with `(path, module_name)` tuples — see Step 6 |
+| Sproc fails with `ModuleNotFoundError: httpx` | `httpx` is a transitive dependency not auto-installed in sproc environment | Add `"httpx"` to `extra_packages` on `deploy()`/`update()` |
 
 ---
 

@@ -80,13 +80,21 @@ def cmd_deploy(manager: CortexAgentManager) -> None:
         f"Deploying sprocs to {DATABASE}.{SCHEMA} "
         f"and agent {AGENT_NAME} to {_agent_location()} ..."
     )
-    manager.deploy(init_tools=init_tools, imports=discover_imports())
+    manager.deploy(
+        init_tools=init_tools,
+        imports=discover_imports(),
+        extra_packages=["httpx"],
+    )
     print(manager.status())
 
 
 def cmd_update(manager: CortexAgentManager) -> None:
     print(f"Updating stored procedures for {AGENT_NAME} ...")
-    manager.update(init_tools=init_tools, imports=discover_imports())
+    manager.update(
+        init_tools=init_tools,
+        imports=discover_imports(),
+        extra_packages=["httpx"],
+    )
     print(manager.status())
 
 
