@@ -52,6 +52,22 @@ The script contains four key parts — see [examples/deploy.py](examples/deploy.
 3. **`init_tools()`** — called inside each sproc; builds a `ToolRegistry`
 4. **CLI subcommands** — `deploy`, `update`, `status`, `chat`, `teardown`
 
+**Expected project layout:**
+
+```
+<project_root>/                  # CWD when running the deploy script
+├── <agent_pkg>/
+│   ├── __init__.py
+│   ├── deploy.py                # CLI entry — init_tools() lives here
+│   └── queries.py               # (optional) query functions for QueryCatalog
+└── <model_pkg>/                 # Your model code as a sibling package
+    ├── __init__.py
+    ├── core.py
+    └── ...
+```
+
+Invoke as `python -m <agent_pkg>.deploy <command>` from `<project_root>`. Every module referenced by `init_tools()` (model code, query functions) must live under this root — `discover_imports()` packages local imports relative to CWD and excludes anything outside it. See Step 6 for the full `imports` contract and non-standard layouts.
+
 Leverage PyRel's inline docstrings by inspecting the code or running eg `help(CortexAgentManager)` or `print(CortexAgentManager.__doc__)`
 
 ---
@@ -132,6 +148,8 @@ If the model is simple and the agent only needs schema-level understanding, the 
 
 > The queries capability is in PREVIEW. Deployment requires `allow_preview=True`.
 
+Without `QueryCatalog` wired into `ToolRegistry.add(..., queries=...)`, the agent can describe the model (via discovery and verbalization) but cannot execute any pre-defined queries — `RAI_QUERY_MODEL` is not registered.
+
 Each query function must:
 - Return a `rai.Fragment` (a `rai.select(...)` expression) or `pandas.DataFrame`
 - Have a clear **docstring** — used as the query description shown to the agent
@@ -140,6 +158,11 @@ Each query function must:
 See [examples/model/queries.py](examples/model/queries.py) for a complete query definition.
 
 Prefer **module-level zero-argument query functions** imported inside `init_tools()`. This keeps `__name__` and `__doc__` intact for `QueryCatalog` without wrappers or partials.
+
+**Adding a new query:**
+1. Define a module-level function in `queries.py` that returns a `rai.Fragment` or `pandas.DataFrame`. Give it a clear docstring — it becomes the description shown to the agent.
+2. Add the function to the `QueryCatalog(...)` call inside `init_tools()` in `deploy.py`.
+3. Redeploy with `deploy` (or `update` if the agent already exists).
 
 Use `QueryCatalog` to expose a small set of curated, parameterized entry points into advanced analysis that the agent should invoke directly rather than reconstruct from scratch. Good candidates are things like community detection outputs, graph metrics, scenario summaries, or other pre-modeled analytical routines whose results you want surfaced reliably.
 
@@ -157,11 +180,9 @@ Wire the manager methods into CLI subcommands using `argparse`. Each command map
 | `chat` | `manager.chat().send(message)` | Test the deployed agent |
 | `teardown` | `manager.cleanup()` | Removes all resources — **permanently loses SI conversation history** |
 
-**`imports`** — `discover_imports()` recursively discovers local Python imports and packages them into the stored procedure. It excludes standard library and installed packages; the `relationalai` package is included automatically. It uses the **current working directory** as the project root and filters out anything outside it.
+**`imports`** — `discover_imports()` recursively discovers local Python imports and packages them into the stored procedure. It excludes standard library and installed packages; the `relationalai` package is included automatically. It uses the **current working directory** as the project root and filters out anything outside it. This is why the canonical layout (see Quick Reference → *Expected project layout*) keeps the agent package and model package as siblings under `<project_root>` and expects you to invoke `python -m <agent_pkg>.deploy ...` from that root — with that setup, no extra import wiring is needed.
 
-**The deploy script is designed to run from the project root that contains all your user modules** — e.g., `python -m si_integration.deploy deploy` invoked from the repo root. With that layout, sibling packages like `ontology/` are visible to `discover_imports()` and no extra wiring is needed. This is the intended pattern; use it whenever possible.
-
-For cases `discover_imports()` can't cover — e.g., a package that must be registered under a specific sproc-visible module name — build an explicit imports list:
+For cases `discover_imports()` can't cover — e.g., a package that must be registered under a specific sproc-visible module name, or model code that cannot be relocated under the project root — build an explicit imports list:
 
 ```python
 from pathlib import Path
