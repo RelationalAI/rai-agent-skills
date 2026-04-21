@@ -8,7 +8,7 @@
       "name": "RAI",
       "source": {
         "source": "local",
-        "path": "./"
+        "path": "./plugins/rai"
       },
       "policy": {
         "installation": "AVAILABLE",
