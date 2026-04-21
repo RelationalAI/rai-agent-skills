@@ -44,6 +44,7 @@ The ultimate quality gate. Everything below serves this — if an agent can't di
 - [ ] **No explaining the obvious**: omit what the agent already knows (general concepts, standard libraries, common protocols) — every token should earn its place
 - [ ] **Concise over exhaustive**: stepwise guidance with a working example beats encyclopedic coverage — if content covers every edge case, check whether most are better left to agent judgment
 - [ ] **Defaults over menus**: when multiple tools/approaches apply, one is the default with brief escape hatch — not equal-weight lists of options
+- [ ] **Short, generic parentheticals**: keep inline "e.g." examples short and generic. Drop overly-specific example phrases unless they disambiguate a rule — when in doubt, cut them.
 
 ---
 
@@ -54,7 +55,7 @@ The ultimate quality gate. Everything below serves this — if an agent can't di
 - [ ] Positive framing: state what to do, not just what to avoid
 - [ ] CRITICAL/MUST reserved for genuine compile/runtime failures only (not section headers)
 - [ ] Each piece of guidance stated once in one authoritative location
-- [ ] No hardcoded domain-specific lists — extract from context
+- [ ] **No hardcoded domain enumerations**: no domain-specific laundry lists in prose or pattern definitions ("price ticks, sensor readings, KPIs…"). State the heuristic or shape distinction principled so the agent adapts to the user's data. One concise illustrative phrase is fine; a list is not.
 - [ ] Hallucination guard: instruct to verify references against provided context
 - [ ] Examples demonstrate correct pattern, not just anti-patterns
 - [ ] **Procedures over declarations**: skill teaches *how to approach* a class of problems, not *what to produce* for a specific instance — the method should generalize even when individual details are specific

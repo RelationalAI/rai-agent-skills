@@ -62,6 +62,8 @@ model.select(count(Customer)).to_df()
 
    If 0: data not loaded. Check table path and `model.define()` rules.
 
+> **Note:** `count(C)` on a concept with zero instances returns an empty DataFrame (no rows), not a DataFrame with `count=0` — the underlying relation is empty so the aggregation has no rows to reduce over. For chained workflows where a placeholder concept is populated by a downstream step, use `inspect.schema()` membership to verify the concept is declared rather than `count()` to verify data.
+
 5. **Isolate where conditions:**
 
 ```python

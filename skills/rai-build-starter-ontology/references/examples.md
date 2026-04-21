@@ -708,3 +708,108 @@ PMIssue.belongs_to_project = model.Relationship(
 - **Cross-system linking**: GitHubUser ↔ PMUser, GitHubPullRequest → PMIssue (bridging identity systems)
 - Prefixed concept names (PM*, GitHub*) to avoid collisions across domains
 - Relationship hierarchy within domains (Issue → Sprint, Issue → Project)
+
+---
+
+## Example 7: Pairwise Value Matrix (long-form relation table, two binding patterns)
+
+Many source datasets encode pairwise quantities as a long-form `(entity_i, entity_j, value)` table — e.g., a distance or similarity matrix between entities. This example shows the two ways to bind such data and when each is preferred.
+
+**Source:** an `INTERACTION` table with rows `(LEFT_ID, RIGHT_ID, STRENGTH)` referencing `Item.id`.
+
+### Pattern A: Junction concept with compound identity
+
+Use when pairs may carry multiple attributes, need explicit Relationships to both endpoints for downstream traversal, or feed a graph reasoner via `edge_concept`.
+
+```python
+from relationalai.semantics import Float, Integer, Model, String
+
+model = Model("Pairwise Demo")
+
+class Sources:
+    class demo:
+        class public:
+            items = model.Table("DEMO.PUBLIC.ITEMS")
+            interactions = model.Table("DEMO.PUBLIC.INTERACTIONS")
+
+src = Sources.demo.public
+
+Item = model.Concept("Item", identify_by={"id": Integer})
+Item.name = model.Property(f"{Item} has {String:name}")
+model.define(
+    i := Item.new(id=src.items.ITEM_ID),
+    i.name(src.items.NAME),
+)
+
+ItemPair = model.Concept(
+    "ItemPair",
+    identify_by={"left_id": Integer, "right_id": Integer},
+)
+ItemPair.strength = model.Property(f"{ItemPair} has {Float:strength}")
+ItemPair.left = model.Relationship(
+    f"{ItemPair} has left {Item}", short_name="pair_left"
+)
+ItemPair.right = model.Relationship(
+    f"{ItemPair} has right {Item}", short_name="pair_right"
+)
+
+model.define(
+    ip := ItemPair.new(
+        left_id=src.interactions.LEFT_ID,
+        right_id=src.interactions.RIGHT_ID,
+    ),
+    ip.strength(src.interactions.STRENGTH),
+)
+
+model.define(ItemPair.left(Item)).where(
+    ItemPair.filter_by(
+        left_id=src.interactions.LEFT_ID,
+        right_id=src.interactions.RIGHT_ID,
+    ),
+    Item.filter_by(id=src.interactions.LEFT_ID),
+)
+model.define(ItemPair.right(Item)).where(
+    ItemPair.filter_by(
+        left_id=src.interactions.LEFT_ID,
+        right_id=src.interactions.RIGHT_ID,
+    ),
+    Item.filter_by(id=src.interactions.RIGHT_ID),
+)
+```
+
+### Pattern B: Same-type ternary Property
+
+*Alternative to Pattern A — replaces the `ItemPair` junction concept with a single ternary Property on `Item`. Choose one pattern; do not combine.*
+
+Use when pairs carry exactly one numeric value and no additional attributes. More compact; retains full queryability via `Item.ref()` for same-type joins.
+
+```python
+Item = model.Concept("Item", identify_by={"id": Integer})
+Item.interaction = model.Property(
+    f"{Item} and {Item} have {Float:strength}"
+)
+
+Other = Item.ref()
+model.where(
+    Item.id == src.interactions.LEFT_ID,
+    Other.id == src.interactions.RIGHT_ID,
+).define(Item.interaction(Other, src.interactions.STRENGTH))
+```
+
+### Choosing between them
+
+| Signal | Pattern A (junction concept) | Pattern B (ternary Property) |
+|--------|------------------------------|------------------------------|
+| Pair has multiple attributes (e.g., cost + time + capacity) | Required | Not applicable |
+| Pair has exactly one numeric value | Either works | Preferred — more compact |
+| Need explicit named Relationships to both endpoints | Direct | Via `.ref()` |
+| Pair feeds a Graph reasoner's `edge_concept` | Required | Not applicable |
+| Pair is symmetric and source lists both `(i,j)` and `(j,i)` | Add `left_id < right_id` filter during binding | Add `Item.id < Other.id` filter during binding |
+
+**Patterns demonstrated:**
+- Compound identity for pair-keyed entities
+- Same-type ternary `Property` for single-value pairwise data
+- Role-named Relationships (left/right, from/to, src/dst) to make traversal directions explicit
+- Symmetry handling via ordered-pair filter during binding
+
+**Related guidance:** see `rai-ontology-design` § "Same-type multiarity detection" for the corresponding design-principle discussion.

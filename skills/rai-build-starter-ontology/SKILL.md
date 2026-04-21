@@ -91,6 +91,13 @@ session.sql("""
 
 #### Analysis
 
+**Identify data shape first.** Source tables typically arrive in one of two shapes, and the distinction drives whether downstream steps derive metrics or bind them directly:
+
+- **Raw events / measurements** — one row per occurrence; metrics of interest must be *derived* in a downstream computed layer from the raw rows.
+- **Pre-aggregated statistics** — one row per entity, per pair, or per time bucket carrying already-computed values (including long-form `(entity_i, entity_j, value)` matrices). Metrics arrive ready-to-bind; do not re-aggregate already-aggregated values.
+
+Two tables in the same schema can be different shapes — classify each independently. For long-form pairwise data specifically, see the pairwise value matrix example in [examples.md](references/examples.md).
+
 Analyze source data per `rai-ontology-design` § Design Decision Sequence, step 1 (Analyze sources). Note:
 - `_ID` suffixes (likely PKs), columns matching other tables' PKs (likely FKs)
 - `IS_`/`HAS_` prefixes (boolean flags), repeated string categories (enums)
@@ -259,6 +266,8 @@ print(df)
 # Expect: count matches source table row count. Zero means data binding failed.
 ```
 
+> **Note:** `aggregates.count(C)` on a concept with zero instances returns an empty DataFrame (no rows), not a DataFrame with `count=0` — the underlying relation is empty so the aggregation has no rows to reduce over. For chained workflows where a placeholder concept is populated by a downstream step, use `inspect.schema()` membership to verify the concept is declared rather than `count()` to verify data.
+
 **7c — Verify relationships** to confirm FK joins resolved:
 
 ```python
@@ -292,19 +301,21 @@ from relationalai.semantics import inspect
 
 schema = inspect.schema(model)
 
-# For small models — full dump
+# Full dump for small models
 print(schema)
 
-# For larger models — targeted sections
+# Targeted per-concept inspection for larger models
 for concept_name in scoped_concepts:
     c = schema[concept_name]
-    print(f"{concept_name}: {len(c.properties)} properties, extends={c.extends}")
-    for prop_name, prop in c.properties.items():
-        print(f"  .{prop_name}: {prop.type}")
+    idents = ", ".join(f"{f.name}:{f.type_name}" for f in c.identify_by)
+    print(f"{concept_name} [id: {idents}], extends={c.extends}")
+    for prop in c.properties:
+        print(f"  .{prop.name}: {prop.type_name}")
+    for rel in c.relationships:
+        print(f"  ~{rel.name}: {rel.reading}")
 
-# Data sources — BOTH tables and inline data
-print(f"Tables: {[t.name for t in model.tables]}")
-print(f"Inline data: {[d.name for d in model.data_items]}")
+# Data sources — tables and inline data (schema.tables includes both model.Table() and model.data())
+print(f"Tables: {[t.name for t in schema.tables]}")
 ```
 
 This is the trust-building step. With `TableSchema` types now propagating through `Concept.new(table.to_schema())`, `inspect.schema()` surfaces real concrete types (`Integer`, `String`, `Date`) instead of `Any` — so the summary shows what the solver/query engine will actually see, not what you *hoped* to bind. See `rai-querying/references/inspect-module.md`.
