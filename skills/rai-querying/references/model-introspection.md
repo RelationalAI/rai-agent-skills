@@ -99,6 +99,9 @@ for field in rel_info.fields:
 from relationalai.semantics import inspect
 
 # List concepts excluding reasoner internals
+# (Note: underscore-prefix is not reliable — prescriptive registers Variable,
+# Constraint, Objective, Variable_<id>, etc. See inspect-module.md § Filtering
+# Library-Internal Concepts for the list-based filter.)
 schema = inspect.schema(model)
 user_concepts = [c for c in schema.concepts if not c.name.startswith("_")]
 

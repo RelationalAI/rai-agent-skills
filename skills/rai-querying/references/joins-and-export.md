@@ -274,7 +274,7 @@ model.define(
 
 Detailed reference for discovering model structure at runtime.
 
-**Prefer `inspect.schema(model)` from `relationalai.semantics.inspect` (v1.0.14+) for all of the patterns in this section.** It returns a frozen `ModelSchema` covering concepts, inherited properties with real types, relationships, tables, inline data sources, and enums in a single call. The lower-level `model.concepts` / `model.relationships` / `model.tables` patterns below remain valid and are kept as a fallback.
+**Prefer `inspect.schema(model)` from `relationalai.semantics.inspect` (v1.0.14+) for all of the patterns in this section.** It returns a frozen `ModelSchema` covering concepts, inherited properties (with type metadata enriched from backing `TableSchema` where available — frontend `Any`s are refined to concrete types in the summary), relationships, tables, inline data sources, and enums in a single call. The lower-level `model.concepts` / `model.relationships` / `model.tables` patterns below remain valid and are kept as a fallback.
 
 See [inspect-module.md](inspect-module.md) for the recommended API. The rest of this section documents the lower-level surface.
 
