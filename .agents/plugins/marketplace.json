@@ -5,10 +5,10 @@
   },
   "plugins": [
     {
-      "name": "rai",
+      "name": "RAI",
       "source": {
         "source": "local",
-        "path": "./plugins/rai"
+        "path": "./"
       },
       "policy": {
         "installation": "AVAILABLE",
