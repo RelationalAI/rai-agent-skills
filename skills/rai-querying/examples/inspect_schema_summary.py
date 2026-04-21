@@ -14,7 +14,7 @@ model = Model("inspect_schema_summary")
 # --- Tiny ontology for demonstration ---
 Customer = model.Concept("Customer", identify_by={"id": String})
 Customer.name = model.Property(f"{Customer} has {String:name}")
-Customer.lifetime_value = model.Property(f"{Customer} has {Float:lifetime_value}")
+Customer.score = model.Property(f"{Customer} has {Float:score}")
 
 Order = model.Concept("Order", identify_by={"id": String})
 Order.amount = model.Property(f"{Order} has {Float:amount}")
