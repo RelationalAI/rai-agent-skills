@@ -318,7 +318,7 @@ print(df)
 
 | Reference | Description | File |
 |-----------|-------------|------|
-| Real model examples | Production ontology patterns for TPC-H, multi-source, and prototyping use cases | [examples.md](references/examples.md) |
+| Starter ontology examples | Build patterns: Snowflake tables, CSV, derived concepts, junction concepts, self-referential hierarchies, pairwise matrices, portable source paths | [examples.md](references/examples.md) |
 
 ---
 
