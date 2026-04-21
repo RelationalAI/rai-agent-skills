@@ -22,6 +22,7 @@ The ultimate quality gate. Everything below serves this — if an agent can't di
 ## Structure
 
 - [ ] YAML frontmatter with `name` and `description` (description is one line, trigger-ready, third-person)
+- [ ] **Description answers two questions**: (1) WHAT the skill does (the substantive scope), (2) WHEN Claude should invoke it (the trigger condition). One sentence, both halves present.
 - [ ] `SKILL.md` at root, `references/` for deep-dive, `examples/` if applicable
 - [ ] `## Summary` with What, When to use, When NOT to use, Overview
 - [ ] `## Quick Reference` near top — tables/code blocks, not prose
@@ -45,6 +46,7 @@ The ultimate quality gate. Everything below serves this — if an agent can't di
 - [ ] **Concise over exhaustive**: stepwise guidance with a working example beats encyclopedic coverage — if content covers every edge case, check whether most are better left to agent judgment
 - [ ] **Defaults over menus**: when multiple tools/approaches apply, one is the default with brief escape hatch — not equal-weight lists of options
 - [ ] **Short, generic parentheticals**: keep inline "e.g." examples short and generic. Drop overly-specific example phrases unless they disambiguate a rule — when in doubt, cut them.
+- [ ] **Extracted content keeps an entry point**: when content moves to a reference file (line-count, depth, or scope reasons), SKILL.md retains (a) an inline summary or canonical table for the extracted topic, (b) a specific load-trigger pointer naming what's in the reference file, AND (c) a Reference Files table row. The agent must still discover the topic from SKILL.md alone.
 
 ---
 
@@ -68,6 +70,7 @@ The ultimate quality gate. Everything below serves this — if an agent can't di
 - [ ] MECE across skills (no overlap; boundary drawn in "When NOT to use")
 - [ ] Every `##` section falls within scope defined by Summary
 - [ ] Cross-references use skill name only (e.g., `rai-pyrel-coding`), point to existing skills
+- [ ] **Negative boundary in description** when the positive scope could overlap with an adjacent skill — explicit "not for X (see other-skill)" clause. Routing failures from over-broad WHEN clauses are silent and expensive.
 
 ---
 
@@ -86,12 +89,13 @@ The ultimate quality gate. Everything below serves this — if an agent can't di
 - [ ] Example files are self-contained (copy-paste-execute)
 - [ ] Pattern-focused — strip unrelated setup boilerplate
 - [ ] **Adaptable**: examples use generic enough names/structure that an agent can map them to a novel domain
+- [ ] **Pattern-titled, not domain-titled**: example file/section titles and opening sentences lead with the PyRel construct or pattern being demonstrated. Domain stays as "illustrated with..." — the illustration is the vehicle, not the point. Exception: classic problems whose name IS the pattern (N-Queens, Sudoku, MTZ subtour).
 
 ---
 
 ## Validation
 
 - [ ] `./scripts/test.sh -v` passes (syntax, imports, cross-refs, template compliance)
-- [ ] All code blocks parse with `ast.parse`
+- [ ] All code blocks parse with `ast.parse` — **except** blocks explicitly marked as anti-patterns (`# WRONG:` comment or surrounding prose flags them as intentionally invalid). Intentional anti-patterns illustrate failure modes and should not be coerced into compiling.
 - [ ] All imports resolve
 - [ ] All skill/reference/example links resolve
