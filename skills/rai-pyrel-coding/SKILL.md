@@ -1,6 +1,6 @@
 ---
 name: rai-pyrel-coding
-description: Covers PyRel v1 language syntax — imports, type system, concepts, properties, relationships, data loading, references, and code structure. Use when writing or reviewing general PyRel code — not query syntax (see rai-querying), rule authoring (see rai-rules-authoring), or solver formulation (see rai-prescriptive-problem-formulation).
+description: Covers PyRel v1 language syntax — imports, type system, concepts, properties, relationships, data loading, references, and code structure. Use when writing or reviewing general PyRel code — not query construction (see rai-querying), business-rule authoring via derived properties (see rai-rules-authoring), or optimization formulation with decision variables, constraints, and objectives (see rai-prescriptive-problem-formulation).
 ---
 
 # PyRel Coding
@@ -19,9 +19,10 @@ description: Covers PyRel v1 language syntax — imports, type system, concepts,
 - Understanding expression rules (`.where()` targets, `.per()` grouping, operators)
 
 **When NOT to use:**
-- Ontology modeling decisions (when to create a concept vs property, gap classification) — see `rai-ontology-design`
+- RAI domain modeling decisions (when to create a concept vs property, gap classification) — see `rai-ontology-design`
 - Query construction (select, aggregation, filtering, joins) — see `rai-querying`
-- Solver formulation (variables, constraints, objectives) — see `rai-prescriptive-problem-formulation`
+- Business-rule authoring via derived properties (validation, classification, alerting) — see `rai-rules-authoring`
+- Optimization formulation (decision variables, constraints, objectives) — see `rai-prescriptive-problem-formulation`
 - Connection and config setup — see `rai-configuration`
 
 **Overview:** Reference skill. Key lookup areas: Imports, Model Patterns, Type System, Concepts/Properties/Relationships, Data Loading, References and Aliasing, Standard Library (math/strings/dates), Expression Rules.
@@ -321,7 +322,7 @@ model.define(food := Food.new(name=food_data.name), food.cost(food_data.cost))
 
 ### Snowflake tables
 
-Snowflake table loading follows the same `model.Table("DB.SCHEMA.TABLE")` + `filter_by`/`model.define` pattern as CSV. For FK binding patterns, Sources class organization, Snowflake-specific auth, column casing/renaming, and portable source path idioms, see [data-loading.md](references/data-loading.md).
+Snowflake table loading follows the same `model.Table("DB.SCHEMA.TABLE")` + `filter_by`/`model.define` pattern as CSV. For FK binding patterns, column casing/renaming, and `to_schema()` rules, see [data-loading.md](references/data-loading.md). For Sources-class organization and portable DB-as-constant source paths, see the `rai-build-starter-ontology` reference examples (Examples 1–6 and Example 8). For Snowflake auth and `raiconfig.yaml` setup, see `rai-configuration`.
 
 ---
 

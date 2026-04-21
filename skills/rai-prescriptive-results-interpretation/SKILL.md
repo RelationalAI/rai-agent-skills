@@ -471,7 +471,7 @@ Use this after every solve to ensure result quality:
 
 | Reference | Description | File |
 |-----------|-------------|------|
-| Solution extraction details | Exporting results, multiple solutions, iterative solving, scenario/parametric solving | [solution-extraction-details.md](references/solution-extraction-details.md) |
+| Solution extraction details | Per-pattern query variations (multiple solutions, iterative, scenario/parametric), `Variable.values()` back-pointer naming rules with examples table, silent-failure warnings, Snowflake export | [solution-extraction-details.md](references/solution-extraction-details.md) |
 | Failure taxonomy | Detailed root causes by solvability level and 5-step diagnosis protocol | [failure-taxonomy.md](references/failure-taxonomy.md) |
 | Fix generation guidelines | Root cause taxonomy, grounding rules, join path fixes, trivial/infeasible fix strategies | [fix-generation-guidelines.md](references/fix-generation-guidelines.md) |
 | Common pitfalls | Full table of 14 common optimization result pitfalls with causes and fixes | [common-pitfalls.md](references/common-pitfalls.md) |
