@@ -31,7 +31,9 @@ See [inspect-module.md](inspect-module.md) for full usage, including targeted di
 model.select(*inspect.fields(Customer.orders)).to_df()
 
 # Check whether a property exists before adding it
-if "tier" not in inspect.schema(model)["Customer"].properties:
+# (ConceptInfo.properties is a tuple — match by .name)
+customer_props = {p.name for p in inspect.schema(model)["Customer"].properties}
+if "tier" not in customer_props:
     # safe to add
 
 # Dump schema for user-facing verification
@@ -85,13 +87,15 @@ schema = inspect.schema(model)
 user_concepts = [c for c in schema.concepts if not c.name.startswith("_")]
 
 # Find all properties on a concept, including inherited ones
-order_props = schema["Order"].properties   # dict-style
+# ConceptInfo.properties is a tuple[RelationshipInfo, ...]
+order_props = schema["Order"].properties
 
 # Select every field of a relationship — canonical idiom
 model.select(*inspect.fields(Order.line_items)).to_df()
 
 # Confirm property type before coding against it
-amount_type = schema["Order"].properties["amount"].type    # e.g. Integer, not Any
+# (match by .name; type is on .type_name as a string)
+amount_type = next(p.type_name for p in schema["Order"].properties if p.name == "amount")
 
 # Lower-level equivalents (fallback only)
 for concept in model.concepts:

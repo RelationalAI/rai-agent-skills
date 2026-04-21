@@ -121,7 +121,8 @@ from relationalai.semantics import inspect
 
 schema = inspect.schema(model)
 concept_info = schema[subject_concept_name]     # fails loudly if the concept doesn't exist
-existing_properties = concept_info.properties   # dict: includes inherited, with real types
+existing_properties = concept_info.properties   # tuple[RelationshipInfo, ...] — includes inherited
+existing_names = {p.name for p in existing_properties}
 ```
 
 This catches the three silent-failure modes that account for most rules-authoring errors:
@@ -135,8 +136,8 @@ This catches the three silent-failure modes that account for most rules-authorin
 | Check | How to verify | If missing |
 |-------|--------------|------------|
 | Concept exists | `inspect.schema(model)["ConceptName"]` (raises `KeyError` if absent) | Define the concept or flag as model gap |
-| Property exists on concept | `"prop_name" in inspect.schema(model)[concept].properties` | Add property or enrich model |
-| Property type | `inspect.schema(model)[concept].properties["prop"].type` (real type, not `Any`) | Cast with `numbers.integer()`, `floats.float()`, `date.fromisoformat()` |
+| Property exists on concept | `"prop_name" in {p.name for p in inspect.schema(model)[concept].properties}` | Add property or enrich model |
+| Property type | `next(p.type_name for p in inspect.schema(model)[concept].properties if p.name == "prop")` (type is a string like `"Integer"`) | Cast with `numbers.integer()`, `floats.float()`, `date.fromisoformat()` |
 | Relationship path exists | Trace join from subject to related concept; use `inspect.fields(rel)` to see field shape | Define relationship or denormalize needed property |
 | Data distribution | Query `min`, `max`, `avg` of condition properties | Set thresholds informed by actual data, not assumptions |
 

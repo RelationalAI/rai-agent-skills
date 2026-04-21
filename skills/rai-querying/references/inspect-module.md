@@ -59,13 +59,16 @@ json.dumps(schema.to_dict())
 
 **Typical usage patterns:**
 
+`ConceptInfo.properties` is a `tuple[RelationshipInfo, ...]`, not a dict. Match by `.name` on each entry; read type via `.type_name` (a string like `"Integer"`).
+
 ```python
 # Does a property already exist before adding it?
-if "tier" not in schema["Customer"].properties:
+customer_prop_names = {p.name for p in schema["Customer"].properties}
+if "tier" not in customer_prop_names:
     # safe to add
 
 # What's the real type of this column?
-amount_type = schema["Order"].properties["amount"].type   # e.g. Integer, not Any
+amount_type = next(p.type_name for p in schema["Order"].properties if p.name == "amount")
 
 # What concepts are in the model? (exclude reasoner internals — see filtering section)
 user_concepts = [c for c in schema.concepts if not c.name.startswith("_")]

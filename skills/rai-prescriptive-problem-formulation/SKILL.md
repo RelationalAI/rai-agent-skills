@@ -119,21 +119,24 @@ Is the formulation complete and correct?
 - Join paths in `.where()` clauses connect to actual data
 - Bounds are consistent (lower <= upper)
 
-**Pre-solver audit:** before calling `problem.solve(...)`, confirm the formulation registered as intended. `ProblemVariable` / `ProblemConstraint` / `ProblemObjective` are Concepts — they appear in `inspect.schema(model)`:
+**Pre-solver audit:** before calling `problem.solve(...)`, confirm the formulation registered as intended. `solve_for` / `satisfy` / `minimize` / `maximize` register concepts named `Variable`, `Constraint`, `Objective` (plus a per-solve `Variable_<id>` subconcept for each decision variable). They appear in `inspect.schema(model).concepts`:
 
 ```python
 from relationalai.semantics import inspect
 
 schema = inspect.schema(model)
-variables = [c for c in schema.concepts if c.extends_any(["ProblemVariable"])]
-constraints = [c for c in schema.concepts if c.extends_any(["ProblemConstraint"])]
-objectives = [c for c in schema.concepts if c.extends_any(["ProblemObjective"])]
+variables   = [c for c in schema.concepts if "Variable" in c.extends]
+constraints = [c for c in schema.concepts if c.name == "Constraint" or "Constraint" in c.extends]
+objectives  = [c for c in schema.concepts if c.name == "Objective"  or "Objective"  in c.extends]
 
-# Confirm counts match what you authored
-# Confirm each registered variable has the bounds/type you set
+# Confirm counts match what you authored (one Variable_<id> per solve_for call).
+# Note: registration is confirmed here, NOT binding cardinality. A solve_for
+# with an always-false `where=[...]` still registers its subconcept. To check
+# whether bindings are non-empty, query model.select(...).to_df() against the
+# Variable_<id> subconcept and count rows.
 ```
 
-This is the downstream complement to Step 0's base-ontology grounding: Step 0 verifies the *inputs* to formulation exist; Step 4's pre-solver audit verifies the *outputs* of formulation registered correctly. Catches cases where a `solve_for` silently failed to create what you expected (e.g., a `where` clause produced an empty set).
+This is the downstream complement to Step 0's base-ontology grounding: Step 0 verifies the *inputs* to formulation exist; Step 4's pre-solver audit verifies the *outputs* of formulation registered correctly.
 
 ### Step 5: Simplify (iterate)
 Can we reduce complexity without losing correctness?
