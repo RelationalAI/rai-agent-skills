@@ -1,10 +1,10 @@
-# Real Model Examples
+# Starter Ontology Examples
 
-These are real base models from production RAI projects, showing different patterns for building starter ontologies. These examples focus on **build patterns** — data loading, Sources class setup, FK binding, and file organization. For advanced design patterns (enrichment, categorization, composition, time hierarchies), see the examples in `rai-ontology-design`.
+These examples illustrate **build patterns** for starter ontologies — data loading, Sources class setup, FK binding, and file organization. Concept names and schemas are illustrative, not customer data. For advanced design patterns (enrichment, categorization, composition, time hierarchies), see the examples in `rai-ontology-design`.
 
-## Example 1: TPC-H Supply Chain (Snowflake tables, hierarchy, compound identity)
+## Example 1: Snowflake tables with FK chains + junction concept
 
-A classic relational schema with 8 tables, FKs, and a junction table (PartSupply). Uses Sources class, `Property` for scalars, `Relationship` for concept-to-concept links, `filter_by()` for FK binding.
+Binding a multi-table Snowflake schema into concepts with FK-linked Relationships and a compound-identity junction concept. Uses `Sources` class for table organization, `Property` for scalars, `Relationship` for concept-to-concept links, and `filter_by()` for FK resolution. Illustrated with TPC-H sample data (8 tables, including a PartSupply junction).
 
 **Source:** `SNOWFLAKE_SAMPLE_DATA.TPCH_SF1` (available on every Snowflake account)
 
@@ -86,9 +86,9 @@ model.define(PartSupply.new(
 
 ---
 
-## Example 2: Ad Spend Optimization (derived concepts, bridge entity)
+## Example 2: Derived concepts from column values + bridge entity
 
-A marketing model with two source tables that derives several concepts (Channel, Campaign, Country) from column values, and creates a bridge entity (PiecewiseLinearSegment) that joins AdPlacement to Segment through a PWL curve.
+Deriving new concepts from distinct column values (no dedicated source table), and creating a bridge entity that joins two concepts through a third. Illustrated with an ad-spend piecewise-linear curve setup — Channel/Campaign/Country concepts are derived from placement columns, and PiecewiseLinearSegment bridges AdPlacement and Segment.
 
 **Source:** `MARKETING_AD_SPEND.PUBLIC`
 
@@ -175,9 +175,9 @@ AdPlacement.segments = PiecewiseLinearSegment.to_ad_placement.alias(
 
 ---
 
-## Example 3: Machine Maintenance (CSV data, cross-product concepts, derived properties)
+## Example 3: CSV loading + cross-product decision concepts
 
-A scheduling domain with CSV source data, multiple cross-product concepts for the decision space, and derived properties computed from joined data.
+Loading CSV source data, building cross-product decision concepts for a constrained cartesian, and computing derived properties from joined data. Illustrated with a machine-maintenance scheduling model.
 
 **Source:** Local CSV files
 
@@ -278,9 +278,9 @@ model.where(
 
 ---
 
-## Example 4: Supply Chain Network (many concepts, self-referential BOM, individual Properties)
+## Example 4: Many concepts + self-referential hierarchy
 
-A supply chain model with 7 source tables and 7+ concepts. Shows individual Property declarations for each scalar attribute, Relationship for concept-to-concept links, self-referential relationship (SKU → SKU for assembly), and identity fields limited to true natural keys.
+Scaling to many concepts with a self-referential relationship (entity → entity of the same type). Shows individual `Property` declarations per scalar, `Relationship` for all concept-to-concept links, and identity fields limited to true natural keys. Illustrated with a supply chain where SKUs point to SKUs via a bill-of-materials pattern.
 
 **Source:** `SUPPLY_CHAIN.PUBLIC`
 
@@ -379,9 +379,9 @@ BillOfMaterials.at_site = model.Relationship(
 
 ---
 
-## Example 5: Telco Network (large-scale, 14 source tables, unary flags, self-referential)
+## Example 5: Large-scale model with bidirectional inverses, unary flags, and role-named relationships
 
-A telecommunications knowledge graph with 14 source tables spanning subscribers, network infrastructure, billing, and marketing. Shows large-scale modeling patterns: unary flags from status columns, bidirectional relationships with inverses, role-named relationships (caller/callee on same concept), and walrus operator for compact binding.
+Patterns for a large model (10+ source tables, 10+ concepts): unary `Relationship` flags derived from status columns, bidirectional relationships with explicit inverses, role-named relationships for self-referential cases (e.g., caller/callee both pointing to the same concept), and the walrus operator for compact entity-and-properties binding. Illustrated with a telco knowledge graph.
 
 **Source:** `TELCO_DATA.RAW`
 
@@ -576,9 +576,9 @@ model.define(RevenueForecast.is_on_target()).where(
 
 ---
 
-## Example 6: Engineering Analytics (multi-schema, individual Properties, cross-system linking)
+## Example 6: Multi-schema sources with cross-system entity linking
 
-A software engineering analytics model spanning multiple source schemas (GitHub, project management, infrastructure, platform API). Demonstrates modeling across organizational data silos with many concepts, individual Properties for each scalar, boolean flags as unary Relationships, and cross-system linking patterns.
+Modeling across multiple source schemas where the same business entity lives in different systems (e.g., a user identified by a GitHub ID in one system and an internal user ID in another). Shows prefixed concept names to avoid collisions, individual `Property` per scalar, boolean flags as unary `Relationship`, and linking patterns that bridge identity systems. Illustrated with an engineering-analytics knowledge graph.
 
 **Source:** `ENG_ANALYTICS.GITHUB`, `ENG_ANALYTICS.PROJECT_MGMT`, `ENG_ANALYTICS.INFRA`, `ENG_ANALYTICS.PLATFORM_API`
 

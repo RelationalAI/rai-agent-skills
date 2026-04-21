@@ -15,7 +15,7 @@
 | Hinge variable penalty | Hinge variable + attribute-filtered aggregation + unmet-requirement penalty | [examples/hinge_variable_penalty.py](../examples/hinge_variable_penalty.py) |
 | Epoch filter assignment | Epoch filtering pipeline + attribute-constrained assignment domain + weighted completion | [examples/epoch_filter_assignment.py](../examples/epoch_filter_assignment.py) |
 | Multi-period flow conservation | Multi-period flow conservation with time-indexed multiarity variables + model.union() objective | [examples/multi_period_flow_conservation.py](../examples/multi_period_flow_conservation.py) |
-| Coupled binary knapsack | Capacity expansion — two coupled binary decision sets sharing a resource constraint + budget knapsack | [examples/coupled_binary_knapsack.py](../examples/coupled_binary_knapsack.py) |
+| Coupled binary knapsack | Two coupled binary decision sets sharing a resource constraint + budget knapsack (illustrated with capacity expansion) | [examples/coupled_binary_knapsack.py](../examples/coupled_binary_knapsack.py) |
 | Semi-continuous activation | Semi-continuous variables via binary activation indicator + per-entity and global budget | [examples/semi_continuous_activation.py](../examples/semi_continuous_activation.py) |
 | N-queens (Integer) | Pairwise inequality constraints with `.ref()`, `Problem(model, Integer)`, MiniZinc | [examples/n_queens.py](../examples/n_queens.py) |
 | Sudoku (Integer) | `all_different` global constraint with `.per()` grouping, standalone property variables | [examples/sudoku.py](../examples/sudoku.py) |
