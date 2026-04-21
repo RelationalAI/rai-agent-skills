@@ -129,7 +129,7 @@ This catches the three silent-failure modes that account for most rules-authorin
 
 1. **Duplicate authoring** — the property is already declared (possibly under a near-synonym, or inherited from a parent concept). Adding it again wastes work and can introduce conflicts.
 2. **Hallucinated surface** — the concept or property name is plausible but not real (`Customer.tier` vs actual `Customer.category`). Fails silently until a downstream query returns wrong results.
-3. **Wrong-type inference** — property type is `Integer` (now propagated from `TableSchema`), not the `Any` you'd get from reading source files alone.
+3. **Wrong-type inference** — for properties created via `Concept.new(table.to_schema())`, `inspect.schema()` enriches the type view from the backing table (e.g., shows `Integer` / `String` / `Date`) even though the frontend model types them as `Any`. Read the enriched type from inspect when writing threshold logic or bound derivation; don't guess from column names.
 
 **Verification checklist:**
 

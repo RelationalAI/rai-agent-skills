@@ -58,7 +58,7 @@ Question discovery is the analyst's springboard into data-driven reasoning. The 
 
 ### Steps
 
-1. **Ground in the real model first.** Before enumerating opportunities from memory or source files, run `inspect.schema(model)` to see what's actually registered — concepts, properties (including inherited), real `TableSchema`-propagated types, relationships, and both `model.tables` and inline `model.data_items` sources. Discovery suggestions are only useful if they're grounded in what the data can actually support; guessing from partial reads produces confident-but-wrong recommendations. See `rai-querying/references/inspect-module.md`.
+1. **Ground in the real model first.** Before enumerating opportunities from memory or source files, run `inspect.schema(model)` to see what's actually registered — concepts, properties (including inherited), types (enriched from the backing `TableSchema` where available), relationships, and both `model.tables` and inline `model.data_items` sources. Discovery suggestions are only useful if they're grounded in what the data can actually support; guessing from partial reads produces confident-but-wrong recommendations. See `rai-querying/references/inspect-module.md`.
 
    ```python
    from relationalai.semantics import inspect

@@ -318,7 +318,7 @@ for concept_name in scoped_concepts:
 print(f"Tables: {[t.name for t in schema.tables]}")
 ```
 
-This is the trust-building step. With `TableSchema` types now propagating through `Concept.new(table.to_schema())`, `inspect.schema()` surfaces real concrete types (`Integer`, `String`, `Date`) instead of `Any` — so the summary shows what the solver/query engine will actually see, not what you *hoped* to bind. See `rai-querying/references/inspect-module.md`.
+This is the trust-building step. `inspect.schema()` *enriches* the summary with table-backed type information — for properties created via `Concept.new(table.to_schema())`, it infers and reports concrete types (`Integer`, `String`, `Date`) from the backing table even when the frontend model still types them as `Any`. The engine produces correctly-typed output regardless (it reads the backing data), but the `inspect` summary gives you a human-readable view of what the data actually carries. See `rai-querying/references/inspect-module.md`.
 
 ---
 

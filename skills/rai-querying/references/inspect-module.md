@@ -74,7 +74,7 @@ amount_type = next(p.type_name for p in schema["Order"].properties if p.name == 
 user_concepts = [c for c in schema.concepts if not c.name.startswith("_")]
 ```
 
-**Targeted access for large models:** `schema["Person"]` returns just that concept. Use this when the full `to_dict()` would blow the context window.
+**Targeted output for large models:** `schema["Person"]` returns just that concept's `ConceptInfo`. Use this when the full `to_dict()` dump would be too large to share back — it narrows the output you hand the user, not the work the call does (constructing `schema` already walked the whole model).
 
 ## `inspect.fields(rel)`
 
@@ -121,23 +121,29 @@ Skills or utilities that list "every data source feeding this model" must check 
 
 ## Filtering Library-Internal Concepts
 
-Reasoners (prescriptive, graph, paths) register their own concepts on the shared model. These show up in `inspect.schema()` output and are usually noise for user-facing introspection.
+Reasoners (prescriptive, graph, paths) register their own concepts on the shared model. These show up in `inspect.schema()` output and are usually noise for user-facing introspection. The exact names depend on which reasoners you've used — there is no clean prefix pattern.
+
+**Known reasoner-registered names** (non-exhaustive; current as of `relationalai==1.0.14`):
+
+| Reasoner | Concept names registered |
+|---|---|
+| prescriptive (after `Problem(...)` + `solve_for` / `satisfy` / `minimize` / `maximize`) | `Variable`, `Expression`, `Constraint`, `Objective`, plus per-solve `Variable_<id>` / `Constraint_<id>` / `Objective_<id>` subconcepts |
+| graph | varies by algorithm invoked |
 
 **Filter pattern:**
 
 ```python
-# Underscore-prefixed names are library-internal by convention
-user_concepts = [c for c in schema.concepts if not c.name.startswith("_")]
-
-# Or filter by known reasoner prefixes
-RESERVED_PREFIXES = ("_point", "Problem", "_edge", "_path")
+# Inspect what's there, then drop the reasoner-registered names you've exercised.
+schema = inspect.schema(model)
+reasoner_names = {"Variable", "Expression", "Constraint", "Objective"}
 user_concepts = [
     c for c in schema.concepts
-    if not any(c.name.startswith(p) for p in RESERVED_PREFIXES)
+    if c.name not in reasoner_names
+    and not any(c.name.startswith(p + "_") for p in reasoner_names)
 ]
 ```
 
-If the user asks "what's in my model?" and you dump everything without filtering, the output is confusing. Filter unless the user specifically asked for internals.
+If the user asks "what's in my model?" and you dump everything without filtering, the output is confusing. Inspect first to see the actual names in the current model, then filter by list — don't rely on a fixed prefix.
 
 ## When Not to Use
 

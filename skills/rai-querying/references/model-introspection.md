@@ -68,14 +68,30 @@ These collections remain available as a fallback, but `inspect.*` is the recomme
 
 ## Field Attributes
 
+Two distinct surfaces — use the right one for your task.
+
+**Structured field metadata** is on `RelationshipInfo.fields` from `inspect.schema(model)`. Each element is a `FieldInfo`:
+
 | API | Type | Description |
 |-----|------|-------------|
 | `field.name` | `str` | Field role name (e.g., "customer", "cost") |
-| `field.type` | `Concept` | Field type (always resolved in v1) |
+| `field.type_name` | `str` | Field type name (e.g., `"Integer"`, `"String"`). String, not a Concept object. |
 | `field.is_input` | `bool` | Whether field is an input field |
 | `field.is_list` | `bool` | Whether field is list-valued |
 
-`inspect.fields(rel)` returns `FieldRef` values that behave like the entries above but are directly usable in `select()` and handle inherited properties correctly.
+Use this when you need to read field metadata programmatically.
+
+**Selectable field references** from `inspect.fields(rel)` are `FieldRef` objects — usable directly in `select()` but NOT for reading field metadata. `FieldRef` does not expose `.name` / `.type_name` / `.is_input` / `.is_list` directly; attribute access on a `FieldRef` delegates through a DSL proxy and raises if you try to use it for introspection.
+
+```python
+# For select() — correct use:
+model.select(*inspect.fields(Order.line_items)).to_df()
+
+# For metadata — go through the schema, not through inspect.fields:
+rel_info = next(r for r in schema["Order"].relationships if r.name == "line_items")
+for field in rel_info.fields:
+    print(field.name, field.type_name)
+```
 
 ## Quick Examples
 
