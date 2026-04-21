@@ -1,6 +1,6 @@
 ---
 name: rai-pyrel-coding
-description: Covers PyRel v1 language syntax including imports, type system, concepts, properties, relationships, data loading, references, and code structure. Use when writing or reviewing PyRel code.
+description: Covers PyRel v1 language syntax — imports, type system, concepts, properties, relationships, data loading, references, and code structure. Use when writing or reviewing general PyRel code — not query syntax (see rai-querying), rule authoring (see rai-rules-authoring), or solver formulation (see rai-prescriptive-problem-formulation).
 ---
 
 # PyRel Coding

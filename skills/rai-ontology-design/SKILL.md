@@ -1,6 +1,6 @@
 ---
 name: rai-ontology-design
-description: Covers RAI domain modeling decisions including concepts, relationships, data mapping, model composition, enrichment, and advanced modeling patterns. Use when designing or reviewing ontology models.
+description: Covers RAI domain modeling decisions — concepts, relationships, data mapping, model composition, enrichment, and advanced modeling patterns. Use when reviewing, enriching, or evolving an existing ontology — not for greenfield starter builds (see rai-build-starter-ontology).
 ---
 
 # Ontology Design
