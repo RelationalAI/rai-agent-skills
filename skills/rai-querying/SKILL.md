@@ -407,6 +407,8 @@ Lower-level `model.concepts` / `model.relationships` / `model.tables` / `model.d
 |---|---|---|
 | Aggregation queries | `model.select()`, `.alias()`, `sum/count` with `.per()`, multi-hop joins, `.to_df()` | [examples/aggregation_queries.py](examples/aggregation_queries.py) |
 | Computed properties | `std.datetime` arithmetic, enum-subconcept segmentation, argmax with tiebreaker | [examples/datetime_argmax_segmentation.py](examples/datetime_argmax_segmentation.py) |
+| `inspect.schema()` summary | Dump registered concepts/properties, dict-style access, does-property-exist check, JSON-safe `to_dict()` | [examples/inspect_schema_summary.py](examples/inspect_schema_summary.py) |
+| `inspect.fields()` unpack | `select(*inspect.fields(rel))` canonical idiom + `include_owner=True` variant | [examples/inspect_fields_unpack.py](examples/inspect_fields_unpack.py) |
 
 ---
 

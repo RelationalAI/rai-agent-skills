@@ -21,7 +21,7 @@ from relationalai.semantics import inspect
 
 ## When to Use
 
-**Prefer `inspect.*` over direct `model.concepts` / `.relationships` / `.tables` access** for:
+**Prefer `inspect.*` over direct `model.concepts` / `.relationships` / `.tables` access** for the patterns listed below. Each pattern is referenced from one or more skill workflows — the bullets here describe the generic pattern; the skill workflow specializes the when/how for its context (e.g., rules-authoring calls it from its Step 3; prescriptive from Step 1; build-starter from Step 7e). Read the relevant skill for domain-specific framing; read this section for the shared pattern.
 
 - **Inspect-before-authoring** — Before adding a rule, derived property, or decision variable, check `inspect.schema()[concept]` to detect duplicates, confirm names, pick up the real type. Closes hallucinated-surface, wrong-type, and duplicate-authoring failure modes in a single call.
 - **Post-action verification** — After scaffolding or modifying a model, dump `inspect.schema().to_dict()` to report *what actually registered* instead of *what you intended*.
@@ -65,7 +65,7 @@ json.dumps(schema.to_dict())
 # Does a property already exist before adding it?
 customer_prop_names = {p.name for p in schema["Customer"].properties}
 if "tier" not in customer_prop_names:
-    # safe to add
+    ...  # safe to add
 
 # What's the real type of this column?
 amount_type = next(p.type_name for p in schema["Order"].properties if p.name == "amount")

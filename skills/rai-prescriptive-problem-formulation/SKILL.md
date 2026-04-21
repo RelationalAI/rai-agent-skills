@@ -119,7 +119,9 @@ Is the formulation complete and correct?
 - Join paths in `.where()` clauses connect to actual data
 - Bounds are consistent (lower <= upper)
 
-**Pre-solver audit:** before calling `problem.solve(...)`, confirm the formulation registered as intended. `solve_for` / `satisfy` / `minimize` / `maximize` register concepts named `Variable`, `Constraint`, `Objective` (plus a per-solve `Variable_<id>` subconcept for each decision variable). They appear in `inspect.schema(model).concepts`:
+**Pre-solver audit:** before calling `problem.solve(...)`, run a two-step check.
+
+**(a) Registration.** `solve_for` / `satisfy` / `minimize` / `maximize` register concepts named `Variable`, `Constraint`, `Objective` (plus a per-solve `Variable_<id>` subconcept for each decision variable). They appear in `inspect.schema(model).concepts`:
 
 ```python
 from relationalai.semantics import inspect
@@ -129,14 +131,23 @@ variables   = [c for c in schema.concepts if "Variable" in c.extends]
 constraints = [c for c in schema.concepts if c.name == "Constraint" or "Constraint" in c.extends]
 objectives  = [c for c in schema.concepts if c.name == "Objective"  or "Objective"  in c.extends]
 
-# Confirm counts match what you authored (one Variable_<id> per solve_for call).
-# Note: registration is confirmed here, NOT binding cardinality. A solve_for
-# with an always-false `where=[...]` still registers its subconcept. To check
-# whether bindings are non-empty, query model.select(...).to_df() against the
-# Variable_<id> subconcept and count rows.
+# Confirm one Variable_<id> per solve_for call, one Constraint_<id> per satisfy,
+# one Objective_<id> per minimize/maximize.
 ```
 
-This is the downstream complement to Step 1's base-ontology grounding: Step 1 verifies the *inputs* to formulation exist; Step 5's pre-solver audit verifies the *outputs* of formulation registered correctly.
+**(b) Binding cardinality.** Registration does NOT mean the variable binds to any rows. A `solve_for(..., where=[always_false])` still registers a `Variable_<id>` subconcept but has zero bindings — the solver will run on an empty decision set. Check each `Variable_<id>` for non-empty binding:
+
+```python
+for var_concept in variables:
+    resolved = model.concept_index[var_concept.name]
+    n = len(model.select(resolved).to_df())
+    if n == 0:
+        # The where= clause excluded every row. Fix the predicate
+        # (wrong property name, wrong threshold, missing join) and re-check.
+        raise ValueError(f"{var_concept.name} has 0 bindings")
+```
+
+Together, (a) and (b) are the downstream complement to Step 1's base-ontology grounding: Step 1 verifies the *inputs* to formulation exist; Step 5 verifies the *outputs* registered correctly and bound to data.
 
 ### Step 6: Simplify (iterate)
 Can we reduce complexity without losing correctness?

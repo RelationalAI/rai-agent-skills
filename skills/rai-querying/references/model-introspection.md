@@ -34,7 +34,7 @@ model.select(*inspect.fields(Customer.orders)).to_df()
 # (ConceptInfo.properties is a tuple — match by .name)
 customer_props = {p.name for p in inspect.schema(model)["Customer"].properties}
 if "tier" not in customer_props:
-    # safe to add
+    ...  # safe to add
 
 # Dump schema for user-facing verification
 inspect.schema(model).to_dict()

@@ -486,6 +486,7 @@ For the full step-by-step debugging checklist, see [common-pitfalls.md](referenc
 | Standalone Property + union | Property not attached to concept, `model.union()` for multi-component objective, segment self-join | [examples/supply_chain_transport_code.py](examples/supply_chain_transport_code.py) |
 | print() debugging | Readable repr for verifying expression structure before query execution | [examples/pprint_debugging.py](examples/pprint_debugging.py) |
 | End-to-end walkthrough | Full ontology + graph + aggregation + query in a single script | [examples/customer_segmentation.py](examples/customer_segmentation.py) |
+| `inspect.to_concept()` helper | Reusable helper accepting any DSL handle (Concept / Ref / Chain / FieldRef); `default=None` for defensive use | [examples/inspect_to_concept_helper.py](examples/inspect_to_concept_helper.py) |
 
 ---
 
