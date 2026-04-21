@@ -1,11 +1,13 @@
-"""Machine Maintenance — CSV data, cross-product concepts, derived properties.
+"""Cross-product decision concepts with constrained cartesian via `.where()`.
 
 NOTE: Demonstrates cross-product decision concepts and constrained cartesian joins —
 advanced patterns for optimization modeling beyond the starter build.
 
-Patterns: CSV data loading, generated concepts (Period), compound identity,
-cross-product decision concepts (constrained via .where()), .ref() for
-derived properties, conditional binary flags.
+Patterns: CSV data loading, generated Period concept, compound identity,
+cross-product decision concepts (Technician x Machine x Period) constrained via `.where()`,
+`.ref()` for derived properties, conditional binary flags.
+
+Illustrated with a machine-maintenance scheduling model.
 """
 from relationalai.semantics import Float, Integer, Model, String
 
