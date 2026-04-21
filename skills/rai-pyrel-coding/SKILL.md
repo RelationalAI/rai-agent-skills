@@ -1,6 +1,6 @@
 ---
 name: rai-pyrel-coding
-description: Covers PyRel v1 language syntax — imports, type system, concepts, properties, relationships, data loading, references, and code structure. Use when writing or reviewing general PyRel code — not query syntax (see rai-querying), rule authoring (see rai-rules-authoring), or solver formulation (see rai-prescriptive-problem-formulation).
+description: Covers PyRel v1 language syntax — imports, type system, concepts, properties, relationships, data loading, references, and code structure. Use when writing or reviewing general PyRel code — not query construction (see rai-querying), business-rule authoring (see rai-rules-authoring), or optimization problem formulation (see rai-prescriptive-problem-formulation).
 ---
 
 # PyRel Coding
@@ -321,7 +321,7 @@ model.define(food := Food.new(name=food_data.name), food.cost(food_data.cost))
 
 ### Snowflake tables
 
-Snowflake table loading follows the same `model.Table("DB.SCHEMA.TABLE")` + `filter_by`/`model.define` pattern as CSV. For FK binding patterns, Sources class organization, Snowflake-specific auth, column casing/renaming, and portable source path idioms, see [data-loading.md](references/data-loading.md).
+Snowflake table loading follows the same `model.Table("DB.SCHEMA.TABLE")` + `filter_by`/`model.define` pattern as CSV. For FK binding patterns, column casing/renaming, and `to_schema()` rules, see [data-loading.md](references/data-loading.md); for `Sources` class organization and portable source paths, see `rai-build-starter-ontology` examples; for Snowflake connection/auth, see `rai-configuration`.
 
 ---
 
