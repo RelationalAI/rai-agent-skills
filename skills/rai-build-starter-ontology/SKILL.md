@@ -28,7 +28,7 @@ description: Walks through building a first RAI ontology from Snowflake tables o
 4. Identify relationships and properties
 5. Validate design against schema
 6. Generate code
-7. Validate with queries
+7. Validate with queries, then emit `inspect.schema()` summary so the user sees what actually registered
 
 
 ---
@@ -284,6 +284,30 @@ df = model.select(
 print(df)
 # Each scoped question from Step 1 should be answerable with a query like this.
 ```
+
+**7e — Report what actually registered.** After the model runs cleanly, emit an `inspect.schema()` summary for the user. This is the canonical "here's what got built" artifact — distinct from "here's what I intended to build."
+
+```python
+from relationalai.semantics import inspect
+
+schema = inspect.schema(model)
+
+# For small models — full dump
+print(schema)
+
+# For larger models — targeted sections
+for concept_name in scoped_concepts:
+    c = schema[concept_name]
+    print(f"{concept_name}: {len(c.properties)} properties, extends={c.extends}")
+    for prop_name, prop in c.properties.items():
+        print(f"  .{prop_name}: {prop.type}")
+
+# Data sources — BOTH tables and inline data
+print(f"Tables: {[t.name for t in model.tables]}")
+print(f"Inline data: {[d.name for d in model.data_items]}")
+```
+
+This is the trust-building step. With `TableSchema` types now propagating through `Concept.new(table.to_schema())`, `inspect.schema()` surfaces real concrete types (`Integer`, `String`, `Date`) instead of `Any` — so the summary shows what the solver/query engine will actually see, not what you *hoped* to bind. See `rai-querying/references/inspect-module.md`.
 
 ---
 

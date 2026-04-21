@@ -1,16 +1,46 @@
 # Model Introspection
 
 ## Table of Contents
-- [Core Collections](#core-collections)
-- [Relationship / Property Inspection](#relationship--property-inspection)
+- [Recommended API: `inspect.*`](#recommended-api-inspect)
+- [Lower-level Access](#lower-level-access)
 - [Field Attributes](#field-attributes)
 - [Quick Examples](#quick-examples)
 
 ---
 
-Public API for discovering model structure at runtime. Useful for dynamic code generation, model validation, and exploring unfamiliar models.
+Public APIs for discovering model structure at runtime. Useful for inspect-before-authoring checks, post-scaffolding verification, query construction over unfamiliar models, and long-session re-grounding.
 
-## Core Collections
+## Recommended API: `inspect.*`
+
+`relationalai.semantics.inspect` provides the stable, typed, JSON-safe introspection surface. **Prefer it over the lower-level collections below.**
+
+```python
+from relationalai.semantics import inspect
+
+schema = inspect.schema(model)          # full ModelSchema (frozen dataclass)
+fields = inspect.fields(rel)            # tuple[FieldRef, ...] for select()
+concept = inspect.to_concept(handle)    # resolve any DSL handle to its Concept
+```
+
+See [inspect-module.md](inspect-module.md) for full usage, including targeted dict-style access, library-internal concept filtering, and when-not-to-use guidance.
+
+**Canonical idioms:**
+
+```python
+# Select every field of a relationship (handles inheritance and alt readings correctly)
+model.select(*inspect.fields(Customer.orders)).to_df()
+
+# Check whether a property exists before adding it
+if "tier" not in inspect.schema(model)["Customer"].properties:
+    # safe to add
+
+# Dump schema for user-facing verification
+inspect.schema(model).to_dict()
+```
+
+## Lower-level Access
+
+These collections remain available as a fallback, but `inspect.*` is the recommended surface for everything listed below.
 
 | API | Type | Description |
 |-----|------|-------------|
@@ -18,13 +48,16 @@ Public API for discovering model structure at runtime. Useful for dynamic code g
 | `model.concept_index` | `dict[str, Concept]` | Lookup concept by name |
 | `model.relationships` | `list[Relationship]` | All relationships/properties |
 | `model.relationship_index` | `dict[str, Relationship]` | Lookup by short name |
-| `model.tables` | `list[Table]` | All table references |
+| `model.tables` | `list[Table]` | Explicitly declared `Table` references |
 | `model.table_index` | `dict[str, Table]` | Lookup table by path |
-| `model.defines` | `KeyedSet[Fragment]` | All define() fragments |
-| `model.requires` | `KeyedSet[Fragment]` | All require() fragments |
+| `model.data_items` | `list[Data]` | Inline data sources from `model.data(...)` — **separate from `model.tables`** |
+| `model.defines` | `KeyedSet[Fragment]` | All `define()` fragments |
+| `model.requires` | `KeyedSet[Fragment]` | All `require()` fragments |
 | `model.enums` | `list[type[ModelEnum]]` | Enum types |
 
-## Relationship / Property Inspection
+**Note on data sources:** `model.tables` does **not** include inline `model.data(pd.DataFrame(...))` sources — those live in `model.data_items`. Utilities that list "every data source" must check both. `inspect.schema()` covers both in a single call.
+
+**Note on relationship inspection:**
 
 | API | Type | Description |
 |-----|------|-------------|
@@ -40,24 +73,30 @@ Public API for discovering model structure at runtime. Useful for dynamic code g
 | `field.is_input` | `bool` | Whether field is an input field |
 | `field.is_list` | `bool` | Whether field is list-valued |
 
+`inspect.fields(rel)` returns `FieldRef` values that behave like the entries above but are directly usable in `select()` and handle inherited properties correctly.
+
 ## Quick Examples
 
 ```python
-# List all concept names — print() shows readable names (one per line)
+from relationalai.semantics import inspect
+
+# List concepts excluding reasoner internals
+schema = inspect.schema(model)
+user_concepts = [c for c in schema.concepts if not c.name.startswith("_")]
+
+# Find all properties on a concept, including inherited ones
+order_props = schema["Order"].properties   # dict-style
+
+# Select every field of a relationship — canonical idiom
+model.select(*inspect.fields(Order.line_items)).to_df()
+
+# Confirm property type before coding against it
+amount_type = schema["Order"].properties["amount"].type    # e.g. Integer, not Any
+
+# Lower-level equivalents (fallback only)
 for concept in model.concepts:
-    print(concept)          # → Customer
-
-# Lookup by name
+    print(concept)
 Order = model.concept_index["Order"]
-
-# Find all properties/relationships on a concept
-order_rels = [r for r in model.relationships if any(
-    str(f.type) == "Order" for f in r
-)]
-
-# Check what tables are loaded
-for table in model.tables:
-    print(table)
 ```
 
-For detailed introspection patterns (classification, property maps, data inspection), see [joins-and-export.md](joins-and-export.md) § Schema Introspection Reference.
+For join patterns and export workflows, see [joins-and-export.md](joins-and-export.md).

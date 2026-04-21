@@ -27,10 +27,11 @@ description: Formulates optimization problems from ontology models covering deci
 - Aggregation syntax (count/sum/per patterns) — see `rai-querying`
 
 **Overview:**
+0. Ground in the base ontology via `inspect.schema(model)` — concepts, properties, types, relationships you're about to reference
 1. Define decision variables (type, bounds, scope, naming)
 2. Define constraints (forcing, capacity, balance, linking; validate interactions)
 3. Define objective (direction, coefficients, multi-component handling)
-4. Validate the complete formulation (structure, completeness, feasibility, data)
+4. Validate the complete formulation (structure, completeness, feasibility, data) — includes pre-solver audit that `ProblemVariable`/`ProblemConstraint`/`ProblemObjective` registered correctly
 5. Simplify (static parameters, goals vs constraints, grouped constraints)
 
 ---
@@ -64,6 +65,29 @@ problem = Problem(model, Float)
 
 After a question is selected (from question discovery) and the ontology is enriched (if needed), build the formulation in this order:
 
+### Step 0: Ground in the base ontology
+
+Prescriptive formulations reference concepts, properties, and relationships from an existing model. Before writing `solve_for` / `satisfy` / `minimize` / `maximize`, confirm every name and type you're about to use against the real schema:
+
+```python
+from relationalai.semantics import inspect
+
+schema = inspect.schema(model)
+
+# Every concept referenced in the formulation
+for name in referenced_concepts:
+    assert name in schema, f"Concept {name} not in model"
+    props = schema[name].properties
+    # surface any properties used in bounds, constraints, or the objective
+```
+
+Catches two silent-failure modes that account for most prescriptive errors:
+
+1. **Hallucinated surface** — `Customer.tier` in a constraint when the real property is `Customer.category`. Solver happily runs on wrong variables and returns nonsense.
+2. **Wrong-type inference** — using an `Integer` property as if it were `Float` (or vice versa) when the type now propagates from `TableSchema`. Silent coercion masks incorrect bound derivation.
+
+**When to skip:** Step 0 is cheap but not free. Skip on small greenfield models or one-shot formulations where the model fits in a single code block you just wrote.
+
 ### Step 1: Define Variables
 What decisions are being made? What can the solver control?
 - Start with the base model context — examine concepts, properties, relationships (Variable Context Integration)
@@ -94,6 +118,22 @@ Is the formulation complete and correct?
 - Forcing constraints exist for minimize objectives
 - Join paths in `.where()` clauses connect to actual data
 - Bounds are consistent (lower <= upper)
+
+**Pre-solver audit:** before calling `problem.solve(...)`, confirm the formulation registered as intended. `ProblemVariable` / `ProblemConstraint` / `ProblemObjective` are Concepts — they appear in `inspect.schema(model)`:
+
+```python
+from relationalai.semantics import inspect
+
+schema = inspect.schema(model)
+variables = [c for c in schema.concepts if c.extends_any(["ProblemVariable"])]
+constraints = [c for c in schema.concepts if c.extends_any(["ProblemConstraint"])]
+objectives = [c for c in schema.concepts if c.extends_any(["ProblemObjective"])]
+
+# Confirm counts match what you authored
+# Confirm each registered variable has the bounds/type you set
+```
+
+This is the downstream complement to Step 0's base-ontology grounding: Step 0 verifies the *inputs* to formulation exist; Step 4's pre-solver audit verifies the *outputs* of formulation registered correctly. Catches cases where a `solve_for` silently failed to create what you expected (e.g., a `where` clause produced an empty set).
 
 ### Step 5: Simplify (iterate)
 Can we reduce complexity without losing correctness?

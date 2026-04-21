@@ -251,6 +251,29 @@ var = problem.solve_for(
 # var is a ProblemVariable concept — usable with model.select(), .ref(), Variable.values()
 ```
 
+### Reserved field names (v1.0.14+)
+
+`solve_for()` validates relationship field names against `ProblemVariable`'s intrinsic surface. Shadowing a reserved name raises a clear error at `solve_for()` time rather than a cryptic `TyperError` later.
+
+**Reserved (case-insensitive — PyRel lowercases attribute lookup):**
+`name`, `type`, `lower`, `upper`, `start`, `values`, `ref`, `new`, `alias`, `where`, `select`, `define`, `require`, and the full `Concept.RESERVED_NAMES` set.
+
+**Reserved (case-sensitive — every public class-level attribute on `ProblemVariable.__mro__`):**
+`dsl_expr`, `populate`, `to_dict_key`, `RESERVED_NAMES`, `lookup_by_id`, `var_id`, plus other descriptors and methods.
+
+**Practical impact:** don't use these as non-value field names in your formulation. Example of what breaks:
+
+```python
+# WRONG — "name" collides with ProblemVariable.name
+problem.solve_for(f"{Customer} has {String:name} allocation={Float:qty}")
+# RuntimeError: field name 'name' shadows ProblemVariable intrinsic
+
+# CORRECT — rename the field
+problem.solve_for(f"{Customer} has {String:customer_name} allocation={Float:qty}")
+```
+
+The validator runs against `_ALLOWED_PROPERTIES` (`name`, `type`, `lower`, `upper`, `start`, `values`) plus `Concept.RESERVED_NAMES` plus every public attribute walked from `ProblemVariable.__mro__`. When in doubt, pick a domain-specific field name (`item_name`, `scheduled_qty`) instead of a generic one.
+
 ### Bounds guidance
 
 **Lower bounds:**

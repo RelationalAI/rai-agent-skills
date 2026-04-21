@@ -157,7 +157,7 @@ PositiveInt = model.Concept("PositiveInt", extends=[Integer])
 - **`identify_by` auto-creates properties.** `Concept("Customer", identify_by={"customer_id": Integer})` automatically creates `Customer.customer_id` as a `Property(Integer)`. Do not declare a separate `model.Property()` for identity fields — it will create a duplicate.
 - **`identify_by` supports concept types** — use for composite keys involving other concepts: `OrderItem = model.Concept("OrderItem", identify_by={"order": Order, "item": Item})`. This is standard for association/junction concepts.
 - **Exception where `identify_by` is not used:** Extending primitive types (`extends=[Integer]`) — identity comes from the primitive value.
-- **Introspection:** `model.concepts` — list of all declared concepts; `model.concept_index["Name"]` — look up concept by name.
+- **Introspection:** Prefer `inspect.schema(model)` from `relationalai.semantics.inspect` (v1.0.14+) — returns a frozen `ModelSchema` with concepts, inherited properties, types, and data sources. Use `inspect.to_concept(obj)` for reusable helpers that must accept any DSL handle (Chain, Ref, FieldRef, Expression). Lower-level `model.concepts` / `model.concept_index["Name"]` remain available as a fallback. See `rai-querying/references/inspect-module.md`.
 
 ---
 

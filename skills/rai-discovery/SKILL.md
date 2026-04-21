@@ -25,6 +25,7 @@ description: Discover questions to answer or problems to solve. Surfaces what th
 - Post-solve interpretation — see `rai-prescriptive-results-interpretation`
 
 **Overview:**
+0. Ground in the real model via `inspect.schema(model)` — concepts, properties with real types, relationships, data sources
 1. Analyze the ontology to identify what the data can support
 2. Classify each opportunity by reasoner type (prescriptive, graph, predictive, rules)
 3. Identify multi-reasoner chains where applicable
@@ -56,6 +57,18 @@ description: Discover questions to answer or problems to solve. Surfaces what th
 Question discovery is the analyst's springboard into data-driven reasoning. The ontology reveals what questions the data can answer -- the analyst learns what's possible before choosing what to pursue.
 
 ### Steps
+
+0. **Ground in the real model first.** Before enumerating opportunities from memory or source files, run `inspect.schema(model)` to see what's actually registered — concepts, properties (including inherited), real `TableSchema`-propagated types, relationships, and both `model.tables` and inline `model.data_items` sources. Discovery suggestions are only useful if they're grounded in what the data can actually support; guessing from partial reads produces confident-but-wrong recommendations. See `rai-querying/references/inspect-module.md`.
+
+   ```python
+   from relationalai.semantics import inspect
+
+   schema = inspect.schema(model)
+   # Now enumerate signals from real state: concepts with network topology,
+   # temporal properties, constrained-resource concepts, boolean flags, etc.
+   ```
+
+   **When to skip:** if the user is asking "what can I do with this new dataset" and the model is still greenfield (no concepts yet), start at Step 1 and return to inspect later.
 
 1. **Analyze the ontology** — what concepts, relationships, and data exist? Look for network topology (graph), temporal patterns (predictive), constrained decisions (prescriptive), threshold/status fields (rules).
 2. **Classify by reasoner** — for each opportunity, determine which reasoner(s) apply (→ Reasoner Classification). Tag with `reasoners` field.

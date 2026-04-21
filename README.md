@@ -42,7 +42,7 @@ The skills in this repo instruct your agent **how to use the `relationalai` Pyth
 | 14 | [rai-health-skill](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-health-skill) | Operations | Diagnose engine performance — memory, CPU, demand metrics, remediation |
 
 ## Prerequisites
-**Assumes `relationalai` (PyRel) v1.0.13+**
+**Requires `relationalai` (PyRel) v1.0.14+** — the model-introspection API (`relationalai.semantics.inspect`) and queryable prescriptive Concept subtypes (`ProblemVariable`, `ProblemConstraint`, `ProblemObjective`) documented in these skills are only available in 1.0.14 and later.
 
 The RelationalAI Native App for Snowflake must be installed in your account by an administrator.
 - Request access [here](https://app.snowflake.com/marketplace/listing/GZTYZOOIX8H/relationalai-relationalai). 
