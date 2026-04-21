@@ -25,13 +25,13 @@ description: Discover questions to answer or problems to solve. Surfaces what th
 - Post-solve interpretation — see `rai-prescriptive-results-interpretation`
 
 **Overview:**
-0. Ground in the real model via `inspect.schema(model)` — concepts, properties with real types, relationships, data sources
-1. Analyze the ontology to identify what the data can support
-2. Classify each opportunity by reasoner type (prescriptive, graph, predictive, rules)
-3. Identify multi-reasoner chains where applicable
-4. Assess feasibility (READY / MODEL_GAP / DATA_GAP)
-5. Present ranked suggestions to the user
-6. Route the selected question to the appropriate reasoner workflow
+1. Ground in the real model via `inspect.schema(model)` — concepts, properties with real types, relationships, data sources
+2. Analyze the ontology to identify what the data can support
+3. Classify each opportunity by reasoner type (prescriptive, graph, predictive, rules)
+4. Identify multi-reasoner chains where applicable
+5. Assess feasibility (READY / MODEL_GAP / DATA_GAP)
+6. Present ranked suggestions to the user
+7. Route the selected question to the appropriate reasoner workflow
 
 ---
 
@@ -58,7 +58,7 @@ Question discovery is the analyst's springboard into data-driven reasoning. The 
 
 ### Steps
 
-0. **Ground in the real model first.** Before enumerating opportunities from memory or source files, run `inspect.schema(model)` to see what's actually registered — concepts, properties (including inherited), real `TableSchema`-propagated types, relationships, and both `model.tables` and inline `model.data_items` sources. Discovery suggestions are only useful if they're grounded in what the data can actually support; guessing from partial reads produces confident-but-wrong recommendations. See `rai-querying/references/inspect-module.md`.
+1. **Ground in the real model first.** Before enumerating opportunities from memory or source files, run `inspect.schema(model)` to see what's actually registered — concepts, properties (including inherited), real `TableSchema`-propagated types, relationships, and both `model.tables` and inline `model.data_items` sources. Discovery suggestions are only useful if they're grounded in what the data can actually support; guessing from partial reads produces confident-but-wrong recommendations. See `rai-querying/references/inspect-module.md`.
 
    ```python
    from relationalai.semantics import inspect
@@ -68,14 +68,14 @@ Question discovery is the analyst's springboard into data-driven reasoning. The 
    # temporal properties, constrained-resource concepts, boolean flags, etc.
    ```
 
-   **When to skip:** if the user is asking "what can I do with this new dataset" and the model is still greenfield (no concepts yet), start at Step 1 and return to inspect later.
+   **When to skip:** if the user is asking "what can I do with this new dataset" and the model is still greenfield (no concepts yet), start at Step 2 and return to inspect later.
 
-1. **Analyze the ontology** — what concepts, relationships, and data exist? Look for network topology (graph), temporal patterns (predictive), constrained decisions (prescriptive), threshold/status fields (rules).
-2. **Classify by reasoner** — for each opportunity, determine which reasoner(s) apply (→ Reasoner Classification). Tag with `reasoners` field.
-3. **Identify chains** — where one reasoner's output enables another (→ Multi-Reasoner Chaining, Cumulative Discovery).
-4. **Assess feasibility** — READY / MODEL_GAP / DATA_GAP for each suggestion (→ Feasibility Framework).
-5. **Generate ranked suggestions** — with implementation hints per reasoner type (→ reference files: `prescriptive.md`, `graph.md`, `predictive.md`, `rules.md`).
-6. **User selects** — route to the appropriate reasoner workflow (→ Post-Discovery Routing). If MODEL_GAP, enrich first (→ Enrichment Handoff).
+2. **Analyze the ontology** — what concepts, relationships, and data exist? Look for network topology (graph), temporal patterns (predictive), constrained decisions (prescriptive), threshold/status fields (rules).
+3. **Classify by reasoner** — for each opportunity, determine which reasoner(s) apply (→ Reasoner Classification). Tag with `reasoners` field.
+4. **Identify chains** — where one reasoner's output enables another (→ Multi-Reasoner Chaining, Cumulative Discovery).
+5. **Assess feasibility** — READY / MODEL_GAP / DATA_GAP for each suggestion (→ Feasibility Framework).
+6. **Generate ranked suggestions** — with implementation hints per reasoner type (→ reference files: `prescriptive.md`, `graph.md`, `predictive.md`, `rules.md`).
+7. **User selects** — route to the appropriate reasoner workflow (→ Post-Discovery Routing). If MODEL_GAP, enrich first (→ Enrichment Handoff).
 
 ### Your role
 

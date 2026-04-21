@@ -27,12 +27,12 @@ description: Formulates optimization problems from ontology models covering deci
 - Aggregation syntax (count/sum/per patterns) — see `rai-querying`
 
 **Overview:**
-0. Ground in the base ontology via `inspect.schema(model)` — concepts, properties, types, relationships you're about to reference
-1. Define decision variables (type, bounds, scope, naming)
-2. Define constraints (forcing, capacity, balance, linking; validate interactions)
-3. Define objective (direction, coefficients, multi-component handling)
-4. Validate the complete formulation (structure, completeness, feasibility, data) — includes pre-solver audit that `ProblemVariable`/`ProblemConstraint`/`ProblemObjective` registered correctly
-5. Simplify (static parameters, goals vs constraints, grouped constraints)
+1. Ground in the base ontology via `inspect.schema(model)` — concepts, properties, types, relationships you're about to reference
+2. Define decision variables (type, bounds, scope, naming)
+3. Define constraints (forcing, capacity, balance, linking; validate interactions)
+4. Define objective (direction, coefficients, multi-component handling)
+5. Validate the complete formulation (structure, completeness, feasibility, data) — includes pre-solver audit that decision variables / constraints / objectives registered correctly
+6. Simplify (static parameters, goals vs constraints, grouped constraints)
 
 ---
 
@@ -65,7 +65,7 @@ problem = Problem(model, Float)
 
 After a question is selected (from question discovery) and the ontology is enriched (if needed), build the formulation in this order:
 
-### Step 0: Ground in the base ontology
+### Step 1: Ground in the base ontology
 
 Prescriptive formulations reference concepts, properties, and relationships from an existing model. Before writing `solve_for` / `satisfy` / `minimize` / `maximize`, confirm every name and type you're about to use against the real schema:
 
@@ -86,16 +86,16 @@ Catches two silent-failure modes that account for most prescriptive errors:
 1. **Hallucinated surface** — `Customer.tier` in a constraint when the real property is `Customer.category`. Solver happily runs on wrong variables and returns nonsense.
 2. **Wrong-type inference** — using an `Integer` property as if it were `Float` (or vice versa) when the type now propagates from `TableSchema`. Silent coercion masks incorrect bound derivation.
 
-**When to skip:** Step 0 is cheap but not free. Skip on small greenfield models or one-shot formulations where the model fits in a single code block you just wrote.
+**When to skip:** this step is cheap but not free. Skip on small greenfield models or one-shot formulations where the model fits in a single code block you just wrote.
 
-### Step 1: Define Variables
+### Step 2: Define Variables
 What decisions are being made? What can the solver control?
 - Start with the base model context — examine concepts, properties, relationships (Variable Context Integration)
 - Identify the primary decision entity first, then auxiliary/aggregation variables (Variable Principles)
 - Choose variable types (continuous/integer/binary) and set bounds from data (Advanced Variable Patterns)
 - For minimize objectives, include a slack/unmet variable to avoid infeasibility
 
-### Step 2: Define Constraints
+### Step 3: Define Constraints
 What rules must the solution satisfy?
 - Start with model structure + user goals (Constraint Context Integration)
 - Add forcing constraints first — these prevent trivial zero solutions for minimize objectives
@@ -103,15 +103,15 @@ What rules must the solution satisfy?
 - Add flow conservation if the model has network structure
 - Derive parameters from data ranges, not arbitrary values (Parameter Derivation from Data)
 
-### Step 3: Define Objective(s)
+### Step 4: Define Objective(s)
 What are we optimizing?
 - Start with user's stated goal — map business language to minimize/maximize (Objective Context Integration)
 - Reference defined variables and data properties in the expression
-- Check for trivial solution risk: "If all variables = 0, are all constraints satisfied?" If yes, Step 2 needs a forcing constraint.
+- Check for trivial solution risk: "If all variables = 0, are all constraints satisfied?" If yes, Step 3 needs a forcing constraint.
 - **Competing objectives?** If the formulation has a penalty term bundling two concerns (cost + penalty×slack), or a constraint that represents a competing goal (return ≥ threshold), consider whether the user wants to explore the tradeoff rather than fix a single point. See [multi-objective-formulation.md](references/multi-objective-formulation.md) for the epsilon constraint approach.
 - **Parameter sensitivity / what-if?** If key constraints use fixed values that could vary (budget, demand, service level), use the Scenario Concept pattern — parameterize the constraint, index the decision variable by Scenario, and solve all scenarios in a single solve. This keeps results in the ontology and avoids manual re-solve loops. See [scenario-analysis.md](references/scenario-analysis.md).
 
-### Step 4: Validate
+### Step 5: Validate
 Is the formulation complete and correct?
 - Every variable appears in at least one constraint or the objective
 - Every constraint references at least one decision variable
@@ -136,22 +136,22 @@ objectives  = [c for c in schema.concepts if c.name == "Objective"  or "Objectiv
 # Variable_<id> subconcept and count rows.
 ```
 
-This is the downstream complement to Step 0's base-ontology grounding: Step 0 verifies the *inputs* to formulation exist; Step 4's pre-solver audit verifies the *outputs* of formulation registered correctly.
+This is the downstream complement to Step 1's base-ontology grounding: Step 1 verifies the *inputs* to formulation exist; Step 5's pre-solver audit verifies the *outputs* of formulation registered correctly.
 
-### Step 5: Simplify (iterate)
+### Step 6: Simplify (iterate)
 Can we reduce complexity without losing correctness?
 - Static parameters over dynamic calculations
 - Objective terms for goals; constraints for hard requirements
 - Group-level constraints over pairwise/granular combinations
 
-### Step 6: Present, React, Refine
+### Step 7: Present, React, Refine
 Is the formulation complete — including constraints the user couldn't articulate upfront?
 - Solve and present the result to the user (see Constraint Elicitation > Post-Solve: Iterative Refinement)
 - Use the result as an elicitation tool to surface latent preferences
 - Disambiguate rejections into constraint types, add them, re-solve
 - Repeat until the user accepts or feasibility pressure forces prioritization
 
-Steps 1-5 produce the best formulation you can build from what the user has told you. Step 6 discovers what they couldn't tell you until they saw a concrete result. Most real-world formulations require at least one pass through Step 6.
+Steps 1-6 produce the best formulation you can build from what the user has told you. Step 7 discovers what they couldn't tell you until they saw a concrete result. Most real-world formulations require at least one pass through Step 7.
 
 For detailed patterns for each step, see [variable-formulation.md](references/variable-formulation.md), [constraint-formulation.md](references/constraint-formulation.md), and [objective-formulation.md](references/objective-formulation.md).
 
