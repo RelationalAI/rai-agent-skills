@@ -812,4 +812,32 @@ model.where(
 - Role-named Relationships (left/right, from/to, src/dst) to make traversal directions explicit
 - Symmetry handling via ordered-pair filter during binding
 
+---
+
+## Example 8: Portable source paths (hoist database name to a constant)
+
+Shared Snowflake databases are often imported under different account-local names (e.g., a publisher's share appears as `SHARED_A` on one consumer and `SHARED_B` on another). Ontologies that hardcode `DATABASE.SCHEMA.TABLE` in every `model.Table()` call break when the local alias differs from the publisher's.
+
+**Pattern:** hoist the database (and optionally schema) to top-of-file constants. Retargeting is a one-line change.
+
+```python
+from relationalai.semantics import Model
+
+DB = "PUBLISHER_NAME"     # override if imported under a different alias
+SCHEMA = "RAW"
+
+model = Model("my_domain")
+
+class Sources:
+    class src:
+        entity_a = model.Table(f"{DB}.{SCHEMA}.ENTITY_A")
+        entity_b = model.Table(f"{DB}.{SCHEMA}.ENTITY_B")
+```
+
+Applies equally to env-split retargeting (`DEV` vs `PROD`). When the DB name varies per deployment, parameterize via an environment variable or `raiconfig` value.
+
+**Patterns demonstrated:**
+- DB-as-constant for portable ontologies
+- Sources class with f-string path interpolation
+
 **Related guidance:** see `rai-ontology-design` § "Same-type multiarity detection" for the corresponding design-principle discussion.

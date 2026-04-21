@@ -27,6 +27,8 @@
 | `Int128Array` / `NotImplementedError` / silent empty results on pandas operations | RAI returns `Int128Array` for counts, integer aggregations, and IDs; `Float128` for float aggregations and Snowflake FLOAT columns. Int128 raises errors on `.fillna(0)`, `.groupby()`, `.sum()`; Float128 can fail silently (e.g., `.sort_values()` produces empty output without error) | Cast early: `df["col"].astype(int)` for integers, `df["col"].astype(float)` for floats |
 | `ValidationError: Unused variable` after `import *` from another model script | `from other_script import *` brings all concepts/relationships into scope — any not referenced in the current query trigger the validator | Import only what you need: `from grid import model, Substation, Line`. Never use `import *` across model scripts |
 
+> **`TyperError` with empty diagnostic body** — `RAIException: [TyperError] ... see above for details` appears but the "above" details never reach stderr. Strip the failing expression to a minimal reproducer: remove one `.where()` clause or `.select()` column at a time until the error disappears. The last removed piece is the culprit. Common causes: a Relationship's `short_name` used in place of its Python attribute, or an unbound `.ref()`.
+
 For data loading pitfalls (NaN columns, `to_schema()` clobbering, NULL FKs), see [data-loading.md](data-loading.md) § Common Data Loading Mistakes.
 For `.exists()` on Properties, see `rai-querying` Common Pitfalls.
 For Graph + large model TyperError, see `rai-graph-analysis` Common Pitfalls.
