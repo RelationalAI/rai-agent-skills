@@ -40,8 +40,8 @@ for your current environment. If possible use a supported marketplace channel th
 
 | Agent                           | Install                                                                                                     | Updates                                                  |
 |---------------------------------|-------------------------------------------------------------------------------------------------------------|----------------------------------------------------------|
-| **Claude Code** (CLI)           | `/plugin marketplace add RelationalAI/rai-agent-skills`<br>`/plugin install rai@RelationalAI`               | `/plugin marketplace update RelationalAI/rai-agent-skills` |
-| **Claude Desktop**              | Use the Customize → Personal plugins **+** UI flow. See the Detailed Install Guide                          | **Auto**                                                 |
+| **Claude Code** (CLI)           | `/plugin marketplace add RelationalAI/rai-agent-skills`<br>`/plugin install RAI@RelationalAI`               | **Auto** — enable **Sync automatically** on the plugin's **···** menu |
+| **Claude Desktop**              | Use the Customize → Personal plugins **+** UI flow. See the Detailed Install Guide                          | **Auto** — enable **Sync automatically** on the plugin's **···** menu |
 | **VS Code / Copilot**           | Add `"RelationalAI/rai-agent-skills"` to `chat.plugins.marketplaces`, then install from the Extensions view | **Auto** (every 24h)                                     |
 | **Cortex Code** (CLI)           | `cortex skill add RelationalAI/rai-agent-skills/skills`                                                     | `cortex skill update RelationalAI/rai-agent-skills`      |
 | **OpenAI Codex**                | See the [Codex guide](#openai-codex) below                                                                  | Re-install / version bump                                |
@@ -92,13 +92,14 @@ See this quick [video](https://www.loom.com/share/a78519cfa60149158779cb9925a44a
 
 ```
 /plugin marketplace add RelationalAI/rai-agent-skills
-/plugin install rai@RelationalAI
+/plugin install RAI@RelationalAI
 # or use the wizard
 /plugin
 ```
 
-Restart your session after installing. Updates install automatically at startup; run `/plugin update rai@RelationalAI`to
-force a refresh.
+Restart your session after installing. To keep the plugin current, open the **Plugins** directory, click the **···**
+menu on the **rai-agent-skills** tile, and enable **Sync automatically** — it pulls new commits from the default
+branch without a manual step. Use **Check for updates** from the same menu for an on-demand refresh.
 
 ![Claude Code skills](doc/claude.png)
 
@@ -112,6 +113,8 @@ force a refresh.
 3. In the **Add marketplace** dialog, enter `RelationalAI/rai-agent-skills` and click **Sync**.
 4. Click **+** next to **Personal plugins** again, then select **Browse plugins**.
 5. Open the **Personal** tab, find the **Rai** tile, and click **+** to install it.
+6. **Recommended:** on the **rai-agent-skills** plugin tile, open the **···** menu and toggle **Sync automatically** on.
+   New commits on the default branch will be pulled in without a manual update step.
 
 Alternatively, download this repo's contents and copy the skills into the Claude app.
 

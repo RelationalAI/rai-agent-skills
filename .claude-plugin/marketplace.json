@@ -9,7 +9,7 @@
   "plugins": [
     {
       "source": "./",
-      "name": "rai",
+      "name": "RAI",
       "description": "RelationalAI semantic models and advanced reasoners",
       "version": "1.0.7",
       "author": {
