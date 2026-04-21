@@ -17,6 +17,8 @@ Three public functions in `relationalai.semantics.inspect` replace ad-hoc access
 from relationalai.semantics import inspect
 ```
 
+**Reading `~relationship` entries.** `ConceptInfo.relationships` formats each as `~{short_name}: {reading_string}` — e.g., `~my_short_name: A links to B`. The prefix after `~` is the **`short_name`** (for query disambiguation), NOT the Python attribute name. The attribute name is whatever was assigned on the concept: `A.rel = model.Relationship(..., short_name="my_short_name")` → use `A.rel(B)` in queries, not `A.my_short_name(B)`.
+
 ## When to Use
 
 **Prefer `inspect.*` over direct `model.concepts` / `.relationships` / `.tables` access** for:
