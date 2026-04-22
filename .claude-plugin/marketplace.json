@@ -11,7 +11,7 @@
       "source": "./",
       "name": "rai",
       "description": "RelationalAI semantic models and advanced reasoners",
-      "version": "1.0.7",
+      "version": "1.0.8",
       "author": {
         "name": "RelationalAI",
         "url": "https://relational.ai"
