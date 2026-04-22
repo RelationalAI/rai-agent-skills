@@ -46,7 +46,7 @@ Product = model.Concept("Product", identify_by={"id": Integer})
 
 # Properties (concept → value) and Relationships (concept → concept)
 Product.cost = model.Property(f"{Product} has {Float:cost}")
-Product.supplier = model.Relationship(f"{Product} supplied by {Supplier:supplier}")
+Product.supplier = model.Property(f"{Product} supplied by {Supplier:supplier}")
 
 # Data loading
 model.define(Product.new(model.data(df).to_schema()))
@@ -196,15 +196,18 @@ Worker.assignment = model.Property(f"{Worker} has {Shift} if {Integer:assigned}"
 
 ## Relationships
 
-Relationships are **multi-valued** associations — zero, one, or many outputs per input. No uniqueness constraint. Use for concept-to-concept links where one entity can relate to many others.
+Relationships are **multi-valued** associations — zero, one, or many outputs per input. No uniqueness constraint. Use when an input can have many outputs, or the association has multiple fields.
 
 ```python
-# Concept-to-concept links — ALL concept-to-concept associations use Relationship
+# Multi-valued concept-to-concept (one parent → many children)
 Parent.has_child = model.Relationship(f"{Parent} has {Child}")
-Order.placed_by = model.Relationship(f"{Order} placed by {Customer}")
 
-# Availability / membership
+# Availability / membership (many-to-many)
 Worker.available_for = model.Relationship(f"{Worker} is available for {Shift}")
+
+# Functional concept-to-concept FKs use Property, NOT Relationship —
+# see Properties section above. Example: Order.customer = model.Property(
+#   f"{Order} placed by {Customer:customer}") because each Order has exactly one Customer.
 ```
 
 **Scalar variables** (standalone floats/ints without a parent concept). Use for optimization variables not attached to any concept (e.g., NLP problems with just a few free variables):

@@ -53,7 +53,7 @@ Account = model.Concept("Account", identify_by={"id": Integer})
 Account.account_type = model.Property(f"{Account} has {String:account_type}")
 Account.balance = model.Property(f"{Account} has {Float:balance}")
 Account.opened_date = model.Property(f"{Account} has {String:opened_date}")
-Account.owner = model.Relationship(f"{Account} owned by {User}")
+Account.owner = model.Property(f"{Account} owned by {User:owner}")
 
 # Transaction
 Transaction = model.Concept("Transaction", identify_by={"id": Integer})
@@ -62,7 +62,7 @@ Transaction.merchant = model.Property(f"{Transaction} has {String:merchant}")
 Transaction.category = model.Property(f"{Transaction} has {String:category}")
 Transaction.timestamp = model.Property(f"{Transaction} has {String:timestamp}")
 Transaction.is_flagged = model.Relationship(f"{Transaction} is flagged")
-Transaction.user = model.Relationship(f"{Transaction} belongs to {User}")
+Transaction.user = model.Property(f"{Transaction} belongs to {User:user}")
 
 # Stock
 Stock = model.Concept("Stock", identify_by={"id": Integer})

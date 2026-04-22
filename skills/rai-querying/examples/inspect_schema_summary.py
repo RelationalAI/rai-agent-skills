@@ -19,7 +19,7 @@ Customer.score = model.Property(f"{Customer} has {Float:score}")
 Order = model.Concept("Order", identify_by={"id": String})
 Order.amount = model.Property(f"{Order} has {Float:amount}")
 Order.item_count = model.Property(f"{Order} has {Integer:item_count}")
-Order.customer = model.Relationship(f"{Order} placed by {Customer}")
+Order.customer = model.Property(f"{Order} placed by {Customer:customer}")
 
 
 # --- Pattern 1: print a human-readable summary of the whole model ---

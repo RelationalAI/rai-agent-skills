@@ -22,7 +22,7 @@ Shipment.status = model.Property(f"{Shipment} has {String:status}")
 Business = model.Concept("Business", identify_by={"id": String})
 Business.name = model.Property(f"{Business} has {String:name}")
 Business.reliability_score = model.Property(f"{Business} has {Float:reliability_score}")
-Shipment.supplier = model.Relationship(f"{Shipment} supplied by {Business}")
+Shipment.supplier = model.Property(f"{Shipment} supplied by {Business:supplier}")
 
 
 # --- Query 1: Simple select with filter ---

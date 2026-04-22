@@ -22,12 +22,12 @@ Product.category = model.Property(f"{Product} in category {String:category}")
 
 Order = model.Concept("Order", identify_by={"id": Integer})
 Order.amount = model.Property(f"{Order} has amount {Float:amount}")
-Order.customer = model.Relationship(f"{Order} placed by {Customer}")
+Order.customer = model.Property(f"{Order} placed by {Customer:customer}")
 Order.product = model.Relationship(f"{Order} contains {Product}")
 
 # Derived concept: community labels become ontology entities
 CustomerSegment = model.Concept("CustomerSegment", identify_by={"id": Integer})
-Customer.segment = model.Relationship(f"{Customer} belongs to {CustomerSegment}")
+Customer.segment = model.Property(f"{Customer} belongs to {CustomerSegment:segment}")
 
 # --- Sample data ---
 

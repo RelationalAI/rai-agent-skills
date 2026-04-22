@@ -15,7 +15,7 @@ Customer.credit_limit = model.Property(f"{Customer} has {Float:credit_limit}")
 
 Order = model.Concept("Order", identify_by={"id": Integer})
 Order.amount = model.Property(f"{Order} has {Float:amount}")
-Order.customer = model.Relationship(f"{Order} placed by {Customer}")
+Order.customer = model.Property(f"{Order} placed by {Customer:customer}")
 
 # --- Validation Rule ---
 # NL: "Flag orders that exceed their customer's credit limit"

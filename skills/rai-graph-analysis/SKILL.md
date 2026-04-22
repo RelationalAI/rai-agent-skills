@@ -416,7 +416,7 @@ df = model.select(User.name, User.community).to_df()
 graph.Node.community_label = graph.louvain()
 Segment = model.Concept("Segment", identify_by={"id": Integer})
 model.define(Segment.new(id=graph.Node.community_label))
-Customer.segment = model.Relationship(f"{Customer} belongs to {Segment}")
+Customer.segment = model.Property(f"{Customer} belongs to {Segment:segment}")
 model.where(graph.Node == Customer).define(
     Customer.segment(Segment.filter_by(id=graph.Node.community_label))
 )

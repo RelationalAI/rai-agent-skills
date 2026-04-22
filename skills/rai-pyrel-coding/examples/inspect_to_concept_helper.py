@@ -14,7 +14,7 @@ Customer = model.Concept("Customer", identify_by={"id": String})
 Customer.name = model.Property(f"{Customer} has {String:name}")
 
 Order = model.Concept("Order", identify_by={"id": String})
-Order.customer = model.Relationship(f"{Order} placed by {Customer}")
+Order.customer = model.Property(f"{Order} placed by {Customer:customer}")
 
 
 # --- Reusable helper: accepts any handle to a Concept ---
