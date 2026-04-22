@@ -131,89 +131,38 @@ Where solved values appear depends on the `populate` parameter in `solve_for()`:
 With `populate=True`, solved values are written back into the model as property values. Query them like any other model data — with entity context, aliases, and filtering:
 
 ```python
-# Display results — .inspect() prints to stdout (preferred for display-only)
+# Canonical extraction: filter active binary decisions, alias columns, display or convert to DataFrame
 model.select(
     MachinePeriod.machine.machine_id.alias("machine_id"),
     MachinePeriod.period.pid.alias("period"),
     MachinePeriod.x_maintain.alias("maintained"),
-).where(MachinePeriod.x_maintain > 0.5).inspect()
-
-# Use .to_df() when you need the DataFrame for further Python analysis
-assignments_df = model.select(
-    TechnicianMachinePeriod.technician.technician_id.alias("technician"),
-    TechnicianMachinePeriod.machine.machine_id.alias("machine"),
-    TechnicianMachinePeriod.period.pid.alias("period"),
-).where(TechnicianMachinePeriod.x_assigned > 0.5).to_df()
-
-# Binary variable selection — filter active decisions
-model.select(
-    Edge.i.alias("from"), Edge.j.alias("to")
-).where(Edge.x_edge > 0.5).inspect()
+).where(MachinePeriod.x_maintain > 0.5).inspect()   # or .to_df() for Python analysis
 ```
 
 **`populate=False` approach: `Variable.values()` on ProblemVariable**
 
-Use `populate=False` + `Variable.values()` for loop-based entity exclusion/partition scenarios. For Scenario Concept workflows, use `model.select()` — the scenario dimension is part of the variable identity. For loop workflows where multiple Problems share decision variables, `populate=False` prevents one solve from overwriting another's results.
-
-`solve_for()` returns a `ProblemVariable` — a Concept that can be used in `model.define()`, `model.select()`, and `.ref()`. Call `.values(sol_index, value_ref)` on it to extract solution values.
-
-**Back-pointer naming rule:** each **non-value** field in the Property's format string becomes a back-pointer attribute on the `ProblemVariable`. The **last** field is the value field — you read it via `var.values(sol_idx, val_ref)` and it is NOT a back-pointer. For each non-value field, the back-pointer attribute name is the **explicit `:name` from the format string if present**, otherwise the **lowercased type name**. Examples:
-
-| Property definition | Back-pointers on the returned var | Value field |
-|---|---|---|
-| `f"{Assignment} has {Float:x}"` | `var.assignment` (lowercased type) | `x` |
-| `f"{Edge:e} has {Float:flow}"` | `var.e` (explicit `:e` overrides `edge`) | `flow` |
-| `f"{Queen} is in {Integer:column}"` | `var.queen` | `column` |
-| `f"{Player} in {Integer:week} is in {Integer:group}"` | `var.player`, `var.week` | `group` |
-| `f"cell {Integer:i} {Integer:j} is {Integer:x}"` | `var.i`, `var.j` (no entity concept) | `x` |
-| `f"{MachinePeriod} has {Float:x}"` | `var.machineperiod` (lowercased as-is, NOT `machine_period`) | `x` |
-| `f"{Float:x}"` | none — call `var.values(sol_idx, val)` directly | `x` |
-
-The lowercased type name is the type name converted to lowercase **as-is** — no underscores or snake_case conversion. `MachinePeriod` becomes `machineperiod`, not `machine_period`.
-
-**Silent-failure warning:** `ProblemVariable` is a Concept subclass, and Concepts return a `Chain` from `__getattr__` for unknown attribute names instead of raising. Two common mistakes both silently return a `Chain` and produce empty or garbage results (not an `AttributeError`):
-
-1. Writing `var.edge` when the format string said `{Edge:e}` (explicit `:name` was `:e`).
-2. Writing `var.column` or `var.group` when the name is a **value** field — those are not back-pointers; read them through `var.values(sol_idx, val_ref)`.
-3. Writing `var.machine_period` when the concept is `MachinePeriod` — the correct name is `var.machineperiod` (lowercased, no underscores).
-
-Always match the attribute name to a non-value field name in the format string.
-
-For `solve_for(Assignment.x, ...)` where `x` is defined as `f"{Assignment} has {Float:x}"`, the back-pointer is `var.assignment`:
+`solve_for()` returns a `ProblemVariable` — a Concept with **back-pointer attributes** for each non-value field in the Property's format string. Call `.values(sol_index, value_ref)` on it to extract solution values:
 
 ```python
-# solve_for() returns a ProblemVariable concept
+# Property: f"{Assignment} has {Float:x}"  → back-pointer var.assignment, value field x
 assign_var = problem.solve_for(Assignment.x, type="bin", populate=False)
-
 problem.solve("highs")
 
-# Extract solution values using Variable.values()
 value_ref = Float.ref()
 df = model.select(
     assign_var.assignment.worker.name.alias("worker"),
     value_ref.alias("value"),
 ).where(assign_var.values(0, value_ref), value_ref > 0.5).to_df()
-# Returns entity-aware results with proper identity columns
-
-# For multiple solutions (e.g., from MiniZinc with solution_limit),
-# pass different sol_index values (0-based)
 ```
-
-**Key rules:**
-- Use `model.select()` by default — it gives entity-aware results with proper identity columns
-- Use `Variable.values()` for scenario loops or when you need per-variable extraction with `populate=False`
-- The `ProblemVariable` returned by `solve_for()` is a Concept — you can traverse its relationships in `model.select()` for entity context
-- `satisfy()` returns `ProblemConstraint` and `minimize()`/`maximize()` return `ProblemObjective` — also Concepts usable with `model.define()`, `model.select()`, `.ref()`
 
 **Extraction principles:**
 - **Binary variables:** Filter with `> 0.5`, not `== 1` (numeric tolerance in MIP solvers)
 - **Continuous variables:** Filter with `> 1e-6` to remove near-zero solver noise
 - **Scalar extraction:** `problem.solve_info().objective_value` for single values (no query needed)
 - **Always alias:** Use `.alias()` on every output column for clean DataFrames
+- **Int128 handling:** RAI may return `Int128Array` (nullable). Cast with `.astype(float)` before filtering or `.groupby().agg()`.
 
-**Int128 handling:** RAI may return `Int128Array` (nullable). Cast with `.astype(float)` before filtering or `.groupby().agg()`.
-
-For exporting to Snowflake, multiple solution extraction, iterative solving, and scenario/parametric analysis, see [references/solution-extraction-details.md](references/solution-extraction-details.md).
+For per-pattern variations (multiple solutions, iterative solving, scenario/parametric extraction, full `Variable.values()` back-pointer naming rules with table of examples, silent-failure warnings, and Snowflake table export), see [references/solution-extraction-details.md](references/solution-extraction-details.md).
 
 ### Post-solve constraint verification
 
@@ -522,7 +471,7 @@ Use this after every solve to ensure result quality:
 
 | Reference | Description | File |
 |-----------|-------------|------|
-| Solution extraction details | Exporting results, multiple solutions, iterative solving, scenario/parametric solving | [solution-extraction-details.md](references/solution-extraction-details.md) |
+| Solution extraction details | Query-pattern variations (`populate=True` / `populate=False`), `Variable.values()` back-pointer naming rule with examples, silent-failure warnings, exporting results, multiple solutions, iterative solving, scenario/parametric solving | [solution-extraction-details.md](references/solution-extraction-details.md) |
 | Failure taxonomy | Detailed root causes by solvability level and 5-step diagnosis protocol | [failure-taxonomy.md](references/failure-taxonomy.md) |
 | Fix generation guidelines | Root cause taxonomy, grounding rules, join path fixes, trivial/infeasible fix strategies | [fix-generation-guidelines.md](references/fix-generation-guidelines.md) |
 | Common pitfalls | Full table of 14 common optimization result pitfalls with causes and fixes | [common-pitfalls.md](references/common-pitfalls.md) |

@@ -1,9 +1,10 @@
-# Pattern: e-commerce — value-type IDs, FK-resolved relationships, computed properties
+# Pattern: value-type IDs + FK-resolved relationships + computed properties over child entities
 # Key ideas: value-type concepts (CustomerId, OrderId) extend primitives for type-safe
 # identity; FK navigation uses filter_by(id=source.COL); boolean source columns become
 # unary Relationships with conditional .where(); computed metrics are defined as
 # expressions over child entities.
 # Best practices: Property for scalars, Relationship for concept-to-concept links.
+# Illustrated with a Jaffle Shop e-commerce model (customers, orders, line items).
 
 from relationalai.semantics import Float, Integer, Model, String, sum
 

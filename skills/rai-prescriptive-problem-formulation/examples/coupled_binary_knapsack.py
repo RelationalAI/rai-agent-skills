@@ -1,7 +1,9 @@
-# Pattern: capacity expansion — two coupled binary decision sets sharing a resource constraint
-# Key ideas: approve-Project and select-Upgrade are independent binary decisions; an Upgrade
-# adds capacity at a Substation, relaxing the constraint on approved Projects there; budget
-# knapsack ties both decision sets together; at-most-one upgrade per substation.
+# Pattern: two coupled binary decision sets sharing a resource constraint + budget knapsack
+# Key ideas: two independent binary decisions (approve-Project, select-Upgrade) are coupled
+# through a shared capacity constraint — selecting an Upgrade at a Substation relaxes the
+# capacity constraint on approved Projects there; a budget knapsack ties both decision sets
+# together; at-most-one upgrade per substation.
+# Illustrated with a capacity-expansion model (approve grid projects, select substation upgrades).
 
 from relationalai.semantics import Float, Integer, Model, String, sum
 from relationalai.semantics.reasoners.prescriptive import Problem

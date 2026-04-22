@@ -1,6 +1,6 @@
 ---
 name: rai-pyrel-coding
-description: Covers PyRel v1 language syntax including imports, type system, concepts, properties, relationships, data loading, references, and code structure. Use when writing or reviewing PyRel code.
+description: Covers PyRel v1 language syntax — imports, type system, concepts, properties, relationships, data loading, references, and code structure. Use when writing or reviewing general PyRel code — not query construction (see rai-querying), business-rule authoring (see rai-rules-authoring), or optimization problem formulation (see rai-prescriptive-problem-formulation).
 ---
 
 # PyRel Coding
@@ -321,21 +321,7 @@ model.define(food := Food.new(name=food_data.name), food.cost(food_data.cost))
 
 ### Snowflake tables
 
-```python
-schema = model.Table("DB.SCHEMA.TABLE").to_schema(exclude=["internal_col"])
-model.define(Concept.new(schema))
-```
-
-**Column renaming:** `to_schema()` does not support `rename`. Use explicit property assignment:
-
-```python
-src = model.Table("DB.SCHEMA.TABLE")
-model.define(concept := Concept.new(key=src.SRC_COL), concept.target_prop(src.OTHER_COL))
-```
-
-**Column name casing:** Snowflake normalizes unquoted identifiers to UPPERCASE. Column schema dicts must use UPPERCASE names to match.
-
-For FK resolution with `filter_by`, multiarity property loading, and programmatic entity creation patterns, see [data-loading.md](references/data-loading.md).
+Snowflake table loading follows the same `model.Table("DB.SCHEMA.TABLE")` + `filter_by`/`model.define` pattern as CSV. For FK binding patterns, column casing/renaming, and `to_schema()` rules, see [data-loading.md](references/data-loading.md); for `Sources` class organization and portable source paths, see `rai-build-starter-ontology` examples; for Snowflake connection/auth, see `rai-configuration`.
 
 ---
 
@@ -347,33 +333,21 @@ Use `.ref()` to create independent variables of the same concept or type for pai
 
 ## Code Structure
 
-**Define models at module level** — not inside functions. This is the standard pattern because tooling and introspection need access to the model objects at import time. Scoping a model inside a function hides it from these tools.
+**Define models at module level** — not inside functions. Tooling and introspection need access to model objects at import time; scoping a model inside a function hides it from these tools. Reasoner-specific code (solver formulation, graph analysis) goes in separate functions that receive the model:
 
 ```python
 """Model Name - Brief description."""
-
 from pathlib import Path
-
 from pandas import read_csv
-from relationalai.semantics import Float, Integer, Model, String, sum
+from relationalai.semantics import Float, Model, String
 
-# --- Model (module level) ---
-model = Model("my_model")
-
-# --- Concepts ---
+model = Model("my_model")                                   # Module level
 Food = model.Concept("Food", identify_by={"name": String})
 Food.cost = model.Property(f"{Food} has {Float:cost}")
-
-# --- Data Loading ---
 csv = read_csv(Path(__file__).parent / "data" / "foods.csv")
 model.define(Food.new(model.data(csv).to_schema()))
-```
 
-Reasoner-specific code (solver formulation, graph analysis) goes in separate functions that receive the model:
-
-```python
-def solve(model):
-    """Define solver variables/constraints/objectives, solve, return results."""
+def solve(model):   # Reasoner-specific code in functions that receive the model
     ...
 ```
 

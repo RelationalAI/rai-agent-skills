@@ -91,6 +91,13 @@ session.sql("""
 
 #### Analysis
 
+**Identify data shape first.** Source tables typically arrive in one of two shapes, and the distinction drives whether downstream steps derive metrics or bind them directly:
+
+- **Raw events / measurements** — one row per occurrence; metrics of interest must be *derived* in a downstream computed layer from the raw rows.
+- **Pre-aggregated statistics** — one row per entity, per pair, or per time bucket carrying already-computed values (including long-form `(entity_i, entity_j, value)` matrices). Metrics arrive ready-to-bind; do not re-aggregate already-aggregated values.
+
+Two tables in the same schema can be different shapes — classify each independently. For long-form pairwise data specifically, see the pairwise value matrix example in [examples.md](references/examples.md).
+
 Analyze source data per `rai-ontology-design` § Design Decision Sequence, step 1 (Analyze sources). Note:
 - `_ID` suffixes (likely PKs), columns matching other tables' PKs (likely FKs)
 - `IS_`/`HAS_` prefixes (boolean flags), repeated string categories (enums)
@@ -259,6 +266,8 @@ print(df)
 # Expect: count matches source table row count. Zero means data binding failed.
 ```
 
+> **Note:** `aggregates.count(C)` on a concept with zero instances returns an empty DataFrame (no rows), not a DataFrame with `count=0` — the underlying relation is empty so the aggregation has no rows to reduce over. For chained workflows where a placeholder concept is populated by a downstream step, use `inspect.schema()` membership to verify the concept is declared rather than `count()` to verify data.
+
 **7c — Verify relationships** to confirm FK joins resolved:
 
 ```python
@@ -309,7 +318,7 @@ print(df)
 
 | Reference | Description | File |
 |-----------|-------------|------|
-| Real model examples | Production ontology patterns for TPC-H, multi-source, and prototyping use cases | [examples.md](references/examples.md) |
+| Starter ontology examples | Build patterns: Snowflake tables, CSV, derived concepts, junction concepts, self-referential hierarchies, pairwise matrices, portable source paths | [examples.md](references/examples.md) |
 
 ---
 
