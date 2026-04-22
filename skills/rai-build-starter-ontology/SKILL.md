@@ -176,11 +176,12 @@ Work domain-first: brainstorm business entities, then map to tables. Each concep
 
 ### Step 4 — Identify relationships and properties
 
-**Relationships** — FK columns, shared keys, business associations. Each link connects independently meaningful concepts. Use the multiplicity results from Step 2 EDA to determine whether each relationship is 1:1, 1:N, or M:N (junction concept).
+**Choose Property or Relationship per link** based on the Step 2 multiplicity results:
 
-**Properties** — remaining columns as attributes. Omit columns with no business meaning for the scoped questions.
+- **Property** — when each input uniquely determines one output. Covers scalar attributes AND functional FKs (e.g., each Order has exactly one Customer → `Order.customer = model.Property(f"{Order} placed by {Customer:customer}")`).
+- **Relationship** — when one input can have many outputs (one Customer → many Orders), the association has multiple fields, or it's a Boolean flag (`{Entity} is <flag>`, unary).
 
-Refer to `rai-ontology-design` § Relationship Principles.
+See `rai-ontology-design` § Property vs. Relationship and `rai-pyrel-coding` § Properties and Relationships for the full decision rule.
 
 ---
 
@@ -191,7 +192,7 @@ Validate the proposed design against source data before coding:
 | Check | What to confirm |
 |-------|-----------------|
 | Identity columns | Exist in source and uniquely identify rows |
-| Relationships | Valid FK or join key exists |
+| Associations (Property/Relationship) | Valid FK or join key exists, multiplicity determined (1:1 / N:1 → Property; 1:N / M:N → Relationship) |
 | Properties | Source column exists with compatible data type |
 | Concept grounding | Every concept maps to an authoritative source |
 | Orthogonality | No two concepts represent the same entity set |

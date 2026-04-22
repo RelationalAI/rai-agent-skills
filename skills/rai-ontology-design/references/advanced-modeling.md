@@ -159,7 +159,7 @@ Reading strings (the `f"{Concept} has {Type:property}"` patterns) are used by th
 
 ```python
 # GOOD: concise, precise verb, no redundancy
-Order.placed_by = model.Relationship(f"{Order} placed by {Customer}")
+Order.placed_by = model.Property(f"{Order} placed by {Customer:placed_by}")
 Site.capacity = model.Property(f"{Site} has {Float:capacity}")
 Operation.source = model.Relationship(f"{Operation} from {Site:source}")
 

@@ -3,7 +3,7 @@
 # identity; FK navigation uses filter_by(id=source.COL); boolean source columns become
 # unary Relationships with conditional .where(); computed metrics are defined as
 # expressions over child entities.
-# Best practices: Property for scalars, Relationship for concept-to-concept links.
+# Best practices: Property for scalars and functional FKs; Relationship for multi-valued links.
 # Illustrated with a Jaffle Shop e-commerce model (customers, orders, line items).
 
 from relationalai.semantics import Float, Integer, Model, String, sum

@@ -19,12 +19,12 @@ Order = model.Concept("Order", identify_by={"id": Integer})
 Order.amount = model.Property(f"{Order} has amount {Float:amount}")
 
 # Declare relationships between orders, customers, and products
-Order.customer = model.Relationship(f"{Order} placed by {Customer}")
+Order.customer = model.Property(f"{Order} placed by {Customer:customer}")
 Order.product = model.Relationship(f"{Order} contains {Product}")
 
 # Declare CustomerSegment and attach segments to customers
 CustomerSegment = model.Concept("CustomerSegment", identify_by={"id": Integer})
-Customer.segment = model.Relationship(f"{Customer} belongs to {CustomerSegment}")
+Customer.segment = model.Property(f"{Customer} belongs to {CustomerSegment:segment}")
 
 # Define sample data (only suitable for small examples)
 customer_rows = [

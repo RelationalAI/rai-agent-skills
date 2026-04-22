@@ -63,7 +63,7 @@ WHICH PATTERN TO USE:
 │   │         Example: Operation.x_flow = model.Property(f"{Operation} has {Float:flow}")
 │   └── NO  → Does your decision span TWO entity types with no existing link?
 │       │     (e.g., "assign Worker to Shift" when no WorkerShift concept exists)
-│       ├── YES → Create cross-product concept (use model.query() for table-backed)
+│       ├── YES → Create cross-product concept (use `model.define(...)` + `.new()` for table-backed)
 │       │         Example: model.define(Assignment.new(worker=Worker, shift=Shift))
 │       └── NO  → Do you need to track aggregated quantities per dimension?
 │           │     (e.g., "unmet demand per SKU", "surplus per region")

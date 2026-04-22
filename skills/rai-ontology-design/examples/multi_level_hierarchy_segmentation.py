@@ -3,7 +3,7 @@
 # for concept-to-concept FK links; MenuItem → MenuType category hierarchy;
 # customer segmentation shows conditional branching (multiple .where() rules for
 # mutually exclusive segments).
-# Best practices: Property for scalars, Relationship for concept-to-concept links.
+# Best practices: Property for scalars and functional FKs; Relationship for multi-valued links.
 
 from relationalai.semantics import Float, Integer, Model, String
 
