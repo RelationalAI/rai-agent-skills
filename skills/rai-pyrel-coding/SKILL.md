@@ -1,6 +1,6 @@
 ---
 name: rai-pyrel-coding
-description: Covers PyRel v1 language syntax — imports, type system, concepts, properties, relationships, data loading, references, and code structure. Use when writing or reviewing general PyRel code — not query construction (see rai-querying), business-rule authoring (see rai-rules-authoring), or optimization problem formulation (see rai-prescriptive-problem-formulation).
+description: Covers PyRel v1 language syntax — imports, type system, concepts, properties, relationships, data loading, references, and code structure. Use when writing or reviewing general PyRel code — not query construction (see rai-querying), business-rule authoring via derived properties (see rai-rules-authoring), or optimization formulation with decision variables, constraints, and objectives (see rai-prescriptive-problem-formulation).
 ---
 
 # PyRel Coding
@@ -19,9 +19,10 @@ description: Covers PyRel v1 language syntax — imports, type system, concepts,
 - Understanding expression rules (`.where()` targets, `.per()` grouping, operators)
 
 **When NOT to use:**
-- Ontology modeling decisions (when to create a concept vs property, gap classification) — see `rai-ontology-design`
+- RAI domain modeling decisions (when to create a concept vs property, gap classification) — see `rai-ontology-design`
 - Query construction (select, aggregation, filtering, joins) — see `rai-querying`
-- Solver formulation (variables, constraints, objectives) — see `rai-prescriptive-problem-formulation`
+- Business-rule authoring via derived properties (validation, classification, alerting) — see `rai-rules-authoring`
+- Optimization formulation (decision variables, constraints, objectives) — see `rai-prescriptive-problem-formulation`
 - Connection and config setup — see `rai-configuration`
 
 **Overview:** Reference skill. Key lookup areas: Imports, Model Patterns, Type System, Concepts/Properties/Relationships, Data Loading, References and Aliasing, Standard Library (math/strings/dates), Expression Rules.
@@ -157,7 +158,7 @@ PositiveInt = model.Concept("PositiveInt", extends=[Integer])
 - **`identify_by` auto-creates properties.** `Concept("Customer", identify_by={"customer_id": Integer})` automatically creates `Customer.customer_id` as a `Property(Integer)`. Do not declare a separate `model.Property()` for identity fields — it will create a duplicate.
 - **`identify_by` supports concept types** — use for composite keys involving other concepts: `OrderItem = model.Concept("OrderItem", identify_by={"order": Order, "item": Item})`. This is standard for association/junction concepts.
 - **Exception where `identify_by` is not used:** Extending primitive types (`extends=[Integer]`) — identity comes from the primitive value.
-- **Introspection:** `model.concepts` — list of all declared concepts; `model.concept_index["Name"]` — look up concept by name.
+- **Introspection:** Prefer `inspect.schema(model)` from `relationalai.semantics.inspect` (v1.0.14+) — returns a frozen `ModelSchema` with concepts, inherited properties, types, and data sources. Use `inspect.to_concept(obj)` for reusable helpers that must accept any DSL handle (Chain, Ref, FieldRef, Expression). Lower-level `model.concepts` / `model.concept_index["Name"]` remain available as a fallback. See `rai-querying/references/inspect-module.md`.
 
 ---
 
@@ -321,7 +322,7 @@ model.define(food := Food.new(name=food_data.name), food.cost(food_data.cost))
 
 ### Snowflake tables
 
-Snowflake table loading follows the same `model.Table("DB.SCHEMA.TABLE")` + `filter_by`/`model.define` pattern as CSV. For FK binding patterns, column casing/renaming, and `to_schema()` rules, see [data-loading.md](references/data-loading.md); for `Sources` class organization and portable source paths, see `rai-build-starter-ontology` examples; for Snowflake connection/auth, see `rai-configuration`.
+Snowflake table loading follows the same `model.Table("DB.SCHEMA.TABLE")` + `filter_by`/`model.define` pattern as CSV. For FK binding patterns, column casing/renaming, and `to_schema()` rules, see [data-loading.md](references/data-loading.md). For Sources-class organization and portable DB-as-constant source paths, see the `rai-build-starter-ontology` reference examples (Examples 1–6 and Example 8). For Snowflake auth and `raiconfig.yaml` setup, see `rai-configuration`.
 
 ---
 
@@ -460,6 +461,7 @@ For the full step-by-step debugging checklist, see [common-pitfalls.md](referenc
 | Standalone Property + union | Property not attached to concept, `model.union()` for multi-component objective, segment self-join | [examples/supply_chain_transport_code.py](examples/supply_chain_transport_code.py) |
 | print() debugging | Readable repr for verifying expression structure before query execution | [examples/pprint_debugging.py](examples/pprint_debugging.py) |
 | End-to-end walkthrough | Full ontology + graph + aggregation + query in a single script | [examples/customer_segmentation.py](examples/customer_segmentation.py) |
+| `inspect.to_concept()` helper | Reusable helper accepting any DSL handle (Concept / Ref / Chain / FieldRef); `default=None` for defensive use | [examples/inspect_to_concept_helper.py](examples/inspect_to_concept_helper.py) |
 
 ---
 

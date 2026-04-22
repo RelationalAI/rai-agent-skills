@@ -812,6 +812,8 @@ model.where(
 - Role-named Relationships (left/right, from/to, src/dst) to make traversal directions explicit
 - Symmetry handling via ordered-pair filter during binding
 
+**Related guidance:** see `rai-ontology-design` § "Same-type multiarity detection" for the corresponding design-principle discussion.
+
 ---
 
 ## Example 8: Portable source paths (hoist database name to a constant)
@@ -839,5 +841,3 @@ Applies equally to env-split retargeting (`DEV` vs `PROD`). When the DB name var
 **Patterns demonstrated:**
 - DB-as-constant for portable ontologies
 - Sources class with f-string path interpolation
-
-**Related guidance:** see `rai-ontology-design` § "Same-type multiarity detection" for the corresponding design-principle discussion.

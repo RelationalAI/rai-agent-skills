@@ -28,7 +28,7 @@ description: Walks through building a first RAI ontology from Snowflake tables o
 4. Identify relationships and properties
 5. Validate design against schema
 6. Generate code
-7. Validate with queries
+7. Validate with queries, then emit `inspect.schema()` summary so the user sees what actually registered
 
 
 ---
@@ -293,6 +293,32 @@ df = model.select(
 print(df)
 # Each scoped question from Step 1 should be answerable with a query like this.
 ```
+
+**7e — Report what actually registered.** After the model runs cleanly, emit an `inspect.schema()` summary for the user. This is the canonical "here's what got built" artifact — distinct from "here's what I intended to build."
+
+```python
+from relationalai.semantics import inspect
+
+schema = inspect.schema(model)
+
+# Full dump for small models
+print(schema)
+
+# Targeted per-concept inspection for larger models
+for concept_name in scoped_concepts:
+    c = schema[concept_name]
+    idents = ", ".join(f"{f.name}:{f.type_name}" for f in c.identify_by)
+    print(f"{concept_name} [id: {idents}], extends={c.extends}")
+    for prop in c.properties:
+        print(f"  .{prop.name}: {prop.type_name}")
+    for rel in c.relationships:
+        print(f"  ~{rel.name}: {rel.reading}")
+
+# Data sources — tables and inline data (schema.tables includes both model.Table() and model.data())
+print(f"Tables: {[t.name for t in schema.tables]}")
+```
+
+This is the trust-building step. `inspect.schema()` *enriches* the summary with table-backed type information — for properties created via `Concept.new(table.to_schema())`, it infers and reports concrete types (`Integer`, `String`, `Date`) from the backing table even when the frontend model still types them as `Any`. The engine produces correctly-typed output regardless (it reads the backing data), but the `inspect` summary gives you a human-readable view of what the data actually carries. See `rai-querying/references/inspect-module.md`.
 
 ---
 

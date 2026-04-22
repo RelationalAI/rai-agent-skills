@@ -45,7 +45,7 @@ and reconciliation rule types.
 **Overview (process steps):**
 1. Parse the natural language rule to identify intent, entities, conditions, and output
 2. Classify the rule type (validation, classification, derivation, alerting, reconciliation)
-3. Map entities and conditions to existing ontology concepts and properties
+3. Ground in the current model via `inspect.schema(model)` before mapping entities to ontology — catches duplicates, hallucinated surface, and wrong-type inference
 4. Translate to PyRel using the appropriate `define()` + `where()` pattern
 5. Validate the rule against known test cases
 6. Connect to downstream consumers (queries, other rules, or reasoner chains)
@@ -114,15 +114,36 @@ a category from a fixed set, it is classification. If it computes a numeric valu
 
 ### Step 3: Map to Ontology and Explore Data
 
-Before writing code, verify each referenced element exists in the model AND explore the actual data to inform threshold values:
+**Inspect-before-authoring is the first action of this step.** Before proposing *any* rule, ground in the current model:
+
+```python
+from relationalai.semantics import inspect
+
+schema = inspect.schema(model)
+concept_info = schema[subject_concept_name]     # fails loudly if the concept doesn't exist
+existing_properties = concept_info.properties   # tuple[RelationshipInfo, ...] — includes inherited
+existing_names = {p.name for p in existing_properties}
+```
+
+This catches the three silent-failure modes that account for most rules-authoring errors:
+
+1. **Duplicate authoring** — the property is already declared (possibly under a near-synonym, or inherited from a parent concept). Adding it again wastes work and can introduce conflicts.
+2. **Hallucinated surface** — the concept or property name is plausible but not real (`Customer.tier` vs actual `Customer.category`). Fails silently until a downstream query returns wrong results.
+3. **Wrong-type inference** — for properties created via `Concept.new(table.to_schema())`, `inspect.schema()` enriches the type view from the backing table (e.g., shows `Integer` / `String` / `Date`) even though the frontend model types them as `Any`. Read the enriched type from inspect when writing threshold logic or bound derivation; don't guess from column names.
+
+**Verification checklist:**
 
 | Check | How to verify | If missing |
 |-------|--------------|------------|
-| Concept exists | `model.concepts` or check ontology definitions | Define the concept or flag as model gap |
-| Property exists on concept | Check concept's property declarations | Add property or enrich model |
-| Relationship path exists | Trace join from subject to related concept | Define relationship or denormalize needed property |
-| Data types match | Compare property types (`Integer`, `Float`, `String`, `Date`) | Cast with `numbers.integer()`, `floats.float()`, `date.fromisoformat()` |
+| Concept exists | `inspect.schema(model)["ConceptName"]` (raises `KeyError` if absent) | Define the concept or flag as model gap |
+| Property exists on concept | `"prop_name" in {p.name for p in inspect.schema(model)[concept].properties}` | Add property or enrich model |
+| Property type | `next(p.type_name for p in inspect.schema(model)[concept].properties if p.name == "prop")` (type is a string like `"Integer"`) | Cast with `numbers.integer()`, `floats.float()`, `date.fromisoformat()` |
+| Relationship path exists | Trace join from subject to related concept; use `inspect.fields(rel)` to see field shape | Define relationship or denormalize needed property |
 | Data distribution | Query `min`, `max`, `avg` of condition properties | Set thresholds informed by actual data, not assumptions |
+
+See `rai-querying/references/inspect-module.md` for full API.
+
+**When to skip:** greenfield authoring on an empty model, or single-shot rules on a fresh session. In those cases, inspect just adds a turn without payoff.
 
 **Data exploration is mandatory for threshold rules.** See [Complex Multi-Entity Rule Design](#data-exploration-before-threshold-selection) for the pattern. Common scale mismatches: scores 0-10 vs 0-100, ratios > 1.0, percentages as 0-1 vs 0-100.
 

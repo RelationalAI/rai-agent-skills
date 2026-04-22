@@ -88,8 +88,9 @@ The ultimate quality gate. Everything below serves this — if an agent can't di
 - [ ] Short patterns (< 10 lines) inline; larger examples in separate files
 - [ ] Example files are self-contained (copy-paste-execute)
 - [ ] Pattern-focused — strip unrelated setup boilerplate
-- [ ] **Adaptable**: examples use generic enough names/structure that an agent can map them to a novel domain
-- [ ] **Pattern-titled, not domain-titled**: example file/section titles and opening sentences lead with the PyRel construct or pattern being demonstrated. Domain stays as "illustrated with..." — the illustration is the vehicle, not the point. Exception: classic problems whose name IS the pattern (N-Queens, Sudoku, MTZ subtour).
+- [ ] **Adaptable**: example concept and property names should be generic enough that an agent can map them to any domain. If a property name encodes a specific business vertical or workflow, rename it to a structural equivalent unless the pattern strictly requires the specific term.
+- [ ] **Pattern-titled, pattern-framed**: example file names, section titles, opening comments, and index-row descriptions lead with the PyRel construct or pattern being demonstrated. Keep descriptions pattern-only; don't append `(illustrated with <domain>)` tails unless the tail names a canonical OR / textbook pattern that itself functions as a pattern tag (the name is as widely understood as the construct it demonstrates).
+- [ ] **No domain creep in property/concept names**: catch vertical-specific terms in both the example-row descriptions and inside the example file contents. If the term is recognizable only within a specific industry or business function, it's too specific.
 
 ---
 
