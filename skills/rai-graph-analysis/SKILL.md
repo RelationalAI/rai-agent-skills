@@ -235,14 +235,14 @@ See [algorithm-selection.md](references/algorithm-selection.md) for full per-alg
 
 ### Step 8: Configure, Execute, and Bind Results
 
-Four-line skeleton of the canonical pattern:
+Canonical assign → bind → query skeleton:
 
 ```python
-graph = Graph(model, directed=True, weighted=True, node_concept=Site, aggregator="sum")
-# ...define edges...
-graph.Node.score = graph.eigenvector_centrality()                           # execute → assign
-model.where(graph.Node == Site).define(Site.score(graph.Node.score))        # bind back
-model.select(Site.id, Site.score).to_df()                                   # query
+graph = Graph(model, directed=True, weighted=True, node_concept=MyConcept, aggregator="sum")
+model.define(graph.Edge.new(src=..., dst=..., weight=...))                  # define edges
+graph.Node.score = graph.eigenvector_centrality()                           # execute — substitute any algorithm
+model.where(graph.Node == MyConcept).define(MyConcept.score(graph.Node.score))  # bind back
+model.select(MyConcept.id, MyConcept.score).to_df()                         # query
 ```
 
 For the `directed` / `weighted` / `aggregator` decisions, see [Parameter Guidance](#parameter-guidance). For the full assign → bind → query walkthrough and per-algorithm extraction, see [Result Extraction and Binding](#result-extraction-and-binding) and [result-extraction.md](references/result-extraction.md).
