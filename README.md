@@ -28,26 +28,26 @@ ontologies and advanced reasoners by generating and executing PyRel code**. They
 ## Quickstart
 
 **Easiest:** point your coding agent at this repo and paste the prompt below. The agent will fetch the install guide,
-detect its own environment, and run the right steps.
+detect its own environment, and run the right steps. Depending what you agent does, you may need to update the skills
+yourself.
 
 ```
-Install the RelationalAI Agent Skills (https://github.com/RelationalAI/rai-agent-skills)
-for your current environment. If possible use a supported marketplace channel that supports updates.
+Install the RelationalAI Agent Skills (https://github.com/RelationalAI/rai-agent-skills) for your current environment. 
 ```
 
-**Or install manually.** Pick your agent and run the command. Channels that receive updates automatically are marked *
-*Auto** — prefer these when available.
+**Most robust** Leverage an official channel that supports updates:
 
-| Agent                           | Install                                                                                                     | Updates                                                  |
-|---------------------------------|-------------------------------------------------------------------------------------------------------------|----------------------------------------------------------|
-| **Claude Code** (CLI)           | `/plugin marketplace add RelationalAI/rai-agent-skills`<br>`/plugin install RAI@RelationalAI`               | **Auto** — enable **Sync automatically** |
-| **Claude Desktop**              | Use the Customize → Personal plugins **+** UI flow. See the Detailed Install Guide                          | **Auto** — enable **Sync automatically** |
-| **Cortex Code** (CLI)           | `cortex skill add RelationalAI/rai-agent-skills/skills`                                                     | `cortex skill update RelationalAI/rai-agent-skills`      |
-| **Cortex Code** (Web)           | Clone/download the repo, then **+** → add the `skills/` folder in a workspace. See the Detailed Install Guide | Re-upload the `skills/` folder                         |
-| **VS Code / Copilot**           | Add `"RelationalAI/rai-agent-skills"` to `chat.plugins.marketplaces`, then install from the Extensions view | **Auto** (every 24h)                                     |
-| **OpenAI Codex**                | See the [Codex guide](#openai-codex) below                                                                  | Re-install / version bump                                |
-| **Cursor**                      | See the [Cursor guide](#cursor) below                                                                       | Manual re-import                                         |
-| **Any 45+ agents** (Vercel CLI) | `npx skills add RelationalAI/rai-agent-skills --skill '*'`                                                  | `npx skills update`                                      |
+| Agent                           | Install                                                                                                                             | Updates                                             |
+|---------------------------------|-------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------|
+| **Claude Code** (CLI)           | `/plugin marketplace add RelationalAI/rai-agent-skills`<br>`/plugin install RAI@RelationalAI`                                       | **Auto** — enable **Sync automatically**            |
+| **Claude** (Desktop)            | Use the Customize → Personal plugins **+** UI flow. See the Detailed Install Guide                                                  | **Auto** — enable **Sync automatically**            |
+| **Cortex Code** (CLI)           | `cortex skill add RelationalAI/rai-agent-skills/plugins/rai/skills`                                                                 | `cortex skill update RelationalAI/rai-agent-skills` |
+| **Cortex Code** (Web)           | Clone/download the repo, open a workspace in Snowsight, then click **+** in CoCo → Upload Skills Directory -> `plugins/rai/skills/` | Re-upload the `plugins/rai/skills/` folder          |
+| **Codex** (CLI)                 | `codex plugin marketplace add RelationalAI/rai-agent-skills`<br>`codex`<br>`/plugins`                                               | `codex plugin marketplace upgrade relationalai`     |
+| **Codex** (Desktop)             | Plugins -> Search "RelationalAI"                                                                                                     | **Auto**                                            |
+| **VS Code / Copilot**           | Add `"RelationalAI/rai-agent-skills"` to `chat.plugins.marketplaces`, then install from the Extensions view                         | **Auto** (every 24h)                                |
+| **Cursor**                      | See the [Cursor guide](#cursor) below                                                                                               | Manual re-import                                    |
+| **Any 45+ agents** (Vercel CLI) | `npx skills add RelationalAI/rai-agent-skills --skill '*'`                                                                          | `npx skills update`                                 |
 
 After installing, start a new session for the skills to become available.
 
@@ -146,9 +146,12 @@ Then open the Extensions view (⇧⌘X), search `@agentPlugins`, and install **R
 cortex skill add RelationalAI/rai-agent-skills/skills
 ```
 
-Point Cortex at the `/skills` subdirectory (not the repo root) — Cortex's auto-discovery expects skills at a conventional layout and will reject the repo root otherwise. Later, run `cortex skill update RelationalAI/rai-agent-skills` to pull new versions.
+Point Cortex at the `/skills` subdirectory (not the repo root) — Cortex's auto-discovery expects skills at a
+conventional layout and will reject the repo root otherwise. Later, run
+`cortex skill update RelationalAI/rai-agent-skills` to pull new versions.
 
-Or follow [the docs](https://docs.snowflake.com/en/user-guide/cortex-code/extensibility#skills) to clone the repo locally and use the `/skill` dialog to add the [skills](skills) folder.
+Or follow [the docs](https://docs.snowflake.com/en/user-guide/cortex-code/extensibility#skills) to clone the repo
+locally and use the `/skill` dialog to add the [skills](skills) folder.
 
 ![Cortex skills](doc/cortex.png)
 
@@ -159,7 +162,8 @@ Or follow [the docs](https://docs.snowflake.com/en/user-guide/cortex-code/extens
 
 Cortex Code in the Snowflake web UI doesn't pull directly from GitHub — you load skills from a local folder.
 
-1. Clone the repo or [download the ZIP](https://github.com/RelationalAI/rai-agent-skills/archive/refs/heads/main.zip) and unzip it.
+1. Clone the repo or [download the ZIP](https://github.com/RelationalAI/rai-agent-skills/archive/refs/heads/main.zip)
+   and unzip it.
 2. In Snowsight, open a workspace and launch **Cortex Code** from the left sidebar.
 3. In the Cortex Code panel, click the **+** button and choose **Upload Skill Folder(s)**.
 4. Select the repo's `skills/` folder (not the repo root).
