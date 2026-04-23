@@ -23,7 +23,7 @@ description: Covers PyRel v1 language syntax — imports, type system, concepts,
 - Query construction (select, aggregation, filtering, joins) — see `rai-querying`
 - Business-rule authoring via derived properties (validation, classification, alerting) — see `rai-rules-authoring`
 - Optimization formulation (decision variables, constraints, objectives) — see `rai-prescriptive-problem-formulation`
-- Connection and config setup — see `rai-configuration`
+- Connection and config setup — see `rai-setup`
 
 **Overview:** Reference skill. Key lookup areas: Imports, Model Patterns, Type System, Concepts/Properties/Relationships, Data Loading, References and Aliasing, Standard Library (math/strings/dates), Expression Rules.
 
@@ -325,7 +325,7 @@ model.define(food := Food.new(name=food_data.name), food.cost(food_data.cost))
 
 ### Snowflake tables
 
-Snowflake table loading follows the same `model.Table("DB.SCHEMA.TABLE")` + `filter_by`/`model.define` pattern as CSV. For FK binding patterns, column casing/renaming, and `to_schema()` rules, see [data-loading.md](references/data-loading.md). For Sources-class organization and portable DB-as-constant source paths, see the `rai-build-starter-ontology` reference examples (Examples 1–6 and Example 8). For Snowflake auth and `raiconfig.yaml` setup, see `rai-configuration`.
+Snowflake table loading follows the same `model.Table("DB.SCHEMA.TABLE")` + `filter_by`/`model.define` pattern as CSV. For FK binding patterns, column casing/renaming, and `to_schema()` rules, see [data-loading.md](references/data-loading.md). For Sources-class organization and portable DB-as-constant source paths, see the `rai-build-starter-ontology` reference examples (Examples 1–6 and Example 8). For Snowflake auth and `raiconfig.yaml` setup, see `rai-setup`.
 
 ---
 
