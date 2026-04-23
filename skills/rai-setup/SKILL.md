@@ -1,14 +1,12 @@
 ---
 name: rai-setup
-description: Setup and configuration for RelationalAI — first-time install and Snowflake connection walkthrough, plus raiconfig.yaml, authentication, reasoner/engine settings, and troubleshooting. Use when installing RAI, connecting to Snowflake, or configuring anything in raiconfig.yaml.
+description: Setup and configuration for RelationalAI — first-time install and Snowflake connection walkthrough, plus raiconfig.yaml, authentication, reasoner/engine settings, and troubleshooting. Use when installing RAI, connecting to Snowflake, or configuring anything in raiconfig.yaml. Not for writing PyRel model code (see rai-pyrel-coding) or solver usage and diagnostics (see rai-prescriptive-solver-management).
 ---
 
 # RelationalAI Setup & Configuration
 <!-- v1-SENSITIVE -->
 
-Build AI that is aligned to your business, grounded in your semantic model, and powered by the advanced reasoners of the RelationalAI decision intelligence platform. Learn more at [relational.ai](https://relational.ai).
-
-This skill refers to the [relationalai Python package](https://pypi.org/project/relationalai) (aka PyRel), which provides PyRel programs and the `rai` CLI.
+Covers the [relationalai Python package](https://pypi.org/project/relationalai) (aka PyRel), which provides PyRel programs and the `rai` CLI.
 
 ## Summary
 
@@ -27,22 +25,60 @@ This skill refers to the [relationalai Python package](https://pypi.org/project/
 - Solver execution and diagnostics — see `rai-prescriptive-solver-management`
 - Discovering what questions an existing model can answer — see `rai-discovery`
 
+**Overview:** For a returning user tweaking config, start from **Quick Reference** below and the **Reference files** trigger table — load only the reference matching the task. For a first-time user, drop into **First-Time Setup Workflow** and walk them through install → connect → validate → starter → next steps. Always finish a connection change by running `rai connect` — never hand the user a config and assume it works.
+
 ---
 
 ## Prerequisites
 
 Requires Python 3.10+ and `relationalai>=1.0.14`.
 
-The RelationalAI Native App for Snowflake must be installed in your account by an administrator.
-- Request access [here](https://app.snowflake.com/marketplace/listing/GZTYZOOIX8H/relationalai-relationalai).
-- See the [Native App docs](https://docs.relational.ai/manage/install) for details.
+The RelationalAI Native App for Snowflake must be installed in your account by an administrator — request access [here](https://app.snowflake.com/marketplace/listing/GZTYZOOIX8H/relationalai-relationalai); see the [Native App docs](https://docs.relational.ai/manage/install).
 
 The `rai_developer` role is the standard role for running PyRel programs. Custom Snowflake roles also work if granted the `rai_user` application role — see [User Access](https://docs.relational.ai/manage/user-access).
 
-## Contact
-- support@relational.ai
-- sales@relational.ai
-- [official documentation](https://docs.relational.ai/)
+Support / docs: support@relational.ai · sales@relational.ai · [docs.relational.ai](https://docs.relational.ai/)
+
+---
+
+## Quick Reference
+
+```yaml
+# Minimal raiconfig.yaml
+default_connection: sf
+connections:
+  sf:
+    type: snowflake
+    authenticator: username_password
+    account: my_account
+    warehouse: my_warehouse
+    user: my_user
+    password: ${SNOWFLAKE_PASSWORD}
+```
+
+```python
+# Programmatic config (no YAML needed)
+import os
+from relationalai.config import create_config
+from relationalai.semantics import Model
+config = create_config(
+    connections={
+        "sf": {
+            "type": "snowflake",
+            "authenticator": "username_password",
+            "account": os.environ["SNOWFLAKE_ACCOUNT"],
+            "warehouse": os.environ["SNOWFLAKE_WAREHOUSE"],
+            "user": os.environ["SNOWFLAKE_USER"],
+            "password": os.environ["SNOWFLAKE_PASSWORD"],
+        }
+    },
+)
+model = Model("my_model", config=config)
+```
+
+**Verify:** run `rai connect` before writing model code, and after any connection change.
+
+**Before proposing fields in a user's `raiconfig.yaml` or a `create_config(...)` call, verify field names against [raiconfig-yaml.md](references/raiconfig-yaml.md) or [programmatic-config.md](references/programmatic-config.md).** Do not invent kwargs.
 
 ---
 
@@ -69,7 +105,7 @@ Run `rai connect` to validate the configuration.
 - On failure, check: (1) credentials, (2) account identifier, (3) warehouse exists and role has access, (4) the Native App is installed. See Common Pitfalls below.
 
 ### Step 4. Create a sample
-Offer a small sample program using inline data. If the user has a domain or analytical use case, tailor the sample to it; otherwise, use customer segmentation with graph analysis (see `rai-graph-analysis`). Reference `rai-pyrel-coding` for syntax. Ensure the sample runs and the user sees output. Offer to explain the components.
+Offer a small sample program using inline data. Ask the user for a domain or use case and tailor the sample to it; if they don't have one, use a minimal structural default — one concept, a handful of instances, one derivation rule, one query — so the sample exercises the install without committing to a vertical. For PyRel syntax load `rai-pyrel-coding`. Ensure the sample runs and the user sees output. Offer to explain the components.
 
 ### Step 5. Propose next steps
 1. Adapt the sample to real Snowflake tables, or
@@ -78,44 +114,19 @@ Offer a small sample program using inline data. If the user has a domain or anal
 
 ---
 
-## Quick Reference
+## Reference files
 
-```yaml
-# Minimal raiconfig.yaml
-default_connection: sf
-connections:
-  sf:
-    type: snowflake
-    authenticator: username_password
-    account: my_account
-    warehouse: my_warehouse
-    user: my_user
-    password: ${SNOWFLAKE_PASSWORD}
-```
+Load the reference when the trigger fires — don't read them all upfront.
 
-```python
-# Programmatic config (no YAML needed)
-from relationalai.config import create_config
-from relationalai.semantics import Model
-config = create_config(connection_type="snowflake")
-model = Model("my_model", config=config)
-```
-
-**Verify:** run `rai connect` before writing model code, and after any connection change.
-
----
-
-## Where to find details
-
-| Topic | Reference |
+| Load when… | Reference |
 |---|---|
-| Full `raiconfig.yaml` structure — connections, model, data, profile overlays, env vars, fallback sources | [raiconfig-yaml.md](references/raiconfig-yaml.md) |
-| Snowflake authentication — 6 authenticators, SPCS / Snowflake Notebooks auto-detection | [authentication.md](references/authentication.md) |
-| Programmatic config — `create_config()`, typed auth objects, sessions | [programmatic-config.md](references/programmatic-config.md) |
-| Reasoner configuration — backends, engine sizes, per-reasoner settings, Gurobi, polling | [reasoners.md](references/reasoners.md) |
-| Execution — metrics/logging, retries, compiler strictness, data-loading defaults | [execution.md](references/execution.md) |
-| Engine management — CLI and Python API for provisioning and lifecycle | [engine-management.md](references/engine-management.md) |
-| Migration from PyRel v0.13 | [v013-migration.md](references/v013-migration.md) |
+| Creating or editing a `raiconfig.yaml` (need field names, defaults, profile overlays, env-var syntax, or fallback-source order) | [raiconfig-yaml.md](references/raiconfig-yaml.md) |
+| Choosing an authenticator, user reports MFA/browser-auth failure, or running inside SPCS / Snowflake Notebooks | [authentication.md](references/authentication.md) |
+| Building config in Python instead of YAML, or fetching a `session` / clearing a session cache | [programmatic-config.md](references/programmatic-config.md) |
+| Configuring reasoners — backend, engine size, Gurobi, polling — or reasoner name/size doesn't take effect as expected | [reasoners.md](references/reasoners.md) |
+| Turning on metrics/logging, tuning retries, toggling compiler strictness, or changing data-loading defaults | [execution.md](references/execution.md) |
+| Provisioning, listing, resuming, or deleting engines via CLI/Python API, or evaluating warm reasoners | [engine-management.md](references/engine-management.md) |
+| User is upgrading from `relationalai` v0.13 and hits renamed params or moved config fields | [v013-migration.md](references/v013-migration.md) |
 
 ---
 

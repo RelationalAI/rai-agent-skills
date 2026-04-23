@@ -53,14 +53,9 @@ Use `strict: true` in CI. Use `soft_type_errors: true` only during rapid iterati
 
 ### Data loading defaults
 
-```yaml
-data:
-  wait_for_stream_sync: true      # wait for streams to sync before queries (default: true)
-  data_freshness_mins: 5          # allow queries if data is within N mins (default: unset = fully synced; max 30240 = 3 weeks)
-  query_timeout_mins: 10          # client-side timeout in minutes (default: unset = no timeout)
-  ensure_change_tracking: false   # auto-enable change tracking on tables (requires OWNERSHIP; default: false)
-  check_column_types: true        # validate column types on load (default: true — keep enabled in CI)
-  download_url_type: internal     # "internal" (default) or "external" (for access outside Snowflake)
-```
+See the `data:` block in [raiconfig-yaml.md](raiconfig-yaml.md) for the full field list and defaults.
 
-**Caution:** `check_column_types: false` speeds up loading but silently allows type mismatches. `ensure_change_tracking: true` modifies tables — only enable if you have OWNERSHIP.
+**Cautions:**
+- `check_column_types: false` speeds up loading but silently allows type mismatches — keep `true` in CI.
+- `ensure_change_tracking: true` modifies tables (requires OWNERSHIP) — leave `false` unless you intend this side effect.
+- `data_freshness_mins` unset means queries wait until streams are fully synced; setting a value trades freshness for latency.
