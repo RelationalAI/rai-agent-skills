@@ -37,7 +37,7 @@ ORDER BY created_at DESC;
 SELECT *
 FROM relationalai.api.data_stream_batches
 WHERE stream_name = '<stream_name>'
-  AND created_at >= DATEADD(hour, -24, CURRENT_TIMESTAMP())
+  AND created_at >= DATEADD(day, -7, CURRENT_TIMESTAMP())
 ORDER BY created_at DESC;
 ```
 
@@ -55,14 +55,9 @@ ORDER BY created_at DESC;
 
 ## Stream Status Reference
 
-| Status | Meaning | Recovery |
-|--------|---------|----------|
-| `ACTIVE` | Healthy | None needed |
-| `SUSPENDED` | Paused; CDC halted | Call `resume_cdc()` |
-| `QUARANTINED` | Permanently paused; data integrity compromise | Full quarantine recovery — see below |
-| `FAILED` | Batch-level failure | Inspect `data_stream_errors`, fix source data, call `resume_cdc()` |
-
-> **Auto-quarantine gotcha:** A stream in `SUSPENDED` state for approximately **one month** is automatically promoted to `QUARANTINED`. This transition creates **no rows in `data_stream_errors`** — the stream simply changes status silently. Always check `status` from `data_stream_batches` or `cdc_status` directly rather than relying on absence of errors to confirm health.
+See the **Stream State Verdicts** table in
+[SKILL.md — Step 5](../SKILL.md#step-5--diagnose-cdc--data-stream-health) for authoritative
+status descriptions, actions, and the auto-quarantine gotcha callout.
 
 ---
 
@@ -93,19 +88,6 @@ High-level flow:
 
 ## alter_cdc_engine_size Parameter Table
 
-```sql
-CALL relationalai.app.alter_cdc_engine_size('<size>');
-```
-
-| Size | Recommended For |
-|------|----------------|
-| `HIGHMEM_X64_S` | Light CDC load; default starting point |
-| `HIGHMEM_X64_M` | Moderate load; frequent timeout or OOM on S |
-| `HIGHMEM_X64_L` | High-volume streams — see 395019 pitfall in SKILL.md Common Pitfalls |
-| `HIGHMEM_X64_SL` | Very high-volume with large memory requirements — see 395019 pitfall |
-
-The CDC engine is suspended and recreated during a resize. Expect brief CDC downtime. Confirm the new size with:
-
-```sql
-SELECT engine_name, engine_size, engine_status FROM relationalai.api.cdc_status;
-```
+See **Resize the CDC Engine** in
+[SKILL.md — Step 6](../SKILL.md#step-6--cdc-engine-management) for the authoritative size
+table, usage notes, and the 395019 pitfall callout.

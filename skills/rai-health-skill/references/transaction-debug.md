@@ -86,7 +86,9 @@ CALL relationalai.api.get_load_errors('<transaction_id>');
 
 **Symptom:** Calling `get_transaction_problems` on a transaction returns HTTP 400.
 
-**Root cause:** The transaction is owned by `cdc.scheduler@erp`, an internal RAI service identity. End-user roles cannot see transactions owned by this account — the API returns 400 (not 404 and not an empty result). This is expected behavior, not a bug.
+**Root cause:** The transaction is owned by `cdc.scheduler@erp`, an internal RAI service
+identity. End-user roles cannot see transactions owned by this account — the API returns 400
+(not 404 and not an empty result). This is expected behavior, not a bug.
 
 **Diagnosis path when you hit a 400:**
 

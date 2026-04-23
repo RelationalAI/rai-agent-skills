@@ -1,25 +1,23 @@
 ---
 name: rai-health-skill
-description: Guides diagnosis of RAI engine performance issues, failed transactions, CDC/data-stream health, and CDC engine management. Use when an engine is slow or unresponsive, a CDC task is suspended or quarantined, a transaction or batch has failed, or engine creation returns Snowflake error 395019.
+description: Guides diagnosis of RAI engine performance, failed transactions, CDC/data-stream health, and CDC engine management. Use when a reasoner is slow or queuing, a transaction or batch has failed, a CDC stream is suspended or quarantined, or CDC engine sizing/recovery is needed.
 ---
 <!-- v1-STABLE -->
 
 ## Summary
 
-**What:** A process skill for setting up RAI observability, reading the three core reasoner metrics
-(memory, CPU, demand), interpreting utilization patterns, and prescribing the correct remediation action.
+**What:** A process skill for diagnosing RAI operational health across four domains: reasoner
+performance (memory/CPU/demand), failed transactions, CDC / data-stream health, and CDC engine
+management. Each domain has its own step with decision tables and remediation actions.
 
 **When to use:**
-- User asks "is my reasoner healthy?" or "why is my engine slow/stuck/queuing?"
-- User wants to check memory, CPU, or demand utilization numbers
-- User wants to set up observability views or register the events view
-- User needs to grant observability access to a team member
-- User wants to scale, resize, or shut down a reasoner based on metrics
-- User wants to build dashboards or alerting on reasoner metrics
-- CDC task is suspended, data stream is quarantined, or `resume_cdc` is needed
-- Batch processing has failed or `get_load_errors` output is needed
-- Transaction was aborted; `get_transaction_problems`, `get_own_transaction_problems`, or `get_load_errors` must be called
-- Engine creation fails with Snowflake error 395019 or `alter_cdc_engine_size` is needed
+- Reasoner is slow, stuck, or queuing; need to check memory, CPU, or demand metrics
+- Observability views need setup, role grants, or dashboard/alerting work
+- A transaction was aborted; `get_transaction_problems`, `get_own_transaction_problems`,
+  or `get_load_errors` must be called
+- Batch processing has failed and load errors need inspection
+- A CDC task is suspended, a data stream is quarantined, or `resume_cdc` is needed
+- CDC engine needs resizing (`alter_cdc_engine_size`) or force-deletion
 
 **When NOT to use:**
 - Writing PyRel models or query logic → see `rai-pyrel-coding`
@@ -34,7 +32,9 @@ description: Guides diagnosis of RAI engine performance issues, failed transacti
 5. Diagnose CDC / data stream health (errors, batches, quarantine recovery, resume_cdc)
 6. Manage the CDC engine (alter_cdc_engine_size, force delete, cdc_status)
 
-> **Navigation:** Steps 1–3 cover reasoner health only. For CDC/stream issues go directly to **Step 5**. For transaction failures go directly to **Step 4**. For CDC engine sizing or force-delete go directly to **Step 6**.
+> **Navigation:** Steps 1–3 cover reasoner health only. For CDC/stream issues go directly to
+> **Step 5**. For transaction failures go directly to **Step 4**. For CDC engine sizing or
+> force-delete go directly to **Step 6**.
 
 ---
 
@@ -216,7 +216,7 @@ CALL relationalai.api.get_transaction_problems('<transaction_id>');
 CALL relationalai.api.get_own_transaction_problems('<transaction_id>');
 ```
 
-| Procedure | Accessible By | Returns |
+| Procedure | Accessible by | Returns |
 |-----------|--------------|---------|
 | `get_transaction_problems` | Admin roles | All transactions |
 | `get_own_transaction_problems` | Any role | Only caller-owned transactions |
@@ -248,7 +248,11 @@ See [transaction-debug.md](references/transaction-debug.md) for full column refe
 
 ## Step 5 — Diagnose CDC / Data Stream Health
 
-> **⚠️ Auto-quarantine gotcha:** A stream that has been in `SUSPENDED` state for **approximately one month** will be automatically promoted to `QUARANTINED` — **without creating any rows in `data_stream_errors`**. The absence of error rows does not mean the stream is healthy. Always confirm stream status from `cdc_status` or `data_stream_batches` before treating an empty errors result as a clean bill of health.
+> **⚠️ Auto-quarantine gotcha:** A stream that has been in `SUSPENDED` state for
+> **approximately one month** will be automatically promoted to `QUARANTINED` —
+> **without creating any rows in `data_stream_errors`**. The absence of error rows does not
+> mean the stream is healthy. Always confirm stream status from `cdc_status` or
+> `data_stream_batches` before treating an empty errors result as a clean bill of health.
 
 ### Find Your Streams (Start Here)
 
@@ -268,7 +272,9 @@ WHERE stream_name = '<stream_name>'
 ORDER BY created_at DESC;
 ```
 
-> Use a 7-day window rather than 24 hours — a quarantined or long-suspended stream may have had no batches for days, and a 24-hour filter returns empty output indistinguishable from a healthy-but-idle stream.
+> Use a 7-day window rather than 24 hours — a quarantined or long-suspended stream may have
+> had no batches for days, and a 24-hour filter returns empty output indistinguishable from a
+> healthy-but-idle stream.
 
 ### Check Stream-Level Errors
 
@@ -288,7 +294,7 @@ For auto-quarantined streams this may return empty — that is expected. Use `da
 |--------|---------|--------|
 | `ACTIVE` | Healthy, batches flowing | None |
 | `SUSPENDED` | Paused; no new batches | Call `resume_cdc()` — see below |
-| `QUARANTINED` | Permanently paused; data integrity issue | [Follow quarantine recovery flow](https://docs.relational.ai/manage/data/#fix-quarantined-streams) |
+| `QUARANTINED` | Permanently paused; data integrity issue | [Follow quarantine recovery flow](references/cdc-recovery.md#quarantine-recovery-runbook) |
 | `FAILED` | Batch or load error | Check `data_stream_errors` and `get_load_errors` |
 
 ### Resume a Suspended Stream
@@ -299,16 +305,17 @@ CALL relationalai.app.resume_cdc('<stream_name>');
 
 ### Quarantine Recovery
 
-Follow the official recovery checklist:
-**[https://docs.relational.ai/manage/data/#fix-quarantined-streams](https://docs.relational.ai/manage/data/#fix-quarantined-streams)**
-
-See [cdc-recovery.md](references/cdc-recovery.md) for full schema reference and recovery runbook.
+See [cdc-recovery.md — Quarantine Recovery Runbook](references/cdc-recovery.md#quarantine-recovery-runbook)
+for the full step-by-step recovery checklist, schema reference, and official docs link.
 
 ---
 
 ## Step 6 — CDC Engine Management
 
-> **CDC engine ≠ reasoner engine.** The CDC pipeline runs on a dedicated managed engine distinct from Logic reasoner engines. `alter_cdc_engine_size` targets only the CDC engine; the CLI commands (`rai reasoners:create/delete`) target Logic reasoners only. Do not apply the Step 3 CLI commands to the CDC engine.
+> **CDC engine ≠ reasoner engine.** The CDC pipeline runs on a dedicated managed engine
+> distinct from Logic reasoner engines. `alter_cdc_engine_size` targets only the CDC engine;
+> the CLI commands (`rai reasoners:create/delete`) target Logic reasoners only. Do not apply
+> the Step 3 CLI commands to the CDC engine.
 
 ### Check Current CDC Status
 
@@ -343,7 +350,10 @@ CALL relationalai.api.delete_engine('CDC_MANAGED_ENGINE', TRUE);
 
 The second argument `TRUE` enables force deletion. RAI will recreate the CDC engine automatically on the next CDC trigger. Confirm recovery with `SELECT * FROM relationalai.api.cdc_status`.
 
-> **⚠️ If `delete_engine` returns "engine not found" but `cdc_status` still shows the engine as suspended:** this is a control-plane / data-plane desync — the engine record exists in RAI's metadata but the underlying Snowflake engine is gone. No self-serve command resolves this state. Run the following and retain the output for support:
+> **⚠️ If `delete_engine` returns "engine not found" but `cdc_status` still shows the engine
+> as suspended:** this is a control-plane / data-plane desync — the engine record exists in
+> RAI's metadata but the underlying Snowflake engine is gone. No self-serve command resolves
+> this state. Run the following and retain the output for support:
 > ```sql
 > SELECT * FROM relationalai.api.cdc_status;
 > ```
