@@ -38,6 +38,7 @@ description: Graph algorithm selection and execution on PyRel v1 models. Covers 
 - Ontology design decisions (concept modeling, data mapping) — see `rai-ontology-design`
 - Optimization formulation (variables, constraints, objectives) — see `rai-prescriptive-problem-formulation`
 - Business rule authoring (validation, classification, alerting) — see `rai-rules-authoring`
+- GNN graph construction for predictive pipelines — see `rai-predictive-modeling`
 
 **Overview (process steps):**
 1. Study the existing model — understand base definitions, coding conventions, and what's already wired
