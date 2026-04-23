@@ -429,7 +429,7 @@ Each suggestion includes a `reasoners` field — an ordered list specifying the 
 
 **After discovery, load these skills before writing code:**
 
-1. **Formulation skill** for the chosen reasoner type (e.g., `rai-prescriptive-problem-formulation`, `rai-graph-analysis`)
+1. **Formulation skill** for the chosen reasoner type (e.g., `rai-prescriptive-problem-formulation`, `rai-graph-analysis`, `rai-predictive-modeling`)
 2. **`rai-querying`** + **`rai-pyrel-coding`** for v1 syntax, imports, and query patterns
 
 Discovery covers *what* to ask. Coding skills cover *how* to write it. Skipping step 2 leads to hallucinated APIs and wrong imports.
