@@ -321,6 +321,8 @@ print(f"Tables: {[t.name for t in schema.tables]}")
 
 This is the trust-building step. `inspect.schema()` *enriches* the summary with table-backed type information — for properties created via `Concept.new(table.to_schema())`, it infers and reports concrete types (`Integer`, `String`, `Date`) from the backing table even when the frontend model still types them as `Any`. The engine produces correctly-typed output regardless (it reads the backing data), but the `inspect` summary gives you a human-readable view of what the data actually carries. See `rai-querying/references/inspect-module.md`.
 
+**Mapped vs mappable diff.** Step 7e shows what's *in model*. To also surface columns that exist in the backing source but aren't mapped yet (the `MODEL_GAP` candidates for enrichment), diff `inspect.schema()` against the source table columns. See `rai-discovery` § Computing the classification from `inspect.schema()` for the set-difference pattern.
+
 ---
 
 ## Common Pitfalls
