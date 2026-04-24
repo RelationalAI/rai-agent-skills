@@ -229,6 +229,34 @@ Shared across all reasoners. Classify each suggestion's data readiness:
 
 If the schema shows NO unmapped columns, there are no model_gaps — all suggestions should be READY. Decision variables, cross-product concepts, and computed expressions are created during formulation — they are NOT model_gaps.
 
+### Computing the classification from `inspect.schema()`
+
+The trichotomy — *in model* / *mappable from schema* / *needs new data* — is a set-difference over three inputs:
+
+```python
+from relationalai.semantics import inspect
+
+schema = inspect.schema(model)
+info = schema[concept_name]
+
+# 1. What's currently mapped on this concept (identity + properties)
+mapped = {f.name for f in info.identify_by} | {p.name for p in info.properties}
+
+# 2. What columns the backing source exposes
+#    - For model.Table(): use table.to_schema() or INFORMATION_SCHEMA.COLUMNS
+#    - For model.data(df): df.columns
+source_cols = set(...)
+
+# 3. For a business question requiring specific fields:
+in_model  = needed & mapped
+mappable  = (needed - mapped) & source_cols
+data_gap  = needed - mapped - source_cols
+```
+
+`in_model` → **READY**. `mappable` → **MODEL_GAP** (each entry becomes a `model_gap_fixes` item with `source_table`/`source_column`). `data_gap` → **DATA_GAP** (blocks the question).
+
+The set-difference is stable because `inspect.schema()` walks the whole model in one call — run it once, reuse for every candidate suggestion in a discovery pass.
+
 ### Gap identification rules
 
 Model gaps are ONLY for data in the schema but not in the model. Decision variables, cross-products, and computed expressions are NOT model gaps (formulation layer). Check "Available for enrichment" columns in schema info. Each gap must specify `source_table` and `source_column`.

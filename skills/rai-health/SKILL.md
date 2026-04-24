@@ -21,7 +21,7 @@ management. Each domain has its own step with decision tables and remediation ac
 
 **When NOT to use:**
 - Writing PyRel models or query logic → see `rai-pyrel-coding`
-- Configuring authentication or initial RAI setup → see `rai-configuration`
+- Configuring authentication or initial RAI setup → see `rai-setup`
 - Managing solver optimization problems → see `rai-prescriptive-solver-management`
 
 **Overview (process steps):**

@@ -67,7 +67,7 @@ Keep the first version to ~10-15 must-have properties.
 
 #### 2a — Snowflake tables (recommended)
 
-For connection setup, see `rai-onboarding`. Run discovery queries via the `snow` CLI or a Snowpark session:
+For connection setup, see `rai-setup`. Run discovery queries via the `snow` CLI or a Snowpark session:
 
 ```python
 from relationalai.config import SnowflakeConnection, create_config
@@ -321,6 +321,8 @@ print(f"Tables: {[t.name for t in schema.tables]}")
 
 This is the trust-building step. `inspect.schema()` *enriches* the summary with table-backed type information — for properties created via `Concept.new(table.to_schema())`, it infers and reports concrete types (`Integer`, `String`, `Date`) from the backing table even when the frontend model still types them as `Any`. The engine produces correctly-typed output regardless (it reads the backing data), but the `inspect` summary gives you a human-readable view of what the data actually carries. See `rai-querying/references/inspect-module.md`.
 
+**Mapped vs mappable diff.** Step 7e shows what's *in model*. To also surface columns that exist in the backing source but aren't mapped yet (the `MODEL_GAP` candidates for enrichment), diff `inspect.schema()` against the source table columns. See `rai-discovery` § Computing the classification from `inspect.schema()` for the set-difference pattern.
+
 ---
 
 ## Common Pitfalls
@@ -334,7 +336,7 @@ This is the trust-building step. `inspect.schema()` *enriches* the summary with 
 | `model.data()` for large datasets | Treating CSV/DataFrame as production-ready | Prototyping only (≤ hundreds of rows). Use `model.Table()` |
 | Wrong Snowflake table path | Incorrect database, schema, or table name | Verify with `SHOW TABLES IN SCHEMA <db>.<schema>` |
 | "Object does not exist" on valid table | Snowflake role lacks access | Check `SELECT CURRENT_ROLE()` and `SHOW GRANTS ON <object>` |
-| Model won't load or sync | Engine not running or misconfigured connection | See `rai-configuration` and `rai-health` |
+| Model won't load or sync | Engine not running or misconfigured connection | See `rai-setup` and `rai-health` |
 | `SnowflakeChangeTrackingNotEnabledException` on first query | `model.Table()` requires change tracking on each source table | Add `ensure_change_tracking=True` to `Model()` constructor, or run `ALTER TABLE <db>.<schema>.<table> SET CHANGE_TRACKING = TRUE` on each source table |
 | Stale data source cleanup takes minutes on re-run | Re-using a model name after changing data bindings triggers stale source removal | Use a fresh model name during rapid iteration, or wait for cleanup to complete |
 | Skipping scope | Starting from tables instead of questions | Complete Step 1 before Step 2 |
