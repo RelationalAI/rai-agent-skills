@@ -244,13 +244,13 @@ results = model.where(
 ```python
 # CORRECT — count parent concept, filter by subtype binding
 results = model.select(
-    aggs.count(FoodTruck).alias("count"),
+    aggs.count(Asset).alias("count"),
 ).where(
-    UnderutilizedFoodTruck(FoodTruck),
+    UnderutilizedAsset(Asset),
 ).to_df()
 
 # WRONG — counting subtype directly causes TyperError
-# results = model.select(rai.count(UnderutilizedFoodTruck).alias("count")).to_df()
+# results = model.select(rai.count(UnderutilizedAsset).alias("count")).to_df()
 ```
 
 **Boolean relationships as filters (not selectable):**

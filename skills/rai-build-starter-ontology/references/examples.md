@@ -88,58 +88,58 @@ model.define(PartSupply.new(
 
 ## Example 2: Derived concepts from column values + bridge entity
 
-Deriving new concepts from distinct column values (no dedicated source table), and creating a bridge entity that joins two concepts through a third. Illustrated with an ad-spend piecewise-linear curve setup — Channel/Campaign/Country concepts are derived from placement columns, and PiecewiseLinearSegment bridges AdPlacement and Segment.
+Deriving new concepts from distinct column values (no dedicated source table), and creating a bridge entity that joins two concepts through a third. Illustrated with a piecewise-linear curve setup — Channel/Country concepts are derived from allocation columns, and PiecewiseLinearSegment bridges Allocation and Segment.
 
-**Source:** `MARKETING_AD_SPEND.PUBLIC`
+**Source:** `OPS_DB.PUBLIC`
 
 ```python
 from relationalai.semantics import Float, Integer, Model, String
 
-model = Model("Marketing Ad Spend")
+model = Model("Allocation Curves")
 
 class Sources:
-    class marketing_ad_spend:
+    class ops_db:
         class public:
-            ad_placements = model.Table("MARKETING_AD_SPEND.PUBLIC.AD_PLACEMENTS")
-            ad_pwl_segments = model.Table("MARKETING_AD_SPEND.PUBLIC.AD_PWL_SEGMENTS")
+            allocations = model.Table("OPS_DB.PUBLIC.ALLOCATIONS")
+            allocation_pwl_segments = model.Table("OPS_DB.PUBLIC.ALLOCATION_PWL_SEGMENTS")
 
-placements = Sources.marketing_ad_spend.public.ad_placements
-segments = Sources.marketing_ad_spend.public.ad_pwl_segments
+allocations = Sources.ops_db.public.allocations
+segments = Sources.ops_db.public.allocation_pwl_segments
 
 # --- Derived concepts from column values ---
 # These aren't their own tables — they're derived from unique values in a column
-MarketingChannel = model.Concept("MarketingChannel", identify_by={"name": String})
-model.define(MarketingChannel.new(name=placements.channel))
+Channel = model.Concept("Channel", identify_by={"name": String})
+model.define(Channel.new(name=allocations.channel))
 
 Country = model.Concept("Country", identify_by={"name": String})
-model.define(Country.new(name=placements.country))
+model.define(Country.new(name=allocations.country))
 
 # --- Primary entity with scalar properties + concept relationships ---
-AdPlacement = model.Concept("AdPlacement", identify_by={"pid": String})
-AdPlacement.min_budget = model.Property(f"{AdPlacement} has {Float:min_budget}")
-AdPlacement.max_budget = model.Property(f"{AdPlacement} has {Float:max_budget}")
-AdPlacement.channel = model.Property(
-    f"{AdPlacement} runs on {MarketingChannel:channel}", short_name="ad_placement_channel")
-AdPlacement.country = model.Property(
-    f"{AdPlacement} is in {Country:country}", short_name="ad_placement_country")
+Allocation = model.Concept("Allocation", identify_by={"aid": String})
+Allocation.min_budget = model.Property(f"{Allocation} has {Float:min_budget}")
+Allocation.max_budget = model.Property(f"{Allocation} has {Float:max_budget}")
+Allocation.channel = model.Property(
+    f"{Allocation} runs on {Channel:channel}", short_name="allocation_channel")
+Allocation.country = model.Property(
+    f"{Allocation} is in {Country:country}", short_name="allocation_country")
 
 # Create entities and bind scalars
 model.define(
-    ap := AdPlacement.new(pid=placements.placement_id),
-    ap.min_budget(placements.min_budget),
-    ap.max_budget(placements.max_budget),
+    al := Allocation.new(aid=allocations.allocation_id),
+    al.min_budget(allocations.min_budget),
+    al.max_budget(allocations.max_budget),
 )
 
 # Bind concept relationships via filter_by
-model.define(AdPlacement.channel(MarketingChannel)).where(
-    AdPlacement.filter_by(pid=placements.placement_id),
-    MarketingChannel.filter_by(name=placements.channel),
+model.define(Allocation.channel(Channel)).where(
+    Allocation.filter_by(aid=allocations.allocation_id),
+    Channel.filter_by(name=allocations.channel),
 )
 
 # --- Bridge entity (joins two concepts through a third) ---
 PiecewiseLinearSegment = model.Concept("PiecewiseLinearSegment")
-PiecewiseLinearSegment.to_ad_placement = model.Property(
-    f"{PiecewiseLinearSegment} models {AdPlacement:to_ad_placement}", short_name="pls_placement")
+PiecewiseLinearSegment.to_allocation = model.Property(
+    f"{PiecewiseLinearSegment} models {Allocation:to_allocation}", short_name="pls_allocation")
 PiecewiseLinearSegment.segment = model.Property(
     f"{PiecewiseLinearSegment} uses {Segment:segment}", short_name="pls_segment")
 PiecewiseLinearSegment.segment_length = model.Property(
@@ -150,20 +150,20 @@ PiecewiseLinearSegment.marginal_return = model.Property(
 # Create bridge entities by joining through PWL curve
 model.define(
     PiecewiseLinearSegment.new(
-        to_ad_placement=AdPlacement,
+        to_allocation=Allocation,
         segment=Segment,
         segment_length=segments.segment_length,
         marginal_return=segments.marginal_return,
     )
 ).where(
-    AdPlacement.pwl(PWL),
+    Allocation.pwl(PWL),
     PWL.filter_by(pwl_id=segments.pwl_id),
     Segment.filter_by(sid=segments.segment),
 )
 
 # Reverse relationship via .alias()
-AdPlacement.segments = PiecewiseLinearSegment.to_ad_placement.alias(
-    f"{AdPlacement} has segment {PiecewiseLinearSegment}")
+Allocation.segments = PiecewiseLinearSegment.to_allocation.alias(
+    f"{Allocation} has segment {PiecewiseLinearSegment}")
 ```
 
 **Patterns demonstrated:**
@@ -381,47 +381,47 @@ BillOfMaterials.at_site = model.Relationship(
 
 ## Example 5: Large-scale model with bidirectional inverses, unary flags, and role-named relationships
 
-Patterns for a large model (10+ source tables, 10+ concepts): unary `Relationship` flags derived from status columns, bidirectional relationships with explicit inverses, role-named relationships for self-referential cases (e.g., caller/callee both pointing to the same concept), and the walrus operator for compact entity-and-properties binding. Illustrated with a telco knowledge graph.
+Patterns for a large model (10+ source tables, 10+ concepts): unary `Relationship` flags derived from status columns, bidirectional relationships with explicit inverses, role-named relationships for self-referential cases (e.g., source/target both pointing to the same concept), and the walrus operator for compact entity-and-properties binding. Illustrated with a multi-entity operational knowledge graph.
 
-**Source:** `TELCO_DATA.RAW`
+**Source:** `OPS_DB.RAW`
 
 ```python
 from relationalai.semantics import Date, DateTime, Float, Integer, Model, String
 
-model = Model("Telco Network")
+model = Model("Multi-Entity Network")
 
 # ── Source Tables (14 tables across one schema) ──────────────────
 class Sources:
-    class telco_data:
+    class ops_db:
         class raw:
-            regional_risk = model.Table("TELCO_DATA.RAW.REGIONAL_RISK")
-            subscribers = model.Table("TELCO_DATA.RAW.SUBSCRIBERS")
-            plans_contracts = model.Table("TELCO_DATA.RAW.PLANS_CONTRACTS")
-            billing_events = model.Table("TELCO_DATA.RAW.BILLING_EVENTS")
-            cell_towers = model.Table("TELCO_DATA.RAW.CELL_TOWERS")
-            parts_inventory = model.Table("TELCO_DATA.RAW.PARTS_INVENTORY")
-            network_equipment = model.Table("TELCO_DATA.RAW.NETWORK_EQUIPMENT")
-            equipment_health = model.Table("TELCO_DATA.RAW.EQUIPMENT_HEALTH")
-            network_events = model.Table("TELCO_DATA.RAW.NETWORK_EVENTS")
-            call_detail_records = model.Table("TELCO_DATA.RAW.CALL_DETAIL_RECORDS")
-            supplier_orders = model.Table("TELCO_DATA.RAW.SUPPLIER_ORDERS")
-            campaigns = model.Table("TELCO_DATA.RAW.CAMPAIGNS")
-            promotion_redemptions = model.Table("TELCO_DATA.RAW.PROMOTION_REDEMPTIONS")
-            revenue_forecast = model.Table("TELCO_DATA.RAW.REVENUE_FORECAST")
+            regional_risk = model.Table("OPS_DB.RAW.REGIONAL_RISK")
+            customers = model.Table("OPS_DB.RAW.CUSTOMERS")
+            plans_contracts = model.Table("OPS_DB.RAW.PLANS_CONTRACTS")
+            billing_events = model.Table("OPS_DB.RAW.BILLING_EVENTS")
+            facilities = model.Table("OPS_DB.RAW.FACILITIES")
+            parts_inventory = model.Table("OPS_DB.RAW.PARTS_INVENTORY")
+            equipment = model.Table("OPS_DB.RAW.EQUIPMENT")
+            equipment_health = model.Table("OPS_DB.RAW.EQUIPMENT_HEALTH")
+            incidents = model.Table("OPS_DB.RAW.INCIDENTS")
+            transactions = model.Table("OPS_DB.RAW.TRANSACTIONS")
+            supplier_orders = model.Table("OPS_DB.RAW.SUPPLIER_ORDERS")
+            campaigns = model.Table("OPS_DB.RAW.CAMPAIGNS")
+            promotion_redemptions = model.Table("OPS_DB.RAW.PROMOTION_REDEMPTIONS")
+            revenue_forecast = model.Table("OPS_DB.RAW.REVENUE_FORECAST")
 
-raw = Sources.telco_data.raw
+raw = Sources.ops_db.raw
 
-# ── PostalArea (geographic entity) ────────────────────────────────
-PostalArea = model.Concept("PostalArea", identify_by={"id": Integer})
-PostalArea.region = model.Property(f"{PostalArea} has {String:region}")
-PostalArea.flood_risk_index = model.Property(f"{PostalArea} has {Float:flood_risk_index}")
-PostalArea.population_density = model.Property(f"{PostalArea} has {Integer:population_density}")
+# ── Location (geographic entity) ──────────────────────────────────
+Location = model.Concept("Location", identify_by={"id": Integer})
+Location.region = model.Property(f"{Location} has {String:region}")
+Location.flood_risk_index = model.Property(f"{Location} has {Float:flood_risk_index}")
+Location.population_density = model.Property(f"{Location} has {Integer:population_density}")
 
 model.define(
-    pa := PostalArea.new(id=raw.regional_risk.POSTAL_CODE),
-    pa.region(raw.regional_risk.REGION),
-    pa.flood_risk_index(raw.regional_risk.FLOOD_RISK_INDEX),
-    pa.population_density(raw.regional_risk.POPULATION_DENSITY),
+    loc := Location.new(id=raw.regional_risk.POSTAL_CODE),
+    loc.region(raw.regional_risk.REGION),
+    loc.flood_risk_index(raw.regional_risk.FLOOD_RISK_INDEX),
+    loc.population_density(raw.regional_risk.POPULATION_DENSITY),
 )
 
 # ── Part (inventory entity with unary flag) ───────────────────────
@@ -448,42 +448,42 @@ model.define(Part.is_critical_shortage()).where(
     Part.stock_status == "CRITICAL_SHORTAGE",
 )
 
-# ── Subscriber (with FK to PostalArea + bidirectional inverse) ────
-Subscriber = model.Concept("Subscriber", identify_by={"id": String})
-Subscriber.segment = model.Property(f"{Subscriber} has {String:segment}")
-Subscriber.lifetime_value = model.Property(f"{Subscriber} has {Float:lifetime_value}")
-Subscriber.churn_risk_score = model.Property(f"{Subscriber} has {Float:churn_risk_score}")
-Subscriber.status = model.Property(f"{Subscriber} has {String:status}")
+# ── Customer (with FK to Location + bidirectional inverse) ────────
+Customer = model.Concept("Customer", identify_by={"id": String})
+Customer.segment = model.Property(f"{Customer} has {String:segment}")
+Customer.lifetime_value = model.Property(f"{Customer} has {Float:lifetime_value}")
+Customer.churn_risk_score = model.Property(f"{Customer} has {Float:churn_risk_score}")
+Customer.status = model.Property(f"{Customer} has {String:status}")
 # Bidirectional relationships
-Subscriber.located_in = model.Property(
-    f"{Subscriber} located in {PostalArea:located_in}", short_name="subscriber_located_in")
-PostalArea.has_subscriber = model.Relationship(
-    f"{PostalArea} has subscriber {Subscriber}", short_name="postal_area_has_subscriber")
+Customer.located_in = model.Property(
+    f"{Customer} located in {Location:located_in}", short_name="customer_located_in")
+Location.has_customer = model.Relationship(
+    f"{Location} has customer {Customer}", short_name="location_has_customer")
 
 model.define(
-    s := Subscriber.new(id=raw.subscribers.SUB_ID),
-    s.segment(raw.subscribers.SEGMENT),
-    s.lifetime_value(raw.subscribers.LIFETIME_VALUE_USD),
-    s.churn_risk_score(raw.subscribers.CHURN_RISK_SCORE),
-    s.status(raw.subscribers.STATUS),
+    c := Customer.new(id=raw.customers.CUST_ID),
+    c.segment(raw.customers.SEGMENT),
+    c.lifetime_value(raw.customers.LIFETIME_VALUE_USD),
+    c.churn_risk_score(raw.customers.CHURN_RISK_SCORE),
+    c.status(raw.customers.STATUS),
 )
 
 # FK binding with filter_by — both directions
-model.define(Subscriber.located_in(PostalArea)).where(
-    Subscriber.filter_by(id=raw.subscribers.SUB_ID),
-    PostalArea.filter_by(id=raw.subscribers.POSTAL_CODE),
+model.define(Customer.located_in(Location)).where(
+    Customer.filter_by(id=raw.customers.CUST_ID),
+    Location.filter_by(id=raw.customers.POSTAL_CODE),
 )
-model.define(PostalArea.has_subscriber(Subscriber)).where(
-    PostalArea.filter_by(id=raw.subscribers.POSTAL_CODE),
-    Subscriber.filter_by(id=raw.subscribers.SUB_ID),
+model.define(Location.has_customer(Customer)).where(
+    Location.filter_by(id=raw.customers.POSTAL_CODE),
+    Customer.filter_by(id=raw.customers.CUST_ID),
 )
 
 # ── Contract (unary flag from boolean column) ─────────────────────
 Contract = model.Concept("Contract", identify_by={"id": String})
 Contract.monthly_rate = model.Property(f"{Contract} has {Float:monthly_rate}")
 Contract.term_months = model.Property(f"{Contract} has {Integer:term_months}")
-Contract.for_subscriber = model.Property(
-    f"{Contract} for subscriber {Subscriber:for_subscriber}", short_name="contract_for_subscriber")
+Contract.for_customer = model.Property(
+    f"{Contract} for customer {Customer:for_customer}", short_name="contract_for_customer")
 Contract.is_auto_renew = model.Relationship(f"{Contract} is auto renew")
 
 model.define(Contract.is_auto_renew()).where(
@@ -491,64 +491,64 @@ model.define(Contract.is_auto_renew()).where(
     raw.plans_contracts.AUTO_RENEW == "True",
 )
 
-# ── NetworkEquipment (multi-FK: tower + part) ─────────────────────
-NetworkEquipment = model.Concept("NetworkEquipment", identify_by={"id": String})
-NetworkEquipment.equipment_type = model.Property(f"{NetworkEquipment} has {String:equipment_type}")
-NetworkEquipment.installed_at = model.Property(
-    f"{NetworkEquipment} installed at {CellTower:installed_at}", short_name="equipment_installed_at")
-NetworkEquipment.uses_part = model.Relationship(
-    f"{NetworkEquipment} uses part {Part}", short_name="equipment_uses_part")
-NetworkEquipment.has_outdated_firmware = model.Relationship(
-    f"{NetworkEquipment} has outdated firmware")
+# ── Equipment (multi-FK: facility + part) ─────────────────────────
+Equipment = model.Concept("Equipment", identify_by={"id": String})
+Equipment.equipment_type = model.Property(f"{Equipment} has {String:equipment_type}")
+Equipment.installed_at = model.Property(
+    f"{Equipment} installed at {Facility:installed_at}", short_name="equipment_installed_at")
+Equipment.uses_part = model.Relationship(
+    f"{Equipment} uses part {Part}", short_name="equipment_uses_part")
+Equipment.has_outdated_firmware = model.Relationship(
+    f"{Equipment} has outdated firmware")
 # Inverses
-CellTower.has_equipment = model.Relationship(
-    f"{CellTower} has equipment {NetworkEquipment}", short_name="cell_tower_has_equipment")
+Facility.has_equipment = model.Relationship(
+    f"{Facility} has equipment {Equipment}", short_name="facility_has_equipment")
 Part.used_in_equipment = model.Relationship(
-    f"{Part} used in equipment {NetworkEquipment}", short_name="part_used_in_equipment")
+    f"{Part} used in equipment {Equipment}", short_name="part_used_in_equipment")
 
-# ── CallDetailRecord (self-referential: caller + callee both → Subscriber) ──
-CallDetailRecord = model.Concept("CallDetailRecord", identify_by={"id": String})
-CallDetailRecord.duration_seconds = model.Property(
-    f"{CallDetailRecord} has {Integer:duration_seconds}")
-CallDetailRecord.quality_score = model.Property(
-    f"{CallDetailRecord} has {Float:quality_score}")
+# ── Transaction (self-referential: source + target both → Customer) ──
+Transaction = model.Concept("Transaction", identify_by={"id": String})
+Transaction.duration_seconds = model.Property(
+    f"{Transaction} has {Integer:duration_seconds}")
+Transaction.quality_score = model.Property(
+    f"{Transaction} has {Float:quality_score}")
 # Role-named relationships — same target concept, different roles
-CallDetailRecord.caller = model.Property(
-    f"{CallDetailRecord} has caller {Subscriber:caller}", short_name="cdr_caller")
-CallDetailRecord.callee = model.Property(
-    f"{CallDetailRecord} has callee {Subscriber:callee}", short_name="cdr_callee")
-CallDetailRecord.routed_through = model.Property(
-    f"{CallDetailRecord} routed through {CellTower:routed_through}", short_name="cdr_routed_through")
-CallDetailRecord.is_dropped = model.Relationship(f"{CallDetailRecord} is dropped")
+Transaction.source = model.Property(
+    f"{Transaction} has source {Customer:source}", short_name="transaction_source")
+Transaction.target = model.Property(
+    f"{Transaction} has target {Customer:target}", short_name="transaction_target")
+Transaction.routed_through = model.Property(
+    f"{Transaction} routed through {Facility:routed_through}", short_name="transaction_routed_through")
+Transaction.is_dropped = model.Relationship(f"{Transaction} is dropped")
 # Inverses with role names
-Subscriber.made_call = model.Relationship(
-    f"{Subscriber} made call {CallDetailRecord}", short_name="subscriber_made_call")
-Subscriber.received_call = model.Relationship(
-    f"{Subscriber} received call {CallDetailRecord}", short_name="subscriber_received_call")
+Customer.sent_transaction = model.Relationship(
+    f"{Customer} sent transaction {Transaction}", short_name="customer_sent_transaction")
+Customer.received_transaction = model.Relationship(
+    f"{Customer} received transaction {Transaction}", short_name="customer_received_transaction")
 
 # FK binding — same concept referenced by two different columns
-model.define(CallDetailRecord.caller(Subscriber)).where(
-    CallDetailRecord.filter_by(id=raw.call_detail_records.CDR_ID),
-    Subscriber.filter_by(id=raw.call_detail_records.CALLER_SUB_ID),
+model.define(Transaction.source(Customer)).where(
+    Transaction.filter_by(id=raw.transactions.TXN_ID),
+    Customer.filter_by(id=raw.transactions.SOURCE_CUST_ID),
 )
-model.define(CallDetailRecord.callee(Subscriber)).where(
-    CallDetailRecord.filter_by(id=raw.call_detail_records.CDR_ID),
-    Subscriber.filter_by(id=raw.call_detail_records.CALLEE_SUB_ID),
+model.define(Transaction.target(Customer)).where(
+    Transaction.filter_by(id=raw.transactions.TXN_ID),
+    Customer.filter_by(id=raw.transactions.TARGET_CUST_ID),
 )
-model.define(CallDetailRecord.is_dropped()).where(
-    CallDetailRecord.filter_by(id=raw.call_detail_records.CDR_ID),
-    raw.call_detail_records.CALL_STATUS == "DROPPED",
+model.define(Transaction.is_dropped()).where(
+    Transaction.filter_by(id=raw.transactions.TXN_ID),
+    raw.transactions.TXN_STATUS == "DROPPED",
 )
 
-# ── NetworkEvent (unary flag from event type) ─────────────────────
-NetworkEvent = model.Concept("NetworkEvent", identify_by={"id": String})
-NetworkEvent.severity = model.Property(f"{NetworkEvent} has {String:severity}")
-NetworkEvent.duration_minutes = model.Property(f"{NetworkEvent} has {Integer:duration_minutes}")
-NetworkEvent.is_outage = model.Relationship(f"{NetworkEvent} is outage")
+# ── Incident (unary flag from event type) ─────────────────────────
+Incident = model.Concept("Incident", identify_by={"id": String})
+Incident.severity = model.Property(f"{Incident} has {String:severity}")
+Incident.duration_minutes = model.Property(f"{Incident} has {Integer:duration_minutes}")
+Incident.is_outage = model.Relationship(f"{Incident} is outage")
 
-model.define(NetworkEvent.is_outage()).where(
-    NetworkEvent.filter_by(id=raw.network_events.EVENT_ID),
-    raw.network_events.EVENT_TYPE == "OUTAGE",
+model.define(Incident.is_outage()).where(
+    Incident.filter_by(id=raw.incidents.EVENT_ID),
+    raw.incidents.EVENT_TYPE == "OUTAGE",
 )
 
 # ── RevenueForecast (standalone analytics entity) ─────────────────
@@ -570,134 +570,134 @@ model.define(RevenueForecast.is_on_target()).where(
 - Walrus operator (`:=`) for compact entity creation + property binding
 - Unary flags from status/boolean columns (`is_critical_shortage`, `is_auto_renew`, `is_outage`, `is_dropped`, `is_on_target`)
 - Bidirectional relationships with explicit inverses (both directions defined)
-- **Self-referential relationships**: caller and callee both reference Subscriber — disambiguated with `short_name`
-- Multi-FK binding: NetworkEquipment references both CellTower and Part
+- **Self-referential relationships**: source and target both reference Customer — disambiguated with `short_name`
+- Multi-FK binding: Equipment references both Facility and Part
 - Standalone analytics entities (RevenueForecast) with no FK to other concepts
 
 ---
 
 ## Example 6: Multi-schema sources with cross-system entity linking
 
-Modeling across multiple source schemas where the same business entity lives in different systems (e.g., a user identified by a GitHub ID in one system and an internal user ID in another). Shows prefixed concept names to avoid collisions, individual `Property` per scalar, boolean flags as unary `Relationship`, and linking patterns that bridge identity systems. Illustrated with an engineering-analytics knowledge graph.
+Modeling across multiple source schemas where the same business entity lives in different systems (e.g., a user identified by one ID in one system and a different user ID in another). Shows prefixed concept names to avoid collisions, individual `Property` per scalar, boolean flags as unary `Relationship`, and linking patterns that bridge identity systems.
 
-**Source:** `ENG_ANALYTICS.GITHUB`, `ENG_ANALYTICS.PROJECT_MGMT`, `ENG_ANALYTICS.INFRA`, `ENG_ANALYTICS.PLATFORM_API`
+**Source:** `OPS_DB.SYSTEM_A`, `OPS_DB.SYSTEM_B`, `OPS_DB.INFRA`, `OPS_DB.PLATFORM_API`
 
 ```python
 from relationalai.semantics import Model, Bool, Date, DateTime, Float, Integer, String
 
-model = Model("Engineering Analytics")
+model = Model("Cross-System Analytics")
 
 # ── Source Tables (multi-schema: 4 domains, 30+ tables) ──────────
 class Sources:
-    class eng_analytics:
-        class github:
-            ci_jobs = model.Table("ENG_ANALYTICS.GITHUB.CI_JOBS")
-            commit = model.Table("ENG_ANALYTICS.GITHUB.COMMIT")
-            pull_request = model.Table("ENG_ANALYTICS.GITHUB.PULL_REQUEST")
-            pull_request_review = model.Table("ENG_ANALYTICS.GITHUB.PULL_REQUEST_REVIEW")
-            repository = model.Table("ENG_ANALYTICS.GITHUB.REPOSITORY")
-            team = model.Table("ENG_ANALYTICS.GITHUB.TEAM")
-            user = model.Table("ENG_ANALYTICS.GITHUB.USER")
-            workflow = model.Table("ENG_ANALYTICS.GITHUB.WORKFLOW")
-        class project_mgmt:
-            epic = model.Table("ENG_ANALYTICS.PROJECT_MGMT.EPIC")
-            issue = model.Table("ENG_ANALYTICS.PROJECT_MGMT.ISSUE")
-            project = model.Table("ENG_ANALYTICS.PROJECT_MGMT.PROJECT")
-            sprint = model.Table("ENG_ANALYTICS.PROJECT_MGMT.SPRINT")
-            user = model.Table("ENG_ANALYTICS.PROJECT_MGMT.USER")
+    class ops_db:
+        class system_a:
+            ci_jobs = model.Table("OPS_DB.SYSTEM_A.CI_JOBS")
+            activity = model.Table("OPS_DB.SYSTEM_A.ACTIVITY")
+            work_item = model.Table("OPS_DB.SYSTEM_A.WORK_ITEM")
+            work_item_review = model.Table("OPS_DB.SYSTEM_A.WORK_ITEM_REVIEW")
+            project = model.Table("OPS_DB.SYSTEM_A.PROJECT")
+            team = model.Table("OPS_DB.SYSTEM_A.TEAM")
+            user = model.Table("OPS_DB.SYSTEM_A.USER")
+            workflow = model.Table("OPS_DB.SYSTEM_A.WORKFLOW")
+        class system_b:
+            epic = model.Table("OPS_DB.SYSTEM_B.EPIC")
+            task = model.Table("OPS_DB.SYSTEM_B.TASK")
+            project = model.Table("OPS_DB.SYSTEM_B.PROJECT")
+            iteration = model.Table("OPS_DB.SYSTEM_B.ITERATION")
+            user = model.Table("OPS_DB.SYSTEM_B.USER")
 
 # ── Concepts ─────────────────────────────────────────────────────
-# GitHub domain
-GitHubUser = model.Concept("GitHubUser", identify_by={"id": Integer})
-model.define(GitHubUser.new(id=Sources.eng_analytics.github.user.id))
+# System A domain
+SystemAUser = model.Concept("SystemAUser", identify_by={"id": Integer})
+model.define(SystemAUser.new(id=Sources.ops_db.system_a.user.id))
 
-GitHubRepository = model.Concept("GitHubRepository", identify_by={"id": Integer})
-model.define(GitHubRepository.new(id=Sources.eng_analytics.github.repository.id))
+SystemAProject = model.Concept("SystemAProject", identify_by={"id": Integer})
+model.define(SystemAProject.new(id=Sources.ops_db.system_a.project.id))
 
-GitHubPullRequest = model.Concept("GitHubPullRequest", identify_by={"id": Integer})
-model.define(GitHubPullRequest.new(id=Sources.eng_analytics.github.pull_request.id))
+SystemAWorkItem = model.Concept("SystemAWorkItem", identify_by={"id": Integer})
+model.define(SystemAWorkItem.new(id=Sources.ops_db.system_a.work_item.id))
 
-GitHubCommit = model.Concept("GitHubCommit", identify_by={"sha": String})
-model.define(GitHubCommit.new(sha=Sources.eng_analytics.github.commit.sha))
+SystemAActivity = model.Concept("SystemAActivity", identify_by={"sha": String})
+model.define(SystemAActivity.new(sha=Sources.ops_db.system_a.activity.sha))
 
-# Project management domain
-PMProject = model.Concept("PMProject", identify_by={"id": Integer})
-model.define(PMProject.new(id=Sources.eng_analytics.project_mgmt.project.id))
+# System B domain
+SystemBProject = model.Concept("SystemBProject", identify_by={"id": Integer})
+model.define(SystemBProject.new(id=Sources.ops_db.system_b.project.id))
 
-PMIssue = model.Concept("PMIssue", identify_by={"id": Integer})
-model.define(PMIssue.new(id=Sources.eng_analytics.project_mgmt.issue.id))
+SystemBTask = model.Concept("SystemBTask", identify_by={"id": Integer})
+model.define(SystemBTask.new(id=Sources.ops_db.system_b.task.id))
 
-PMSprint = model.Concept("PMSprint", identify_by={"id": Integer})
-model.define(PMSprint.new(id=Sources.eng_analytics.project_mgmt.sprint.id))
+SystemBIteration = model.Concept("SystemBIteration", identify_by={"id": Integer})
+model.define(SystemBIteration.new(id=Sources.ops_db.system_b.iteration.id))
 
-PMUser = model.Concept("PMUser", identify_by={"id": String})
-model.define(PMUser.new(id=Sources.eng_analytics.project_mgmt.user.id))
+SystemBUser = model.Concept("SystemBUser", identify_by={"id": String})
+model.define(SystemBUser.new(id=Sources.ops_db.system_b.user.id))
 
 # ── Properties (individual scalar attributes) ────────────────────
-# GitHub user — each attribute is its own Property
-GitHubUser.login = model.Property(f"{GitHubUser} has {String:login}")
-GitHubUser.name = model.Property(f"{GitHubUser} has {String:name}")
-GitHubUser.company = model.Property(f"{GitHubUser} has {String:company}")
-GitHubUser.location = model.Property(f"{GitHubUser} has {String:location}")
-GitHubUser.created_at = model.Property(f"{GitHubUser} has {Integer:created_at}")
+# System A user — each attribute is its own Property
+SystemAUser.login = model.Property(f"{SystemAUser} has {String:login}")
+SystemAUser.name = model.Property(f"{SystemAUser} has {String:name}")
+SystemAUser.company = model.Property(f"{SystemAUser} has {String:company}")
+SystemAUser.location = model.Property(f"{SystemAUser} has {String:location}")
+SystemAUser.created_at = model.Property(f"{SystemAUser} has {Integer:created_at}")
 # Boolean flags → unary Relationship
-GitHubUser.is_site_admin = model.Relationship(f"{GitHubUser} is site admin")
+SystemAUser.is_site_admin = model.Relationship(f"{SystemAUser} is site admin")
 
-# GitHub repository
-GitHubRepository.name = model.Property(f"{GitHubRepository} has {String:name}")
-GitHubRepository.full_name = model.Property(f"{GitHubRepository} has {String:full_name}")
-GitHubRepository.description = model.Property(f"{GitHubRepository} has {String:description}")
-GitHubRepository.primary_language = model.Property(f"{GitHubRepository} has {String:primary_language}")
-GitHubRepository.fork_count = model.Property(f"{GitHubRepository} has {Integer:fork_count}")
-GitHubRepository.is_private = model.Relationship(f"{GitHubRepository} is private")
-GitHubRepository.is_archived = model.Relationship(f"{GitHubRepository} is archived")
+# System A project
+SystemAProject.name = model.Property(f"{SystemAProject} has {String:name}")
+SystemAProject.full_name = model.Property(f"{SystemAProject} has {String:full_name}")
+SystemAProject.description = model.Property(f"{SystemAProject} has {String:description}")
+SystemAProject.primary_language = model.Property(f"{SystemAProject} has {String:primary_language}")
+SystemAProject.fork_count = model.Property(f"{SystemAProject} has {Integer:fork_count}")
+SystemAProject.is_private = model.Relationship(f"{SystemAProject} is private")
+SystemAProject.is_archived = model.Relationship(f"{SystemAProject} is archived")
 
-# GitHub pull request
-GitHubPullRequest.created_at = model.Property(f"{GitHubPullRequest} has {Integer:created_at}")
-GitHubPullRequest.closed_at = model.Property(f"{GitHubPullRequest} has {Integer:closed_at}")
-GitHubPullRequest.head_ref = model.Property(f"{GitHubPullRequest} has {String:head_ref}")
-GitHubPullRequest.base_ref = model.Property(f"{GitHubPullRequest} has {String:base_ref}")
-GitHubPullRequest.is_draft = model.Relationship(f"{GitHubPullRequest} is draft")
+# System A work item
+SystemAWorkItem.created_at = model.Property(f"{SystemAWorkItem} has {Integer:created_at}")
+SystemAWorkItem.closed_at = model.Property(f"{SystemAWorkItem} has {Integer:closed_at}")
+SystemAWorkItem.head_ref = model.Property(f"{SystemAWorkItem} has {String:head_ref}")
+SystemAWorkItem.base_ref = model.Property(f"{SystemAWorkItem} has {String:base_ref}")
+SystemAWorkItem.is_draft = model.Relationship(f"{SystemAWorkItem} is draft")
 
-# GitHub commit
-GitHubCommit.message = model.Property(f"{GitHubCommit} has {String:message}")
-GitHubCommit.timestamp = model.Property(f"{GitHubCommit} has {Integer:timestamp}")
-GitHubCommit.author_name = model.Property(f"{GitHubCommit} has {String:author_name}")
+# System A activity
+SystemAActivity.message = model.Property(f"{SystemAActivity} has {String:message}")
+SystemAActivity.timestamp = model.Property(f"{SystemAActivity} has {Integer:timestamp}")
+SystemAActivity.author_name = model.Property(f"{SystemAActivity} has {String:author_name}")
 
-# PM issue
-PMIssue.summary = model.Property(f"{PMIssue} has {String:summary}")
-PMIssue.original_estimate = model.Property(f"{PMIssue} has {Float:original_estimate}")
-PMIssue.remaining_estimate = model.Property(f"{PMIssue} has {Float:remaining_estimate}")
-PMIssue.time_spent = model.Property(f"{PMIssue} has {Float:time_spent}")
+# System B task
+SystemBTask.summary = model.Property(f"{SystemBTask} has {String:summary}")
+SystemBTask.original_estimate = model.Property(f"{SystemBTask} has {Float:original_estimate}")
+SystemBTask.remaining_estimate = model.Property(f"{SystemBTask} has {Float:remaining_estimate}")
+SystemBTask.time_spent = model.Property(f"{SystemBTask} has {Float:time_spent}")
 
-# PM sprint
-PMSprint.start_date = model.Property(f"{PMSprint} has {Integer:start_date}")
-PMSprint.end_date = model.Property(f"{PMSprint} has {Integer:end_date}")
-PMSprint.state = model.Property(f"{PMSprint} has {String:state}")
+# System B iteration
+SystemBIteration.start_date = model.Property(f"{SystemBIteration} has {Integer:start_date}")
+SystemBIteration.end_date = model.Property(f"{SystemBIteration} has {Integer:end_date}")
+SystemBIteration.state = model.Property(f"{SystemBIteration} has {String:state}")
 
 # ── Concept-to-concept associations (Property for functional, Relationship for multi-valued) ──
 # Cross-system linking (different identity systems)
-GitHubUser.pm_user_mapping = model.Property(
-    f"{GitHubUser} links to {PMUser:pm_user_mapping}", short_name="github_pm_user_mapping")
-GitHubPullRequest.implements_issue = model.Property(
-    f"{GitHubPullRequest} implements {PMIssue:implements_issue}",
-    short_name="github_pr_to_pm_issue")
+SystemAUser.system_b_user_mapping = model.Property(
+    f"{SystemAUser} links to {SystemBUser:system_b_user_mapping}", short_name="system_a_to_b_user_mapping")
+SystemAWorkItem.implements_task = model.Property(
+    f"{SystemAWorkItem} implements {SystemBTask:implements_task}",
+    short_name="system_a_work_item_to_system_b_task")
 
-# Within GitHub
-GitHubUser.created_pr = model.Relationship(
-    f"{GitHubUser} created {GitHubPullRequest}", short_name="github_user_created_pr")
-GitHubRepository.contains_pr = model.Relationship(
-    f"{GitHubRepository} contains {GitHubPullRequest}", short_name="repository_pull_requests")
-GitHubPullRequest.contains_commit = model.Relationship(
-    f"{GitHubPullRequest} contains {GitHubCommit}", short_name="pull_request_commits")
+# Within System A
+SystemAUser.created_work_item = model.Relationship(
+    f"{SystemAUser} created {SystemAWorkItem}", short_name="system_a_user_created_work_item")
+SystemAProject.contains_work_item = model.Relationship(
+    f"{SystemAProject} contains {SystemAWorkItem}", short_name="project_work_items")
+SystemAWorkItem.contains_activity = model.Relationship(
+    f"{SystemAWorkItem} contains {SystemAActivity}", short_name="work_item_activities")
 
-# Within project management: hierarchy
-PMIssue.assigned_to = model.Property(
-    f"{PMIssue} assigned to {PMUser:assigned_to}", short_name="pm_issue_assignment")
-PMIssue.in_sprint = model.Property(
-    f"{PMIssue} assigned to {PMSprint:in_sprint}", short_name="pm_issue_sprint_assignment")
-PMIssue.belongs_to_project = model.Property(
-    f"{PMIssue} belongs to {PMProject:belongs_to_project}", short_name="pm_issue_project_membership")
+# Within System B: hierarchy
+SystemBTask.assigned_to = model.Property(
+    f"{SystemBTask} assigned to {SystemBUser:assigned_to}", short_name="system_b_task_assignment")
+SystemBTask.in_iteration = model.Property(
+    f"{SystemBTask} assigned to {SystemBIteration:in_iteration}", short_name="system_b_task_iteration_assignment")
+SystemBTask.belongs_to_project = model.Property(
+    f"{SystemBTask} belongs to {SystemBProject:belongs_to_project}", short_name="system_b_task_project_membership")
 ```
 
 **Patterns demonstrated:**
@@ -705,9 +705,9 @@ PMIssue.belongs_to_project = model.Property(
 - Many concepts (8+) with simple identity patterns — one concept per source table
 - Individual `Property` for each scalar attribute (not bundled)
 - Boolean flags as unary `Relationship` (`is_site_admin`, `is_private`, `is_archived`, `is_draft`)
-- **Cross-system linking**: GitHubUser ↔ PMUser, GitHubPullRequest → PMIssue (bridging identity systems)
-- Prefixed concept names (PM*, GitHub*) to avoid collisions across domains
-- Relationship hierarchy within domains (Issue → Sprint, Issue → Project)
+- **Cross-system linking**: SystemAUser <-> SystemBUser, SystemAWorkItem -> SystemBTask (bridging identity systems)
+- Prefixed concept names (SystemA*, SystemB*) to avoid collisions across domains
+- Relationship hierarchy within domains (Task -> Iteration, Task -> Project)
 
 ---
 

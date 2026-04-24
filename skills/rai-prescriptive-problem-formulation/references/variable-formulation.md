@@ -428,9 +428,9 @@ Assignment.worker = model.Relationship(f"{Assignment} assigns {worker:Worker}") 
 **Property names must be valid Python identifiers** — no spaces, no special characters:
 ```python
 # CORRECT:
-AdPlacement.min_budget = model.Property(f"{AdPlacement} has {Float:min_budget}")
+Asset.min_budget = model.Property(f"{Asset} has {Float:min_budget}")
 # WRONG — spaces in names cause syntax errors:
-AdPlacement.min budget = model.Property(...)  # ERROR!
+Asset.min budget = model.Property(...)  # ERROR!
 ```
 
 When accessing decision variables through `.ref()` aliases, use the Python attribute name (with `x_` prefix), not the semantic slot name. The solver resolves variables by attribute name:

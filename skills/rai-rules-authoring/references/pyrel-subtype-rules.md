@@ -91,24 +91,24 @@ further `model.define()` chains on them fail.
 
 ```python
 # FAILS: subtype referencing aggregation-computed property
-model.FoodTruckAvgOrders = model.Concept("FoodTruckAvgOrders", extends=[Float])
-model.FoodTruck.avg_daily_orders = model.Property(f"{model.FoodTruck} has avg_daily_orders {model.FoodTruckAvgOrders}")
+model.AssetAvgUtilization = model.Concept("AssetAvgUtilization", extends=[Float])
+model.Asset.avg_daily_orders = model.Property(f"{model.Asset} has avg_daily_orders {model.AssetAvgUtilization}")
 model.define(
-    model.FoodTruck.avg_daily_orders(
-        model.FoodTruckAvgOrders(aggregates.avg(model.DailyDeployment.actual_orders_count).per(model.FoodTruck))
+    model.Asset.avg_daily_orders(
+        model.AssetAvgUtilization(aggregates.avg(model.DailyUsage.actual_orders_count).per(model.Asset))
     )
-).where(model.FoodTruck.has_deployment(model.DailyDeployment))
+).where(model.Asset.has_usage(model.DailyUsage))
 
 # THIS WILL CRASH — avg_daily_orders is aggregation-computed
-model.UnderutilizedFoodTruck = model.Concept("UnderutilizedFoodTruck", extends=[model.FoodTruck])
-model.define(model.UnderutilizedFoodTruck(model.FoodTruck)).where(
-    model.FoodTruck.avg_daily_orders < 50,  # FAILS: Query error
+model.UnderutilizedAsset = model.Concept("UnderutilizedAsset", extends=[model.Asset])
+model.define(model.UnderutilizedAsset(model.Asset)).where(
+    model.Asset.avg_daily_orders < 50,  # FAILS: Query error
 )
 
 # ALSO FAILS — inline aggregation in subtype condition
-model.define(model.UnderutilizedFoodTruck(model.FoodTruck)).where(
-    model.FoodTruck.has_deployment(model.DailyDeployment),
-    aggregates.avg(model.DailyDeployment.actual_orders_count).per(model.FoodTruck) < 50,  # FAILS
+model.define(model.UnderutilizedAsset(model.Asset)).where(
+    model.Asset.has_usage(model.DailyUsage),
+    aggregates.avg(model.DailyUsage.actual_orders_count).per(model.Asset) < 50,  # FAILS
 )
 ```
 
@@ -118,17 +118,17 @@ at query time instead of defining a subtype:
 ```python
 # Define the property — this works
 model.define(
-    model.FoodTruck.avg_daily_orders(
-        model.FoodTruckAvgOrders(aggregates.avg(model.DailyDeployment.actual_orders_count).per(model.FoodTruck))
+    model.Asset.avg_daily_orders(
+        model.AssetAvgUtilization(aggregates.avg(model.DailyUsage.actual_orders_count).per(model.Asset))
     )
-).where(model.FoodTruck.has_deployment(model.DailyDeployment))
+).where(model.Asset.has_usage(model.DailyUsage))
 
 # Query-time filter instead of subtype — this works
 results = model.where(
-    model.FoodTruck.avg_daily_orders < model.FoodTruck.max_daily_capacity * 0.5,
+    model.Asset.avg_daily_orders < model.Asset.max_daily_capacity * 0.5,
 ).select(
-    model.FoodTruck.truck_name.alias("name"),
-    model.FoodTruck.avg_daily_orders.alias("avg_orders"),
+    model.Asset.asset_name.alias("name"),
+    model.Asset.avg_daily_orders.alias("avg_orders"),
 ).to_df()
 ```
 
