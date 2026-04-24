@@ -1,6 +1,6 @@
 ---
 name: rai-pyrel-coding
-description: Covers PyRel v1 language syntax including imports, type system, concepts, properties, relationships, data loading, references, and code structure. Use when writing or reviewing PyRel code.
+description: Covers PyRel v1 language syntax — imports, type system, concepts, properties, relationships, data loading, references, and code structure. Use when writing or reviewing general PyRel code — not query construction (see rai-querying), business-rule authoring via derived properties (see rai-rules-authoring), or optimization formulation with decision variables, constraints, and objectives (see rai-prescriptive-problem-formulation).
 ---
 
 # PyRel Coding
@@ -19,9 +19,10 @@ description: Covers PyRel v1 language syntax including imports, type system, con
 - Understanding expression rules (`.where()` targets, `.per()` grouping, operators)
 
 **When NOT to use:**
-- Ontology modeling decisions (when to create a concept vs property, gap classification) — see `rai-ontology-design`
+- RAI domain modeling decisions (when to create a concept vs property, gap classification) — see `rai-ontology-design`
 - Query construction (select, aggregation, filtering, joins) — see `rai-querying`
-- Solver formulation (variables, constraints, objectives) — see `rai-prescriptive-problem-formulation`
+- Business-rule authoring via derived properties (validation, classification, alerting) — see `rai-rules-authoring`
+- Optimization formulation (decision variables, constraints, objectives) — see `rai-prescriptive-problem-formulation`
 - Connection and config setup — see `rai-configuration`
 
 **Overview:** Reference skill. Key lookup areas: Imports, Model Patterns, Type System, Concepts/Properties/Relationships, Data Loading, References and Aliasing, Standard Library (math/strings/dates), Expression Rules.
@@ -45,7 +46,7 @@ Product = model.Concept("Product", identify_by={"id": Integer})
 
 # Properties (concept → value) and Relationships (concept → concept)
 Product.cost = model.Property(f"{Product} has {Float:cost}")
-Product.supplier = model.Relationship(f"{Product} supplied by {Supplier:supplier}")
+Product.supplier = model.Property(f"{Product} supplied by {Supplier:supplier}")
 
 # Data loading
 model.define(Product.new(model.data(df).to_schema()))
@@ -157,7 +158,7 @@ PositiveInt = model.Concept("PositiveInt", extends=[Integer])
 - **`identify_by` auto-creates properties.** `Concept("Customer", identify_by={"customer_id": Integer})` automatically creates `Customer.customer_id` as a `Property(Integer)`. Do not declare a separate `model.Property()` for identity fields — it will create a duplicate.
 - **`identify_by` supports concept types** — use for composite keys involving other concepts: `OrderItem = model.Concept("OrderItem", identify_by={"order": Order, "item": Item})`. This is standard for association/junction concepts.
 - **Exception where `identify_by` is not used:** Extending primitive types (`extends=[Integer]`) — identity comes from the primitive value.
-- **Introspection:** `model.concepts` — list of all declared concepts; `model.concept_index["Name"]` — look up concept by name.
+- **Introspection:** Prefer `inspect.schema(model)` from `relationalai.semantics.inspect` (v1.0.14+) — returns a frozen `ModelSchema` with concepts, inherited properties, types, and data sources. Use `inspect.to_concept(obj)` for reusable helpers that must accept any DSL handle (Chain, Ref, FieldRef, Expression). Lower-level `model.concepts` / `model.concept_index["Name"]` remain available as a fallback. See `rai-querying/references/inspect-module.md`.
 
 ---
 
@@ -195,15 +196,18 @@ Worker.assignment = model.Property(f"{Worker} has {Shift} if {Integer:assigned}"
 
 ## Relationships
 
-Relationships are **multi-valued** associations — zero, one, or many outputs per input. No uniqueness constraint. Use for concept-to-concept links where one entity can relate to many others.
+Relationships are **multi-valued** associations — zero, one, or many outputs per input. No uniqueness constraint. Use when an input can have many outputs, or the association has multiple fields.
 
 ```python
-# Concept-to-concept links — ALL concept-to-concept associations use Relationship
+# Multi-valued concept-to-concept (one parent → many children)
 Parent.has_child = model.Relationship(f"{Parent} has {Child}")
-Order.placed_by = model.Relationship(f"{Order} placed by {Customer}")
 
-# Availability / membership
+# Availability / membership (many-to-many)
 Worker.available_for = model.Relationship(f"{Worker} is available for {Shift}")
+
+# Functional concept-to-concept FKs use Property, NOT Relationship —
+# see Properties section above. Example: Order.customer = model.Property(
+#   f"{Order} placed by {Customer:customer}") because each Order has exactly one Customer.
 ```
 
 **Scalar variables** (standalone floats/ints without a parent concept). Use for optimization variables not attached to any concept (e.g., NLP problems with just a few free variables):
@@ -321,21 +325,7 @@ model.define(food := Food.new(name=food_data.name), food.cost(food_data.cost))
 
 ### Snowflake tables
 
-```python
-schema = model.Table("DB.SCHEMA.TABLE").to_schema(exclude=["internal_col"])
-model.define(Concept.new(schema))
-```
-
-**Column renaming:** `to_schema()` does not support `rename`. Use explicit property assignment:
-
-```python
-src = model.Table("DB.SCHEMA.TABLE")
-model.define(concept := Concept.new(key=src.SRC_COL), concept.target_prop(src.OTHER_COL))
-```
-
-**Column name casing:** Snowflake normalizes unquoted identifiers to UPPERCASE. Column schema dicts must use UPPERCASE names to match.
-
-For FK resolution with `filter_by`, multiarity property loading, and programmatic entity creation patterns, see [data-loading.md](references/data-loading.md).
+Snowflake table loading follows the same `model.Table("DB.SCHEMA.TABLE")` + `filter_by`/`model.define` pattern as CSV. For FK binding patterns, column casing/renaming, and `to_schema()` rules, see [data-loading.md](references/data-loading.md). For Sources-class organization and portable DB-as-constant source paths, see the `rai-build-starter-ontology` reference examples (Examples 1–6 and Example 8). For Snowflake auth and `raiconfig.yaml` setup, see `rai-configuration`.
 
 ---
 
@@ -347,33 +337,21 @@ Use `.ref()` to create independent variables of the same concept or type for pai
 
 ## Code Structure
 
-**Define models at module level** — not inside functions. This is the standard pattern because tooling and introspection need access to the model objects at import time. Scoping a model inside a function hides it from these tools.
+**Define models at module level** — not inside functions. Tooling and introspection need access to model objects at import time; scoping a model inside a function hides it from these tools. Reasoner-specific code (solver formulation, graph analysis) goes in separate functions that receive the model:
 
 ```python
 """Model Name - Brief description."""
-
 from pathlib import Path
-
 from pandas import read_csv
-from relationalai.semantics import Float, Integer, Model, String, sum
+from relationalai.semantics import Float, Model, String
 
-# --- Model (module level) ---
-model = Model("my_model")
-
-# --- Concepts ---
+model = Model("my_model")                                   # Module level
 Food = model.Concept("Food", identify_by={"name": String})
 Food.cost = model.Property(f"{Food} has {Float:cost}")
-
-# --- Data Loading ---
 csv = read_csv(Path(__file__).parent / "data" / "foods.csv")
 model.define(Food.new(model.data(csv).to_schema()))
-```
 
-Reasoner-specific code (solver formulation, graph analysis) goes in separate functions that receive the model:
-
-```python
-def solve(model):
-    """Define solver variables/constraints/objectives, solve, return results."""
+def solve(model):   # Reasoner-specific code in functions that receive the model
     ...
 ```
 
@@ -486,6 +464,7 @@ For the full step-by-step debugging checklist, see [common-pitfalls.md](referenc
 | Standalone Property + union | Property not attached to concept, `model.union()` for multi-component objective, segment self-join | [examples/supply_chain_transport_code.py](examples/supply_chain_transport_code.py) |
 | print() debugging | Readable repr for verifying expression structure before query execution | [examples/pprint_debugging.py](examples/pprint_debugging.py) |
 | End-to-end walkthrough | Full ontology + graph + aggregation + query in a single script | [examples/customer_segmentation.py](examples/customer_segmentation.py) |
+| `inspect.to_concept()` helper | Reusable helper accepting any DSL handle (Concept / Ref / Chain / FieldRef); `default=None` for defensive use | [examples/inspect_to_concept_helper.py](examples/inspect_to_concept_helper.py) |
 
 ---
 

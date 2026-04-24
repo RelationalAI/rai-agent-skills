@@ -25,12 +25,13 @@ description: Discover questions to answer or problems to solve. Surfaces what th
 - Post-solve interpretation — see `rai-prescriptive-results-interpretation`
 
 **Overview:**
-1. Analyze the ontology to identify what the data can support
-2. Classify each opportunity by reasoner type (prescriptive, graph, predictive, rules)
-3. Identify multi-reasoner chains where applicable
-4. Assess feasibility (READY / MODEL_GAP / DATA_GAP)
-5. Present ranked suggestions to the user
-6. Route the selected question to the appropriate reasoner workflow
+1. Ground in the real model via `inspect.schema(model)` — concepts, properties with real types, relationships, data sources
+2. Analyze the ontology to identify what the data can support
+3. Classify each opportunity by reasoner type (prescriptive, graph, predictive, rules)
+4. Identify multi-reasoner chains where applicable
+5. Assess feasibility (READY / MODEL_GAP / DATA_GAP)
+6. Present ranked suggestions to the user
+7. Route the selected question to the appropriate reasoner workflow
 
 ---
 
@@ -57,12 +58,24 @@ Question discovery is the analyst's springboard into data-driven reasoning. The 
 
 ### Steps
 
-1. **Analyze the ontology** — what concepts, relationships, and data exist? Look for network topology (graph), temporal patterns (predictive), constrained decisions (prescriptive), threshold/status fields (rules).
-2. **Classify by reasoner** — for each opportunity, determine which reasoner(s) apply (→ Reasoner Classification). Tag with `reasoners` field.
-3. **Identify chains** — where one reasoner's output enables another (→ Multi-Reasoner Chaining, Cumulative Discovery).
-4. **Assess feasibility** — READY / MODEL_GAP / DATA_GAP for each suggestion (→ Feasibility Framework).
-5. **Generate ranked suggestions** — with implementation hints per reasoner type (→ reference files: `prescriptive.md`, `graph.md`, `predictive.md`, `rules.md`).
-6. **User selects** — route to the appropriate reasoner workflow (→ Post-Discovery Routing). If MODEL_GAP, enrich first (→ Enrichment Handoff).
+1. **Ground in the real model first.** Before enumerating opportunities from memory or source files, run `inspect.schema(model)` to see what's actually registered — concepts, properties (including inherited), types (enriched from the backing `TableSchema` where available), relationships, and both `model.tables` and inline `model.data_items` sources. Discovery suggestions are only useful if they're grounded in what the data can actually support; guessing from partial reads produces confident-but-wrong recommendations. See `rai-querying/references/inspect-module.md`.
+
+   ```python
+   from relationalai.semantics import inspect
+
+   schema = inspect.schema(model)
+   # Now enumerate signals from real state: concepts with network topology,
+   # temporal properties, constrained-resource concepts, boolean flags, etc.
+   ```
+
+   **When to skip:** if the user is asking "what can I do with this new dataset" and the model is still greenfield (no concepts yet), start at Step 2 and return to inspect later.
+
+2. **Analyze the ontology** — what concepts, relationships, and data exist? Look for network topology (graph), temporal patterns (predictive), constrained decisions (prescriptive), threshold/status fields (rules).
+3. **Classify by reasoner** — for each opportunity, determine which reasoner(s) apply (→ Reasoner Classification). Tag with `reasoners` field.
+4. **Identify chains** — where one reasoner's output enables another (→ Multi-Reasoner Chaining, Cumulative Discovery).
+5. **Assess feasibility** — READY / MODEL_GAP / DATA_GAP for each suggestion (→ Feasibility Framework).
+6. **Generate ranked suggestions** — with implementation hints per reasoner type (→ reference files: `prescriptive.md`, `graph.md`, `predictive.md`, `rules.md`).
+7. **User selects** — route to the appropriate reasoner workflow (→ Post-Discovery Routing). If MODEL_GAP, enrich first (→ Enrichment Handoff).
 
 ### Your role
 
@@ -215,6 +228,34 @@ Shared across all reasoners. Classify each suggestion's data readiness:
 4. Data not in any table? → **DATA_GAP**
 
 If the schema shows NO unmapped columns, there are no model_gaps — all suggestions should be READY. Decision variables, cross-product concepts, and computed expressions are created during formulation — they are NOT model_gaps.
+
+### Computing the classification from `inspect.schema()`
+
+The trichotomy — *in model* / *mappable from schema* / *needs new data* — is a set-difference over three inputs:
+
+```python
+from relationalai.semantics import inspect
+
+schema = inspect.schema(model)
+info = schema[concept_name]
+
+# 1. What's currently mapped on this concept (identity + properties)
+mapped = {f.name for f in info.identify_by} | {p.name for p in info.properties}
+
+# 2. What columns the backing source exposes
+#    - For model.Table(): use table.to_schema() or INFORMATION_SCHEMA.COLUMNS
+#    - For model.data(df): df.columns
+source_cols = set(...)
+
+# 3. For a business question requiring specific fields:
+in_model  = needed & mapped
+mappable  = (needed - mapped) & source_cols
+data_gap  = needed - mapped - source_cols
+```
+
+`in_model` → **READY**. `mappable` → **MODEL_GAP** (each entry becomes a `model_gap_fixes` item with `source_table`/`source_column`). `data_gap` → **DATA_GAP** (blocks the question).
+
+The set-difference is stable because `inspect.schema()` walks the whole model in one call — run it once, reuse for every candidate suggestion in a discovery pass.
 
 ### Gap identification rules
 

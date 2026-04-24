@@ -56,7 +56,7 @@ model.define(
 )
 
 # Concept-to-concept relationship (FK via filter_by)
-Order.customer = model.Relationship(f"{Order} was placed by {Customer}", short_name="order_customer")
+Order.customer = model.Property(f"{Order} was placed by {Customer:customer}", short_name="order_customer")
 model.define(
     Order.filter_by(order_id=Sources.tastybytes.raw_pos.order_header.order_id)
     .customer(Customer.filter_by(customer_id=Sources.tastybytes.raw_pos.order_header.customer_id))

@@ -89,7 +89,7 @@ Invoke the skills using the `/rai-` command.
 
 ## Prerequisites
 
-**Assumes `relationalai` (PyRel) v1.0.13+**
+**Requires `relationalai` (PyRel) v1.0.14+**
 
 The RelationalAI Native App for Snowflake must be installed in your account by an administrator.
 

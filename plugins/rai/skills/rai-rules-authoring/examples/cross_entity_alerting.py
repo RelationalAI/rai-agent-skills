@@ -22,8 +22,8 @@ Order = model.Concept("Order", identify_by={"id": String})
 Order.quantity = model.Property(f"{Order} has {Integer:quantity}")
 Order.fulfilled_quantity = model.Property(f"{Order} has {Integer:fulfilled_quantity}")
 Order.status = model.Property(f"{Order} has {String:status}")
-Order.supplier = model.Relationship(f"{Order} supplied by {Supplier}")
-Order.customer = model.Relationship(f"{Order} placed by {Customer}")
+Order.supplier = model.Property(f"{Order} supplied by {Supplier:supplier}")
+Order.customer = model.Property(f"{Order} placed by {Customer:customer}")
 
 # --- Rule 1: Cross-entity alert (join through relationship) ---
 # Flag orders where the supplier has low reliability AND the customer is high-tier

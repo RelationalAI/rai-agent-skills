@@ -374,3 +374,17 @@ model.define(Queen.new(row=std.common.range(n)))           # Range-based
 model.define(sf := Factory.new(name="steel_factory"), sf.avail(40.0))  # Inline
 model.define(Node.new(v=Edge.i))                            # Derived from existing data
 ```
+
+### Creating entities from a pandas DataFrame
+
+To create entities from a DataFrame you computed in Python (e.g., a cross-product for a decision concept), pipe through `model.data()`:
+
+```python
+import pandas as pd
+
+combos = pd.DataFrame([...])
+data = model.data(combos)
+model.define(MyConcept.new(data.to_schema()))
+```
+
+Passing Series as kwargs directly (`MyConcept.new(a=df["a"], b=df["b"])`) raises `NotImplementedError: Literal type not implemented for value type: pandas.core.series.Series`.

@@ -28,7 +28,7 @@ description: Walks through building a first RAI ontology from Snowflake tables o
 4. Identify relationships and properties
 5. Validate design against schema
 6. Generate code
-7. Validate with queries
+7. Validate with queries, then emit `inspect.schema()` summary so the user sees what actually registered
 
 
 ---
@@ -90,6 +90,13 @@ session.sql("""
 `model.data()` is for prototyping only (hundreds of rows). For production, load into Snowflake and use `model.Table()`.
 
 #### Analysis
+
+**Identify data shape first.** Source tables typically arrive in one of two shapes, and the distinction drives whether downstream steps derive metrics or bind them directly:
+
+- **Raw events / measurements** — one row per occurrence; metrics of interest must be *derived* in a downstream computed layer from the raw rows.
+- **Pre-aggregated statistics** — one row per entity, per pair, or per time bucket carrying already-computed values (including long-form `(entity_i, entity_j, value)` matrices). Metrics arrive ready-to-bind; do not re-aggregate already-aggregated values.
+
+Two tables in the same schema can be different shapes — classify each independently. For long-form pairwise data specifically, see the pairwise value matrix example in [examples.md](references/examples.md).
 
 Analyze source data per `rai-ontology-design` § Design Decision Sequence, step 1 (Analyze sources). Note:
 - `_ID` suffixes (likely PKs), columns matching other tables' PKs (likely FKs)
@@ -169,11 +176,12 @@ Work domain-first: brainstorm business entities, then map to tables. Each concep
 
 ### Step 4 — Identify relationships and properties
 
-**Relationships** — FK columns, shared keys, business associations. Each link connects independently meaningful concepts. Use the multiplicity results from Step 2 EDA to determine whether each relationship is 1:1, 1:N, or M:N (junction concept).
+**Choose Property or Relationship per link** based on the Step 2 multiplicity results:
 
-**Properties** — remaining columns as attributes. Omit columns with no business meaning for the scoped questions.
+- **Property** — when each input uniquely determines one output. Covers scalar attributes AND functional FKs (e.g., each Order has exactly one Customer → `Order.customer = model.Property(f"{Order} placed by {Customer:customer}")`).
+- **Relationship** — when one input can have many outputs (one Customer → many Orders), the association has multiple fields, or it's a Boolean flag (`{Entity} is <flag>`, unary).
 
-Refer to `rai-ontology-design` § Relationship Principles.
+See `rai-ontology-design` § Property vs. Relationship and `rai-pyrel-coding` § Properties and Relationships for the full decision rule.
 
 ---
 
@@ -184,7 +192,7 @@ Validate the proposed design against source data before coding:
 | Check | What to confirm |
 |-------|-----------------|
 | Identity columns | Exist in source and uniquely identify rows |
-| Relationships | Valid FK or join key exists |
+| Associations (Property/Relationship) | Valid FK or join key exists, multiplicity determined (1:1 / N:1 → Property; 1:N / M:N → Relationship) |
 | Properties | Source column exists with compatible data type |
 | Concept grounding | Every concept maps to an authoritative source |
 | Orthogonality | No two concepts represent the same entity set |
@@ -259,6 +267,8 @@ print(df)
 # Expect: count matches source table row count. Zero means data binding failed.
 ```
 
+> **Note:** `aggregates.count(C)` on a concept with zero instances returns an empty DataFrame (no rows), not a DataFrame with `count=0` — the underlying relation is empty so the aggregation has no rows to reduce over. For chained workflows where a placeholder concept is populated by a downstream step, use `inspect.schema()` membership to verify the concept is declared rather than `count()` to verify data.
+
 **7c — Verify relationships** to confirm FK joins resolved:
 
 ```python
@@ -285,6 +295,34 @@ print(df)
 # Each scoped question from Step 1 should be answerable with a query like this.
 ```
 
+**7e — Report what actually registered.** After the model runs cleanly, emit an `inspect.schema()` summary for the user. This is the canonical "here's what got built" artifact — distinct from "here's what I intended to build."
+
+```python
+from relationalai.semantics import inspect
+
+schema = inspect.schema(model)
+
+# Full dump for small models
+print(schema)
+
+# Targeted per-concept inspection for larger models
+for concept_name in scoped_concepts:
+    c = schema[concept_name]
+    idents = ", ".join(f"{f.name}:{f.type_name}" for f in c.identify_by)
+    print(f"{concept_name} [id: {idents}], extends={c.extends}")
+    for prop in c.properties:
+        print(f"  .{prop.name}: {prop.type_name}")
+    for rel in c.relationships:
+        print(f"  ~{rel.name}: {rel.reading}")
+
+# Data sources — tables and inline data (schema.tables includes both model.Table() and model.data())
+print(f"Tables: {[t.name for t in schema.tables]}")
+```
+
+This is the trust-building step. `inspect.schema()` *enriches* the summary with table-backed type information — for properties created via `Concept.new(table.to_schema())`, it infers and reports concrete types (`Integer`, `String`, `Date`) from the backing table even when the frontend model still types them as `Any`. The engine produces correctly-typed output regardless (it reads the backing data), but the `inspect` summary gives you a human-readable view of what the data actually carries. See `rai-querying/references/inspect-module.md`.
+
+**Mapped vs mappable diff.** Step 7e shows what's *in model*. To also surface columns that exist in the backing source but aren't mapped yet (the `MODEL_GAP` candidates for enrichment), diff `inspect.schema()` against the source table columns. See `rai-discovery` § Computing the classification from `inspect.schema()` for the set-difference pattern.
+
 ---
 
 ## Common Pitfalls
@@ -309,7 +347,7 @@ print(df)
 
 | Reference | Description | File |
 |-----------|-------------|------|
-| Real model examples | Production ontology patterns for TPC-H, multi-source, and prototyping use cases | [examples.md](references/examples.md) |
+| Starter ontology examples | Build patterns: Snowflake tables, CSV, derived concepts, junction concepts, self-referential hierarchies, pairwise matrices, portable source paths | [examples.md](references/examples.md) |
 
 ---
 

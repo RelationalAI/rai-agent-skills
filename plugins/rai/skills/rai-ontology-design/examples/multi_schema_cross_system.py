@@ -7,7 +7,7 @@ Patterns: Multi-schema sources (4 organizational domains), many concepts with
 simple identity, Property for all scalar attributes (not bundled Relationships),
 Relationship for cross-system links (GitHub <-> project management),
 prefixed concept names for collision avoidance.
-Best practices: Property for scalars, Relationship for concept-to-concept links.
+Best practices: Property for scalars and functional FKs; Relationship for multi-valued links.
 """
 from relationalai.semantics import Model, Date, DateTime, Float, Integer, String
 
@@ -138,7 +138,7 @@ PMSprint.end_date = model.Property(f"{PMSprint} has {Integer:end_date}")
 PMSprint.complete_date = model.Property(f"{PMSprint} has {Integer:complete_date}")
 PMSprint.state = model.Property(f"{PMSprint} has {String:state}")
 
-# ── Relationships (concept-to-concept links) ─────────────────────
+# ── Multi-valued concept-to-concept associations (Relationship) ─────────────────────
 # Cross-system linking (different identity systems)
 GitHubUser.pm_user_mapping = model.Relationship(
     f"{GitHubUser} links to {PMUser}", short_name="github_pm_user_mapping")

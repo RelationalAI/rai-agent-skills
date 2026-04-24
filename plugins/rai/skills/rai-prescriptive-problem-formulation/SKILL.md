@@ -27,11 +27,12 @@ description: Formulates optimization problems from ontology models covering deci
 - Aggregation syntax (count/sum/per patterns) — see `rai-querying`
 
 **Overview:**
-1. Define decision variables (type, bounds, scope, naming)
-2. Define constraints (forcing, capacity, balance, linking; validate interactions)
-3. Define objective (direction, coefficients, multi-component handling)
-4. Validate the complete formulation (structure, completeness, feasibility, data)
-5. Simplify (static parameters, goals vs constraints, grouped constraints)
+1. Ground in the base ontology via `inspect.schema(model)` — concepts, properties, types, relationships you're about to reference
+2. Define decision variables (type, bounds, scope, naming)
+3. Define constraints (forcing, capacity, balance, linking; validate interactions)
+4. Define objective (direction, coefficients, multi-component handling)
+5. Validate the complete formulation (structure, completeness, feasibility, data) — includes pre-solver audit that decision variables / constraints / objectives registered correctly
+6. Simplify (static parameters, goals vs constraints, grouped constraints)
 
 ---
 
@@ -64,14 +65,37 @@ problem = Problem(model, Float)
 
 After a question is selected (from question discovery) and the ontology is enriched (if needed), build the formulation in this order:
 
-### Step 1: Define Variables
+### Step 1: Ground in the base ontology
+
+Prescriptive formulations reference concepts, properties, and relationships from an existing model. Before writing `solve_for` / `satisfy` / `minimize` / `maximize`, confirm every name and type you're about to use against the real schema:
+
+```python
+from relationalai.semantics import inspect
+
+schema = inspect.schema(model)
+
+# Every concept referenced in the formulation
+for name in referenced_concepts:
+    assert name in schema, f"Concept {name} not in model"
+    props = schema[name].properties
+    # surface any properties used in bounds, constraints, or the objective
+```
+
+Catches two silent-failure modes that account for most prescriptive errors:
+
+1. **Hallucinated surface** — `Customer.tier` in a constraint when the real property is `Customer.category`. Solver happily runs on wrong variables and returns nonsense.
+2. **Wrong-type inference** — using an `Integer` property as if it were `Float` (or vice versa) when the type now propagates from `TableSchema`. Silent coercion masks incorrect bound derivation.
+
+**When to skip:** this step is cheap but not free. Skip on small greenfield models or one-shot formulations where the model fits in a single code block you just wrote.
+
+### Step 2: Define Variables
 What decisions are being made? What can the solver control?
 - Start with the base model context — examine concepts, properties, relationships (Variable Context Integration)
 - Identify the primary decision entity first, then auxiliary/aggregation variables (Variable Principles)
 - Choose variable types (continuous/integer/binary) and set bounds from data (Advanced Variable Patterns)
 - For minimize objectives, include a slack/unmet variable to avoid infeasibility
 
-### Step 2: Define Constraints
+### Step 3: Define Constraints
 What rules must the solution satisfy?
 - Start with model structure + user goals (Constraint Context Integration)
 - Add forcing constraints first — these prevent trivial zero solutions for minimize objectives
@@ -79,15 +103,15 @@ What rules must the solution satisfy?
 - Add flow conservation if the model has network structure
 - Derive parameters from data ranges, not arbitrary values (Parameter Derivation from Data)
 
-### Step 3: Define Objective(s)
+### Step 4: Define Objective(s)
 What are we optimizing?
 - Start with user's stated goal — map business language to minimize/maximize (Objective Context Integration)
 - Reference defined variables and data properties in the expression
-- Check for trivial solution risk: "If all variables = 0, are all constraints satisfied?" If yes, Step 2 needs a forcing constraint.
+- Check for trivial solution risk: "If all variables = 0, are all constraints satisfied?" If yes, Step 3 needs a forcing constraint.
 - **Competing objectives?** If the formulation has a penalty term bundling two concerns (cost + penalty×slack), or a constraint that represents a competing goal (return ≥ threshold), consider whether the user wants to explore the tradeoff rather than fix a single point. See [multi-objective-formulation.md](references/multi-objective-formulation.md) for the epsilon constraint approach.
 - **Parameter sensitivity / what-if?** If key constraints use fixed values that could vary (budget, demand, service level), use the Scenario Concept pattern — parameterize the constraint, index the decision variable by Scenario, and solve all scenarios in a single solve. This keeps results in the ontology and avoids manual re-solve loops. See [scenario-analysis.md](references/scenario-analysis.md).
 
-### Step 4: Validate
+### Step 5: Validate
 Is the formulation complete and correct?
 - Every variable appears in at least one constraint or the objective
 - Every constraint references at least one decision variable
@@ -95,20 +119,50 @@ Is the formulation complete and correct?
 - Join paths in `.where()` clauses connect to actual data
 - Bounds are consistent (lower <= upper)
 
-### Step 5: Simplify (iterate)
+**Pre-solver audit:** before calling `problem.solve(...)`, run a two-step check.
+
+**(a) Registration.** `solve_for` / `satisfy` / `minimize` / `maximize` register concepts named `Variable`, `Constraint`, `Objective` (plus a per-solve `Variable_<id>` subconcept for each decision variable). They appear in `inspect.schema(model).concepts`:
+
+```python
+from relationalai.semantics import inspect
+
+schema = inspect.schema(model)
+variables   = [c for c in schema.concepts if "Variable" in c.extends]
+constraints = [c for c in schema.concepts if c.name == "Constraint" or "Constraint" in c.extends]
+objectives  = [c for c in schema.concepts if c.name == "Objective"  or "Objective"  in c.extends]
+
+# Confirm one Variable_<id> per solve_for call, one Constraint_<id> per satisfy,
+# one Objective_<id> per minimize/maximize.
+```
+
+**(b) Binding cardinality.** Registration does NOT mean the variable binds to any rows. A `solve_for(..., where=[always_false])` still registers a `Variable_<id>` subconcept but has zero bindings — the solver will run on an empty decision set. Check each `Variable_<id>` for non-empty binding:
+
+```python
+for var_concept in variables:
+    resolved = model.concept_index[var_concept.name]
+    n = len(model.select(resolved).to_df())
+    if n == 0:
+        # The where= clause excluded every row. Fix the predicate
+        # (wrong property name, wrong threshold, missing join) and re-check.
+        raise ValueError(f"{var_concept.name} has 0 bindings")
+```
+
+Together, (a) and (b) are the downstream complement to Step 1's base-ontology grounding: Step 1 verifies the *inputs* to formulation exist; Step 5 verifies the *outputs* registered correctly and bound to data.
+
+### Step 6: Simplify (iterate)
 Can we reduce complexity without losing correctness?
 - Static parameters over dynamic calculations
 - Objective terms for goals; constraints for hard requirements
 - Group-level constraints over pairwise/granular combinations
 
-### Step 6: Present, React, Refine
+### Step 7: Present, React, Refine
 Is the formulation complete — including constraints the user couldn't articulate upfront?
 - Solve and present the result to the user (see Constraint Elicitation > Post-Solve: Iterative Refinement)
 - Use the result as an elicitation tool to surface latent preferences
 - Disambiguate rejections into constraint types, add them, re-solve
 - Repeat until the user accepts or feasibility pressure forces prioritization
 
-Steps 1-5 produce the best formulation you can build from what the user has told you. Step 6 discovers what they couldn't tell you until they saw a concrete result. Most real-world formulations require at least one pass through Step 6.
+Steps 1-6 produce the best formulation you can build from what the user has told you. Step 7 discovers what they couldn't tell you until they saw a concrete result. Most real-world formulations require at least one pass through Step 7.
 
 For detailed patterns for each step, see [variable-formulation.md](references/variable-formulation.md), [constraint-formulation.md](references/constraint-formulation.md), and [objective-formulation.md](references/objective-formulation.md).
 
@@ -296,6 +350,8 @@ For detailed heuristics, examples, and the over-specification recognition table,
 | `.per(Concept.property)` silently ignored in solver constraints | Property-value grouping (e.g., `.per(Slot.group_name)`) doesn't translate to solver constraints — produces all-zero "optimal" solution | Use entity-level `.per(ParentConcept)` with a relationship join: create a parent concept for the grouping dimension and link via Relationship, then group with `.per(Parent).where(Child.parent(Parent))` |
 | Forcing constraint added when objective already penalizes inaction | Adding `>= 1` forcing alongside a cost-penalty objective over-constrains the problem — turns an OPTIMAL-with-cost-tradeoff into INFEASIBLE. Distinct from rows above where forcing IS needed (no penalty mechanism) | Check: does the objective already penalize zero activity? If yes, forcing is redundant. Only add forcing constraints explicitly required by the problem statement |
 | Infeasible but not caught before solve | Feasibility arithmetic not validated — e.g., 50 entities need service, 4 periods, max 5/period = 20 slots < 50 needed | Before formulating, verify: `entity_count / periods / capacity_per_period` fits. If not, adjust parameters or confirm the problem allows partial coverage |
+| Linear objective over continuous decision variables collapses to one entity | LP pushes to the boundary — without a per-entity upper cap the max-coefficient entity absorbs all budget/weight. Symptom: "+X% lift" headlines masking a single-winner solution. | Add a per-entity upper cap (e.g., `w_i <= 3 * current_i`), switch to a concave objective (`sqrt`, `log`), or piecewise-linear saturation curves. |
+| `solve_for(where=expr)` raises `[Invalid operator] Cannot use python's 'bool check'` | `where` argument is iterated as a tuple; passing a bare expression triggers PyRel's `__bool__` guard | Wrap in a list: `where=[Concept.prop >= threshold, ...]` |
 
 For detailed unwired relationship symptoms, checks, and code examples, see [constraint-formulation.md](references/constraint-formulation.md) > Unwired Relationships (Detailed).
 

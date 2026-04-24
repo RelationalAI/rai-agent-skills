@@ -1,10 +1,10 @@
-# Real Model Examples
+# Starter Ontology Examples
 
-These are real base models from production RAI projects, showing different patterns for building starter ontologies. These examples focus on **build patterns** — data loading, Sources class setup, FK binding, and file organization. For advanced design patterns (enrichment, categorization, composition, time hierarchies), see the examples in `rai-ontology-design`.
+These examples illustrate **build patterns** for starter ontologies — data loading, Sources class setup, FK binding, and file organization. Concept names and schemas are illustrative, not customer data. For advanced design patterns (enrichment, categorization, composition, time hierarchies), see the examples in `rai-ontology-design`.
 
-## Example 1: TPC-H Supply Chain (Snowflake tables, hierarchy, compound identity)
+## Example 1: Snowflake tables with FK chains + junction concept
 
-A classic relational schema with 8 tables, FKs, and a junction table (PartSupply). Uses Sources class, `Property` for scalars, `Relationship` for concept-to-concept links, `filter_by()` for FK binding.
+Binding a multi-table Snowflake schema into concepts with FK-linked associations and a compound-identity junction concept. Uses `Sources` class for table organization, `Property` for scalars and functional FKs (e.g., each Order has one Customer), `Relationship` for multi-valued links and junction patterns, and `filter_by()` for FK resolution. Illustrated with TPC-H sample data (8 tables, including a PartSupply junction).
 
 **Source:** `SNOWFLAKE_SAMPLE_DATA.TPCH_SF1` (available on every Snowflake account)
 
@@ -35,8 +35,8 @@ model.define(Region.new(id=src.region.R_REGIONKEY, name=src.region.R_NAME))
 
 Nation = model.Concept("Nation", identify_by={"id": Integer})
 Nation.name = model.Property(f"{Nation} has {String:name}")
-# Concept-to-concept link → Relationship
-Nation.region = model.Relationship(f"{Nation} is within {Region}", short_name="nation_region")
+# Functional FK (each Nation in exactly one Region) → Property
+Nation.region = model.Property(f"{Nation} is within {Region:region}", short_name="nation_region")
 model.define(Nation.new(
     id=src.nation.N_NATIONKEY,
     name=src.nation.N_NAME,
@@ -46,8 +46,8 @@ model.define(Nation.new(
 Customer = model.Concept("Customer", identify_by={"id": Integer})
 Customer.name = model.Property(f"{Customer} has {String:name}")
 Customer.account_balance = model.Property(f"{Customer} has {Float:account_balance}")
-# FK → Relationship
-Customer.nation = model.Relationship(f"{Customer} is in {Nation}", short_name="customer_nation")
+# Functional FK (each Customer in exactly one Nation) → Property
+Customer.nation = model.Property(f"{Customer} is in {Nation:nation}", short_name="customer_nation")
 model.define(Customer.new(id=src.customer.C_CUSTKEY))
 model.define(Customer.name(src.customer.C_NAME)).where(
     Customer.filter_by(id=src.customer.C_CUSTKEY))
@@ -59,7 +59,7 @@ model.define(Customer.nation(Nation.filter_by(id=src.customer.C_NATIONKEY))).whe
 Order = model.Concept("Order", identify_by={"id": Integer})
 Order.total_price = model.Property(f"{Order} has {Float:total_price}")
 Order.order_date = model.Property(f"{Order} has {Date:order_date}")
-Order.customer = model.Relationship(f"{Order} is placed by {Customer}", short_name="order_customer")
+Order.customer = model.Property(f"{Order} is placed by {Customer:customer}", short_name="order_customer")
 model.define(Order.new(id=src.orders.O_ORDERKEY))
 model.define(Order.customer(Customer.filter_by(id=src.orders.O_CUSTKEY))).where(
     Order.filter_by(id=src.orders.O_ORDERKEY))
@@ -78,7 +78,7 @@ model.define(PartSupply.new(
 
 **Patterns demonstrated:**
 - Sources class for table organization
-- `Property` for scalar values, `Relationship` for concept-to-concept links
+- `Property` for scalars AND functional FKs (each Order has one Customer); `Relationship` for multi-valued links and junction patterns
 - `filter_by()` for FK binding (maps FK column to referenced entity's identity)
 - Inline property binding in `.new()` for compact entity creation
 - Compound identity for junction table (PartSupply)
@@ -86,9 +86,9 @@ model.define(PartSupply.new(
 
 ---
 
-## Example 2: Ad Spend Optimization (derived concepts, bridge entity)
+## Example 2: Derived concepts from column values + bridge entity
 
-A marketing model with two source tables that derives several concepts (Channel, Campaign, Country) from column values, and creates a bridge entity (PiecewiseLinearSegment) that joins AdPlacement to Segment through a PWL curve.
+Deriving new concepts from distinct column values (no dedicated source table), and creating a bridge entity that joins two concepts through a third. Illustrated with an ad-spend piecewise-linear curve setup — Channel/Campaign/Country concepts are derived from placement columns, and PiecewiseLinearSegment bridges AdPlacement and Segment.
 
 **Source:** `MARKETING_AD_SPEND.PUBLIC`
 
@@ -118,10 +118,10 @@ model.define(Country.new(name=placements.country))
 AdPlacement = model.Concept("AdPlacement", identify_by={"pid": String})
 AdPlacement.min_budget = model.Property(f"{AdPlacement} has {Float:min_budget}")
 AdPlacement.max_budget = model.Property(f"{AdPlacement} has {Float:max_budget}")
-AdPlacement.channel = model.Relationship(
-    f"{AdPlacement} runs on {MarketingChannel}", short_name="ad_placement_channel")
-AdPlacement.country = model.Relationship(
-    f"{AdPlacement} is in {Country}", short_name="ad_placement_country")
+AdPlacement.channel = model.Property(
+    f"{AdPlacement} runs on {MarketingChannel:channel}", short_name="ad_placement_channel")
+AdPlacement.country = model.Property(
+    f"{AdPlacement} is in {Country:country}", short_name="ad_placement_country")
 
 # Create entities and bind scalars
 model.define(
@@ -138,10 +138,10 @@ model.define(AdPlacement.channel(MarketingChannel)).where(
 
 # --- Bridge entity (joins two concepts through a third) ---
 PiecewiseLinearSegment = model.Concept("PiecewiseLinearSegment")
-PiecewiseLinearSegment.to_ad_placement = model.Relationship(
-    f"{PiecewiseLinearSegment} models {AdPlacement}", short_name="pls_placement")
-PiecewiseLinearSegment.segment = model.Relationship(
-    f"{PiecewiseLinearSegment} uses {Segment}", short_name="pls_segment")
+PiecewiseLinearSegment.to_ad_placement = model.Property(
+    f"{PiecewiseLinearSegment} models {AdPlacement:to_ad_placement}", short_name="pls_placement")
+PiecewiseLinearSegment.segment = model.Property(
+    f"{PiecewiseLinearSegment} uses {Segment:segment}", short_name="pls_segment")
 PiecewiseLinearSegment.segment_length = model.Property(
     f"{PiecewiseLinearSegment} has {Float:segment_length}")
 PiecewiseLinearSegment.marginal_return = model.Property(
@@ -175,9 +175,9 @@ AdPlacement.segments = PiecewiseLinearSegment.to_ad_placement.alias(
 
 ---
 
-## Example 3: Machine Maintenance (CSV data, cross-product concepts, derived properties)
+## Example 3: CSV loading + cross-product decision concepts
 
-A scheduling domain with CSV source data, multiple cross-product concepts for the decision space, and derived properties computed from joined data.
+Loading CSV source data, building cross-product decision concepts for a constrained cartesian, and computing derived properties from joined data. Illustrated with a machine-maintenance scheduling model.
 
 **Source:** Local CSV files
 
@@ -278,9 +278,9 @@ model.where(
 
 ---
 
-## Example 4: Supply Chain Network (many concepts, self-referential BOM, individual Properties)
+## Example 4: Many concepts + self-referential hierarchy
 
-A supply chain model with 7 source tables and 7+ concepts. Shows individual Property declarations for each scalar attribute, Relationship for concept-to-concept links, self-referential relationship (SKU → SKU for assembly), and identity fields limited to true natural keys.
+Scaling to many concepts with a self-referential relationship (entity → entity of the same type). Shows individual `Property` declarations per scalar, `Relationship` for multi-valued concept-to-concept links, and identity fields limited to true natural keys. Illustrated with a supply chain where SKUs point to SKUs via a bill-of-materials pattern.
 
 **Source:** `SUPPLY_CHAIN.PUBLIC`
 
@@ -349,7 +349,7 @@ Shipment.quantity = model.Property(f"{Shipment} has {Integer:quantity}")
 Shipment.status = model.Property(f"{Shipment} has {String:status}")
 model.define(Shipment.new(id=src.shipment["ID"]))
 
-# ── Relationships (concept-to-concept links) ─────────────────────
+# ── Multi-valued concept-to-concept associations (Relationship) ──
 Site.produces_sku = model.Relationship(
     f"{Site} produces {StockKeepingUnit}", short_name="site_produces_sku")
 Operation.transformation = model.Relationship(
@@ -372,16 +372,16 @@ BillOfMaterials.at_site = model.Relationship(
 **Patterns demonstrated:**
 - Identity limited to true natural key (`{"id": String}`) — other attributes as Properties
 - Individual `Property` for each scalar attribute (not bundled)
-- `Relationship` for all concept-to-concept links
+- `Relationship` for multi-valued concept-to-concept links
 - Self-referential relationship (SKU → SKU for BOM assembly)
 - `short_name` on every relationship for query disambiguation
 - Bracket syntax for column access (`src.site["ID"]`)
 
 ---
 
-## Example 5: Telco Network (large-scale, 14 source tables, unary flags, self-referential)
+## Example 5: Large-scale model with bidirectional inverses, unary flags, and role-named relationships
 
-A telecommunications knowledge graph with 14 source tables spanning subscribers, network infrastructure, billing, and marketing. Shows large-scale modeling patterns: unary flags from status columns, bidirectional relationships with inverses, role-named relationships (caller/callee on same concept), and walrus operator for compact binding.
+Patterns for a large model (10+ source tables, 10+ concepts): unary `Relationship` flags derived from status columns, bidirectional relationships with explicit inverses, role-named relationships for self-referential cases (e.g., caller/callee both pointing to the same concept), and the walrus operator for compact entity-and-properties binding. Illustrated with a telco knowledge graph.
 
 **Source:** `TELCO_DATA.RAW`
 
@@ -455,8 +455,8 @@ Subscriber.lifetime_value = model.Property(f"{Subscriber} has {Float:lifetime_va
 Subscriber.churn_risk_score = model.Property(f"{Subscriber} has {Float:churn_risk_score}")
 Subscriber.status = model.Property(f"{Subscriber} has {String:status}")
 # Bidirectional relationships
-Subscriber.located_in = model.Relationship(
-    f"{Subscriber} located in {PostalArea}", short_name="subscriber_located_in")
+Subscriber.located_in = model.Property(
+    f"{Subscriber} located in {PostalArea:located_in}", short_name="subscriber_located_in")
 PostalArea.has_subscriber = model.Relationship(
     f"{PostalArea} has subscriber {Subscriber}", short_name="postal_area_has_subscriber")
 
@@ -482,8 +482,8 @@ model.define(PostalArea.has_subscriber(Subscriber)).where(
 Contract = model.Concept("Contract", identify_by={"id": String})
 Contract.monthly_rate = model.Property(f"{Contract} has {Float:monthly_rate}")
 Contract.term_months = model.Property(f"{Contract} has {Integer:term_months}")
-Contract.for_subscriber = model.Relationship(
-    f"{Contract} for subscriber {Subscriber}", short_name="contract_for_subscriber")
+Contract.for_subscriber = model.Property(
+    f"{Contract} for subscriber {Subscriber:for_subscriber}", short_name="contract_for_subscriber")
 Contract.is_auto_renew = model.Relationship(f"{Contract} is auto renew")
 
 model.define(Contract.is_auto_renew()).where(
@@ -494,8 +494,8 @@ model.define(Contract.is_auto_renew()).where(
 # ── NetworkEquipment (multi-FK: tower + part) ─────────────────────
 NetworkEquipment = model.Concept("NetworkEquipment", identify_by={"id": String})
 NetworkEquipment.equipment_type = model.Property(f"{NetworkEquipment} has {String:equipment_type}")
-NetworkEquipment.installed_at = model.Relationship(
-    f"{NetworkEquipment} installed at {CellTower}", short_name="equipment_installed_at")
+NetworkEquipment.installed_at = model.Property(
+    f"{NetworkEquipment} installed at {CellTower:installed_at}", short_name="equipment_installed_at")
 NetworkEquipment.uses_part = model.Relationship(
     f"{NetworkEquipment} uses part {Part}", short_name="equipment_uses_part")
 NetworkEquipment.has_outdated_firmware = model.Relationship(
@@ -513,12 +513,12 @@ CallDetailRecord.duration_seconds = model.Property(
 CallDetailRecord.quality_score = model.Property(
     f"{CallDetailRecord} has {Float:quality_score}")
 # Role-named relationships — same target concept, different roles
-CallDetailRecord.caller = model.Relationship(
-    f"{CallDetailRecord} has caller {Subscriber}", short_name="cdr_caller")
-CallDetailRecord.callee = model.Relationship(
-    f"{CallDetailRecord} has callee {Subscriber}", short_name="cdr_callee")
-CallDetailRecord.routed_through = model.Relationship(
-    f"{CallDetailRecord} routed through {CellTower}", short_name="cdr_routed_through")
+CallDetailRecord.caller = model.Property(
+    f"{CallDetailRecord} has caller {Subscriber:caller}", short_name="cdr_caller")
+CallDetailRecord.callee = model.Property(
+    f"{CallDetailRecord} has callee {Subscriber:callee}", short_name="cdr_callee")
+CallDetailRecord.routed_through = model.Property(
+    f"{CallDetailRecord} routed through {CellTower:routed_through}", short_name="cdr_routed_through")
 CallDetailRecord.is_dropped = model.Relationship(f"{CallDetailRecord} is dropped")
 # Inverses with role names
 Subscriber.made_call = model.Relationship(
@@ -576,9 +576,9 @@ model.define(RevenueForecast.is_on_target()).where(
 
 ---
 
-## Example 6: Engineering Analytics (multi-schema, individual Properties, cross-system linking)
+## Example 6: Multi-schema sources with cross-system entity linking
 
-A software engineering analytics model spanning multiple source schemas (GitHub, project management, infrastructure, platform API). Demonstrates modeling across organizational data silos with many concepts, individual Properties for each scalar, boolean flags as unary Relationships, and cross-system linking patterns.
+Modeling across multiple source schemas where the same business entity lives in different systems (e.g., a user identified by a GitHub ID in one system and an internal user ID in another). Shows prefixed concept names to avoid collisions, individual `Property` per scalar, boolean flags as unary `Relationship`, and linking patterns that bridge identity systems. Illustrated with an engineering-analytics knowledge graph.
 
 **Source:** `ENG_ANALYTICS.GITHUB`, `ENG_ANALYTICS.PROJECT_MGMT`, `ENG_ANALYTICS.INFRA`, `ENG_ANALYTICS.PLATFORM_API`
 
@@ -675,12 +675,12 @@ PMSprint.start_date = model.Property(f"{PMSprint} has {Integer:start_date}")
 PMSprint.end_date = model.Property(f"{PMSprint} has {Integer:end_date}")
 PMSprint.state = model.Property(f"{PMSprint} has {String:state}")
 
-# ── Relationships (concept-to-concept links) ─────────────────────
+# ── Concept-to-concept associations (Property for functional, Relationship for multi-valued) ──
 # Cross-system linking (different identity systems)
-GitHubUser.pm_user_mapping = model.Relationship(
-    f"{GitHubUser} links to {PMUser}", short_name="github_pm_user_mapping")
-GitHubPullRequest.implements_issue = model.Relationship(
-    f"{GitHubPullRequest} implements {PMIssue}",
+GitHubUser.pm_user_mapping = model.Property(
+    f"{GitHubUser} links to {PMUser:pm_user_mapping}", short_name="github_pm_user_mapping")
+GitHubPullRequest.implements_issue = model.Property(
+    f"{GitHubPullRequest} implements {PMIssue:implements_issue}",
     short_name="github_pr_to_pm_issue")
 
 # Within GitHub
@@ -692,12 +692,12 @@ GitHubPullRequest.contains_commit = model.Relationship(
     f"{GitHubPullRequest} contains {GitHubCommit}", short_name="pull_request_commits")
 
 # Within project management: hierarchy
-PMIssue.assigned_to = model.Relationship(
-    f"{PMIssue} assigned to {PMUser}", short_name="pm_issue_assignment")
-PMIssue.in_sprint = model.Relationship(
-    f"{PMIssue} assigned to {PMSprint}", short_name="pm_issue_sprint_assignment")
-PMIssue.belongs_to_project = model.Relationship(
-    f"{PMIssue} belongs to {PMProject}", short_name="pm_issue_project_membership")
+PMIssue.assigned_to = model.Property(
+    f"{PMIssue} assigned to {PMUser:assigned_to}", short_name="pm_issue_assignment")
+PMIssue.in_sprint = model.Property(
+    f"{PMIssue} assigned to {PMSprint:in_sprint}", short_name="pm_issue_sprint_assignment")
+PMIssue.belongs_to_project = model.Property(
+    f"{PMIssue} belongs to {PMProject:belongs_to_project}", short_name="pm_issue_project_membership")
 ```
 
 **Patterns demonstrated:**
@@ -708,3 +708,136 @@ PMIssue.belongs_to_project = model.Relationship(
 - **Cross-system linking**: GitHubUser ↔ PMUser, GitHubPullRequest → PMIssue (bridging identity systems)
 - Prefixed concept names (PM*, GitHub*) to avoid collisions across domains
 - Relationship hierarchy within domains (Issue → Sprint, Issue → Project)
+
+---
+
+## Example 7: Pairwise Value Matrix (long-form relation table, two binding patterns)
+
+Many source datasets encode pairwise quantities as a long-form `(entity_i, entity_j, value)` table — e.g., a distance or similarity matrix between entities. This example shows the two ways to bind such data and when each is preferred.
+
+**Source:** an `INTERACTION` table with rows `(LEFT_ID, RIGHT_ID, STRENGTH)` referencing `Item.id`.
+
+### Pattern A: Junction concept with compound identity
+
+Use when pairs may carry multiple attributes, need explicit Relationships to both endpoints for downstream traversal, or feed a graph reasoner via `edge_concept`.
+
+```python
+from relationalai.semantics import Float, Integer, Model, String
+
+model = Model("Pairwise Demo")
+
+class Sources:
+    class demo:
+        class public:
+            items = model.Table("DEMO.PUBLIC.ITEMS")
+            interactions = model.Table("DEMO.PUBLIC.INTERACTIONS")
+
+src = Sources.demo.public
+
+Item = model.Concept("Item", identify_by={"id": Integer})
+Item.name = model.Property(f"{Item} has {String:name}")
+model.define(
+    i := Item.new(id=src.items.ITEM_ID),
+    i.name(src.items.NAME),
+)
+
+ItemPair = model.Concept(
+    "ItemPair",
+    identify_by={"left_id": Integer, "right_id": Integer},
+)
+ItemPair.strength = model.Property(f"{ItemPair} has {Float:strength}")
+ItemPair.left = model.Property(
+    f"{ItemPair} has left {Item:left}", short_name="pair_left"
+)
+ItemPair.right = model.Property(
+    f"{ItemPair} has right {Item:right}", short_name="pair_right"
+)
+
+model.define(
+    ip := ItemPair.new(
+        left_id=src.interactions.LEFT_ID,
+        right_id=src.interactions.RIGHT_ID,
+    ),
+    ip.strength(src.interactions.STRENGTH),
+)
+
+model.define(ItemPair.left(Item)).where(
+    ItemPair.filter_by(
+        left_id=src.interactions.LEFT_ID,
+        right_id=src.interactions.RIGHT_ID,
+    ),
+    Item.filter_by(id=src.interactions.LEFT_ID),
+)
+model.define(ItemPair.right(Item)).where(
+    ItemPair.filter_by(
+        left_id=src.interactions.LEFT_ID,
+        right_id=src.interactions.RIGHT_ID,
+    ),
+    Item.filter_by(id=src.interactions.RIGHT_ID),
+)
+```
+
+### Pattern B: Same-type ternary Property
+
+*Alternative to Pattern A — replaces the `ItemPair` junction concept with a single ternary Property on `Item`. Choose one pattern; do not combine.*
+
+Use when pairs carry exactly one numeric value and no additional attributes. More compact; retains full queryability via `Item.ref()` for same-type joins.
+
+```python
+Item = model.Concept("Item", identify_by={"id": Integer})
+Item.interaction = model.Property(
+    f"{Item} and {Item} have {Float:strength}"
+)
+
+Other = Item.ref()
+model.where(
+    Item.id == src.interactions.LEFT_ID,
+    Other.id == src.interactions.RIGHT_ID,
+).define(Item.interaction(Other, src.interactions.STRENGTH))
+```
+
+### Choosing between them
+
+| Signal | Pattern A (junction concept) | Pattern B (ternary Property) |
+|--------|------------------------------|------------------------------|
+| Pair has multiple attributes (e.g., cost + time + capacity) | Required | Not applicable |
+| Pair has exactly one numeric value | Either works | Preferred — more compact |
+| Need explicit named Relationships to both endpoints | Direct | Via `.ref()` |
+| Pair feeds a Graph reasoner's `edge_concept` | Required | Not applicable |
+| Pair is symmetric and source lists both `(i,j)` and `(j,i)` | Add `left_id < right_id` filter during binding | Add `Item.id < Other.id` filter during binding |
+
+**Patterns demonstrated:**
+- Compound identity for pair-keyed entities
+- Same-type ternary `Property` for single-value pairwise data
+- Role-named Relationships (left/right, from/to, src/dst) to make traversal directions explicit
+- Symmetry handling via ordered-pair filter during binding
+
+**Related guidance:** see `rai-ontology-design` § "Same-type multiarity detection" for the corresponding design-principle discussion.
+
+---
+
+## Example 8: Portable source paths (hoist database name to a constant)
+
+Shared Snowflake databases are often imported under different account-local names (e.g., a publisher's share appears as `SHARED_A` on one consumer and `SHARED_B` on another). Ontologies that hardcode `DATABASE.SCHEMA.TABLE` in every `model.Table()` call break when the local alias differs from the publisher's.
+
+**Pattern:** hoist the database (and optionally schema) to top-of-file constants. Retargeting is a one-line change.
+
+```python
+from relationalai.semantics import Model
+
+DB = "PUBLISHER_NAME"     # override if imported under a different alias
+SCHEMA = "RAW"
+
+model = Model("my_domain")
+
+class Sources:
+    class src:
+        entity_a = model.Table(f"{DB}.{SCHEMA}.ENTITY_A")
+        entity_b = model.Table(f"{DB}.{SCHEMA}.ENTITY_B")
+```
+
+Applies equally to env-split retargeting (`DEV` vs `PROD`). When the DB name varies per deployment, parameterize via an environment variable or `raiconfig` value.
+
+**Patterns demonstrated:**
+- DB-as-constant for portable ontologies
+- Sources class with f-string path interpolation

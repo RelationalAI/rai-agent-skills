@@ -17,7 +17,7 @@ Order.status = model.Property(f"{Order} has {String:status}")
 LineItem = model.Concept("LineItem", identify_by={"id": Integer})
 LineItem.quantity = model.Property(f"{LineItem} has {Integer:quantity}")
 LineItem.unit_price = model.Property(f"{LineItem} has {Float:unit_price}")
-LineItem.order = model.Relationship(f"{LineItem} belongs to {Order}")
+LineItem.order = model.Property(f"{LineItem} belongs to {Order:order}")
 
 # --- Derivation Rule 1: Line item total ---
 # NL: "Each line item's total equals quantity times unit price"

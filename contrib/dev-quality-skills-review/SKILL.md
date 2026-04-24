@@ -22,6 +22,7 @@ The ultimate quality gate. Everything below serves this — if an agent can't di
 ## Structure
 
 - [ ] YAML frontmatter with `name` and `description` (description is one line, trigger-ready, third-person)
+- [ ] **Description answers two questions**: (1) WHAT the skill does (the substantive scope), (2) WHEN Claude should invoke it (the trigger condition). One sentence, both halves present.
 - [ ] `SKILL.md` at root, `references/` for deep-dive, `examples/` if applicable
 - [ ] `## Summary` with What, When to use, When NOT to use, Overview
 - [ ] `## Quick Reference` near top — tables/code blocks, not prose
@@ -44,6 +45,8 @@ The ultimate quality gate. Everything below serves this — if an agent can't di
 - [ ] **No explaining the obvious**: omit what the agent already knows (general concepts, standard libraries, common protocols) — every token should earn its place
 - [ ] **Concise over exhaustive**: stepwise guidance with a working example beats encyclopedic coverage — if content covers every edge case, check whether most are better left to agent judgment
 - [ ] **Defaults over menus**: when multiple tools/approaches apply, one is the default with brief escape hatch — not equal-weight lists of options
+- [ ] **Short, generic parentheticals**: keep inline "e.g." examples short and generic. Drop overly-specific example phrases unless they disambiguate a rule — when in doubt, cut them.
+- [ ] **Extracted content keeps an entry point**: when content moves to a reference file (line-count, depth, or scope reasons), SKILL.md retains (a) an inline summary or canonical table for the extracted topic, (b) a specific load-trigger pointer naming what's in the reference file, AND (c) a Reference Files table row. The agent must still discover the topic from SKILL.md alone.
 
 ---
 
@@ -54,7 +57,7 @@ The ultimate quality gate. Everything below serves this — if an agent can't di
 - [ ] Positive framing: state what to do, not just what to avoid
 - [ ] CRITICAL/MUST reserved for genuine compile/runtime failures only (not section headers)
 - [ ] Each piece of guidance stated once in one authoritative location
-- [ ] No hardcoded domain-specific lists — extract from context
+- [ ] **No hardcoded domain enumerations**: no domain-specific laundry lists in prose or pattern definitions ("price ticks, sensor readings, KPIs…"). State the heuristic or shape distinction principled so the agent adapts to the user's data. One concise illustrative phrase is fine; a list is not.
 - [ ] Hallucination guard: instruct to verify references against provided context
 - [ ] Examples demonstrate correct pattern, not just anti-patterns
 - [ ] **Procedures over declarations**: skill teaches *how to approach* a class of problems, not *what to produce* for a specific instance — the method should generalize even when individual details are specific
@@ -67,6 +70,7 @@ The ultimate quality gate. Everything below serves this — if an agent can't di
 - [ ] MECE across skills (no overlap; boundary drawn in "When NOT to use")
 - [ ] Every `##` section falls within scope defined by Summary
 - [ ] Cross-references use skill name only (e.g., `rai-pyrel-coding`), point to existing skills
+- [ ] **Negative boundary in description** when the positive scope could overlap with an adjacent skill — explicit "not for X (see other-skill)" clause. Routing failures from over-broad WHEN clauses are silent and expensive.
 
 ---
 
@@ -84,13 +88,15 @@ The ultimate quality gate. Everything below serves this — if an agent can't di
 - [ ] Short patterns (< 10 lines) inline; larger examples in separate files
 - [ ] Example files are self-contained (copy-paste-execute)
 - [ ] Pattern-focused — strip unrelated setup boilerplate
-- [ ] **Adaptable**: examples use generic enough names/structure that an agent can map them to a novel domain
+- [ ] **Adaptable**: example concept and property names should be generic enough that an agent can map them to any domain. If a property name encodes a specific business vertical or workflow, rename it to a structural equivalent unless the pattern strictly requires the specific term.
+- [ ] **Pattern-titled, pattern-framed**: example file names, section titles, opening comments, and index-row descriptions lead with the PyRel construct or pattern being demonstrated. Keep descriptions pattern-only; don't append `(illustrated with <domain>)` tails unless the tail names a canonical OR / textbook pattern that itself functions as a pattern tag (the name is as widely understood as the construct it demonstrates).
+- [ ] **No domain creep in property/concept names**: catch vertical-specific terms in both the example-row descriptions and inside the example file contents. If the term is recognizable only within a specific industry or business function, it's too specific.
 
 ---
 
 ## Validation
 
 - [ ] `./scripts/test.sh -v` passes (syntax, imports, cross-refs, template compliance)
-- [ ] All code blocks parse with `ast.parse`
+- [ ] All code blocks parse with `ast.parse` — **except** blocks explicitly marked as anti-patterns (`# WRONG:` comment or surrounding prose flags them as intentionally invalid). Intentional anti-patterns illustrate failure modes and should not be coerced into compiling.
 - [ ] All imports resolve
 - [ ] All skill/reference/example links resolve

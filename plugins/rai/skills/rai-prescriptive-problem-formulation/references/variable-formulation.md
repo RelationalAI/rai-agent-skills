@@ -63,7 +63,7 @@ WHICH PATTERN TO USE:
 │   │         Example: Operation.x_flow = model.Property(f"{Operation} has {Float:flow}")
 │   └── NO  → Does your decision span TWO entity types with no existing link?
 │       │     (e.g., "assign Worker to Shift" when no WorkerShift concept exists)
-│       ├── YES → Create cross-product concept (use model.query() for table-backed)
+│       ├── YES → Create cross-product concept (use `model.define(...)` + `.new()` for table-backed)
 │       │         Example: model.define(Assignment.new(worker=Worker, shift=Shift))
 │       └── NO  → Do you need to track aggregated quantities per dimension?
 │           │     (e.g., "unmet demand per SKU", "surplus per region")
@@ -250,6 +250,34 @@ var = problem.solve_for(
 )
 # var is a ProblemVariable concept — usable with model.select(), .ref(), Variable.values()
 ```
+
+### Reserved field names (v1.0.14+)
+
+`solve_for()` validates non-value relationship field names against every public attribute on `ProblemVariable.__mro__`. Shadowing one of these raises a clear `ValueError` at `solve_for()` time rather than a cryptic `TyperError` later.
+
+**What the validator checks.** The exact reserved set is reported in the raised `ValueError` message — don't memorize a list, read the list printed by the exception. At time of writing (1.0.14) it includes common-sounding names agents often reach for, including `name`, `type`, `lower`, `upper`, `values`, `start`, `alias`, `select`, `define`, `require`, `where`, `filter_by`, `concept_name`, `property_name`, and `var_type`.
+
+**Practical impact:** don't use generic attribute-like words as non-value field names. Prefer domain-specific names (`item_name`, `scheduled_qty`, `allocation_tier`) over `name`, `type`, etc.
+
+```python
+# WRONG — "name" collides with ProblemVariable.name
+problem.solve_for(
+    model.Relationship(f"{Customer} has {String:name} allocation {Float:qty}"),
+    type="cont",
+)
+# Raises ValueError: solve_for() cannot accept relationship '<anonymous>':
+#   non-value field name(s) ['name'] collide with ProblemVariable's intrinsic
+#   properties (reserved: ['RESERVED_NAMES', 'alias', 'annotate', 'as_bool',
+#   'concept_name', 'define', 'dsl_expr', 'filter_by', ...]).
+
+# CORRECT — rename the field
+problem.solve_for(
+    model.Relationship(f"{Customer} has {String:customer_name} allocation {Float:qty}"),
+    type="cont",
+)
+```
+
+**When to catch it:** `except ValueError` (not `RuntimeError`). If you're writing defensive validation around agent-generated formulations, `ValueError` is the exception type to expect.
 
 ### Bounds guidance
 

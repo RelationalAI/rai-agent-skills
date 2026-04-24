@@ -33,7 +33,7 @@ This allows you to write PyRel programs and use the `rai` CLI tool.
 
 | Step | Action | Key Command |
 |------|--------|-------------|
-| 1 | Install package | `pip install relationalai` or `uv add relationalai` |
+| 1 | Install package | `pip install relationalai>=1.0.14` or `uv add relationalai>=1.0.14` |
 | 2 | Establish connection | Use existing Snowflake/DBT config or `rai init` |
 | 3 | Validate connection | `rai connect` (check MFA) |
 | 4 | Create sample program | Use inline data or user's domain |
@@ -67,9 +67,9 @@ For each step, explain what it will accomplish and prompt the user for the neces
 
 ### Step 1. Install the package
 ```
-pip install relationalai
+pip install relationalai>=1.0.14
 # or
-uv add relationalai
+uv add relationalai>=1.0.14
 ```
 
 ### Step 2. Establish the connection

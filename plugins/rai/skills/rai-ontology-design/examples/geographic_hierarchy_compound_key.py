@@ -1,11 +1,13 @@
 # NOTE: Extends beyond the starter build (see rai-build-starter-ontology examples)
 # with derived metrics (revenue, late delivery) and layered composition on the base model.
-# Pattern: supply chain — geographic hierarchy, compound identity, derived metrics
-# Key ideas: Region → Nation → Supplier/Customer forms a multi-level hierarchy;
-# PartSupply uses compound identity for a natural many-to-many junction;
-# .new() with inline FK kwargs loads identity + relationships in one call;
-# derived properties (revenue, late delivery) layer on top of the base model.
-# Best practices: Property for scalars, Relationship for concept-to-concept links.
+# Pattern: multi-level hierarchy + compound-identity junction + derived metrics layered on a base model
+# Key ideas: a chain of Relationships (A → B → C → D) encodes a multi-level hierarchy;
+# compound identity (identify_by={"parent_a": ConceptA, "parent_b": ConceptB}) gives a natural
+# many-to-many junction concept; `.new()` with inline FK kwargs loads identity + relationships
+# in one call; derived properties layer on top of the base model.
+# Best practices: Property for scalars and functional FKs; Relationship for multi-valued links.
+# Illustrated with a supply chain (Region → Nation → Supplier/Customer, PartSupply junction,
+# revenue and late-delivery derived metrics).
 
 from relationalai.semantics import Date, Float, Integer, Model, String
 

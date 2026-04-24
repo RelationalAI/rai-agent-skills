@@ -368,9 +368,15 @@ problem.satisfy(model.require(supply >= demand))  # hard constraint in the solve
 
 ## Model Introspection
 
-Public API for discovering model structure at runtime via `model.concepts`, `model.relationships`, `model.tables`, and related indexes. Useful for dynamic code generation, model validation, and exploring unfamiliar models.
+`relationalai.semantics.inspect` (v1.0.14+) is the recommended public API for discovering model structure at runtime:
 
-For the full API tables (core collections, relationship/property inspection, field attributes) and usage examples, see [model-introspection.md](references/model-introspection.md).
+- `inspect.schema(model)` — full frozen `ModelSchema` with concepts, properties (including inherited), relationships, tables, inline data sources, enums, and rules. Supports `ms["Person"]` dict-style access and `ms.to_dict()` for JSON-safe serialization.
+- `inspect.fields(rel)` — `tuple[FieldRef, ...]` usable directly in `select(*inspect.fields(rel))`; handles inheritance and alt readings.
+- `inspect.to_concept(obj)` — resolve any DSL handle (Chain, Ref, FieldRef, Expression) to its underlying `Concept`.
+
+Use inspect-before-authoring to catch duplicate/hallucinated properties, inspect-after-scaffolding to verify what actually registered, and re-inspect after long sessions or `/compact` to avoid acting on stale mental models. See [inspect-module.md](references/inspect-module.md).
+
+Lower-level `model.concepts` / `model.relationships` / `model.tables` / `model.data_items` remain available as a fallback — see [model-introspection.md](references/model-introspection.md).
 
 ---
 
@@ -401,6 +407,8 @@ For the full API tables (core collections, relationship/property inspection, fie
 |---|---|---|
 | Aggregation queries | `model.select()`, `.alias()`, `sum/count` with `.per()`, multi-hop joins, `.to_df()` | [examples/aggregation_queries.py](examples/aggregation_queries.py) |
 | Computed properties | `std.datetime` arithmetic, enum-subconcept segmentation, argmax with tiebreaker | [examples/datetime_argmax_segmentation.py](examples/datetime_argmax_segmentation.py) |
+| `inspect.schema()` summary | Dump registered concepts/properties, dict-style access, does-property-exist check, JSON-safe `to_dict()` | [examples/inspect_schema_summary.py](examples/inspect_schema_summary.py) |
+| `inspect.fields()` unpack | `select(*inspect.fields(rel))` canonical idiom + `include_owner=True` variant | [examples/inspect_fields_unpack.py](examples/inspect_fields_unpack.py) |
 
 ---
 
@@ -412,4 +420,5 @@ For the full API tables (core collections, relationship/property inspection, fie
 | Distinct patterns | Code examples for `distinct()` usage in select queries | [distinct-patterns.md](references/distinct-patterns.md) |
 | Advanced aggregation | Conditional `.where()` on aggregates, `per().sum()` standalone, conditional count | [aggregation-advanced.md](references/aggregation-advanced.md) |
 | Advanced filtering | Extended `not_()` examples, `union()` patterns, HAVING equivalent | [filtering-advanced.md](references/filtering-advanced.md) |
-| Model introspection | Core collections API, relationship/field inspection, usage examples | [model-introspection.md](references/model-introspection.md) |
+| `inspect` module | Public model-introspection API: `inspect.schema`, `inspect.fields`, `inspect.to_concept` | [inspect-module.md](references/inspect-module.md) |
+| Model introspection (lower level) | `model.concepts`/`relationships`/`tables`/`data_items` fallback API | [model-introspection.md](references/model-introspection.md) |

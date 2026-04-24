@@ -220,8 +220,7 @@ Match the question to the algorithm family:
 | "Who/what is most important/influential?" | Centrality | Choose variant by importance type (see below) |
 | "What natural groups exist?" | Community | Requires undirected for Louvain; infomap handles directed |
 | "Is the network fragmented?" | Components | WCC for undirected; SCC future |
-| "What are all transitive dependencies?" | Reachability | `reachable()` |
-| "What depends on X? / What does X affect?" | Reachability | `reachable()` |
+| "What are all transitive dependencies? / What depends on X? / What does X affect?" | Reachability | `reachable()` |
 | "How far apart are X and Y?" | Distance | Supports weighted (non-negative) |
 | "Which entities are most similar?" | Similarity | Based on shared neighborhoods |
 | "How tightly connected are local regions?" | Clustering | Triangle-based metrics |
@@ -236,24 +235,17 @@ See [algorithm-selection.md](references/algorithm-selection.md) for full per-alg
 
 ### Step 8: Configure, Execute, and Bind Results
 
+Canonical assign → bind → query skeleton:
+
 ```python
-# Configure — see Parameter Guidance for directed/weighted/aggregator decisions
-# aggregator="sum" used here because multiple Operations can connect the same Site pair
-graph = Graph(model, directed=False, weighted=True, node_concept=Site, aggregator="sum")
-# ... define edges ...
-
-# Execute — assign algorithm output to graph.Node
-graph.Node.centrality_score = graph.eigenvector_centrality()
-
-# Bind — make results available on the original concept
-Site.centrality_score = model.Property(f"{Site} has {Float:centrality_score}")
-model.where(graph.Node == Site).define(Site.centrality_score(graph.Node.centrality_score))
-
-# Query — extract as DataFrame
-df = model.select(Site.id, Site.centrality_score).to_df()
+graph = Graph(model, directed=True, weighted=True, node_concept=MyConcept, aggregator="sum")
+model.define(graph.Edge.new(src=..., dst=..., weight=...))                  # define edges
+graph.Node.score = graph.eigenvector_centrality()                           # execute — substitute any algorithm
+model.where(graph.Node == MyConcept).define(MyConcept.score(graph.Node.score))  # bind back
+model.select(MyConcept.id, MyConcept.score).to_df()                         # query
 ```
 
-See [Parameter Guidance](#parameter-guidance) for configuration details, [Result Extraction and Binding](#result-extraction-and-binding) for query patterns, and [result-extraction.md](references/result-extraction.md) for per-algorithm extraction.
+For the `directed` / `weighted` / `aggregator` decisions, see [Parameter Guidance](#parameter-guidance). For the full assign → bind → query walkthrough and per-algorithm extraction, see [Result Extraction and Binding](#result-extraction-and-binding) and [result-extraction.md](references/result-extraction.md).
 
 ---
 
@@ -375,55 +367,18 @@ For per-algorithm deep dives (parameters, output shapes, interpretation, compati
 
 ## Domain Constraints
 
-Domain constraints control which subset of a relationship gets materialized. Without them, relationships are materialized in full.
+Domain constraints control which subset of an output relationship gets materialized. Some algorithms (e.g., `preferential_attachment`, `common_neighbor`, `jaccard_similarity`, `reachable`, `triangle`) are expensive to materialize in full and require explicit domain constraints via `of=`, `from_=`, `to=`, `between=`, or `full=True` to proceed.
 
-### Why domain constraints matter
+| Keyword | Meaning |
+|---------|---------|
+| `of=R` | Constrain to nodes in relationship `R` (binary relationships: `degree`, `neighbor`, etc.) |
+| `from_=R` | Source / first-argument nodes (paths, reachability) |
+| `to=R` | Destination / second-argument nodes |
+| `from_=R1, to=R2` | Separately constrain both axes |
+| `between=R` | Jointly constrain to specific node pairs (binary Relationship of pairs) |
+| `full=True` | Override guard and compute full relationship |
 
-For some relationships, full materialization is tractable. For example, `outdegree` is linear in the number of nodes/edges — materializing it fully is typically reasonable. But other relationships can be expensive or intractable to materialize in full. For example, `preferential_attachment` is quadratic in the number of nodes, and `common_neighbor` can be cubic — full materialization rapidly becomes infeasible as the graph grows.
-
-Even for relationships that are tractable to materialize in full, applications often need only a small subset. If you only need the `outdegree` of a single node, paying the cost of materializing the full relationship is wasteful. Domain constraints let you specify which subset to materialize.
-
-### Which relationships support domain constraints
-
-Not all relationships support domain constraints, and those that do support different keyword arguments. **Check the docstring for a given relationship** (in the graph library source or documentation) to confirm which domain constraint modes it supports at this time.
-
-General patterns by relationship shape:
-
-| Relationship Shape | Examples | Typical Domain Constraint Keywords |
-|---------------|----------|-----------------------------------|
-| Node → value (binary) | `degree()`, `neighbor()`, `local_clustering_coefficient()`, `weakly_connected_component()`, `degree_centrality()` | `of` |
-| Node-pair (binary) | `reachable()` | `full`, `from_`, `to`, `between` |
-
-| Node-pair (ternary) | `jaccard_similarity()`, `preferential_attachment()`, `distance()`, `common_neighbor()` | `full`, `from_`, `to`, `between` |
-| Scalar / global | `num_nodes()`, `eigenvector_centrality()`, `pagerank()`, `louvain()` | None — computed in full by nature |
-
-### The `full` keyword
-
-Relationships that are typically expensive enough to materialize in full that doing so is a footgun (e.g. preferential attachment, reachable, common_neighbor, triangle) will **error with guidance** if called without domain-constraint keyword arguments. To override this guard and compute the full relationship, pass `full=True`:
-
-### Domain constraint keyword patterns
-
-Each keyword argument takes a `Relationship` containing the nodes or node pairs to constrain to:
-
-| Keyword | Argument Type | Meaning | Example |
-|---------|--------------|---------|---------|
-| `of=R` | Unary Relationship (nodes) | Constrain to nodes in `R` | `graph.degree(of=seed_nodes)` |
-| `from_=R` | Unary Relationship (nodes) | Constrain source / first-argument nodes | `graph.reachable(from_=seed_nodes)` |
-| `to=R` | Unary Relationship (nodes) | Constrain destination / second-argument nodes | `graph.reachable(to=target_nodes)` |
-| `from_=R1, to=R2` | Two unary Relationships | Separately constrain both axes | `graph.distance(from_=sources, to=targets)` |
-| `between=R` | Binary Relationship (node pairs) | Jointly constrain to specific node pairs | `graph.distance(between=node_pairs)` |
-| `full=True` | Boolean | Override guard; compute full relationship | `graph.jaccard_similarity(full=True)` |
-
-### Example: constrained similarity
-
-```python
-# Define the nodes of interest
-seeds = model.Relationship(f"{graph.Node} is a seed node")
-model.where(...).define(seeds(graph.Node))
-
-# Compute similarity only from seed nodes to all other nodes — not all O(n^2) pairs
-similarity_relationship = graph.jaccard_similarity(from_=seeds)
-```
+For detailed guidance — which relationships support which keywords, the `full=True` guard rationale, and a worked constrained-similarity example — see [domain-constraints.md](references/domain-constraints.md).
 
 ---
 
@@ -461,7 +416,7 @@ df = model.select(User.name, User.community).to_df()
 graph.Node.community_label = graph.louvain()
 Segment = model.Concept("Segment", identify_by={"id": Integer})
 model.define(Segment.new(id=graph.Node.community_label))
-Customer.segment = model.Relationship(f"{Customer} belongs to {Segment}")
+Customer.segment = model.Property(f"{Customer} belongs to {Segment:segment}")
 model.where(graph.Node == Customer).define(
     Customer.segment(Segment.filter_by(id=graph.Node.community_label))
 )
@@ -469,7 +424,7 @@ model.where(graph.Node == Customer).define(
 
 ### Type handling
 
-**Critical:** Community detection IDs (Louvain, Infomap) always return as `Int128Array` — cast before pandas operations **and** before `model.data()`: `df["community"] = df["community"].astype(int)`. Int128Dtype is unrecognized by `model.data()` type inference (maps to `"Any"`, causing `TyperError`). **WCC is different:** its output is a Node, not an integer. Via the shorthand (`graph.Node.component = g.weakly_connected_component()` then `model.select(Site.component).to_df()`), the column arrives as **string hashes** — use `.astype(str)`. For an integer component ID, use the direct-query pattern with node and `graph.Node.ref()` on both sides and select `comp_ref.id`: when the node concept uses `identify_by={"id": Integer}`, that column is Int128 and needs `.astype(int)`; for `identify_by={"id": String}` it arrives as an ordinary string column (no cast). See [result-extraction.md](references/result-extraction.md#int128array-from-rai).
+**Critical:** Community detection IDs (Louvain, Infomap) always return as `Int128Array` — cast with `.astype(int)` before pandas operations **and** before `model.data()`. WCC is different: its output is a Node, so the shorthand produces **string hashes** (`.astype(str)`) while the direct-query pattern using `graph.Node.ref()` exposes the node identifier type directly. See [result-extraction.md](references/result-extraction.md#int128array-from-rai) for full casting guidance including both WCC access modes.
 
 ### Validation
 
@@ -513,6 +468,7 @@ model.where(Site.centrality_score < 0.1).define(Site.is_at_risk())
 | `aggregator` missing | Weighted graph with multi-edges requires aggregator for parallel edges | Add `aggregator="sum"` — but only when multi-edges are expected (see [Aggregator guidance](#graph-constructor-aggregator-parameter-guidance)) |
 | Parallel edges mask bridges | Two edges between the same node pair mean removing one doesn't disconnect the pair — neither is a true bridge | Before reporting bridges, check whether the underlying data has parallel edges between the same endpoints. Do not collapse with `aggregator="sum"` before bridge detection — that merges parallel edges into one, making the single result appear to be a bridge when physically it isn't |
 | Weight type error | Weights must be floats, but property is Integer/Number | Cast with `floats.float(property)` in Edge.new weight parameter |
+| `ValueError: edge_weight_relationship must have type Float, is Number(38,0)` | Weight property is Integer (count, duration in seconds, etc.), but graph weights must be Float | Cast inline with `weight=floats.float(Entity.int_prop)` in `Edge.new()`, or define a Float-typed derived property on the node concept |
 | Centrality all equal / graph too dense | Two causes: (1) co-occurrence edges built on shared attribute values rather than shared specific entities produce near-complete graphs; (2) even with correct edges, all nodes have identical connectivity | (1) Build edges from shared specific entities (same FK value), not shared attribute categories; (2) add weighted edges to differentiate. If centrality is still uniform after both fixes, the underlying data may lack structural bottlenecks |
 | Similarity produces too many results | O(n^2) output for n nodes | Use [domain constraints](#domain-constraints) to limit computation: e.g. `graph.jaccard_similarity(from_=seed_nodes)`. If you need the full relationship, filter by minimum threshold or limit to top-k per node after `full=True`. |
 | Reachability on undirected connected graph gives trivial results | On undirected connected graphs, all nodes are reachable from all others — results aren't useful | Set `directed=True` for meaningful reachability/impact analysis. (On disconnected undirected graphs, reachable can still be useful for discovering components for specific nodes.) |
@@ -550,4 +506,5 @@ Each example targets a distinct combination of edge construction, topology, algo
 |-----------|-------------|------|
 | Graph construction | Detailed construction patterns from ontology — entity-level, infrastructure, hierarchy, bridge, self-referencing, filtered, multi-graph | [graph-construction.md](references/graph-construction.md) |
 | Algorithm selection | Per-algorithm deep dive — when to use, parameters, output shape, complexity, decision guidance | [algorithm-selection.md](references/algorithm-selection.md) |
+| Domain constraints | Why they matter, which relationships support which keywords, `full=True` guard rationale, worked constrained-similarity example | [domain-constraints.md](references/domain-constraints.md) |
 | Result extraction | Query patterns for each algorithm output shape, model binding, DataFrame extraction, type handling | [result-extraction.md](references/result-extraction.md) |

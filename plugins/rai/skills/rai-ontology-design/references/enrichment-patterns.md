@@ -175,7 +175,7 @@ This avoids creating unnecessary entities and keeps the problem size manageable.
 A relationship enrichment is incomplete without data binding. After declaring:
 
 ```python
-Order.customer = model.Relationship(f"{Order} assigned to {Customer:customer}")
+Order.customer = model.Property(f"{Order} assigned to {Customer:customer}")
 ```
 
 You MUST also add a `define()` rule to populate it:

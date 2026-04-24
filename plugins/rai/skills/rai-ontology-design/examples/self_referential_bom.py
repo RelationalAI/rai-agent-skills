@@ -4,7 +4,7 @@
 # Key ideas: Sources class with Snowflake tables; single-field identify_by (ID only);
 # Properties for scalar attributes; Relationships for concept-to-concept links;
 # self-referential relationship (SKU → SKU for assembly); short_name for disambiguation.
-# Best practices: Property for scalars, Relationship for concept-to-concept links,
+# Best practices: Property for scalars and functional FKs; Relationship for multi-valued links,
 # identity = true natural key only.
 
 from relationalai.semantics import Model, Date, DateTime, Float, Integer, String
@@ -71,7 +71,7 @@ Shipment.quantity = model.Property(f"{Shipment} has {Integer:quantity}")
 Shipment.status = model.Property(f"{Shipment} has {String:status}")
 model.define(Shipment.new(id=src.shipment.ID))
 
-# --- Relationships (concept-to-concept links) ---
+# --- Multi-valued concept-to-concept associations (Relationship) ---
 Site.produces_sku = model.Relationship(
     f"{Site} produces {StockKeepingUnit}", short_name="site_produces_sku")
 Operation.transformation = model.Relationship(
