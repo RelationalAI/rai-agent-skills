@@ -30,7 +30,7 @@ ontologies and advanced reasoners by generating and executing PyRel code**. They
 **Easiest:** point your coding agent at this repo and paste the prompt below.
 
 ```
-Install the RelationalAI Agent Skills (https://github.com/RelationalAI/rai-agent-skills) for your current environment. Provide me with instructions on how to keep up-to-date and leverage them across projects.
+Install the RelationalAI Agent Skills (https://github.com/RelationalAI/rai-agent-skills) for your current environment. Provide me with instructions on how to keep up-to-date and leverage them across projects. Once installed, print the skill inventory given in the README.
 ```
 
 **Most robust:** leverage an official channel that supports updates. The table below is for installing the skills on
