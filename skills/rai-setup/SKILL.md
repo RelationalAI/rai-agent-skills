@@ -1,12 +1,12 @@
 ---
 name: rai-setup
-description: Setup and configuration for RelationalAI — first-time install and Snowflake connection walkthrough, plus raiconfig.yaml, authentication, reasoner/engine settings, and troubleshooting. Use when installing RAI, connecting to Snowflake, or configuring anything in raiconfig.yaml. Not for writing PyRel model code (see rai-pyrel-coding) or solver usage and diagnostics (see rai-prescriptive-solver-management).
+description: Setup and configuration for RelationalAI — first-time install walkthrough and all raiconfig.yaml tuning. Use when installing RAI, connecting to Snowflake, or editing raiconfig.yaml. Not for writing PyRel model code (see rai-pyrel-coding) or solver usage and diagnostics (see rai-prescriptive-solver-management).
 ---
 
 # RelationalAI Setup & Configuration
 <!-- v1-SENSITIVE -->
 
-Covers the [relationalai Python package](https://pypi.org/project/relationalai) (aka PyRel), which provides PyRel programs and the `rai` CLI.
+Covers the [relationalai Python package](https://pypi.org/project/relationalai) (aka PyRel), which enables PyRel programs and ships the `rai` CLI.
 
 ## Summary
 
@@ -43,6 +43,11 @@ Support / docs: support@relational.ai · sales@relational.ai · [docs.relational
 
 ## Quick Reference
 
+```bash
+rai init      # scaffold a new raiconfig.yaml
+rai connect   # validate the connection (run after any connection change)
+```
+
 ```yaml
 # Minimal raiconfig.yaml
 default_connection: sf
@@ -62,6 +67,7 @@ import os
 from relationalai.config import create_config
 from relationalai.semantics import Model
 config = create_config(
+    default_connection="sf",
     connections={
         "sf": {
             "type": "snowflake",
@@ -126,7 +132,7 @@ Load the reference when the trigger fires — don't read them all upfront.
 | Configuring reasoners — backend, engine size, Gurobi, polling — or reasoner name/size doesn't take effect as expected | [reasoners.md](references/reasoners.md) |
 | Turning on metrics/logging, tuning retries, toggling compiler strictness, or changing data-loading defaults | [execution.md](references/execution.md) |
 | Provisioning, listing, resuming, or deleting engines via CLI/Python API, or evaluating warm reasoners | [engine-management.md](references/engine-management.md) |
-| User is upgrading from `relationalai` v0.13 and hits renamed params or moved config fields | [v013-migration.md](references/v013-migration.md) |
+| User is upgrading from `relationalai` v0.13 and hits renamed params or moved config fields (one-time legacy migration — unrelated to fresh setup) | [v013-migration.md](references/v013-migration.md) |
 
 ---
 
