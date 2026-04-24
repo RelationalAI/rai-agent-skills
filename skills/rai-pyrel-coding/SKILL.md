@@ -180,11 +180,11 @@ Food.contains = model.Property(f"{Food} contains {Nutrient} in {Float:qty}")
 
 ```python
 Stock.covar = model.Property(f"{Stock:stock1} and {Stock:stock2} have {Float:covar}")       # Binary (same-type disambiguation)
-FreightGroup.inv = model.Property(f"{FreightGroup} on day {Integer:t} has {Float:inv}")      # Time-indexed
+ResourceGroup.inv = model.Property(f"{ResourceGroup} on day {Integer:t} has {Float:inv}")    # Time-indexed
 Worker.assignment = model.Property(f"{Worker} has {Shift} if {Integer:assigned}")             # Multi-concept
 ```
 
-**Scalar / standalone properties** (primitives only, no user-defined concepts): `bin_tl = model.Property(f"departure day {Integer:t} has {Float:bin_tl}")`
+**Scalar / standalone properties** (primitives only, no user-defined concepts): `bin_fast = model.Property(f"departure day {Integer:t} has {Float:bin_fast}")`
 
 ---
 

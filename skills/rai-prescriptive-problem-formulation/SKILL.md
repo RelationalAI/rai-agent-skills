@@ -375,15 +375,15 @@ Do not use `+` to combine cost terms from independent concept groups — this ca
 ```python
 # CORRECT: per-entity cost expressions inside model.union()
 problem.minimize(sum(model.union(
-    FreightGroup.holding_cost * sum(x_inv).per(FreightGroup).where(...),  # per-FreightGroup
-    Arc.transport_cost * Arc.x_flow,                                       # per-Arc
-    Factory.unit_cost * Factory.x_production,                              # per-Factory
+    ResourceGroup.holding_cost * sum(x_inv).per(ResourceGroup).where(...),  # per-ResourceGroup
+    Arc.transport_cost * Arc.x_flow,                                        # per-Arc
+    Factory.unit_cost * Factory.x_production,                               # per-Factory
 )))
 
 # WRONG: scalar sums inside model.union()
 problem.minimize(sum(model.union(
-    sum(x * FreightGroup.cost),   # scalar — causes AssertionError
-    sum(Arc.x_flow * Arc.cost),   # scalar — causes AssertionError
+    sum(x * ResourceGroup.cost),   # scalar — causes AssertionError
+    sum(Arc.x_flow * Arc.cost),    # scalar — causes AssertionError
 )))
 ```
 

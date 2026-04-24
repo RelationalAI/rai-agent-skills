@@ -122,13 +122,13 @@ problem.minimize(risk)
 Combine terms from different scopes using `model.union()`, then wrap in `sum()`.
 
 ```python
-total_inv_cost = inv_cost * sum(x_inv).where(FreightGroup.inv(t, x_inv), t > FreightGroup.inv_start_t)
-total_tl_cost = tl_tra_cost * sum(y_bin_tl).where(bin_tl(Integer.ref(), y_bin_tl))
+total_inv_cost = inv_cost * sum(x_inv).where(ResourceGroup.inv(t, x_inv), t > ResourceGroup.inv_start_t)
+total_fast_cost = fast_fixed_cost * sum(y_bin_fast).where(bin_fast(Integer.ref(), y_bin_fast))
 total_ltl_rem_cost = LTLSegment.cost * sum(x_rem_ltl).per(LTLSegment).where(
     LTLSegment.rem_ltl(Integer.ref(), x_rem_ltl)
 )
 
-total_cost = sum(model.union(total_inv_cost, total_tl_cost, total_ltl_rem_cost))
+total_cost = sum(model.union(total_inv_cost, total_fast_cost, total_ltl_rem_cost))
 problem.minimize(total_cost)
 ```
 
