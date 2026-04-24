@@ -583,7 +583,7 @@ Modeling across multiple source schemas where the same business entity lives in 
 **Source:** `OPS_DB.SYSTEM_A`, `OPS_DB.SYSTEM_B`, `OPS_DB.INFRA`, `OPS_DB.PLATFORM_API`
 
 ```python
-from relationalai.semantics import Model, Bool, Date, DateTime, Float, Integer, String
+from relationalai.semantics import Model, Boolean, Date, DateTime, Float, Integer, String
 
 model = Model("Cross-System Analytics")
 

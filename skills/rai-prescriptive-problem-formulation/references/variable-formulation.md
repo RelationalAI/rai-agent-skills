@@ -106,8 +106,8 @@ The entity creation strategy for cross-product concepts depends on the **problem
 model.define(WorkerShift.new(worker=Worker, shift=Shift))
 
 # FLOW/TOPOLOGY: Grounded by relationship (only existing routes)
-model.define(IssueAssignment.new(issue=JiraIssue, sprint=JiraSprint)).where(
-    JiraIssue.sprint == JiraSprint
+model.define(TaskAssignment.new(task=Task, sprint=Sprint)).where(
+    Task.sprint == Sprint
 )
 
 # AGGREGATION: Grounded via shared dimension
