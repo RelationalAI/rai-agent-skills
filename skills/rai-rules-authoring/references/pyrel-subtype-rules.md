@@ -41,10 +41,10 @@ model.define(model.HighMarginMenuItem(model.MenuItem)).where(
 )
 ```
 
-### CRITICAL LIMITATION: OR Operator (`|`) in Subtype Conditions
+### Limitation: OR Operator (`|`) in Subtype Conditions
 
-**Subtypes CANNOT use `|` (OR) operator** in their `where()` conditions. This causes `Query error`
-and **poisons ALL queries on the parent entity** — not just the subtype.
+**Subtypes CANNOT use `|` (OR) operator** in their `where()` conditions. **This raises a `Query error`
+at runtime and poisons ALL queries on the parent entity** — not just the subtype.
 
 **Note:** The `&` (AND) operator DOES work in `where()` conditions — e.g.,
 `(model.Entity.score >= 1.0) & (model.Entity.score < 2.0)` is valid for range checks in classification.
@@ -70,10 +70,11 @@ model.define(model.LoyalCustomer(model.Customer)).where(
 )
 ```
 
-### CRITICAL LIMITATION: model.define() Cannot Chain on Aggregation-Computed Properties
+### Limitation: model.define() Cannot Chain on Aggregation-Computed Properties
 
 **`model.define()` CANNOT reference aggregation-computed properties in arithmetic** — not just subtypes,
-but ANY downstream `model.define()`. This causes "Unreachable" error and **poisons the entire model**.
+but ANY downstream `model.define()`. **This raises an "Unreachable" error at runtime and poisons the
+entire model.**
 
 This includes:
 - Properties defined with `aggregates.avg`, `aggregates.sum`, `aggregates.count` + `.per()` (direct aggregation)
@@ -132,10 +133,10 @@ results = model.where(
 ).to_df()
 ```
 
-### CRITICAL LIMITATION: Cross-Entity Property Access in model.define()
+### Limitation: Cross-Entity Property Access in model.define()
 
-Dot-chain navigation (`model.EntityA.relationship.property`) in `model.define()` arithmetic causes
-"Unreachable" error. You MUST use explicit joins instead.
+Dot-chain navigation (`model.EntityA.relationship.property`) in `model.define()` arithmetic **raises
+an "Unreachable" error at runtime**. Use explicit joins instead.
 
 **Impact on classification rules:** When a classification rule computes a threshold from a
 related entity's property (e.g., "classify orders by their customer's credit tier"), use

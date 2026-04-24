@@ -131,7 +131,7 @@ GROUP BY REASONER_NAME, REASONER_CAPACITY;
 
 ## Step 3 — Health Verdicts and Actions
 
-### ✅ HEALTHY — No Action
+### OK — HEALTHY — No Action
 **Signals:** `MEMORY_UTILIZATION` < 0.80, `CPU_UTILIZATION` < 0.85, `DEMAND` ≤ 1.0 on most runs.
 
 If transactions are still failing despite healthy metrics, the problem is not resource-related —
@@ -139,7 +139,7 @@ go to **Step 4** to diagnose the transaction directly.
 
 ---
 
-### 🔴 OVERLOADED — Upgrade to Larger Reasoner (Immediate)
+### CRITICAL — OVERLOADED — Upgrade to Larger Reasoner (Immediate)
 **Signals (any of):**
 - `MEMORY_UTILIZATION` > 0.80 on most workload runs
 - `CPU_UTILIZATION` consistently > 0.95
@@ -154,7 +154,7 @@ rai reasoners:create  --type Logic --name <name> --size <larger-size>
 
 ---
 
-### 🟡 PLAN TO RESIZE — Proactive Warning
+### ELEVATED — PLAN TO RESIZE — Proactive Warning
 **Signals:** `CPU_UTILIZATION` consistently 0.85–0.95 (below critical but limited headroom for bursts).
 
 **Action:** Schedule a resize during a low-traffic window before the next traffic spike. No immediate
@@ -162,7 +162,7 @@ action required.
 
 ---
 
-### 🟠 QUEUING — Review Job Volume / Split Across Reasoners
+### WARNING — QUEUING — Review Job Volume / Split Across Reasoners
 **Signals:** `DEMAND` consistently > 1.0 (more jobs than available queue slots).
 
 **Action:**
@@ -173,7 +173,7 @@ action required.
 
 ---
 
-### 🔵 UNDERUTILIZED — Downsize to Save Cost
+### INFORMATIONAL — UNDERUTILIZED — Downsize to Save Cost
 **Signals:** `CPU_UTILIZATION` < 0.30 AND `MEMORY_UTILIZATION` never exceeds 0.30 across workload runs.
 
 **Action:** Downgrade to a smaller reasoner — you are paying for unused capacity.
@@ -185,7 +185,7 @@ rai reasoners:create  --type Logic --name <name> --size <smaller-size>
 
 ---
 
-### ⚪ IDLE — Suspend or Lower Auto-Suspend Threshold
+### NOMINAL — IDLE — Suspend or Lower Auto-Suspend Threshold
 **Signals:** `DEMAND` = 0 for extended periods.
 
 **Action:** Suspend the reasoner or reduce its `auto_suspend` threshold to stop billing for idle time.
@@ -231,7 +231,7 @@ CALL relationalai.api.get_load_errors('<transaction_id>');
 Returns row-level load errors associated with a transaction: source object, error message, and
 affected row count.
 
-> **⚠️ Owner-restriction pitfall:** If `get_transaction_problems` returns **HTTP 400**, check the
+> **WARNING — Owner-restriction pitfall:** If `get_transaction_problems` returns **HTTP 400**, check the
 > transaction owner before assuming a permissions misconfiguration:
 > ```sql
 > CALL relationalai.api.get_transaction('<transaction_id>');
@@ -251,7 +251,7 @@ When `get_transaction` returns an unexpected column or state code, or when inspe
 
 ## Step 5 — Diagnose CDC / Data Stream Health
 
-> **⚠️ Auto-quarantine gotcha:** A stream that has been in `SUSPENDED` state for
+> **WARNING — Auto-quarantine gotcha:** A stream that has been in `SUSPENDED` state for
 > **approximately one month** will be automatically promoted to `QUARANTINED` —
 > **without creating any rows in `data_stream_errors`**. The absence of error rows does not
 > mean the stream is healthy. Always confirm stream status from `cdc_status` or
@@ -356,7 +356,7 @@ CALL relationalai.api.delete_engine('CDC_MANAGED_ENGINE', TRUE);
 The second argument `TRUE` enables force deletion. RAI will recreate the CDC engine automatically
 on the next CDC trigger. Confirm recovery with `SELECT * FROM relationalai.api.cdc_status`.
 
-> **⚠️ If `delete_engine` returns "engine not found" but `cdc_status` still shows the engine
+> **WARNING — If `delete_engine` returns "engine not found" but `cdc_status` still shows the engine
 > as suspended:** this is a control-plane / data-plane desync — the engine record exists in
 > RAI's metadata but the underlying Snowflake engine is gone. No self-serve command resolves
 > this state. Run the following and retain the output for support:

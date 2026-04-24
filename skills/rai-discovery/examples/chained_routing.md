@@ -4,58 +4,58 @@ Discovery-to-routing walkthroughs for multi-reasoner chains. Each example shows 
 
 ---
 
-## Graph → Prescriptive: "Identify critical warehouses, then optimize allocation weighted by importance"
+## Graph → Prescriptive: "Identify critical hubs, then optimize allocation weighted by importance"
 
 ### Discovery framing
 Two questions that form a cumulative chain:
 
-**Question A (graph, standalone):** "Which warehouses are most critical to supply chain resilience?"
+**Question A (graph, standalone):** "Which hubs are most critical to network resilience?"
 - Feasibility: READY (network topology exists)
-- Output: `Site.centrality_score` enriches the ontology
+- Output: `Node.centrality_score` enriches the ontology
 
-**Question B (prescriptive, depends on A):** "Allocate inventory across warehouses weighted by network importance"
+**Question B (prescriptive, depends on A):** "Allocate resources across hubs weighted by network importance"
 - Feasibility: depends on graph output — only solvable after centrality scores exist
-- Uses `Site.centrality_score` as a weight in the allocation objective or constraint
+- Uses `Node.centrality_score` as a weight in the allocation objective or constraint
 
 ### How discovery presents this
 ```
-1. [Graph] Identify which warehouses are critical connectors (READY)
-2. [Prescriptive] Allocate inventory weighted by warehouse importance
+1. [Graph] Identify which hubs are critical connectors (READY)
+2. [Prescriptive] Allocate resources weighted by hub importance
    → available after running #1 (centrality scores feed allocation weights)
 ```
 
 ### Chain mechanics
-- **Stage 1:** Run `eigenvector_centrality()` on SiteDependencyGraph → `Site.centrality_score` added to ontology
-- **Enrichment bridge:** centrality scores are now queryable properties on Site
-- **Stage 2:** Prescriptive formulation uses `Site.centrality_score` as allocation weight — higher centrality warehouses get priority in allocation
+- **Stage 1:** Run `eigenvector_centrality()` on NodeDependencyGraph → `Node.centrality_score` added to ontology
+- **Enrichment bridge:** centrality scores are now queryable properties on Node
+- **Stage 2:** Prescriptive formulation uses `Node.centrality_score` as allocation weight — higher centrality hubs get priority in allocation
 
 ---
 
-## Predictive → Prescriptive: "Forecast supplier delays, then optimize re-sourcing given predicted reliability"
+## Predictive → Prescriptive: "Forecast provider risks, then optimize re-allocation given predicted reliability"
 
 ### Discovery framing
 Two questions that form a sequential chain:
 
-**Question A (predictive):** "Which suppliers will likely have the most delayed shipments next quarter?"
-- Feasibility: READY (DelayPrediction table exists as pre-computed predictions)
-- Output: `DelayPrediction.predicted_delay_prob` per supplier per quarter
+**Question A (predictive):** "Which providers will likely have the most at-risk activities next period?"
+- Feasibility: READY (RiskPrediction table exists as pre-computed predictions)
+- Output: `RiskPrediction.predicted_risk_prob` per provider per period
 
-**Question B (prescriptive, uses A's output):** "Given predicted delays, how should we re-source to minimize cost while maintaining reliability?"
-- Feasibility: READY (prediction data + operation costs + demand all in model)
-- Uses `predicted_delay_prob` as the reliability parameter in constraints
+**Question B (prescriptive, uses A's output):** "Given predicted risks, how should we re-allocate to minimize cost while maintaining reliability?"
+- Feasibility: READY (prediction data + activity costs + demand all in model)
+- Uses `predicted_risk_prob` as the reliability parameter in constraints
 
 ### How discovery presents this
 ```
-1. [Predictive] Identify which suppliers are predicted to delay next quarter (READY)
-2. [Prescriptive] Optimize sourcing to minimize cost given predicted reliability (READY)
-   → uses predicted delay probabilities as reliability constraint
+1. [Predictive] Identify which providers are predicted to be at risk next period (READY)
+2. [Prescriptive] Optimize allocation to minimize cost given predicted reliability (READY)
+   → uses predicted risk probabilities as reliability constraint
 ```
 
 ### Chain mechanics
-- **Stage 1:** Query `DelayPrediction` concept for target quarter → supplier risk ranking
-- **Stage 2:** Prescriptive formulation references `DelayPrediction.predicted_delay_prob` as reliability parameter
+- **Stage 1:** Query `RiskPrediction` concept for target period → provider risk ranking
+- **Stage 2:** Prescriptive formulation references `RiskPrediction.predicted_risk_prob` as reliability parameter
   - Scenario 1: soft penalty — `reliability_weight * sum(flow * (1 - reliability_score))`
-  - Scenario 2: hard threshold — exclude suppliers where `predicted_delay_prob > threshold`
+  - Scenario 2: hard threshold — exclude providers where `predicted_risk_prob > threshold`
   - Scenario 3: parameter sweep across threshold values → cost-vs-reliability tradeoff
 
 ---
@@ -65,24 +65,24 @@ Two questions that form a sequential chain:
 ### Discovery framing
 A three-stage chain where each question builds on the previous:
 
-**Question A (graph):** "Which warehouses are bridges between supply chain clusters?"
+**Question A (graph):** "Which nodes are bridges between network clusters?"
 - WCC + bridge detection → identifies single points of failure
 
-**Question B (graph):** "If a critical supplier goes offline, which customers and products are affected?"
-- Downstream reachability from at-risk supplier → quantifies impact
+**Question B (graph):** "If a critical provider goes offline, which downstream entities and resources are affected?"
+- Downstream reachability from at-risk provider → quantifies impact
 
-**Question C (prescriptive):** "Re-source components to minimize cost while covering all affected customers"
+**Question C (prescriptive):** "Re-allocate components to minimize cost while covering all affected targets"
 - Optimization problem scoped by the impact set identified by graph analysis
 
 ### How discovery presents this
 ```
-1. [Graph] Identify bridge warehouses and isolated clusters (READY)
-2. [Graph] Assess downstream impact if key supplier goes offline (READY)
-3. [Prescriptive] Optimize re-sourcing for affected supply chain (READY)
+1. [Graph] Identify bridge nodes and isolated clusters (READY)
+2. [Graph] Assess downstream impact if a key provider goes offline (READY)
+3. [Prescriptive] Optimize re-allocation for affected portion of the network (READY)
    → scope informed by #1 (critical nodes) and #2 (affected entities)
 ```
 
 ### Chain mechanics
 - **Stage 1:** `weakly_connected_component()` identifies clusters; Bridge concept flags connectors
-- **Stage 2:** `reachable(from_=target_supplier)` maps the blast radius of a supplier disruption
-- **Stage 3:** Prescriptive formulation uses Stages 1+2 to: (a) force redundancy for bridge nodes, (b) constrain re-sourcing to reachable alternatives only
+- **Stage 2:** `reachable(from_=target_provider)` maps the blast radius of a provider disruption
+- **Stage 3:** Prescriptive formulation uses Stages 1+2 to: (a) force redundancy for bridge nodes, (b) constrain re-allocation to reachable alternatives only
