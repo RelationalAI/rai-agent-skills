@@ -1,5 +1,5 @@
 ---
-name: rai-health-skill
+name: rai-health
 description: Guides diagnosis of RAI engine performance, failed transactions, CDC/data-stream health, and CDC engine management. Use when a reasoner is slow or queuing, a transaction or batch has failed, a CDC stream is suspended or quarantined, or CDC engine sizing/recovery is needed.
 ---
 <!-- v1-STABLE -->

@@ -39,7 +39,7 @@ The skills in this repo instruct your agent **how to use the `relationalai` Pyth
 | 11 | [rai-prescriptive-solver-management](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-prescriptive-solver-management) | Reasoning | Solver lifecycle — selection, creation, execution, diagnostics |
 | 12 | [rai-prescriptive-results-interpretation](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-prescriptive-results-interpretation) | Reasoning | Post-solve — solution extraction, status codes, quality, sensitivity |
 | 13 | [rai-cortex-integration](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-cortex-integration) | Operations | Deploy RAI models as Snowflake Cortex Agents |
-| 14 | [rai-health-skill](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-health-skill) | Operations | Diagnose engine performance — memory, CPU, demand metrics, remediation |
+| 14 | [rai-health](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-health) | Operations | Diagnose engine performance — memory, CPU, demand metrics, remediation |
 
 ## Prerequisites
 **Requires `relationalai` (PyRel) v1.0.14+**

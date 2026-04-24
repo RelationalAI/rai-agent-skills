@@ -334,7 +334,7 @@ This is the trust-building step. `inspect.schema()` *enriches* the summary with 
 | `model.data()` for large datasets | Treating CSV/DataFrame as production-ready | Prototyping only (≤ hundreds of rows). Use `model.Table()` |
 | Wrong Snowflake table path | Incorrect database, schema, or table name | Verify with `SHOW TABLES IN SCHEMA <db>.<schema>` |
 | "Object does not exist" on valid table | Snowflake role lacks access | Check `SELECT CURRENT_ROLE()` and `SHOW GRANTS ON <object>` |
-| Model won't load or sync | Engine not running or misconfigured connection | See `rai-configuration` and `rai-health-skill` |
+| Model won't load or sync | Engine not running or misconfigured connection | See `rai-configuration` and `rai-health` |
 | `SnowflakeChangeTrackingNotEnabledException` on first query | `model.Table()` requires change tracking on each source table | Add `ensure_change_tracking=True` to `Model()` constructor, or run `ALTER TABLE <db>.<schema>.<table> SET CHANGE_TRACKING = TRUE` on each source table |
 | Stale data source cleanup takes minutes on re-run | Re-using a model name after changing data bindings triggers stale source removal | Use a fresh model name during rapid iteration, or wait for cleanup to complete |
 | Skipping scope | Starting from tables instead of questions | Complete Step 1 before Step 2 |
