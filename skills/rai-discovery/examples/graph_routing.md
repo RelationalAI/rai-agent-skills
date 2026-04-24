@@ -35,16 +35,16 @@ Discovery-to-routing walkthroughs for graph reasoner questions. Each example sho
 
 ---
 
-## "Which upstream entities do high-priority targets depend upon?"
+## "Which upstream entities do high-priority entities depend upon?"
 
 ### Ontology signals
 - `Entity` concept with `provides_to` relationship (Entity → Entity) → directed dependency chain
-- `Entity.is_high_priority_target` derived property → target filter available
-- Multi-tier dependency chain (e.g., Source → Intermediary → Hub → Target) → multi-hop reachability needed
+- `Entity.is_high_priority` derived property → target filter available
+- Multi-tier dependency chain (e.g., upstream → intermediary → hub → consumer) → multi-hop reachability needed
 
 ### Reasoner classification: Graph (reachability, upstream)
 - "Depend upon" + directed relationships → upstream reachability
-- Multi-hop (not just direct providers) → graph traversal, not SQL join
+- Multi-hop (not just direct dependencies) → graph traversal, not SQL join
 - NOT predictive — question is about current structure, not future outcomes
 
 ### Implementation hint
@@ -52,25 +52,25 @@ Discovery-to-routing walkthroughs for graph reasoner questions. Each example sho
 {"algorithm": "reachable", "graph_construction": {"node_concept": "Entity",
   "directed": true, "weighted": false,
   "edge_definition": "Entity.provides_to relationship"},
- "target_filter": "Entity.is_high_priority_target",
- "output_binding": "(provider, target) reachable pairs"}
+ "target_filter": "Entity.is_high_priority",
+ "output_binding": "(source_entity, target_entity) reachable pairs"}
 ```
 
 ### Modeling needs (→ rai-ontology-design)
 - Graph construction: directed `EntityGraph` with Entity as nodes, `provides_to` as edges
 - Derived relationship: `Entity.provides_to` from Allocation (source_entity → target_entity)
-- Target concept: `is_high_priority_target` filter (e.g., role='CONSUMER' AND priority_tier='HIGH')
+- Target concept: `is_high_priority` filter (e.g., role='CONSUMER' AND priority_tier='HIGH')
 - PyRel: `Graph(model, directed=True, weighted=False, node_concept=Entity)`
 
 ### Reasoner handoff (→ graph workflow)
 - Define target: `model.Relationship("Target Entity")` filtered to high-priority
 - `EntityGraph.reachable(to=target_entity)` → returns `(source, target)` pairs
-- Filter `source.role == "PROVIDER"` for upstream providers only
-- Output: per-target provider dependency list with reliability scores
+- Filter source role for upstream entities only as needed
+- Output: per-target upstream dependency list with reliability scores
 
 ---
 
-## "If a key provider goes offline, which downstream entities and resources are impacted?"
+## "If a key entity goes offline, which downstream entities and resources are impacted?"
 
 ### Ontology signals
 - Same directed `EntityGraph` as the upstream example (Entity → Entity via `provides_to`)
@@ -87,8 +87,8 @@ Discovery-to-routing walkthroughs for graph reasoner questions. Each example sho
 {"algorithm": "reachable", "graph_construction": {"node_concept": "Entity",
   "directed": true, "weighted": false,
   "edge_definition": "Entity.provides_to relationship"},
- "target_filter": "Entity.name == '<key provider>' (parameterized)",
- "output_binding": "(source_provider, affected_target) reachable pairs"}
+ "target_filter": "Entity.name == '<key entity>' (parameterized)",
+ "output_binding": "(source_entity, affected_entity) reachable pairs"}
 ```
 
 ### Modeling needs (→ rai-ontology-design)
@@ -97,10 +97,10 @@ Discovery-to-routing walkthroughs for graph reasoner questions. Each example sho
 - Join path to quantities: `Allocation.quantity` for volume at risk
 
 ### Reasoner handoff (→ graph workflow)
-- Define target: `model.Relationship("Target Provider")` filtered by name
-- `EntityGraph.reachable(from_=target_provider)` → returns all downstream entities
+- Define target: `model.Relationship("Target Entity")` filtered by name
+- `EntityGraph.reachable(from_=target_entity)` → returns all downstream entities
 - Join to downstream entities and Resource concepts for impact quantification
-- Output: affected targets with resources at risk and quantity exposure
+- Output: affected entities with resources at risk and quantity exposure
 
 ### Cumulative discovery note
-This question pairs naturally with prescriptive: "Given the impact of the key provider going offline, how should we re-allocate to minimize cost?" (graph → prescriptive chain). The reachability output identifies which alternatives are available.
+This question pairs naturally with prescriptive: "Given the impact of the key entity going offline, how should we re-allocate to minimize cost?" (graph → prescriptive chain). The reachability output identifies which alternatives are available.

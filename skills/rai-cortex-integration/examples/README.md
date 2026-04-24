@@ -6,7 +6,7 @@ For full documentation — configuration, privileges, verbalizers, queries, and 
 
 | Example | File | Description |
 |---------|------|-------------|
-| Deployment Script | `deploy.py` | Primary reference: CLI lifecycle management using the recommended zero-arg `init_tools()` pattern. Configures the full level-3 registry (verbalizer + queries) |
+| Deployment Script | `deploy.py` | Primary reference: CLI lifecycle management using the recommended zero-arg `init_tools()` pattern. Configures verbalizer + queries (Step 3, level 3 of the progression) |
 | Model modules | `model/` | Core, computed, and query modules referenced by `init_tools()` |
 
 `deploy.py` is a reference implementation intended to be copied into the user's

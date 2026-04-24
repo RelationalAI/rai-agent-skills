@@ -4,12 +4,12 @@ Discovery-to-routing walkthroughs for predictive reasoner questions. Each exampl
 
 ---
 
-## "Which providers will likely have the most at-risk activities next period?"
+## "Which entities will likely have the most at-risk activities next period?"
 
 ### Ontology signals
 - `RiskPrediction` table in schema with `predicted_risk_prob`, `risk_tier`, `confidence` columns → pre-computed predictions exist
 - `Activity` concept with `risk_value` and `time_period` → historical outcome data available
-- `Provider` concept with `reliability_score` → existing reliability metric
+- `Entity` concept with `reliability_score` → existing reliability metric
 
 ### Reasoner classification: Predictive (pre-computed classification)
 - "Will likely" + future time horizon → predictive
@@ -20,7 +20,7 @@ Discovery-to-routing walkthroughs for predictive reasoner questions. Each exampl
 ### Implementation hint
 ```json
 {"type": "classification", "mode": "pre_computed",
- "target_concept": "Provider", "target_property": "risk_probability",
+ "target_concept": "Entity", "target_property": "risk_probability",
  "output_concept": "RiskPrediction",
  "output_properties": ["predicted_risk_prob", "risk_tier", "confidence"],
  "pre_computed_table": "RISK_PREDICTION",
@@ -29,15 +29,15 @@ Discovery-to-routing walkthroughs for predictive reasoner questions. Each exampl
 
 ### Modeling needs (→ rai-ontology-design)
 - Map `RiskPrediction` table as a concept if not already in the model
-- Establish relationship: `RiskPrediction.provider` → `Provider` (via entity_id FK)
+- Establish relationship: `RiskPrediction.entity` → `Entity` (via entity_id FK)
 - Properties: `predicted_risk_prob` (Float), `risk_tier` (String), `confidence` (Float)
 
 ### Reasoner handoff
 - For pre-computed mode: query the `RiskPrediction` concept filtered to the target time period
-- Rank providers by `predicted_risk_prob` descending
-- Output: ranked provider list with risk probability, risk tier, confidence
+- Rank entities by `predicted_risk_prob` descending
+- Output: ranked entity list with risk probability, risk tier, confidence
 
 ### Cumulative discovery note
 This prediction output enables prescriptive chains:
 - "Given predicted risks, how should we re-allocate to minimize cost?" → predictive → prescriptive
-- "Set reliability threshold at 80% — exclude providers below" → downstream prescriptive uses `RiskPrediction.predicted_risk_prob` as a reliability parameter
+- "Set reliability threshold at 80% — exclude entities below" → downstream prescriptive uses `RiskPrediction.predicted_risk_prob` as a reliability parameter

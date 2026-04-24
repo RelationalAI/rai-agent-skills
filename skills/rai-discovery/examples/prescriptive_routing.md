@@ -4,17 +4,17 @@ Discovery-to-routing walkthroughs for prescriptive reasoner questions. Each exam
 
 ---
 
-## "How should we re-allocate components if a provider goes offline?"
+## "How should we re-allocate components if an entity goes offline?"
 
 ### Ontology signals
 - `Activity` concept with `source_node`, `target_node`, `cost_per_unit`, `capacity_per_period` → flow network with costs and capacity
 - `Dependency` with `input_resource`, `output_resource`, `input_quantity` → component requirements per output
 - `Demand` with `quantity` per `entity_id` and `resource_id` → forcing requirement (demand must be met)
-- Binary scenario: exclude one provider entirely → contingency planning
+- Binary scenario: exclude one entity entirely → contingency planning
 
 ### Reasoner classification: Prescriptive (network flow LP)
 - "How should we re-allocate" → optimization decision
-- Network structure (provider → intermediary → hub) → network flow type
+- Network structure (entity → intermediary → hub) → network flow type
 - Capacity constraints + cost minimization → linear program
 - NOT graph — question is "what should we do?", not "what's the structure?"
 
@@ -24,7 +24,7 @@ Discovery-to-routing walkthroughs for prescriptive reasoner questions. Each exam
  "decision_scope": "ComponentFlow through Activity — quantity to move per activity route",
  "forcing_requirement": "Dependency component demand satisfaction per (Resource, Node)",
  "objective_property": "total_cost (flow * cost_per_unit) + unmet_penalty",
- "scenario_parameter": "excluded_provider (binary: force flow=0 for that provider's activities)"}
+ "scenario_parameter": "excluded_entity (binary: force flow=0 for that entity's activities)"}
 ```
 
 ### Modeling needs (→ rai-ontology-design, rai-prescriptive-problem-formulation)
@@ -32,21 +32,21 @@ Discovery-to-routing walkthroughs for prescriptive reasoner questions. Each exam
 - Slack concept: `UnmetComponent` per (Resource, Node) for infeasibility handling
 - Variables: `ComponentFlow.quantity` (continuous, 0 to capacity), `UnmetComponent.quantity` (continuous, >= 0)
 - Constraints: per (Resource, Node): sum(inflow) + unmet >= Dependency requirement
-- Constraint: if excluded provider, force `ComponentFlow.quantity == 0` for that provider's activities
+- Constraint: if excluded entity, force `ComponentFlow.quantity == 0` for that entity's activities
 
 ### Reasoner handoff (→ prescriptive workflow)
 - Define variables → define constraints → define objective → validate formulation → solve
 - Solver: HiGHS (LP/MIP)
-- Scenario comparison: baseline (all providers) vs offline (excluded provider)
+- Scenario comparison: baseline (all entities) vs offline (excluded entity)
 
 ---
 
-## "Minimize total flow cost while meeting demand given provider reliability"
+## "Minimize total flow cost while meeting demand given entity reliability"
 
 ### Ontology signals
 - Same `Activity` network as the previous example with costs and capacity
 - `Demand` concept with quantity per target and resource → forcing requirement
-- `Entity.reliability_score` → provider quality metric
+- `Entity.reliability_score` → entity quality metric
 - `RiskPrediction.predicted_risk_prob` → predicted reliability from predictive stage
 
 ### Reasoner classification: Prescriptive (network flow LP with predictive input)
@@ -61,7 +61,7 @@ Discovery-to-routing walkthroughs for prescriptive reasoner questions. Each exam
  "forcing_requirement": "demand satisfaction per Resource (sum of inflow + unmet >= demand)",
  "objective_property": "flow_cost + unmet_penalty + reliability_penalty",
  "scenario_parameters": ["reliability_weight (soft penalty multiplier)",
-                         "min_reliability (hard threshold, exclude providers below)"]}
+                         "min_reliability (hard threshold, exclude entities below)"]}
 ```
 
 ### Modeling needs (→ rai-ontology-design, rai-prescriptive-problem-formulation)
@@ -79,4 +79,4 @@ Discovery-to-routing walkthroughs for prescriptive reasoner questions. Each exam
 - Output: cost-vs-reliability tradeoff frontier across scenarios
 
 ### Cumulative discovery note
-This problem uses predictive output (RiskPrediction) as a prescriptive parameter — a key predictive → prescriptive chain. Discovery should suggest: "Given predicted provider risks (from the prediction stage), optimize allocation to minimize cost while maintaining reliability."
+This problem uses predictive output (RiskPrediction) as a prescriptive parameter — a key predictive → prescriptive chain. Discovery should suggest: "Given predicted entity risks (from the prediction stage), optimize allocation to minimize cost while maintaining reliability."

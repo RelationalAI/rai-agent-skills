@@ -81,10 +81,10 @@ Question discovery is the analyst's springboard into data-driven reasoning. The 
 
 - Analyze the ontology to surface opportunities grounded in actual data
 - Write the `statement` field as a business question the analyst can evaluate -- not a technical formulation
-  - GOOD: "Allocate inventory across warehouses to minimize stockouts while staying within budget"
+  - GOOD: "Allocate capacity across sites to meet demand while staying within budget"
   - GOOD: "Schedule technicians to maintenance tasks to minimize downtime and balance workload"
-  - BAD: "Minimize sum(OPERATION.COST_PER_UNIT * OPERATION.X_FLOW) subject to SITE.CAPACITY"
-  - BAD: "Optimize Shipment.quantity across Operation edges"
+  - BAD: "Minimize sum(ACTIVITY.COST_PER_UNIT * ACTIVITY.X_FLOW) subject to SITE.CAPACITY"
+  - BAD: "Optimize Allocation.quantity across Activity edges"
 - Maintain full technical specificity in `implementation_hint` fields -- these drive downstream workflow and must reference actual concept/property names
 - For each suggestion, distinguish what's ready to pursue, what needs model enrichment (auto-fixable), and what needs new data (blocks the question)
 - Suggest questions across reasoner types when the data supports it -- don't default to only one type
@@ -100,8 +100,8 @@ Frame suggestions by the type of question they answer:
 - "Here's what we can validate/enforce" (rules)
 
 Connect each suggestion to the decision or insight it enables, not just the analysis it performs:
-- NOT: "Run centrality analysis on the supply network"
-- YES: "Identify which warehouses are critical connectors -- so you know where disruptions would cascade and where to invest in redundancy"
+- NOT: "Run centrality analysis on the network"
+- YES: "Identify which hubs are critical connectors -- so you know where disruptions would cascade and where to invest in redundancy"
 
 ---
 
@@ -154,7 +154,7 @@ Some questions require multiple reasoners in sequence. Each stage's output enric
 
 ### Suggesting chained questions
 
-- State the full chain in the `statement` field: "Forecast regional demand (predictive), then optimize warehouse allocation to minimize stockouts (prescriptive)"
+- State the full chain in the `statement` field: "Forecast appointment volume per clinic (predictive), then assign staff to shifts to meet expected demand (prescriptive)"
 - Tag with `reasoners: ["predictive", "prescriptive"]` (ordered by execution sequence)
 - Implementation hint includes per-stage detail: what each stage needs and what it produces for the next stage
 
@@ -356,7 +356,7 @@ When the user selects a question with **MODEL_GAP** feasibility:
 3. After enrichment, re-assess feasibility -- it should now be READY
 4. Then proceed to the reasoner workflow via Post-Discovery Routing
 
-For graph questions, enrichment may also include constructing derived relationships needed for graph edges (e.g., a `ships_to` relationship derived from Shipment data, or operation-based site connectivity).
+For graph questions, enrichment may also include constructing derived relationships needed for graph edges (e.g., a `connects_to` relationship derived from Activity data linking source/target nodes).
 
 ---
 
@@ -377,16 +377,16 @@ Each suggestion includes a `reasoners` field — an ordered list specifying the 
 
 ```json
 {
-  "statement": "Identify which warehouses are critical connectors in the supply network",
+  "statement": "Identify which hubs are critical connectors in the network",
   "reasoners": ["graph"],
   "feasibility": "READY",
   "implementation_hint": {
     "algorithm": "eigenvector_centrality",
     "graph_construction": {
-      "node_concept": "Site",
+      "node_concept": "Node",
       "directed": false,
       "weighted": true,
-      "edge_definition": "Operation linking source_site to output_site"
+      "edge_definition": "Activity linking source_node to target_node"
     },
     "output_binding": "(node, centrality_score)"
   }
@@ -406,7 +406,7 @@ Each suggestion includes a `reasoners` field — an ordered list specifying the 
 
 ```json
 {
-  "statement": "Identify critical supply nodes, then optimize allocation weighted by importance",
+  "statement": "Identify critical nodes, then optimize allocation weighted by importance",
   "reasoners": ["graph", "prescriptive"],
   "feasibility": "READY",
   "implementation_hint": {
@@ -414,12 +414,12 @@ Each suggestion includes a `reasoners` field — an ordered list specifying the 
       {
         "reasoner": "graph",
         "algorithm": "eigenvector_centrality",
-        "graph_construction": { "node_concept": "Site", "directed": false, "weighted": true },
-        "output_binding": "Site.centrality_score"
+        "graph_construction": { "node_concept": "Node", "directed": false, "weighted": true },
+        "output_binding": "Node.centrality_score"
       },
       {
         "reasoner": "prescriptive",
-        "decision_scope": "Site.allocation_quantity",
+        "decision_scope": "Node.allocation_quantity",
         "objective_property": "maximize weighted_allocation (centrality_score * quantity)"
       }
     ]

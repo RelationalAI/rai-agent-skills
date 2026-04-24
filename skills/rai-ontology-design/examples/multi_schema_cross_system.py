@@ -114,10 +114,10 @@ SystemAProject.default_branch = model.Property(f"{SystemAProject} has {String:de
 SystemAWorkItem.created_at = model.Property(f"{SystemAWorkItem} has {Integer:created_at}")
 SystemAWorkItem.updated_at = model.Property(f"{SystemAWorkItem} has {Integer:updated_at}")
 SystemAWorkItem.closed_at = model.Property(f"{SystemAWorkItem} has {Integer:closed_at}")
-SystemAWorkItem.merge_commit_sha = model.Property(f"{SystemAWorkItem} has {String:merge_commit_sha}")
+SystemAWorkItem.merge_ref = model.Property(f"{SystemAWorkItem} has {String:merge_ref}")
 SystemAWorkItem.is_draft = model.Relationship(f"{SystemAWorkItem} is draft")
-SystemAWorkItem.head_ref = model.Property(f"{SystemAWorkItem} has {String:head_ref}")
-SystemAWorkItem.base_ref = model.Property(f"{SystemAWorkItem} has {String:base_ref}")
+SystemAWorkItem.source_ref = model.Property(f"{SystemAWorkItem} has {String:source_ref}")
+SystemAWorkItem.target_ref = model.Property(f"{SystemAWorkItem} has {String:target_ref}")
 
 # System A activity
 SystemAActivity.message = model.Property(f"{SystemAActivity} has {String:message}")

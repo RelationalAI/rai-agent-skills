@@ -35,7 +35,7 @@ Discovery-to-routing walkthroughs for rules reasoner questions. Each example sho
 - `model.define(Entity.is_unreliable()).where(Entity.reliability_score < 0.7)`
 - Or compound: `.where(Entity.reliability_score < 0.7, Entity.at_risk_ratio > 0.3)`
 - Output: boolean flag queryable via `model.where(Entity.is_unreliable()).select(...)`
-- Available for downstream prescriptive use (e.g., exclude unreliable providers from allocation)
+- Available for downstream prescriptive use (e.g., exclude unreliable entities from allocation)
 
 ---
 

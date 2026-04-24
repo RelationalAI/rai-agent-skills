@@ -5,12 +5,7 @@
 # Concept.ref() creates a second independent iterator for pairwise binding;
 # Junction concept connects two parent concepts; filter_by for FK resolution.
 
-"""Generic entity-aggregation — Owners, accounts, transactions, items, collections.
-
-Patterns: Binary property (Item.covar between two Item instances),
-.ref() for pairwise data binding, collection/allocations junction,
-filter_by for FK resolution, Sources class with Snowflake tables.
-"""
+"""Pattern: binary property with `.ref()` for pairwise self-join + junction concept for many-to-many."""
 from relationalai.semantics import Model, Date, DateTime, Float, Integer, String
 
 model = Model("Entity Aggregation")

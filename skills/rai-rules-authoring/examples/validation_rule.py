@@ -3,7 +3,6 @@
 # unary Relationship for boolean output; both "valid" and "exceeds" flags defined.
 
 from relationalai.semantics import Float, Integer, Model, String
-import relationalai.semantics as rai
 
 model = Model("validation_rule")
 

@@ -73,7 +73,7 @@ _Site.id = Property(f"{_Site} has id {String:id}")
 model.define(_Site.new(id=TABLE__SITE.id))
 ```
 
-Both patterns are valid. Use `identify_by` when the identity key and type are known upfront. Use the Property + `.new()` pattern in modeler exports where identity is established during data loading.
+Both patterns are valid. Use `identify_by` when the identity key and type are known upfront. Use the Property + `.new()` pattern when identity is established during data loading.
 
 ### Identity pattern taxonomy
 
@@ -187,9 +187,9 @@ Site.capacity = model.Property(f"{Site} has {Float:capacity}")
 Site.max_throughput = model.Property(f"{Site} has {Float:max_throughput}")
 ```
 
-**Multi-field Relationships with short_name (modeler exports):**
+**Multi-field Relationships with short_name (grouped fields):**
 
-The modeler groups related fields into a single Relationship:
+When grouping related fields under one Relationship:
 
 ```python
 Site.location_details = model.Relationship(
