@@ -1,5 +1,5 @@
 ---
-name: dev-quality-skills-review
+name: dev-skills-review
 description: Reviews RAI agent skills for structure, content quality, prompt engineering,
   boundaries, examples, and agent usability. Use when creating, reviewing, or auditing
   skills in rai-agent-skills or rai-agent-skills-private.
@@ -21,12 +21,12 @@ The ultimate quality gate. Everything below serves this — if an agent can't di
 
 ## Structure
 
-- [ ] YAML frontmatter with `name` and `description` (description is one line, trigger-ready, third-person)
-- [ ] **Description answers two questions**: (1) WHAT the skill does (the substantive scope), (2) WHEN Claude should invoke it (the trigger condition). One sentence, both halves present.
+- [ ] YAML frontmatter with `name` and `description` (one line, imperative mood, trigger-ready, under 1024 characters)
+- [ ] **Description answers two questions**: (1) WHAT the skill covers, framed from user-intent angle not implementation mechanics; (2) WHEN Claude should invoke it, including cases where the user doesn't name the domain directly ("even if they don't mention X"). One sentence, both halves present.
 - [ ] `SKILL.md` at root, `references/` for deep-dive, `examples/` if applicable
 - [ ] `## Summary` with What, When to use, When NOT to use, Overview
 - [ ] `## Quick Reference` near top — tables/code blocks, not prose
-- [ ] `## Common Pitfalls` table (Mistake / Cause / Fix)
+- [ ] `## Common Pitfalls` table (Mistake / Cause / Fix) captures counterintuitive, environment-specific facts the agent would get wrong without being told — not generic advice
 - [ ] `## Examples` table linking to example files
 - [ ] `## Reference files` with "when to use" framing
 - [ ] Stability classification (`v1-STABLE` or `v1-SENSITIVE`) below title
@@ -47,6 +47,7 @@ The ultimate quality gate. Everything below serves this — if an agent can't di
 - [ ] **Defaults over menus**: when multiple tools/approaches apply, one is the default with brief escape hatch — not equal-weight lists of options
 - [ ] **Short, generic parentheticals**: keep inline "e.g." examples short and generic. Drop overly-specific example phrases unless they disambiguate a rule — when in doubt, cut them.
 - [ ] **Extracted content keeps an entry point**: when content moves to a reference file (line-count, depth, or scope reasons), SKILL.md retains (a) an inline summary or canonical table for the extracted topic, (b) a specific load-trigger pointer naming what's in the reference file, AND (c) a Reference Files table row. The agent must still discover the topic from SKILL.md alone.
+- [ ] **Grounded, not generic**: guidance reflects specific APIs, conventions, and failure modes — if a paragraph could apply to any project ("follow best practices", "handle errors appropriately"), cut or replace it with the project-specific rule it's standing in for
 
 ---
 
@@ -70,6 +71,7 @@ The ultimate quality gate. Everything below serves this — if an agent can't di
 - [ ] MECE across skills (no overlap; boundary drawn in "When NOT to use")
 - [ ] Every `##` section falls within scope defined by Summary
 - [ ] Cross-references use skill name only (e.g., `rai-pyrel-coding`), point to existing skills
+- [ ] **Coherent scope**: skill covers one coherent unit of work — not so narrow that related tasks force multiple skills to load, not so broad that activation becomes imprecise
 - [ ] **Negative boundary in description** when the positive scope could overlap with an adjacent skill — explicit "not for X (see other-skill)" clause. Routing failures from over-broad WHEN clauses are silent and expensive.
 
 ---
@@ -78,6 +80,7 @@ The ultimate quality gate. Everything below serves this — if an agent can't di
 
 - [ ] **Validation loops**: for tasks with verifiable output, skill instructs the agent to validate its own work before moving on (run validator → fix → re-validate)
 - [ ] **Reference load triggers are specific**: references say *when* to load (e.g., "if the API returns non-200") — not generic "see references/ for details"
+- [ ] **Pattern matches task shape**: output-format templates when the agent must produce a specific structure; explicit checklists for multi-step workflows with dependencies; plan-validate-execute for batch/destructive operations; bundled scripts for logic the agent would otherwise reinvent each run
 
 ---
 
