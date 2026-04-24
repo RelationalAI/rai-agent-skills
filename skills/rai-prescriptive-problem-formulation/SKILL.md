@@ -229,7 +229,7 @@ Common business phrases are ambiguous between constraint and objective. Always c
 
 Pre-solve elicitation has a fundamental limit: users cannot always articulate preferences until they see a concrete result that violates them. "No constraints" often means "I can't think of any right now," not "anything goes." Preferences may be real but latent — only surfaceable through confrontation with a specific proposal.
 
-**Principle: Use results as an elicitation tool.** The first solve with minimal constraints is diagnostic, not prescriptive — its purpose is to provoke reactions that reveal the real formulation. This is Step 6 of the Formulation Workflow.
+**Principle: Use results as an elicitation tool.** The first solve with minimal constraints is diagnostic, not prescriptive — its purpose is to provoke reactions that reveal the real formulation. This is Step 7 of the Formulation Workflow.
 
 **The refinement loop:**
 
@@ -266,7 +266,7 @@ When a user rejects an aspect of the result, the rejection is ambiguous. Before 
 - **Specific vs. vague** — if the rejection is vague ("this seems aggressive"), probe which dimension: concentration, deviation from current, absolute level, or something else entirely. Each maps to a different constraint type.
 
 **When to stop iterating:**
-- The user accepts the result — explicitly, or by shifting to implementation questions. If the user accepts on the first pass, Step 6 is done; do not probe for objections that aren't there.
+- The user accepts the result — explicitly, or by shifting to implementation questions. If the user accepts on the first pass, Step 7 is done; do not probe for objections that aren't there.
 - The user provides a specific value ("just cap it at 10%") — take the bound directly, no need to run the disambiguation protocol.
 - Changes between iterations become marginal
 - The user starts making trade-offs between constraints — this signals the efficient frontier has been found and the remaining decisions are genuinely preferential
