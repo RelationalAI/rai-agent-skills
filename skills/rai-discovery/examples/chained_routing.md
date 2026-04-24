@@ -29,10 +29,6 @@ Two questions that form a cumulative chain:
 - **Enrichment bridge:** centrality scores are now queryable properties on Site
 - **Stage 2:** Prescriptive formulation uses `Site.centrality_score` as allocation weight — higher centrality warehouses get priority in allocation
 
-### Reference
-- Stage 1: `hero-user-journey/src/hero_user_journey/queries/q11_critical_warehouse_centrality.py`
-- Stage 2: formulation layer (not in hero journey — an example of cumulative expansion)
-
 ---
 
 ## Predictive → Prescriptive: "Forecast supplier delays, then optimize re-sourcing given predicted reliability"
@@ -62,10 +58,6 @@ Two questions that form a sequential chain:
   - Scenario 2: hard threshold — exclude suppliers where `predicted_delay_prob > threshold`
   - Scenario 3: parameter sweep across threshold values → cost-vs-reliability tradeoff
 
-### Reference
-- Stage 1 data: `hero-user-journey/src/hero_user_journey/model/generated_corrected.py` (DelayPrediction concept)
-- Stage 2: `hero-user-journey/src/hero_user_journey/queries/q8_supplier_reliability_transport.py`
-
 ---
 
 ## Graph → Graph → Prescriptive: "Map network structure, assess impact, then optimize contingency"
@@ -94,8 +86,3 @@ A three-stage chain where each question builds on the previous:
 - **Stage 1:** `weakly_connected_component()` identifies clusters; Bridge concept flags connectors
 - **Stage 2:** `reachable(from_=target_supplier)` maps the blast radius of a supplier disruption
 - **Stage 3:** Prescriptive formulation uses Stages 1+2 to: (a) force redundancy for bridge nodes, (b) constrain re-sourcing to reachable alternatives only
-
-### Reference
-- Stage 1: `hero-user-journey/src/hero_user_journey/queries/q10_critical_warehouse_bridges.py`
-- Stage 2: `hero-user-journey/src/hero_user_journey/queries/q6_at_risk_customers_skus.py`
-- Stage 3: `hero-user-journey/src/hero_user_journey/queries/q7_component_sourcing.py`

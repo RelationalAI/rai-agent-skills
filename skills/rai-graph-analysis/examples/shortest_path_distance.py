@@ -70,7 +70,7 @@ graph = Graph(
 
 src, dst, length = graph.Node.ref("s"), graph.Node.ref("d"), Float.ref("len")
 dist_df = (
-    model.where(graph.distance()(src, dst, length))
+    model.where(graph.distance(full=True)(src, dst, length))
     .select(
         src.name.alias("from_city"),
         dst.name.alias("to_city"),

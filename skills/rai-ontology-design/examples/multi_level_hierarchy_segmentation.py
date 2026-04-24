@@ -1,13 +1,13 @@
-# Pattern: multi-level location hierarchy + menu structure + customer segmentation
+# Pattern: multi-level location hierarchy + product catalog structure + customer segmentation
 # Key ideas: Country → Region → City → Location hierarchy chain using Relationship
-# for concept-to-concept FK links; MenuItem → MenuType category hierarchy;
+# for concept-to-concept FK links; Product → Category classification hierarchy;
 # customer segmentation shows conditional branching (multiple .where() rules for
 # mutually exclusive segments).
 # Best practices: Property for scalars and functional FKs; Relationship for multi-valued links.
 
 from relationalai.semantics import Float, Integer, Model, String
 
-model = Model("Tasty Bytes")
+model = Model("retail_hierarchy")
 
 # --- Sample Data ---
 location_source = model.data([
@@ -15,13 +15,13 @@ location_source = model.data([
     {"LOCATION_ID": 2, "CITY_ID": 10},
     {"LOCATION_ID": 3, "CITY_ID": 20},
 ])
-menu_source = model.data([
-    {"MENU_ITEM_ID": 1, "MENU_ITEM_NAME": "Lobster Mac", "SALE_PRICE_USD": 14.0,
-     "COST_OF_GOODS_USD": 5.5, "MENU_TYPE_ID": 100},
-    {"MENU_ITEM_ID": 2, "MENU_ITEM_NAME": "Hot Dog", "SALE_PRICE_USD": 6.0,
-     "COST_OF_GOODS_USD": 1.5, "MENU_TYPE_ID": 100},
-    {"MENU_ITEM_ID": 3, "MENU_ITEM_NAME": "Lemonade", "SALE_PRICE_USD": 4.0,
-     "COST_OF_GOODS_USD": 0.8, "MENU_TYPE_ID": 200},
+product_source = model.data([
+    {"PRODUCT_ID": 1, "PRODUCT_NAME": "Wireless Headphones", "SALE_PRICE_USD": 149.0,
+     "COST_OF_GOODS_USD": 55.0, "CATEGORY_ID": 100},
+    {"PRODUCT_ID": 2, "PRODUCT_NAME": "USB-C Cable", "SALE_PRICE_USD": 12.0,
+     "COST_OF_GOODS_USD": 3.0, "CATEGORY_ID": 100},
+    {"PRODUCT_ID": 3, "PRODUCT_NAME": "Desk Lamp", "SALE_PRICE_USD": 40.0,
+     "COST_OF_GOODS_USD": 9.0, "CATEGORY_ID": 200},
 ])
 customer_source = model.data([
     {"CUSTOMER_ID": 1, "LIFETIME_SPEND": 6200.0},
@@ -34,8 +34,8 @@ CountryId = model.Concept("CountryId", extends=[Integer])
 RegionId = model.Concept("RegionId", extends=[Integer])
 CityId = model.Concept("CityId", extends=[Integer])
 LocationId = model.Concept("LocationId", extends=[Integer])
-MenuTypeId = model.Concept("MenuTypeId", extends=[Integer])
-MenuItemId = model.Concept("MenuItemId", extends=[Integer])
+CategoryId = model.Concept("CategoryId", extends=[Integer])
+ProductId = model.Concept("ProductId", extends=[Integer])
 CustomerId = model.Concept("CustomerId", extends=[Integer])
 
 # --- Location Hierarchy: Country → Region → City → Location ---
@@ -62,23 +62,23 @@ model.define(Location.new(
     city=City.filter_by(id=location_source.CITY_ID),
 ))
 
-# --- Menu Hierarchy: MenuType → MenuItem ---
-MenuType = model.Concept("MenuType", identify_by={"id": MenuTypeId})
-MenuType.name = model.Property(f"{MenuType} has {String:name}")
+# --- Product Hierarchy: Category → Product ---
+Category = model.Concept("Category", identify_by={"id": CategoryId})
+Category.name = model.Property(f"{Category} has {String:name}")
 
-MenuItem = model.Concept("MenuItem", identify_by={"id": MenuItemId})
-MenuItem.name = model.Property(f"{MenuItem} has {String:name}")
-MenuItem.price = model.Property(f"{MenuItem} has {Float:price}")
-MenuItem.cost = model.Property(f"{MenuItem} has {Float:cost}")
-MenuItem.menu_type = model.Relationship(
-    f"{MenuItem} belongs to {MenuType}", short_name="menu_item_menu_type")
+Product = model.Concept("Product", identify_by={"id": ProductId})
+Product.name = model.Property(f"{Product} has {String:name}")
+Product.price = model.Property(f"{Product} has {Float:price}")
+Product.cost = model.Property(f"{Product} has {Float:cost}")
+Product.category = model.Relationship(
+    f"{Product} belongs to {Category}", short_name="product_category")
 
-model.define(MenuItem.new(
-    id=menu_source.MENU_ITEM_ID,
-    name=menu_source.MENU_ITEM_NAME,
-    price=menu_source.SALE_PRICE_USD,
-    cost=menu_source.COST_OF_GOODS_USD,
-    menu_type=MenuType.filter_by(id=menu_source.MENU_TYPE_ID),
+model.define(Product.new(
+    id=product_source.PRODUCT_ID,
+    name=product_source.PRODUCT_NAME,
+    price=product_source.SALE_PRICE_USD,
+    cost=product_source.COST_OF_GOODS_USD,
+    category=Category.filter_by(id=product_source.CATEGORY_ID),
 ))
 
 # --- Customer Segmentation ---

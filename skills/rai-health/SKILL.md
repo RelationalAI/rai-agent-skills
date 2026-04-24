@@ -245,7 +245,7 @@ affected row count.
 | `owner` = any other identity; caller has an admin role | Genuine API failure — not a permissions problem | Open a support ticket with the transaction ID and full error response |
 | `get_transaction` itself returns 400 | Invalid transaction ID, or insufficient role to read any transactions | Verify the transaction ID; if correct, confirm read access to `relationalai.api` |
 
-See [transaction-debug.md](references/transaction-debug.md) for full column reference and example outputs.
+When `get_transaction` returns an unexpected column or state code, or when inspecting load errors per row, see [transaction-debug.md](references/transaction-debug.md).
 
 ---
 

@@ -18,7 +18,7 @@
 # =============================================================================
 # Each point is a dict from the epsilon sweep (see epsilon_constraint_pareto.py):
 #   pareto_points = [
-#       {"label": "min_risk", "primary": 18704.12, "secondary": 137.25, "variables": df},
+#       {"label": "min_primary", "primary": 18704.12, "secondary": 137.25, "variables": df},
 #       {"label": "eps_1",    "primary": 19906.79, "secondary": 147.71, "variables": df},
 #       ...
 #   ]
@@ -28,16 +28,16 @@
 
 # --- Example data (from a tested epsilon constraint sweep) ---
 pareto_points = [
-    {"label": "min_risk", "primary": 18704.12, "secondary": 137.25},
+    {"label": "min_primary", "primary": 18704.12, "secondary": 137.25},
     {"label": "eps_1", "primary": 19906.79, "secondary": 147.71},
     {"label": "eps_2", "primary": 23514.78, "secondary": 158.17},
     {"label": "eps_3", "primary": 30698.48, "secondary": 168.63},
     {"label": "eps_4", "primary": 44122.28, "secondary": 179.08},
     {"label": "eps_5", "primary": 63889.45, "secondary": 189.54},
-    {"label": "max_ret", "primary": 90000.00, "secondary": 200.00},
+    {"label": "max_secondary", "primary": 90000.00, "secondary": 200.00},
 ]
-primary_name = "Risk (minimize)"
-secondary_name = "Return (maximize)"
+primary_name = "Primary objective (minimize)"
+secondary_name = "Secondary objective (maximize)"
 
 # =============================================================================
 # 1. TRADEOFF TABLE: both objectives + marginal rate at each point

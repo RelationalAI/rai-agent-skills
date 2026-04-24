@@ -1,41 +1,40 @@
 # Complex Multi-Entity Rule Example
 
-Real-world example of a 5-entity subtype rule with OR branches and layered dependencies.
-Domain: food truck fleet operations.
+Pattern: 5-entity subtype rule with OR branches and layered dependencies on existing boolean flags and subtypes. The concept names below illustrate the pattern generically; the structure applies to any overlap/risk classification across entities that share a location or context.
 
 ---
 
-## CannibalizationRiskHotspot (5-entity subtype)
+## OverlapRiskHotspot (5-entity subtype)
 
-Identifies locations where two food trucks compete for the same customers, the location
-has high foot traffic, and at least one truck is wasting inventory.
+Identifies locations where two entities overlap at the same location, the location
+has high foot traffic, and at least one entity is wasting inventory.
 
 ```python
 # Subtype of LocationCooccurrence where:
-#   1. High cannibalization score (boolean flag)
+#   1. High overlap score (boolean flag)
 #   2. Location is a HighTrafficLocation (existing subtype)
-#   3. At least one of the two trucks has high inventory waste
-CannibalizationRiskHotspot = model.Concept(
-    "CannibalizationRiskHotspot", extends=[LocationCooccurrence]
+#   3. At least one of the two entities has high inventory waste
+OverlapRiskHotspot = model.Concept(
+    "OverlapRiskHotspot", extends=[LocationCooccurrence]
 )
 
-# Path 1: truck_a has high waste (OR branch 1)
-model.define(CannibalizationRiskHotspot(LocationCooccurrence)).where(
-    LocationCooccurrence.is_high_cannibalization(),   # boolean flag filter
+# Path 1: entity_a has high waste (OR branch 1)
+model.define(OverlapRiskHotspot(LocationCooccurrence)).where(
+    LocationCooccurrence.is_high_overlap(),            # boolean flag filter
     LocationCooccurrence.at_location(Location),        # join to Location
     HighTrafficLocation(Location),                     # existing subtype check
-    LocationCooccurrence.truck_a(FoodTruck),           # join to FoodTruck via truck_a
-    FoodTruck.has_inventory_log(InventoryLog),         # join to InventoryLog
+    LocationCooccurrence.entity_a(Asset),              # join to Asset via entity_a
+    Asset.has_inventory_log(InventoryLog),             # join to InventoryLog
     InventoryLog.is_high_waste(),                      # boolean flag filter
 )
 
-# Path 2: truck_b has high waste (OR branch 2)
-model.define(CannibalizationRiskHotspot(LocationCooccurrence)).where(
-    LocationCooccurrence.is_high_cannibalization(),
+# Path 2: entity_b has high waste (OR branch 2)
+model.define(OverlapRiskHotspot(LocationCooccurrence)).where(
+    LocationCooccurrence.is_high_overlap(),
     LocationCooccurrence.at_location(Location),
     HighTrafficLocation(Location),
-    LocationCooccurrence.truck_b(FoodTruck),           # different FK path
-    FoodTruck.has_inventory_log(InventoryLog),
+    LocationCooccurrence.entity_b(Asset),              # different FK path
+    Asset.has_inventory_log(InventoryLog),
     InventoryLog.is_high_waste(),
 )
 ```

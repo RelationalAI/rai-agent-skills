@@ -40,8 +40,4 @@ Discovery-to-routing walkthroughs for predictive reasoner questions. Each exampl
 ### Cumulative discovery note
 This prediction output enables prescriptive chains:
 - "Given predicted delays, how should we re-source to minimize cost?" → predictive → prescriptive
-- "Set reliability threshold at 80% — exclude suppliers below" → Q8's reliability constraint uses `DelayPrediction.predicted_delay_prob`
-
-### Reference
-- Data model: `hero-user-journey/src/hero_user_journey/model/generated_corrected.py` (DelayPrediction concept)
-- Downstream prescriptive use: `hero-user-journey/src/hero_user_journey/queries/q8_supplier_reliability_transport.py`
+- "Set reliability threshold at 80% — exclude suppliers below" → downstream prescriptive uses `DelayPrediction.predicted_delay_prob` as a reliability parameter

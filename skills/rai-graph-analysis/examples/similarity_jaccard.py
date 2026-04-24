@@ -95,7 +95,7 @@ model.where(
 
 n1, n2, score = graph.Node.ref("a"), graph.Node.ref("b"), Float.ref("s")
 similarity_df = (
-    model.where(graph.jaccard_similarity()(n1, n2, score))
+    model.where(graph.jaccard_similarity(full=True)(n1, n2, score))
     .select(
         n1.name.alias("product_a"),
         n2.name.alias("product_b"),

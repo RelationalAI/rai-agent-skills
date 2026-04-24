@@ -38,7 +38,6 @@ from relationalai.semantics import (
     count, sum, min, max, avg, per, distinct,
 )
 from relationalai.semantics import Number  # Always use Number.size(p,s) — bare Number causes inference issues
-from relationalai.semantics.reasoners.prescriptive import Problem
 
 # Model + concepts
 model = Model("my_model")
@@ -58,20 +57,15 @@ result = model.where(Product.cost > 10).select(Product.id, Product.cost).to_df()
 print(Product.cost)        # → Product.cost
 print(Product.cost > 10)   # → Product.cost > 10
 Product.cost.inspect()     # → executes query, prints DataFrame to stdout
-
-# Solver
-problem = Problem(model, Float)
-problem.solve_for(Product.x_qty, type="cont", lower=0, name=["qty", Product.id])
-problem.satisfy(model.require(sum(Product.x_qty) <= 100))
-problem.minimize(sum(Product.cost * Product.x_qty))
-problem.solve("highs")
 ```
+
+For solver formulation (Problem, solve_for, satisfy, minimize/maximize), see `rai-prescriptive-problem-formulation`.
 
 ---
 
 ## Imports
 
-For the complete import catalog, see [imports.md](references/imports.md).
+When you need imports beyond the common ones shown in Quick Reference (reasoners, `std` library, non-obvious aliases, or avoiding builtin shadowing), see [imports.md](references/imports.md).
 
 ---
 
@@ -215,13 +209,9 @@ Worker.available_for = model.Relationship(f"{Worker} is available for {Shift}")
 ```python
 x = model.Relationship(f"{Float:x}")
 y = model.Relationship(f"{Float:y}")
-
-# Use in solver:
-problem = Problem(model, Float)
-problem.solve_for(x, name="x", lower=-100.0, upper=5.0, start=0.0)
-problem.solve_for(y, name="y", lower=-100.0, upper=5.0, start=0.0)
-problem.minimize((1 - x) ** 2 + 100 * (y - x**2) ** 2)
 ```
+
+For how to bind these to a solver, see `rai-prescriptive-problem-formulation`.
 
 **Global counts/values:** Assign to a Python variable (`NODE_COUNT = count(Node)`). Use a model Relationship only when the value must be available in downstream `define()` rules or solver expressions: `model.define(node_count(count(Node)))`.
 
@@ -292,7 +282,7 @@ class Priority(model.Enum):
 Priority = model.Enum("Priority", ["low", "medium", "high"])
 ```
 
-Note: `Enum` is accessed via `model.Enum`, not imported standalone. See [expression-rules.md](references/expression-rules.md#enums) for full syntax and examples.
+Note: `Enum` is accessed via `model.Enum`, not imported standalone. When defining enums with integer values, comparing enum members in `where()`/`define()`, or using them in property declarations, see [expression-rules.md](references/expression-rules.md#enums).
 
 ---
 
@@ -460,10 +450,10 @@ For the full step-by-step debugging checklist, see [common-pitfalls.md](referenc
 
 | Pattern | Description | File |
 |---|---|---|
-| Multiarity properties + refs | Binding multiple Float.ref() in `.where()`, pairwise week comparison | [examples/retail_markdown_code.py](examples/retail_markdown_code.py) |
-| Standalone Property + union | Property not attached to concept, `model.union()` for multi-component objective, segment self-join | [examples/supply_chain_transport_code.py](examples/supply_chain_transport_code.py) |
+| Multiarity properties + refs | Binding multiple Float.ref() in `.where()`, pairwise multi-arity joins | [examples/multiarity_property_refs.py](examples/multiarity_property_refs.py) |
+| Standalone Property + union | Property not attached to concept, `model.union()` for multi-component objective, segment self-join | [examples/standalone_property_union_objective.py](examples/standalone_property_union_objective.py) |
 | print() debugging | Readable repr for verifying expression structure before query execution | [examples/pprint_debugging.py](examples/pprint_debugging.py) |
-| End-to-end walkthrough | Full ontology + graph + aggregation + query in a single script | [examples/customer_segmentation.py](examples/customer_segmentation.py) |
+| End-to-end walkthrough | Full ontology + graph + aggregation + query in a single script | [examples/graph_derived_subtypes.py](examples/graph_derived_subtypes.py) |
 | `inspect.to_concept()` helper | Reusable helper accepting any DSL handle (Concept / Ref / Chain / FieldRef); `default=None` for defensive use | [examples/inspect_to_concept_helper.py](examples/inspect_to_concept_helper.py) |
 
 ---

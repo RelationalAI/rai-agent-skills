@@ -39,9 +39,6 @@ Discovery-to-routing walkthroughs for prescriptive reasoner questions. Each exam
 - Solver: HiGHS (LP/MIP)
 - Scenario comparison: baseline (all suppliers) vs offline (excluded supplier)
 
-### Reference
-`hero-user-journey/src/hero_user_journey/queries/q7_component_sourcing.py`
-
 ---
 
 ## "Minimize transportation costs while meeting demand given supplier reliability"
@@ -83,6 +80,3 @@ Discovery-to-routing walkthroughs for prescriptive reasoner questions. Each exam
 
 ### Cumulative discovery note
 This problem uses predictive output (DelayPrediction) as a prescriptive parameter — a key predictive → prescriptive chain. Discovery should suggest: "Given predicted supplier delays (from the prediction stage), optimize sourcing to minimize cost while maintaining reliability."
-
-### Reference
-`hero-user-journey/src/hero_user_journey/queries/q8_supplier_reliability_transport.py`

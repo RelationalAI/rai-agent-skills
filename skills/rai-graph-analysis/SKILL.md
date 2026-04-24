@@ -136,10 +136,7 @@ graph = Graph(
 | **Similarity** | `jaccard_similarity()`, `cosine_similarity()`, `adamic_adar()`, `preferential_attachment()` | `(node1, node2, score)` | Entity comparison, link prediction |
 | **Clustering** | `local_clustering_coefficient()`, `average_clustering_coefficient()`, `triangle_count()`, `triangle()`, `unique_triangle()` | `(node, value)` or `(n1, n2, n3)` | Local density, tightness |
 
-**Key compatibility constraints:**
-- `betweenness_centrality()` -- cannot use with `weighted=True`
-- `louvain()` -- cannot use with `directed=True` (use `infomap()` for directed graphs)
-- `local_clustering_coefficient()` -- cannot use with `directed=True` (requires undirected)
+For compatibility constraints (directed/weighted limits per algorithm), see Algorithm Selection below.
 
 ---
 
@@ -231,7 +228,7 @@ Match the question to the algorithm family:
 - **PageRank** — directed influence: importance flows along directed edges. Best for: "which nodes receive the most flow/attention?"
 - **Degree** — local connectivity: count of direct connections. Best for: "which nodes have the most direct relationships?"
 
-See [algorithm-selection.md](references/algorithm-selection.md) for full per-algorithm guidance.
+When choosing between algorithm variants within a family, or needing parameter details, output shape, or compatibility specifics, see [algorithm-selection.md](references/algorithm-selection.md).
 
 ### Step 8: Configure, Execute, and Bind Results
 

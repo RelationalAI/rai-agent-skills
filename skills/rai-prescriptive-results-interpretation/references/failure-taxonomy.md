@@ -1,5 +1,7 @@
 # Failure Taxonomy
 
+This taxonomy spans the full optimization lifecycle (generate → compile → solve → optimal → non-trivial → meaningful). Agents from `rai-prescriptive-problem-formulation` consult it for `generates`/`compiles` levels, and agents from `rai-prescriptive-solver-management` consult it for `solves` and `optimal` levels. Kept in one place so the ladder stays coherent.
+
 ## Table of Contents
 - [Failure Taxonomy by Level](#failure-taxonomy-by-level)
 - [Diagnosis Protocol](#diagnosis-protocol)

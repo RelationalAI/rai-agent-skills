@@ -149,6 +149,8 @@ for var_concept in variables:
 
 Together, (a) and (b) are the downstream complement to Step 1's base-ontology grounding: Step 1 verifies the *inputs* to formulation exist; Step 5 verifies the *outputs* registered correctly and bound to data.
 
+When the formulation fails to generate or compile (before a solve is even attempted), look up the root cause in the unified failure taxonomy at `rai-prescriptive-results-interpretation/references/failure-taxonomy.md` (`generates` and `compiles` levels).
+
 ### Step 6: Simplify (iterate)
 Can we reduce complexity without losing correctness?
 - Static parameters over dynamic calculations
@@ -185,12 +187,7 @@ These are overarching principles that apply to all optimization formulations reg
 
 When presenting variables, constraints, and objectives to the user, describe them in business terms first ("ensure each customer's demand is met," "don't exceed warehouse capacity"), then provide the technical formulation. The analyst selects based on business understanding; the code is generated behind the scenes. Never force users to think in mathematical terms -- business language in, business language out, with valid PyRel as the executable bridge.
 
-**Natural language rule for all user-facing text:** Use domain-natural language in every `description`, `rationale`, `business_mapping`, problem `statement`, and explanation field. Technical `Concept.property` references confuse business users — translate them to readable phrases:
-- `Operation.cost_per_unit` -> "cost per unit for each operation"
-- `sum(Shipment.quantity)` -> "total shipment volume"
-- `Site.capacity` -> "each site's available capacity"
-- `UnmetDemand.x_slack` -> "unmet demand quantity"
-- `sum(Assignment.x_assigned).per(Worker)` -> "number of assignments per worker"
+**Natural language rule for all user-facing text:** Use domain-natural language in every `description`, `rationale`, `business_mapping`, problem `statement`, and explanation field. Technical `Concept.property` references confuse business users — translate them to readable phrases (e.g., `sum(X.quantity).per(Entity)` → "total X quantity per entity"; `Entity.capacity` → "each entity's available capacity").
 
 Code snippets in `solver_registration`, `expression`, and `entity_creation` fields remain technical (valid PyRel). But every field the user reads should sound like a business analyst wrote it, not a database query.
 

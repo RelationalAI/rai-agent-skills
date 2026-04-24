@@ -33,9 +33,6 @@ Discovery-to-routing walkthroughs for graph reasoner questions. Each example sho
 - Filter non-relevant site types (STORE, OFFICE)
 - Output: `Site.centrality_score` available for downstream prescriptive use (e.g., weight allocation by warehouse importance)
 
-### Reference
-`hero-user-journey/src/hero_user_journey/queries/q11_critical_warehouse_centrality.py`
-
 ---
 
 ## "Which suppliers do high-value customers depend upon?"
@@ -70,9 +67,6 @@ Discovery-to-routing walkthroughs for graph reasoner questions. Each example sho
 - `BusinessGraph.reachable(to=target_customer)` → returns `(source, target)` pairs
 - Filter `source.type == "SUPPLIER"` for upstream suppliers only
 - Output: per-customer supplier dependency list with reliability scores
-
-### Reference
-`hero-user-journey/src/hero_user_journey/queries/q5_high_value_customer_dependency.py`
 
 ---
 
@@ -110,6 +104,3 @@ Discovery-to-routing walkthroughs for graph reasoner questions. Each example sho
 
 ### Cumulative discovery note
 This question pairs naturally with prescriptive: "Given the impact of WaferTech going offline, how should we re-source components to minimize cost?" (graph → prescriptive chain). The reachability output identifies which alternatives are available.
-
-### Reference
-`hero-user-journey/src/hero_user_journey/queries/q6_at_risk_customers_skus.py`

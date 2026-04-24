@@ -4,11 +4,10 @@
 # unary Relationships with conditional .where(); computed metrics are defined as
 # expressions over child entities.
 # Best practices: Property for scalars and functional FKs; Relationship for multi-valued links.
-# Illustrated with a Jaffle Shop e-commerce model (customers, orders, line items).
 
 from relationalai.semantics import Float, Integer, Model, String, sum
 
-model = Model("Jaffle Shop")
+model = Model("value_type_fk_resolution")
 
 # --- Sample Data ---
 order_source = model.data([
