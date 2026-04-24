@@ -37,8 +37,8 @@ Install the RelationalAI Agent Skills (https://github.com/RelationalAI/rai-agent
 your own machine — if you're rolling these out to a team, see [Distribute to a team](#distribute-to-a-team) below.
 
 **Most flexible:** clone the repo and symlink its skills into your agent's skills directory. Local edits and
-`git pull` updates propagate instantly across every linked agent. See [Install from source](#install-from-source)
-below.
+`git pull` updates propagate instantly across every linked agent. See **Install from source** under
+[Detailed install guides](#detailed-install-guides) below.
 
 ### Install for yourself
 
@@ -54,25 +54,6 @@ below.
 | **Cursor**                      | No personal marketplace import yet — use **Remote Rules** as a fallback. See the [Cursor guide](#cursor) below                      | Manual re-import                                    |
 
 After installing, start a new session for the skills to become available.
-
-### Install from source
-
-For power users and contributors: clone once and symlink each skill into every agent you use. Local edits and
-upstream `git pull`s both propagate instantly — no re-import step.
-
-```bash
-git clone https://github.com/RelationalAI/rai-agent-skills.git ~/src/rai-agent-skills
-cd ~/src/rai-agent-skills
-
-# link each skill into the agent's skills directory (Claude Code shown):
-for d in plugins/rai/skills/*/; do
-  ln -s "$PWD/$d" ~/.claude/skills/$(basename "$d")
-done
-```
-
-Swap the target directory for other agents: `~/.agents/skills/` (Codex), `~/.cursor/rules/` (Cursor — as Remote
-Rules). To expose the plugin as a unit rather than loose skills, symlink the whole `plugins/rai/` directory into
-the agent's local-plugins location (e.g., `~/.cursor/plugins/local/rai`). Run `git pull` inside the clone to update.
 
 ### Distribute to a team
 
@@ -283,9 +264,23 @@ npx skills update
 </details>
 
 <details>
-<summary><b>Manual install (any agent)</b></summary>
+<summary><b>Install from source (clone + symlink)</b></summary>
 
-Ask your agent to copy the contents of this repo's [skills](skills) folder into its skills folder. This works anywhere
-but provides no update path — you'll need to re-copy after each release.
+For power users and contributors: clone once and symlink each skill into every agent you use. Local edits and
+upstream `git pull`s both propagate instantly — no re-import step.
+
+```bash
+git clone https://github.com/RelationalAI/rai-agent-skills.git ~/src/rai-agent-skills
+cd ~/src/rai-agent-skills
+
+# link each skill into the agent's skills directory (Claude Code shown):
+for d in plugins/rai/skills/*/; do
+  ln -s "$PWD/$d" ~/.claude/skills/$(basename "$d")
+done
+```
+
+Swap the target directory for other agents: `~/.agents/skills/` (Codex), `~/.cursor/rules/` (Cursor — as Remote
+Rules). To expose the plugin as a unit rather than loose skills, symlink the whole `plugins/rai/` directory into
+the agent's local-plugins location (e.g., `~/.cursor/plugins/local/rai`). Run `git pull` inside the clone to update.
 
 </details>
