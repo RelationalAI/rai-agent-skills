@@ -6,5 +6,12 @@
     "name": "RelationalAI"
   },
   "homepage": "https://github.com/RelationalAI/rai-agent-skills",
-  "license": "Apache-2.0"
+  "repository": "https://github.com/RelationalAI/rai-agent-skills",
+  "license": "Apache-2.0",
+  "keywords": [
+    "relationalai",
+    "pyrel",
+    "reasoning",
+    "optimization"
+  ]
 }

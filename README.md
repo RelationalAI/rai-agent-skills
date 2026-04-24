@@ -27,29 +27,63 @@ ontologies and advanced reasoners by generating and executing PyRel code**. They
 
 ## Quickstart
 
-**Easiest:** point your coding agent at this repo and paste the prompt below. The agent will fetch the install guide,
-detect its own environment, and run the right steps. Depending what you agent does, you may need to update the skills
-yourself.
+**Easiest:** point your coding agent at this repo and paste the prompt below.
 
 ```
-Install the RelationalAI Agent Skills (https://github.com/RelationalAI/rai-agent-skills) for your current environment. 
+Install the RelationalAI Agent Skills (https://github.com/RelationalAI/rai-agent-skills) for your current environment. Provide me with instructions on how to keep up-to-date and leverage them across projects.
 ```
 
-**Most robust** Leverage an official channel that supports updates:
+**Most robust:** leverage an official channel that supports updates. The table below is for installing the skills on
+your own machine — if you're rolling these out to a team, see [Distribute to a team](#distribute-to-a-team) below.
+
+**Most flexible:** clone the repo and symlink its skills into your agent's skills directory. Local edits and
+`git pull` updates propagate instantly across every linked agent. See [Install from source](#install-from-source)
+below.
+
+### Install for yourself
 
 | Agent                           | Install                                                                                                                             | Updates                                             |
 |---------------------------------|-------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------|
-| **Claude Code** (CLI)           | `/plugin marketplace add RelationalAI/rai-agent-skills`<br>`/plugin install RAI@RelationalAI`                                       | **Auto** — enable **Sync automatically**            |
+| **Any 45+ agents** (Vercel CLI) | `npx skills add RelationalAI/rai-agent-skills --skill '*'`                                                                          | `npx skills update`                                 |
+| **Claude Code** (CLI)           | `/plugin marketplace add RelationalAI/rai-agent-skills`<br>`/plugin install rai@RelationalAI`                                       | **Auto** — enable **Sync automatically**            |
 | **Claude** (Desktop)            | Use the Customize → Personal plugins **+** UI flow. See the Detailed Install Guide                                                  | **Auto** — enable **Sync automatically**            |
 | **Cortex Code** (CLI)           | `cortex skill add RelationalAI/rai-agent-skills/plugins/rai/skills`                                                                 | `cortex skill update RelationalAI/rai-agent-skills` |
 | **Cortex Code** (Web)           | Clone/download the repo, open a workspace in Snowsight, then click **+** in CoCo → Upload Skills Directory -> `plugins/rai/skills/` | Re-upload the `plugins/rai/skills/` folder          |
-| **Codex** (CLI)                 | `codex plugin marketplace add RelationalAI/rai-agent-skills`<br>`codex`<br>`/plugins`                                               | `codex plugin marketplace upgrade relationalai`     |
-| **Codex** (Desktop)             | Plugins -> Search "RelationalAI"                                                                                                     | **Auto**                                            |
-| **VS Code / Copilot**           | Add `"RelationalAI/rai-agent-skills"` to `chat.plugins.marketplaces`, then install from the Extensions view                         | **Auto** (every 24h)                                |
-| **Cursor**                      | See the [Cursor guide](#cursor) below                                                                                               | Manual re-import                                    |
-| **Any 45+ agents** (Vercel CLI) | `npx skills add RelationalAI/rai-agent-skills --skill '*'`                                                                          | `npx skills update`                                 |
+| **Codex** (CLI)                 | `codex plugin marketplace add RelationalAI/rai-agent-skills`<br>Then inside a `codex` session: `/plugins` → install **rai**          | `codex plugin marketplace upgrade relationalai`     |
+| **VS Code / Copilot**           | Add `"RelationalAI/rai-agent-skills"` to `chat.plugins.marketplaces`, then install **rai** from Extensions (`@agentPlugins`)         | **Auto** (every 24h)                                |
+| **Cursor**                      | No personal marketplace import yet — use **Remote Rules** as a fallback. See the [Cursor guide](#cursor) below                      | Manual re-import                                    |
 
 After installing, start a new session for the skills to become available.
+
+### Install from source
+
+For power users and contributors: clone once and symlink each skill into every agent you use. Local edits and
+upstream `git pull`s both propagate instantly — no re-import step.
+
+```bash
+git clone https://github.com/RelationalAI/rai-agent-skills.git ~/src/rai-agent-skills
+cd ~/src/rai-agent-skills
+
+# link each skill into the agent's skills directory (Claude Code shown):
+for d in plugins/rai/skills/*/; do
+  ln -s "$PWD/$d" ~/.claude/skills/$(basename "$d")
+done
+```
+
+Swap the target directory for other agents: `~/.agents/skills/` (Codex), `~/.cursor/rules/` (Cursor — as Remote
+Rules). To expose the plugin as a unit rather than loose skills, symlink the whole `plugins/rai/` directory into
+the agent's local-plugins location (e.g., `~/.cursor/plugins/local/rai`). Run `git pull` inside the clone to update.
+
+### Distribute to a team
+
+For channels with documented admin paths. Rows here complement — not replace — the individual install above.
+
+| Channel                              | Setup                                                                                                                                                  | Rollout                                                                             |
+|--------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------|
+| **Claude Code** (project settings)   | Commit `extraKnownMarketplaces` to `.claude/settings.json` so the marketplace travels with your repo                                                   | Teammates are prompted to add the marketplace and install **rai** on folder trust  |
+| **Claude Code** (managed / enforced) | Deploy `enabledPlugins` (force-enable) and/or `strictKnownMarketplaces` (allowlist) in OS-level `managed-settings.json`                                | Plugins force-enabled org-wide; users cannot disable                               |
+| **Cursor** (Teams/Enterprise)        | Dashboard → Settings → Plugins → Team Marketplaces → **Import**, paste this repo's URL                                                                 | Teammates see **rai** in their Plugins panel; re-import from dashboard to update    |
+| **VS Code / Copilot** (workspace)    | Commit `extraKnownMarketplaces` (and optionally `enabledPlugins`) to `.github/copilot/settings.json` — or reuse `.claude/settings.json` above to cover both channels | VS Code surfaces a notification on first chat message; teammates browse via `@agentPlugins @recommended` in Extensions |
 
 ## What's included
 
@@ -93,7 +127,7 @@ See this quick [video](https://www.loom.com/share/a78519cfa60149158779cb9925a44a
 
 ```
 /plugin marketplace add RelationalAI/rai-agent-skills
-/plugin install RAI@RelationalAI
+/plugin install rai@RelationalAI
 # or use the wizard
 /plugin
 ```
@@ -173,49 +207,59 @@ To update, pull the latest changes locally (or re-download the ZIP) and upload t
 </details>
 
 <details>
-<summary><b>OpenAI Codex</b></summary>
+<summary><b>OpenAI Codex (CLI)</b></summary>
 
-Codex discovers skills from `.agents/skills/` in your working repo or `~/.agents/skills/` globally. Two options:
+This repo ships a Codex plugin marketplace manifest at `.agents/plugins/marketplace.json`, so you can add it directly
+by GitHub shorthand:
 
-**Individual install.** Use the built-in `$skill-installer` skill inside a Codex session, or clone this repo and copy
-`skills/` into `~/.agents/skills/`.
-
-**Team-wide install.** Add a marketplace entry so teammates can install via `/plugins`. Create
-`.agents/plugins/marketplace.json` in your team's repo:
-
-```json
-{
-  "name": "rai-local",
-  "plugins": [
-    {
-      "name": "rai",
-      "source": {
-        "source": "git",
-        "url": "https://github.com/RelationalAI/rai-agent-skills.git"
-      },
-      "policy": {
-        "installation": "AVAILABLE"
-      }
-    }
-  ]
-}
+```bash
+codex plugin marketplace add RelationalAI/rai-agent-skills
 ```
 
-See [the Codex docs](https://developers.openai.com/codex/skills) for details. Restart Codex after installing; bumping
-the plugin version invalidates the cache.
+Then start a Codex session and open the plugin browser:
+
+```bash
+codex
+```
+
+Inside the session, run the `/plugins` slash command, switch to the **relationalai** marketplace tab, and install
+**rai**. Restart the session for skills to become available.
+
+To pull new releases later:
+
+```bash
+codex plugin marketplace upgrade relationalai
+```
+
+See [the Codex plugins docs](https://developers.openai.com/codex/plugins) for more on the marketplace flow.
 
 </details>
 
 <details>
 <summary><b>Cursor</b></summary>
 
-Cursor's Plugin Marketplace does not list this repo yet. Use **Remote Rules** in the meantime:
+This repo ships a Cursor marketplace manifest at `.cursor-plugin/marketplace.json`. How you install depends on your
+plan.
+
+**Teams / Enterprise admins.** Cursor supports importing a third-party plugin marketplace from a GitHub repo:
+
+1. Open **Dashboard → Settings → Plugins**.
+2. Under **Team Marketplaces**, click **Import** and paste
+   `https://github.com/RelationalAI/rai-agent-skills`.
+3. Review the parsed plugins, assign **Team Access** groups, name the marketplace, and save.
+
+Teammates then see **rai** in their Plugins panel and install it with one click. To pull new releases, re-import from
+the dashboard. Teams plans support up to 1 team marketplace; Enterprise supports unlimited.
+
+**Individual users.** Cursor does not currently expose a personal marketplace-import UI, so plugin-level install isn't
+available yet on free/Pro plans. As a fallback, use **Remote Rules** to get the skill content (without the plugin
+wiring):
 
 1. Follow [these instructions](https://cursor.com/docs/skills#installing-skills-from-github).
 2. Paste `https://github.com/RelationalAI/rai-agent-skills.git` as a Remote Rule (GitHub).
 
-**Heads up:** Remote Rules do not auto-sync. Re-import from GitHub (or `git pull` if you cloned into `.cursor/rules/`)to
-pick up updates.
+Remote Rules do not auto-sync — re-import from GitHub (or `git pull` if you cloned into `.cursor/rules/`) to pick up
+updates.
 
 </details>
 

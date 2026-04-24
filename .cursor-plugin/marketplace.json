@@ -1,0 +1,30 @@
+{
+  "name": "relationalai",
+  "metadata": {
+    "description": "RelationalAI semantic models and advanced reasoners"
+  },
+  "owner": {
+    "name": "RelationalAI"
+  },
+  "plugins": [
+    {
+      "source": "./plugins/rai",
+      "name": "rai",
+      "description": "RelationalAI semantic models and advanced reasoners",
+      "version": "1.0.7",
+      "author": {
+        "name": "RelationalAI"
+      },
+      "homepage": "https://github.com/RelationalAI/rai-agent-skills",
+      "repository": "https://github.com/RelationalAI/rai-agent-skills",
+      "license": "Apache-2.0",
+      "keywords": [
+        "relationalai",
+        "pyrel",
+        "reasoning",
+        "optimization"
+      ],
+      "category": "Coding"
+    }
+  ]
+}

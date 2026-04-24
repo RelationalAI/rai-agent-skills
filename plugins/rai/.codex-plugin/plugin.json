@@ -1,5 +1,5 @@
 {
-  "name": "RAI",
+  "name": "rai",
   "version": "1.0.7",
   "description": "RelationalAI semantic models and advanced reasoners",
   "author": {
@@ -15,7 +15,6 @@
     "reasoning",
     "optimization"
   ],
-  "skills": "./skills/",
   "interface": {
     "displayName": "RAI",
     "shortDescription": "RelationalAI skills for semantic modeling and reasoning",

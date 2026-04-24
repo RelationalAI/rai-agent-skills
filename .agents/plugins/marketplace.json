@@ -5,7 +5,7 @@
   },
   "plugins": [
     {
-      "name": "RAI",
+      "name": "rai",
       "source": {
         "source": "local",
         "path": "./plugins/rai"
