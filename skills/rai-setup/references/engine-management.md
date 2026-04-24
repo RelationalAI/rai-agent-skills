@@ -1,15 +1,35 @@
 ## Engine Management
 
-Operational engine management uses the `Resources` class. Each engine has a **name** and a **type** (`LOGIC`, `SOLVER`, `PREDICTIVE`). Multiple engine types can share the same name.
+Two interfaces manage engines/reasoners: the `rai reasoners:*` CLI (operational one-liners) and the Python `Resources` class / `connect_sync()` client (scriptable). Each engine has a **name** and a **type** (`LOGIC`, `SOLVER`, `PREDICTIVE` in the Python API; `Logic`, `Prescriptive`, `Predictive` in the CLI — `SOLVER` ↔ `Prescriptive`). Multiple engine types can share the same name.
 
-### Setup
+### CLI (`rai reasoners:*`)
+
+All commands accept `--type` (`Logic` / `Prescriptive` / `Predictive`) and `--name`. Both are optional — interactive prompts fill missing values.
+
+| Command | Purpose |
+|---|---|
+| `rai reasoners:create --type Logic --name <name> --size <size>` | Create a reasoner. Add `--await-storage-vacuum` to block until storage is ready. |
+| `rai reasoners:delete --type Logic --name <name>` | Delete a reasoner |
+| `rai reasoners:suspend --type Logic --name <name>` | Suspend (stop billing) |
+| `rai reasoners:resume --type Logic --name <name>` | Resume a suspended reasoner |
+| `rai reasoners:list` | List all reasoners (filterable by `--type`, `--name`, `--size`, `--state`) |
+| `rai reasoners:get --type Logic --name <name>` | Get details for one reasoner |
+| `rai reasoners:alter --type Logic --name <name> --auto-suspend-mins <N>` | Change settings (e.g. `auto_suspend_mins`) |
+
+**Resize pattern:** No in-place resize — delete and recreate: `suspend` → `delete` → `create` with the new size.
+
+### Python API — `Resources`
+
+Operational engine management uses the `Resources` class.
+
+#### Setup
 
 ```python
 from relationalai import Resources
 r = Resources()  # auto-discovers raiconfig.yaml / raiconfig.toml
 ```
 
-### List Engines
+#### List Engines
 
 ```python
 engines = r.list_engines()
@@ -21,7 +41,7 @@ for e in engines:
 
 Engine states: `READY`, `SUSPENDED`, `PROVISIONING`, `DELETING`, `ERROR`.
 
-### Create Engine
+#### Create Engine
 
 ```python
 r.create_engine(
@@ -32,19 +52,19 @@ r.create_engine(
 )
 ```
 
-### Delete Engine
+#### Delete Engine
 
 ```python
 r.delete_engine(name="my_engine", type="LOGIC")  # type is required
 ```
 
-### Get Engine Status
+#### Get Engine Status
 
 ```python
 info = r.get_engine(name="my_engine", type="LOGIC")  # type is required
 ```
 
-### Resume / Suspend Engine
+#### Resume / Suspend Engine
 
 ```python
 r.resume_engine(name="my_engine")
@@ -52,7 +72,7 @@ r.suspend_engine(name="my_engine")
 # Async variants: r.resume_engine_async(), r.create_engine_async()
 ```
 
-### Common Pattern: Delete and Recreate
+#### Common Pattern: Delete and Recreate
 
 Useful when an engine is in a bad state or needs a clean restart:
 
@@ -65,7 +85,7 @@ r.delete_engine(engine_name, "LOGIC")
 r.create_engine(engine_name, "LOGIC", size=engine_size, auto_suspend_mins=30)
 ```
 
-### Engine Types and Naming
+#### Engine Types and Naming
 
 A single engine name (e.g., `prescriptive_assistant`) typically has **two** engines:
 - **LOGIC** — runs model rules, queries, data loading
