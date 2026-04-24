@@ -1,21 +1,23 @@
 ---
 name: rai-health-skill
-description: Guides diagnosis of RAI engine performance issues and recommends remediation. Use when an engine is slow, unresponsive, or needs scaling.
+description: Guides diagnosis of RAI engine performance, failed transactions, CDC/data-stream health, and CDC engine management. Use when a reasoner is slow or queuing, a transaction or batch has failed, a CDC stream is suspended or quarantined, or CDC engine sizing/recovery is needed.
 ---
 <!-- v1-STABLE -->
 
 ## Summary
 
-**What:** A process skill for setting up RAI observability, reading the three core reasoner metrics
-(memory, CPU, demand), interpreting utilization patterns, and prescribing the correct remediation action.
+**What:** A process skill for diagnosing RAI operational health across four domains: reasoner
+performance (memory/CPU/demand), failed transactions, CDC / data-stream health, and CDC engine
+management. Each domain has its own step with decision tables and remediation actions.
 
 **When to use:**
-- User asks "is my reasoner healthy?" or "why is my engine slow/stuck/queuing?"
-- User wants to check memory, CPU, or demand utilization numbers
-- User wants to set up observability views or register the events view
-- User needs to grant observability access to a team member
-- User wants to scale, resize, or shut down a reasoner based on metrics
-- User wants to build dashboards or alerting on reasoner metrics
+- Reasoner is slow, stuck, or queuing; need to check memory, CPU, or demand metrics
+- Observability views need setup, role grants, or dashboard/alerting work
+- A transaction was aborted; `get_transaction_problems`, `get_own_transaction_problems`,
+  or `get_load_errors` must be called
+- Batch processing has failed and load errors need inspection
+- A CDC task is suspended, a data stream is quarantined, or `resume_cdc` is needed
+- CDC engine needs resizing (`alter_cdc_engine_size`) or force-deletion
 
 **When NOT to use:**
 - Writing PyRel models or query logic → see `rai-pyrel-coding`
@@ -25,8 +27,14 @@ description: Guides diagnosis of RAI engine performance issues and recommends re
 **Overview (process steps):**
 1. Verify observability is set up (events view registered and healthy)
 2. Query the three metric views: memory, CPU, demand
-3. Apply threshold-based decision rules to form a health verdict
-4. Prescribe the exact remediation action in plain text
+3. Apply threshold-based decision rules and prescribe the exact remediation action
+4. Diagnose a failed transaction (get_transaction, get_load_errors, owner-restriction pitfall)
+5. Diagnose CDC / data stream health (errors, batches, quarantine recovery, resume_cdc)
+6. Manage the CDC engine (alter_cdc_engine_size, force delete, cdc_status)
+
+> **Navigation:** Steps 1–3 cover reasoner health only. For CDC/stream issues go directly to
+> **Step 5**. For transaction failures go directly to **Step 4**. For CDC engine sizing or
+> force-delete go directly to **Step 6**.
 
 ---
 
@@ -126,6 +134,9 @@ GROUP BY REASONER_NAME, REASONER_CAPACITY;
 ### ✅ HEALTHY — No Action
 **Signals:** `MEMORY_UTILIZATION` < 0.80, `CPU_UTILIZATION` < 0.85, `DEMAND` ≤ 1.0 on most runs.
 
+If transactions are still failing despite healthy metrics, the problem is not resource-related —
+go to **Step 4** to diagnose the transaction directly.
+
 ---
 
 ### 🔴 OVERLOADED — Upgrade to Larger Reasoner (Immediate)
@@ -184,6 +195,179 @@ rai reasoners:suspend --type Logic --name <name>
 
 ---
 
+## Step 4 — Diagnose a Failed Transaction
+
+Use these procedures when a transaction appears stuck, aborted, or when load errors are reported.
+
+### Fetch a Transaction by ID
+
+```sql
+CALL relationalai.api.get_transaction('<transaction_id>');
+```
+
+Returns the full transaction record including status, owner, start/end timestamps, and error detail.
+
+### Get Transaction Problems
+
+```sql
+-- Problems for any transaction (requires admin-level role)
+CALL relationalai.api.get_transaction_problems('<transaction_id>');
+
+-- Problems for transactions you own (end-user role)
+CALL relationalai.api.get_own_transaction_problems('<transaction_id>');
+```
+
+| Procedure | Accessible by | Returns |
+|-----------|--------------|---------|
+| `get_transaction_problems` | Admin roles | All transactions |
+| `get_own_transaction_problems` | Any role | Only caller-owned transactions |
+
+### Get Load Errors
+
+```sql
+CALL relationalai.api.get_load_errors('<transaction_id>');
+```
+
+Returns row-level load errors associated with a transaction: source object, error message, and
+affected row count.
+
+> **⚠️ Owner-restriction pitfall:** If `get_transaction_problems` returns **HTTP 400**, check the
+> transaction owner before assuming a permissions misconfiguration:
+> ```sql
+> CALL relationalai.api.get_transaction('<transaction_id>');
+> ```
+> Then use the table below to interpret the result.
+
+| `get_transaction` result | Meaning | Next step |
+|--------------------------|---------|-----------|
+| `owner` = `cdc.scheduler@erp` | Expected behavior — CDC-owned transactions are not visible to end-user roles by design | Use `SELECT * FROM relationalai.api.cdc_status` or an admin role |
+| `owner` = any other identity; called `get_transaction_problems` without an admin role | Permission issue — `get_transaction_problems` requires an admin role | Grant the admin role, or switch to `get_own_transaction_problems` if you own the transaction |
+| `owner` = any other identity; caller has an admin role | Genuine API failure — not a permissions problem | Open a support ticket with the transaction ID and full error response |
+| `get_transaction` itself returns 400 | Invalid transaction ID, or insufficient role to read any transactions | Verify the transaction ID; if correct, confirm read access to `relationalai.api` |
+
+See [transaction-debug.md](references/transaction-debug.md) for full column reference and example outputs.
+
+---
+
+## Step 5 — Diagnose CDC / Data Stream Health
+
+> **⚠️ Auto-quarantine gotcha:** A stream that has been in `SUSPENDED` state for
+> **approximately one month** will be automatically promoted to `QUARANTINED` —
+> **without creating any rows in `data_stream_errors`**. The absence of error rows does not
+> mean the stream is healthy. Always confirm stream status from `cdc_status` or
+> `data_stream_batches` before treating an empty errors result as a clean bill of health.
+
+### Find Your Streams (Start Here)
+
+```sql
+SELECT * FROM relationalai.api.cdc_status;
+```
+
+Key columns: `stream_name`, `stream_status`, `engine_name`, `engine_status`. Use the `stream_name`
+values from this output as `'<stream_name>'` in the queries below.
+
+### Check Batch-Level Status
+
+```sql
+SELECT stream_name, batch_id, status, error_message, created_at
+FROM relationalai.api.data_stream_batches
+WHERE stream_name = '<stream_name>'
+  AND created_at >= DATEADD(day, -7, CURRENT_TIMESTAMP())
+ORDER BY created_at DESC;
+```
+
+> Use a 7-day window rather than 24 hours — a quarantined or long-suspended stream may have
+> had no batches for days, and a 24-hour filter returns empty output indistinguishable from a
+> healthy-but-idle stream.
+
+### Check Stream-Level Errors
+
+```sql
+SELECT *
+FROM relationalai.api.data_stream_errors
+WHERE stream_name = '<stream_name>'
+ORDER BY created_at DESC
+LIMIT 50;
+```
+
+For auto-quarantined streams this may return empty — that is expected. Use
+`data_stream_batches` `status` as the authoritative source.
+
+### Stream State Verdicts
+
+| Status | Meaning | Action |
+|--------|---------|--------|
+| `ACTIVE` | Healthy, batches flowing | None |
+| `SUSPENDED` | Paused; no new batches | Call `resume_cdc()` — see below |
+| `QUARANTINED` | Permanently paused; data integrity issue | [Follow quarantine recovery flow](references/cdc-recovery.md#quarantine-recovery-runbook) |
+| `FAILED` | Batch or load error | Check `data_stream_errors` and `get_load_errors` |
+
+### Resume a Suspended Stream
+
+```sql
+CALL relationalai.app.resume_cdc('<stream_name>');
+```
+
+### Quarantine Recovery
+
+See [cdc-recovery.md — Quarantine Recovery Runbook](references/cdc-recovery.md#quarantine-recovery-runbook)
+for the full step-by-step recovery checklist, schema reference, and official docs link.
+
+---
+
+## Step 6 — CDC Engine Management
+
+> **CDC engine ≠ reasoner engine.** The CDC pipeline runs on a dedicated managed engine
+> distinct from Logic reasoner engines. `alter_cdc_engine_size` targets only the CDC engine;
+> the CLI commands (`rai reasoners:create/delete`) target Logic reasoners only. Do not apply
+> the Step 3 CLI commands to the CDC engine.
+
+### Check Current CDC Status
+
+```sql
+SELECT * FROM relationalai.api.cdc_status;
+```
+
+Key columns: `engine_name`, `engine_size`, `engine_status`, `stream_name`, `stream_status`.
+
+### Resize the CDC Engine
+
+```sql
+CALL relationalai.app.alter_cdc_engine_size('<size>');
+```
+
+| Size | Use When |
+|------|----------|
+| `HIGHMEM_X64_S` | Small CDC load; default starting point |
+| `HIGHMEM_X64_M` | Moderate load or frequent quarantine timeouts |
+| `HIGHMEM_X64_L` | High-volume streams (see 395019 pitfall in Common Pitfalls) |
+| `HIGHMEM_X64_SL` | Largest available; high-volume with large memory requirement (see 395019 pitfall) |
+
+The CDC engine is suspended and recreated during a resize — expect brief CDC downtime.
+
+### Force-Delete a Stale CDC Engine
+
+Use when the CDC engine is stuck in a non-deletable state:
+
+```sql
+CALL relationalai.api.delete_engine('CDC_MANAGED_ENGINE', TRUE);
+```
+
+The second argument `TRUE` enables force deletion. RAI will recreate the CDC engine automatically
+on the next CDC trigger. Confirm recovery with `SELECT * FROM relationalai.api.cdc_status`.
+
+> **⚠️ If `delete_engine` returns "engine not found" but `cdc_status` still shows the engine
+> as suspended:** this is a control-plane / data-plane desync — the engine record exists in
+> RAI's metadata but the underlying Snowflake engine is gone. No self-serve command resolves
+> this state. Run the following and retain the output for support:
+> ```sql
+> SELECT * FROM relationalai.api.cdc_status;
+> ```
+> Then open a support ticket with that output. Do not attempt `alter_cdc_engine_size` in this
+> state — it will fail or create a duplicate record.
+
+---
+
 ## Access Control
 
 Two application roles control who can configure and who can read observability data:
@@ -226,6 +410,7 @@ Cost scales with: event volume × time range × query complexity.
 | `DEMAND > 1.0` but CPU is low | Job routing: one reasoner saturated, others idle | Redistribute jobs across reasoner instances |
 | Isolated spikes look alarming | Normal: spiky workloads cause transient peaks | Focus on pattern across runs, not individual data points |
 | `observability_viewer` cannot see views | Role not granted | Run `GRANT APPLICATION ROLE ... TO ROLE ...` as admin |
+| Engine create fails: `Failed to parse 'service spec' as YAML` (Snowflake error 395019) | `ENGINE_CONFIG_OVERRIDE` is set and the size is `HIGHMEM_X64_L` or `HIGHMEM_X64_SL` | Use `HIGHMEM_X64_S` or `HIGHMEM_X64_M` until the platform fix is deployed |
 
 ---
 
@@ -235,3 +420,5 @@ Cost scales with: event volume × time range × query complexity.
 |-----------|-------------|------|
 | Setup guide | Full 6-step observability setup | [setup-guide.md](references/setup-guide.md) |
 | Metric schemas | All metric view schemas | [metric-schemas.md](references/metric-schemas.md) |
+| Transaction debug | `get_transaction` / `get_load_errors` API reference and owner-restriction details | [transaction-debug.md](references/transaction-debug.md) |
+| CDC recovery | `data_stream_errors`, batches schema, quarantine recovery, `resume_cdc` | [cdc-recovery.md](references/cdc-recovery.md) |
