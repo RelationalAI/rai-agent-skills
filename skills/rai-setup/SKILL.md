@@ -132,7 +132,6 @@ Load the reference when the trigger fires — don't read them all upfront.
 | Configuring reasoners — backend, engine size, Gurobi, polling — or reasoner name/size doesn't take effect as expected | [reasoners.md](references/reasoners.md) |
 | Turning on metrics/logging, tuning retries, toggling compiler strictness, or changing data-loading defaults | [execution.md](references/execution.md) |
 | Provisioning, listing, resuming, or deleting engines via CLI/Python API, or evaluating warm reasoners | [engine-management.md](references/engine-management.md) |
-| User is upgrading from `relationalai` v0.13 and hits renamed params or moved config fields (one-time legacy migration — unrelated to fresh setup) | [v013-migration.md](references/v013-migration.md) |
 
 ---
 
