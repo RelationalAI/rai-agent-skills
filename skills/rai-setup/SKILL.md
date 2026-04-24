@@ -157,4 +157,4 @@ Load the reference when the trigger fires — don't read them all upfront.
 - `rai-ontology-design` — domain modeling
 - `rai-discovery` — surface answerable questions and route to the right reasoner
 - `rai-prescriptive-solver-management` — solver lifecycle and diagnostics (includes Gurobi usage)
-- `rai-health-skill` — diagnose engine performance issues
+- `rai-health` — diagnose engine performance issues
