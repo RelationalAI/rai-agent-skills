@@ -134,7 +134,8 @@ GROUP BY REASONER_NAME, REASONER_CAPACITY;
 ### ✅ HEALTHY — No Action
 **Signals:** `MEMORY_UTILIZATION` < 0.80, `CPU_UTILIZATION` < 0.85, `DEMAND` ≤ 1.0 on most runs.
 
-If transactions are still failing despite healthy metrics, the problem is not resource-related — go to **Step 4** to diagnose the transaction directly.
+If transactions are still failing despite healthy metrics, the problem is not resource-related —
+go to **Step 4** to diagnose the transaction directly.
 
 ---
 
@@ -227,9 +228,11 @@ CALL relationalai.api.get_own_transaction_problems('<transaction_id>');
 CALL relationalai.api.get_load_errors('<transaction_id>');
 ```
 
-Returns row-level load errors associated with a transaction: source object, error message, and affected row count.
+Returns row-level load errors associated with a transaction: source object, error message, and
+affected row count.
 
-> **⚠️ Owner-restriction pitfall:** If `get_transaction_problems` returns **HTTP 400**, check the transaction owner before assuming a permissions misconfiguration:
+> **⚠️ Owner-restriction pitfall:** If `get_transaction_problems` returns **HTTP 400**, check the
+> transaction owner before assuming a permissions misconfiguration:
 > ```sql
 > CALL relationalai.api.get_transaction('<transaction_id>');
 > ```
@@ -260,7 +263,8 @@ See [transaction-debug.md](references/transaction-debug.md) for full column refe
 SELECT * FROM relationalai.api.cdc_status;
 ```
 
-Key columns: `stream_name`, `stream_status`, `engine_name`, `engine_status`. Use the `stream_name` values from this output as `'<stream_name>'` in the queries below.
+Key columns: `stream_name`, `stream_status`, `engine_name`, `engine_status`. Use the `stream_name`
+values from this output as `'<stream_name>'` in the queries below.
 
 ### Check Batch-Level Status
 
@@ -286,7 +290,8 @@ ORDER BY created_at DESC
 LIMIT 50;
 ```
 
-For auto-quarantined streams this may return empty — that is expected. Use `data_stream_batches` `status` as the authoritative source.
+For auto-quarantined streams this may return empty — that is expected. Use
+`data_stream_batches` `status` as the authoritative source.
 
 ### Stream State Verdicts
 
@@ -348,7 +353,8 @@ Use when the CDC engine is stuck in a non-deletable state:
 CALL relationalai.api.delete_engine('CDC_MANAGED_ENGINE', TRUE);
 ```
 
-The second argument `TRUE` enables force deletion. RAI will recreate the CDC engine automatically on the next CDC trigger. Confirm recovery with `SELECT * FROM relationalai.api.cdc_status`.
+The second argument `TRUE` enables force deletion. RAI will recreate the CDC engine automatically
+on the next CDC trigger. Confirm recovery with `SELECT * FROM relationalai.api.cdc_status`.
 
 > **⚠️ If `delete_engine` returns "engine not found" but `cdc_status` still shows the engine
 > as suspended:** this is a control-plane / data-plane desync — the engine record exists in
@@ -357,7 +363,8 @@ The second argument `TRUE` enables force deletion. RAI will recreate the CDC eng
 > ```sql
 > SELECT * FROM relationalai.api.cdc_status;
 > ```
-> Then open a support ticket with that output. Do not attempt `alter_cdc_engine_size` in this state — it will fail or create a duplicate record.
+> Then open a support ticket with that output. Do not attempt `alter_cdc_engine_size` in this
+> state — it will fail or create a duplicate record.
 
 ---
 

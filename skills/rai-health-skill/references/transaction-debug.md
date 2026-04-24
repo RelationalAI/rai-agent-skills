@@ -103,4 +103,5 @@ identity. End-user roles cannot see transactions owned by this account — the A
    SELECT * FROM relationalai.api.cdc_status;
    ```
 
-3. To get full problem details on a CDC-owned transaction, use an admin role or open a support ticket with the transaction ID.
+3. To get full problem details on a CDC-owned transaction, use an admin role or open a support
+   ticket with the transaction ID.

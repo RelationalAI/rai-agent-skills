@@ -3,11 +3,14 @@
 <!-- TOC -->
 - [data_stream_errors Schema](#data_stream_errors-schema)
 - [data_stream_batches Schema](#data_stream_batches-schema)
-- [Stream Status Reference](#stream-status-reference)
 - [Resume CDC](#resume-cdc)
 - [Quarantine Recovery Runbook](#quarantine-recovery-runbook)
-- [alter_cdc_engine_size Parameter Table](#alter_cdc_engine_size-parameter-table)
 <!-- /TOC -->
+
+> For **Stream State Verdicts** see
+> [SKILL.md — Step 5](../SKILL.md#step-5--diagnose-cdc--data-stream-health); for the
+> **`alter_cdc_engine_size` size table** see
+> [SKILL.md — Step 6](../SKILL.md#step-6--cdc-engine-management).
 
 ---
 
@@ -53,14 +56,6 @@ ORDER BY created_at DESC;
 
 ---
 
-## Stream Status Reference
-
-See the **Stream State Verdicts** table in
-[SKILL.md — Step 5](../SKILL.md#step-5--diagnose-cdc--data-stream-health) for authoritative
-status descriptions, actions, and the auto-quarantine gotcha callout.
-
----
-
 ## Resume CDC
 
 ```sql
@@ -83,11 +78,3 @@ High-level flow:
 2. Fix the root cause (schema change, source table permissions, stale offsets)
 3. Follow the drop-and-recreate stream procedure in the official docs
 4. Monitor `data_stream_batches` for new `COMPLETED` batches after recreation
-
----
-
-## alter_cdc_engine_size Parameter Table
-
-See **Resize the CDC Engine** in
-[SKILL.md — Step 6](../SKILL.md#step-6--cdc-engine-management) for the authoritative size
-table, usage notes, and the 395019 pitfall callout.
