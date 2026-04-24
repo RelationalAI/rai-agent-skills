@@ -1,6 +1,6 @@
-# Pattern: Shortest path distances and diameter on a weighted directed network.
+# Pattern: Shortest path distances on a weighted directed network.
 # Key ideas: directed weighted graph from intermediary concept (Route);
-# distance() for pairwise shortest paths; diameter_range() for network extent;
+# distance() for pairwise shortest paths;
 # filter distances to specific source/target pairs.
 
 from relationalai.semantics import Float, Integer, Model, String
@@ -90,8 +90,5 @@ seattle_paths = dist_df[dist_df["from_city"] == "Seattle"].sort_values("distance
 print("\nShortest paths from Seattle:")
 print(seattle_paths.to_string(index=False))
 
-# --- Diameter range: network extent ---
-
-lower, upper = graph.diameter_range()
-print(f"\nDiameter range: [{lower}, {upper}]")
-print("(longest shortest path in the network)")
+# Note: diameter_range() requires undirected, unweighted graphs — see
+# algorithm-selection.md § diameter_range() for the compatibility constraint.

@@ -396,6 +396,8 @@ df = (
 
 **Output:** `(lower_bound, upper_bound)` tuple.
 
+**Constraints:** Not available for directed or weighted graphs — requires `directed=False, weighted=False`.
+
 ```python
 lower, upper = graph.diameter_range()
 ```
@@ -508,7 +510,7 @@ Also available: `graph.triangle()` returns ternary `(n1, n2, n3)` of all triangl
 | `is_connected()` | Yes | Yes | N/A | N/A |
 | `reachable()` | Yes | Yes | N/A | N/A |
 | `distance()` | Yes | Yes | Yes (non-neg) | Yes |
-| `diameter_range()` | Yes | Yes | Yes | Yes |
+| `diameter_range()` | No | Yes | No | Yes |
 | `jaccard_similarity()` | Yes | Yes | N/A | N/A |
 | `cosine_similarity()` | Yes | Yes | Yes | Yes |
 | `adamic_adar()` | Yes | Yes | N/A | N/A |
