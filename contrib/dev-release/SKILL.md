@@ -27,14 +27,13 @@ branch/repo. Don't do it.
 
 ## Files carrying the plugin version
 
-Exactly four. Keep them identical. Do NOT touch version fields elsewhere
-(e.g. `plugins/rai/skills/rai-graph-analysis/examples/metadata.json` has its
-own unrelated `version`).
+Exactly three. Keep them identical. Do NOT touch `version` fields in any
+`plugins/rai/skills/*/examples/metadata.json` — those are example-local and
+unrelated to the plugin version.
 
 - `plugins/rai/.claude-plugin/plugin.json`
 - `plugins/rai/.codex-plugin/plugin.json`
 - `plugins/rai/.cursor-plugin/plugin.json`
-- `.cursor-plugin/marketplace.json` (inside the single plugin entry)
 
 ## Recommended path — run the helper script
 
@@ -96,13 +95,13 @@ for f in plugins/rai/.claude-plugin/plugin.json \
 done
 ```
 
-Verify every non-example occurrence is on the new version:
+Verify every non-example manifest is on the new version — expect exactly 4
+matches. Any other count means drift or a missed manifest:
 
 ```bash
-grep -rn '"version"' .claude-plugin .agents .cursor-plugin plugins | grep -v /examples/
+grep -rn "\"version\": \"$NEW\"" .claude-plugin .agents .cursor-plugin plugins | grep -v /examples/ | wc -l
+# Expect: 4
 ```
-
-All four lines should show the new version.
 
 ### 3. Commit, tag, push
 

@@ -72,20 +72,20 @@ Invoke the skills using the `/rai-` command.
 
 | #  | Skill                                                                                                                                                | Area        | Description                                                                       |
 |:---|:-----------------------------------------------------------------------------------------------------------------------------------------------------|:------------|:----------------------------------------------------------------------------------|
-| 1  | [rai-onboarding](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-onboarding)                                                   | Setup       | First-time setup — install, connect to Snowflake, validate                        |
-| 2  | [rai-configuration](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-configuration)                                             | Setup       | Config files, connections, authentication, model and engine settings              |
-| 3  | [rai-pyrel-coding](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-pyrel-coding)                                               | Development | Language syntax — imports, types, concepts, properties, data loading              |
-| 4  | [rai-build-starter-ontology](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-build-starter-ontology)                           | Ontology    | Build a first ontology from Snowflake tables or local data                        |
-| 5  | [rai-ontology-design](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-ontology-design)                                         | Ontology    | Domain modeling — concepts, relationships, data mapping, enrichment               |
-| 6  | [rai-rules-authoring](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-rules-authoring)                                         | Ontology    | Business rules as PyRel derived properties — validation, classification, alerting |
-| 7  | [rai-querying](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-querying)                                                       | Reasoning   | Query construction — aggregation, filtering, joins, ordering, export              |
-| 8  | [rai-discovery](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-discovery)                                                     | Reasoning   | Surface answerable questions, classify by reasoner type, route to workflow        |
-| 9  | [rai-graph-analysis](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-graph-analysis)                                           | Reasoning   | Graph algorithms — centrality, community detection, reachability, similarity      |
-| 10 | [rai-prescriptive-problem-formulation](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-prescriptive-problem-formulation)       | Reasoning   | Formulate optimization — decision variables, constraints, objectives              |
-| 11 | [rai-prescriptive-solver-management](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-prescriptive-solver-management)           | Reasoning   | Solver lifecycle — selection, creation, execution, diagnostics                    |
-| 12 | [rai-prescriptive-results-interpretation](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-prescriptive-results-interpretation) | Reasoning   | Post-solve — solution extraction, status codes, quality, sensitivity              |
-| 13 | [rai-cortex-integration](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-cortex-integration)                                   | Operations  | Deploy RAI models as Snowflake Cortex Agents                                      |
-| 14 | [rai-health-skill](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-health-skill)                                               | Operations  | Diagnose engine performance — memory, CPU, demand metrics, remediation            |
+| 1  | [rai-onboarding](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-onboarding)                                                   | Setup       | First-time setup — install, connect to Snowflake, validate                        |
+| 2  | [rai-configuration](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-configuration)                                             | Setup       | Config files, connections, authentication, model and engine settings              |
+| 3  | [rai-pyrel-coding](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-pyrel-coding)                                               | Development | Language syntax — imports, types, concepts, properties, data loading              |
+| 4  | [rai-build-starter-ontology](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-build-starter-ontology)                           | Ontology    | Build a first ontology from Snowflake tables or local data                        |
+| 5  | [rai-ontology-design](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-ontology-design)                                         | Ontology    | Domain modeling — concepts, relationships, data mapping, enrichment               |
+| 6  | [rai-rules-authoring](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-rules-authoring)                                         | Ontology    | Business rules as PyRel derived properties — validation, classification, alerting |
+| 7  | [rai-querying](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-querying)                                                       | Reasoning   | Query construction — aggregation, filtering, joins, ordering, export              |
+| 8  | [rai-discovery](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-discovery)                                                     | Reasoning   | Surface answerable questions, classify by reasoner type, route to workflow        |
+| 9  | [rai-graph-analysis](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-graph-analysis)                                           | Reasoning   | Graph algorithms — centrality, community detection, reachability, similarity      |
+| 10 | [rai-prescriptive-problem-formulation](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-prescriptive-problem-formulation)       | Reasoning   | Formulate optimization — decision variables, constraints, objectives              |
+| 11 | [rai-prescriptive-solver-management](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-prescriptive-solver-management)           | Reasoning   | Solver lifecycle — selection, creation, execution, diagnostics                    |
+| 12 | [rai-prescriptive-results-interpretation](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-prescriptive-results-interpretation) | Reasoning   | Post-solve — solution extraction, status codes, quality, sensitivity              |
+| 13 | [rai-cortex-integration](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-cortex-integration)                                   | Operations  | Deploy RAI models as Snowflake Cortex Agents                                      |
+| 14 | [rai-health-skill](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-health-skill)                                               | Operations  | Diagnose engine performance — memory, CPU, demand metrics, remediation            |
 
 ## Prerequisites
 
@@ -158,15 +158,15 @@ Then open the Extensions view (⇧⌘X), search `@agentPlugins`, and install **R
 <summary><b>Cortex Code CLI</b></summary>
 
 ```bash
-cortex skill add RelationalAI/rai-agent-skills/skills
+cortex skill add RelationalAI/rai-agent-skills/plugins/rai/skills
 ```
 
-Point Cortex at the `/skills` subdirectory (not the repo root) — Cortex's auto-discovery expects skills at a
-conventional layout and will reject the repo root otherwise. Later, run
+Point Cortex at the `/plugins/rai/skills` subdirectory (not the repo root) — Cortex's auto-discovery expects skills
+at a conventional layout and will reject the repo root otherwise. Later, run
 `cortex skill update RelationalAI/rai-agent-skills` to pull new versions.
 
 Or follow [the docs](https://docs.snowflake.com/en/user-guide/cortex-code/extensibility#skills) to clone the repo
-locally and use the `/skill` dialog to add the [skills](skills) folder.
+locally and use the `/skill` dialog to add the [plugins/rai/skills](plugins/rai/skills) folder.
 
 ![Cortex skills](doc/cortex.png)
 
@@ -181,9 +181,9 @@ Cortex Code in the Snowflake web UI doesn't pull directly from GitHub — you lo
    and unzip it.
 2. In Snowsight, open a workspace and launch **Cortex Code** from the left sidebar.
 3. In the Cortex Code panel, click the **+** button and choose **Upload Skill Folder(s)**.
-4. Select the repo's `skills/` folder (not the repo root).
+4. Select the repo's `plugins/rai/skills/` folder (not the repo root).
 
-To update, pull the latest changes locally (or re-download the ZIP) and upload the `skills/` folder again.
+To update, pull the latest changes locally (or re-download the ZIP) and upload the `plugins/rai/skills/` folder again.
 
 </details>
 
