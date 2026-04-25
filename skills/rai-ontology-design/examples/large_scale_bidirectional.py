@@ -39,10 +39,10 @@ Location.flood_risk_index = model.Property(f"{Location} has {Float:flood_risk_in
 Location.population_density = model.Property(f"{Location} has {Integer:population_density}")
 
 model.define(
-    pa := Location.new(id=raw.regional_risk.POSTAL_CODE),
-    pa.region(raw.regional_risk.REGION),
-    pa.flood_risk_index(raw.regional_risk.FLOOD_RISK_INDEX),
-    pa.population_density(raw.regional_risk.POPULATION_DENSITY),
+    loc := Location.new(id=raw.regional_risk.POSTAL_CODE),
+    loc.region(raw.regional_risk.REGION),
+    loc.flood_risk_index(raw.regional_risk.FLOOD_RISK_INDEX),
+    loc.population_density(raw.regional_risk.POPULATION_DENSITY),
 )
 
 # ── Part (with unary flag) ────────────────────────────────────────

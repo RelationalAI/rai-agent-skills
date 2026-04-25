@@ -299,7 +299,7 @@ and [expression-rules.md](../rai-pyrel-coding/references/expression-rules.md).
 
 ### Data Exploration Before Threshold Selection
 
-**CRITICAL:** Always explore the actual data distribution before choosing threshold values for rules. Assumptions about data scales can be wrong:
+Always explore the actual data distribution before choosing threshold values for rules. Assumptions about data scales can be wrong:
 
 ```python
 # Step 1: Check the actual data range BEFORE setting thresholds

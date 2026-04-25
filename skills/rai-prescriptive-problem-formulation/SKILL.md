@@ -33,6 +33,7 @@ description: Formulates optimization problems from ontology models covering deci
 4. Define objective (direction, coefficients, multi-component handling)
 5. Validate the complete formulation (structure, completeness, feasibility, data) — includes pre-solver audit that decision variables / constraints / objectives registered correctly
 6. Simplify (static parameters, goals vs constraints, grouped constraints)
+7. Post-solve refinement — present results, surface user reactions, iterate on the formulation (see Workflow Step 7)
 
 ---
 

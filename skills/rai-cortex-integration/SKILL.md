@@ -294,7 +294,7 @@ SI users need:
 | Mistake | Cause | Fix |
 |---------|-------|-----|
 | `use schema` fails during deploy | Deployment schema doesn't exist | Run `CREATE SCHEMA IF NOT EXISTS` before deploying. If `agent_schema` is different, ensure that schema exists and the deployer can use it too |
-| Object "does not exist" errors from Snowflake | Role lacks required privileges — Snowflake reports missing permissions as "does not exist" | Verify deployer and SI user privileges against the tables in Steps 1 and 6 (Deployed Stored Procedures) |
+| Object "does not exist" errors from Snowflake | Role lacks required privileges — Snowflake reports missing permissions as "does not exist" | Verify deployer and SI user privileges against the tables in Step 1 and the Deployed Stored Procedures section |
 | Agent does not show up where expected in the UI | Agent was created in `database`.`schema`, not the SI schema | Set `agent_schema="SNOWFLAKE_INTELLIGENCE.AGENTS"` or promote the deployed agent from the UI |
 | `agent_schema` validation fails | Value is not a two-part `DATABASE.SCHEMA` name | Use a fully qualified two-part name such as `SNOWFLAKE_INTELLIGENCE.AGENTS` |
 | `QueryCatalog` rejects a query definition | Wrapped queries lost `__name__` or `__doc__` metadata | Prefer module-level query functions with docstrings; avoid `functools.partial` |
