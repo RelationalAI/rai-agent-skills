@@ -51,7 +51,7 @@ Which RAI Graph method to use. Maps directly to `Graph` instance methods:
 
 ### graph_construction
 How to build the `Graph` instance:
-- **node_concept**: Which concept forms graph nodes (e.g., `Business`, `Site`)
+- **node_concept**: Which concept forms graph nodes (e.g., `Entity`, `Node`)
 - **directed**: `True` for dependency/flow analysis, `False` for network structure analysis
 - **weighted**: `True` if edge weights are available and relevant
 - **edge_definition**: How edges are constructed — from a direct relationship or via an intermediary concept
@@ -91,23 +91,23 @@ How results are bound via `Graph.Node.ref()`:
 A single ontology can yield multiple `Graph` instances. The question determines which construction is appropriate.
 
 ### Entity-level directed graph
-Nodes are business entities, edges are direct relationships. Suited for reachability, dependency tracing, PageRank.
+Nodes are entities, edges are direct relationships. Suited for reachability, dependency tracing, PageRank.
 ```python
-graph = Graph(model, directed=True, weighted=False, node_concept=Business)
-define(graph.Edge.new(src=Business.ref(), dst=Business.ships_to(Business.ref())))
+graph = Graph(model, directed=True, weighted=False, node_concept=Entity)
+define(graph.Edge.new(src=Entity.ref(), dst=Entity.provides_to(Entity.ref())))
 ```
 
-### Infrastructure-level undirected weighted graph
-Nodes are physical locations, edges derived from operational relationships. Suited for centrality, WCC, community detection, bridge analysis.
+### Node-level undirected weighted graph
+Nodes are physical locations, edges derived from activity relationships. Suited for centrality, WCC, community detection, bridge analysis.
 ```python
-graph = Graph(model, directed=False, weighted=True, node_concept=Site)
+graph = Graph(model, directed=False, weighted=True, node_concept=Node)
 define(
-    graph.Edge.new(src=site1, dst=site2, weight=site1.shipment_count)
-).where(Operation.source_site(op, site1), Operation.destination_site(op, site2))
+    graph.Edge.new(src=node1, dst=node2, weight=node1.activity_count)
+).where(Activity.source_node(act, node1), Activity.destination_node(act, node2))
 ```
 
 ### Key insight
-The same ontology may need both constructions. "Which suppliers do customers depend on?" uses a **directed entity graph**. "Which warehouses are critical connectors?" uses an **undirected infrastructure graph**. Discovery should identify which perspective fits each question.
+The same ontology may need both constructions. "Which providers do customers depend on?" uses a **directed entity graph**. "Which nodes are critical connectors?" uses an **undirected node-level graph**. Discovery should identify which perspective fits each question.
 
 ---
 
@@ -115,20 +115,20 @@ The same ontology may need both constructions. "Which suppliers do customers dep
 
 A single ontology can yield multiple `Graph` instances, each answering different questions. Discovery should surface ALL viable graph perspectives, not just the first match.
 
-**Example:** A supply chain model with `Business`, `Site`, and `Operation` concepts supports:
-1. **Directed business graph** (`Business` → `Business` via `ships_to`) — for PageRank, reachability, dependency tracing
-2. **Undirected infrastructure graph** (`Site` ↔ `Site` via `Operation`) — for centrality, WCC, bridge detection, community
-3. **Customer co-purchase graph** (if customer/order data exists) — for community detection
+**Example:** A model with `Entity`, `Node`, and `Activity` concepts supports:
+1. **Directed entity graph** (`Entity` → `Entity` via `provides_to`) — for PageRank, reachability, dependency tracing
+2. **Undirected node-level graph** (`Node` ↔ `Node` via `Activity`) — for centrality, WCC, bridge detection, community
+3. **Customer co-occurrence graph** (if customer/order data exists) — for community detection
 
 Each graph answers fundamentally different questions. When suggesting graph problems, check all potential graph constructions and suggest from each where appropriate.
 
 ---
 
 ### How to identify graph potential from ontology
-- Concepts that act as edges (Operation, Route, Connection) with source/destination properties → infrastructure-level graph
-- Direct entity-to-entity relationships (ships_to, manages, follows) → entity-level graph
+- Concepts that act as edges (Activity, Route, Connection) with source/destination properties → node-level graph
+- Direct entity-to-entity relationships (provides_to, manages, follows) → entity-level graph
 - Hierarchy (parent→child, category→subcategory) → tree/DAG for reachability
-- Same-type instance references (BOM: component → assembly) → recursive graph
+- Same-type instance references (Dependency: component → assembly) → recursive graph
 - Many-to-many bridge tables → dense graph for community detection
 
 ---
@@ -155,12 +155,12 @@ These outputs are available for cumulative discovery — problems that weren't f
 
 What ontology patterns indicate graph reasoning potential:
 
-- **Explicit relationship concepts**: Route, Operation, Link concepts with source/destination properties → high confidence
-- **Direct entity relationships**: `ships_to`, `manages`, `follows` → entity-level graph
+- **Explicit relationship concepts**: Route, Activity, Link concepts with source/destination properties → high confidence
+- **Direct entity relationships**: `provides_to`, `manages`, `follows` → entity-level graph
 - **FK chains forming paths**: Entity A → Entity B → Entity C → multi-hop traversal viable
 - **Edge weights available**: Cost, distance, capacity, count properties → enables weighted centrality and pathfinding
 - **Multiple connected components likely**: Regional boundaries, heterogeneous entity types → WCC/community detection
-- **Directed flow present**: Supply chain, approval chain, reporting structure → reachability analysis
+- **Directed flow present**: Provider chain, approval chain, reporting structure → reachability analysis
 - **Many-to-many relationships**: Membership, collaboration, co-occurrence → dense graph for community detection
 
 **Minimum viable ontology for graph:** At least one concept pair connected by a relationship forming a non-trivial network (more than a simple lookup/dimension table). For centrality/community: 10+ nodes with varied connectivity. For reachability: directed edges with multi-hop paths.

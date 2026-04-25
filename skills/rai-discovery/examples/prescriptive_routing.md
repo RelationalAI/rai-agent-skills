@@ -22,16 +22,16 @@ Discovery-to-routing walkthroughs for prescriptive reasoner questions. Each exam
 ```json
 {"problem_type": "network_flow",
  "decision_scope": "ComponentFlow through Activity — quantity to move per activity route",
- "forcing_requirement": "Dependency component demand satisfaction per (Resource, Node)",
+ "forcing_requirement": "Dependency component demand satisfaction per (Resource, Entity)",
  "objective_property": "total_cost (flow * cost_per_unit) + unmet_penalty",
  "scenario_parameter": "excluded_entity (binary: force flow=0 for that entity's activities)"}
 ```
 
 ### Modeling needs (→ rai-ontology-design, rai-prescriptive-problem-formulation)
 - Decision concept: `ComponentFlow` defined on `Activity` with `quantity` variable
-- Slack concept: `UnmetComponent` per (Resource, Node) for infeasibility handling
+- Slack concept: `UnmetComponent` per (Resource, Entity) for infeasibility handling
 - Variables: `ComponentFlow.quantity` (continuous, 0 to capacity), `UnmetComponent.quantity` (continuous, >= 0)
-- Constraints: per (Resource, Node): sum(inflow) + unmet >= Dependency requirement
+- Constraints: per (Resource, Entity): sum(inflow) + unmet >= Dependency requirement
 - Constraint: if excluded entity, force `ComponentFlow.quantity == 0` for that entity's activities
 
 ### Reasoner handoff (→ prescriptive workflow)
