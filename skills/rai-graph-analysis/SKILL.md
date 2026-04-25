@@ -364,7 +364,7 @@ For per-algorithm deep dives (parameters, output shapes, interpretation, compati
 
 ## Domain Constraints
 
-Domain constraints control which subset of an output relationship gets materialized. Some algorithms (e.g., `preferential_attachment`, `common_neighbor`, `jaccard_similarity`, `reachable`, `triangle`) are expensive to materialize in full and require explicit domain constraints via `of=`, `from_=`, `to=`, `between=`, or `full=True` to proceed.
+Domain constraints control which subset of an output relationship gets materialized. Some algorithms (e.g., `preferential_attachment`, `common_neighbor`, `jaccard_similarity`, `reachable`, `triangle`, `distance`) are expensive to materialize in full and require explicit domain constraints via `of=`, `from_=`, `to=`, `between=`, or `full=True` to proceed.
 
 | Keyword | Meaning |
 |---------|---------|

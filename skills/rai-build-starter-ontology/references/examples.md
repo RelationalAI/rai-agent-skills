@@ -123,6 +123,12 @@ Allocation.channel = model.Property(
 Allocation.country = model.Property(
     f"{Allocation} is in {Country:country}", short_name="allocation_country")
 
+# --- PWL curve and Segment concepts (declared so the bridge below can reference them) ---
+PWL = model.Concept("PWL", identify_by={"pwl_id": String})
+Segment = model.Concept("Segment", identify_by={"sid": String})
+Allocation.pwl = model.Relationship(
+    f"{Allocation} has pwl {PWL}", short_name="allocation_pwl")
+
 # Create entities and bind scalars
 model.define(
     al := Allocation.new(aid=allocations.allocation_id),
@@ -491,6 +497,20 @@ model.define(Contract.is_auto_renew()).where(
     raw.plans_contracts.AUTO_RENEW == "True",
 )
 
+# ── Facility ─────────────────────────────────────────────────────
+Facility = model.Concept("Facility", identify_by={"id": String})
+Facility.capacity = model.Property(f"{Facility} has {Integer:capacity}")
+Facility.located_in = model.Property(
+    f"{Facility} located in {Location:located_in}", short_name="facility_located_in")
+model.define(
+    f := Facility.new(id=raw.facilities.FACILITY_ID),
+    f.capacity(raw.facilities.CAPACITY),
+)
+model.define(Facility.located_in(Location)).where(
+    Facility.filter_by(id=raw.facilities.FACILITY_ID),
+    Location.filter_by(id=raw.facilities.POSTAL_CODE),
+)
+
 # ── Equipment (multi-FK: facility + part) ─────────────────────────
 Equipment = model.Concept("Equipment", identify_by={"id": String})
 Equipment.equipment_type = model.Property(f"{Equipment} has {String:equipment_type}")
@@ -580,14 +600,14 @@ model.define(RevenueForecast.is_on_target()).where(
 
 Modeling across multiple source schemas where the same business entity lives in different systems (e.g., a user identified by one ID in one system and a different user ID in another). Shows prefixed concept names to avoid collisions, individual `Property` per scalar, boolean flags as unary `Relationship`, and linking patterns that bridge identity systems.
 
-**Source:** `OPS_DB.SYSTEM_A`, `OPS_DB.SYSTEM_B`, `OPS_DB.INFRA`, `OPS_DB.PLATFORM_API`
+**Source:** `OPS_DB.SYSTEM_A`, `OPS_DB.SYSTEM_B`
 
 ```python
 from relationalai.semantics import Model, Boolean, Date, DateTime, Float, Integer, String
 
 model = Model("Cross-System Analytics")
 
-# ── Source Tables (multi-schema: 4 domains, 30+ tables) ──────────
+# ── Source Tables (multi-schema: 2 domains, 13 tables) ──────────
 class Sources:
     class ops_db:
         class system_a:
@@ -701,7 +721,7 @@ SystemBTask.belongs_to_project = model.Property(
 ```
 
 **Patterns demonstrated:**
-- Multi-schema sources: 4 schemas across different organizational domains
+- Multi-schema sources: 2 schemas across different organizational domains
 - Many concepts (8+) with simple identity patterns — one concept per source table
 - Individual `Property` for each scalar attribute (not bundled)
 - Boolean flags as unary `Relationship` (`is_site_admin`, `is_private`, `is_archived`, `is_draft`)

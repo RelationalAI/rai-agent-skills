@@ -378,13 +378,13 @@ df = (
 ```python
 src, dst, length = graph.Node.ref("s"), graph.Node.ref("d"), Float.ref("len")
 df = (
-    model.where(graph.distance()(src, dst, length))
+    model.where(graph.distance(full=True)(src, dst, length))
     .select(src.id.alias("from"), dst.id.alias("to"), length.alias("distance"))
     .to_df()
 )
 ```
 
-**Note:** Produces O(n^2) rows. For large graphs, filter to specific source/destination pairs.
+**Note:** Produces O(n^2) rows. For large graphs, prefer `from_=`, `to=`, or `between=` to scope to specific node subsets instead of `full=True`.
 
 ---
 

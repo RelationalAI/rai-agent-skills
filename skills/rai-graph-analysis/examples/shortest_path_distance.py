@@ -5,7 +5,6 @@
 
 from relationalai.semantics import Float, Integer, Model, String
 from relationalai.semantics.reasoners.graph import Graph
-from relationalai.semantics.std import floats
 
 model = Model("shortest_path_distance")
 

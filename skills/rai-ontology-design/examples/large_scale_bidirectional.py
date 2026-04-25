@@ -70,21 +70,21 @@ Customer.churn_risk_score = model.Property(f"{Customer} has {Float:churn_risk_sc
 Customer.located_in = model.Relationship(
     f"{Customer} located in {Location}", short_name="customer_located_in")
 Location.has_customer = model.Relationship(
-    f"{Location} has customer {Customer}", short_name="postal_area_has_customer")
+    f"{Location} has customer {Customer}", short_name="location_has_customer")
 
 model.define(
-    s := Customer.new(id=raw.customers.SUB_ID),
+    s := Customer.new(id=raw.customers.CUST_ID),
     s.segment(raw.customers.SEGMENT),
     s.lifetime_value(raw.customers.LIFETIME_VALUE_USD),
     s.churn_risk_score(raw.customers.CHURN_RISK_SCORE),
 )
 model.define(Customer.located_in(Location)).where(
-    Customer.filter_by(id=raw.customers.SUB_ID),
+    Customer.filter_by(id=raw.customers.CUST_ID),
     Location.filter_by(id=raw.customers.POSTAL_CODE),
 )
 model.define(Location.has_customer(Customer)).where(
     Location.filter_by(id=raw.customers.POSTAL_CODE),
-    Customer.filter_by(id=raw.customers.SUB_ID),
+    Customer.filter_by(id=raw.customers.CUST_ID),
 )
 
 # ── Contract (unary flag from boolean column) ─────────────────────
@@ -100,7 +100,7 @@ model.define(
 )
 model.define(Contract.for_customer(Customer)).where(
     Contract.filter_by(id=raw.plans_contracts.CONTRACT_ID),
-    Customer.filter_by(id=raw.plans_contracts.SUB_ID),
+    Customer.filter_by(id=raw.plans_contracts.CUST_ID),
 )
 model.define(Contract.is_auto_renew()).where(
     Contract.filter_by(id=raw.plans_contracts.CONTRACT_ID),
@@ -111,14 +111,14 @@ model.define(Contract.is_auto_renew()).where(
 Facility = model.Concept("Facility", identify_by={"id": String})
 Facility.capacity_gbps = model.Property(f"{Facility} has {Integer:capacity_gbps}")
 Facility.located_in = model.Relationship(
-    f"{Facility} located in {Location}", short_name="cell_tower_located_in")
+    f"{Facility} located in {Location}", short_name="facility_located_in")
 
 model.define(
-    ct := Facility.new(id=raw.facilities.TOWER_ID),
+    ct := Facility.new(id=raw.facilities.FACILITY_ID),
     ct.capacity_gbps(raw.facilities.CAPACITY_GBPS),
 )
 model.define(Facility.located_in(Location)).where(
-    Facility.filter_by(id=raw.facilities.TOWER_ID),
+    Facility.filter_by(id=raw.facilities.FACILITY_ID),
     Location.filter_by(id=raw.facilities.POSTAL_CODE),
 )
 
@@ -144,11 +144,11 @@ model.define(
 )
 model.define(Transaction.source(Customer)).where(
     Transaction.filter_by(id=raw.transactions.TXN_ID),
-    Customer.filter_by(id=raw.transactions.SOURCE_SUB_ID),
+    Customer.filter_by(id=raw.transactions.SOURCE_CUST_ID),
 )
 model.define(Transaction.target(Customer)).where(
     Transaction.filter_by(id=raw.transactions.TXN_ID),
-    Customer.filter_by(id=raw.transactions.TARGET_SUB_ID),
+    Customer.filter_by(id=raw.transactions.TARGET_CUST_ID),
 )
 model.define(Transaction.is_failed()).where(
     Transaction.filter_by(id=raw.transactions.TXN_ID),
