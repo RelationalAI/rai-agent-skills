@@ -74,7 +74,7 @@ Pattern for distance, similarity:
 ```python
 src, dst, length = graph.Node.ref("s"), graph.Node.ref("d"), Float.ref("len")
 df = (
-    model.where(graph.distance()(src, dst, length))
+    model.where(graph.distance(full=True)(src, dst, length))
     .select(
         src.id.alias("from_id"),
         dst.id.alias("to_id"),
