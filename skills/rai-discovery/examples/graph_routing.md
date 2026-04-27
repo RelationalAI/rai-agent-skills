@@ -4,12 +4,12 @@ Discovery-to-routing walkthroughs for graph reasoner questions. Each example sho
 
 ---
 
-## "Which warehouses are most critical to supply chain resilience?"
+## "Which entities are most critical to network resilience?"
 
 ### Ontology signals
-- `Site` concept with `Operation` linking `source_site` → `output_site` → network topology
-- `Operation.capacity_per_day` → weighted edges available
-- Multiple site types (FACTORY, WAREHOUSE, DISTRIBUTION_CENTER) → heterogeneous network
+- `Node` concept with `Activity` linking `source_node` → `target_node` → network topology
+- `Activity.capacity_per_period` → weighted edges available
+- Multiple node types (e.g., PRODUCER, HUB, CONSUMER) → heterogeneous network
 
 ### Reasoner classification: Graph (centrality)
 - "Most critical" + network topology → centrality analysis
@@ -17,99 +17,90 @@ Discovery-to-routing walkthroughs for graph reasoner questions. Each example sho
 
 ### Implementation hint
 ```json
-{"algorithm": "eigenvector_centrality", "graph_construction": {"node_concept": "Site",
+{"algorithm": "eigenvector_centrality", "graph_construction": {"node_concept": "Node",
   "directed": false, "weighted": true,
-  "edge_definition": "Operation linking source_site to output_site, weight=shipment_count"},
+  "edge_definition": "Activity linking source_node to target_node, weight=activity_count"},
  "output_binding": "(node, centrality_score)"}
 ```
 
 ### Modeling needs (→ rai-ontology-design)
-- Graph construction: undirected `SiteDependencyGraph` with Site as nodes, Operation as edges
-- Derived properties: `count_is_source` / `count_is_destination` for edge weights
-- PyRel: `Graph(model, directed=False, weighted=True, node_concept=Site)`
+- Graph construction: undirected `NodeDependencyGraph` with Node as nodes, Activity as edges
+- Derived properties: `count_is_source` / `count_is_target` for edge weights
+- PyRel: `Graph(model, directed=False, weighted=True, node_concept=Node)`
 
 ### Reasoner handoff (→ graph workflow)
-- `SiteDependencyGraph.eigenvector_centrality()` → returns `(site, centrality_score)`
-- Filter non-relevant site types (STORE, OFFICE)
-- Output: `Site.centrality_score` available for downstream prescriptive use (e.g., weight allocation by warehouse importance)
-
-### Reference
-`hero-user-journey/src/hero_user_journey/queries/q11_critical_warehouse_centrality.py`
+- `NodeDependencyGraph.eigenvector_centrality()` → returns `(node, centrality_score)`
+- Filter non-relevant node types if needed
+- Output: `Node.centrality_score` available for downstream prescriptive use (e.g., weight allocation by node importance)
 
 ---
 
-## "Which suppliers do high-value customers depend upon?"
+## "Which upstream entities do high-priority entities depend upon?"
 
 ### Ontology signals
-- `Business` concept with `ships_to` relationship (Business → Business) → directed dependency chain
-- `Business.is_high_value_customer` derived property → target filter available
-- 4-tier supply chain (Supplier → Manufacturer → Warehouse → Customer) → multi-hop reachability needed
+- `Entity` concept with `provides_to` relationship (Entity → Entity) → directed dependency chain
+- `Entity.is_high_priority` derived property → target filter available
+- Multi-tier dependency chain (e.g., upstream → intermediary → hub → consumer) → multi-hop reachability needed
 
 ### Reasoner classification: Graph (reachability, upstream)
 - "Depend upon" + directed relationships → upstream reachability
-- Multi-hop (not just direct suppliers) → graph traversal, not SQL join
+- Multi-hop (not just direct dependencies) → graph traversal, not SQL join
 - NOT predictive — question is about current structure, not future outcomes
 
 ### Implementation hint
 ```json
-{"algorithm": "reachable", "graph_construction": {"node_concept": "Business",
+{"algorithm": "reachable", "graph_construction": {"node_concept": "Entity",
   "directed": true, "weighted": false,
-  "edge_definition": "Business.ships_to relationship"},
- "target_filter": "Business.is_high_value_customer",
- "output_binding": "(supplier, customer) reachable pairs"}
+  "edge_definition": "Entity.provides_to relationship"},
+ "target_filter": "Entity.is_high_priority",
+ "output_binding": "(source_entity, target_entity) reachable pairs"}
 ```
 
 ### Modeling needs (→ rai-ontology-design)
-- Graph construction: directed `BusinessGraph` with Business as nodes, `ships_to` as edges
-- Derived relationship: `Business.ships_to` from Shipment (supplier_business → customer_business)
-- Target concept: `is_high_value_customer` filter (TYPE='BUYER' AND value_tier='HIGH')
-- PyRel: `Graph(model, directed=True, weighted=False, node_concept=Business)`
+- Graph construction: directed `EntityGraph` with Entity as nodes, `provides_to` as edges
+- Derived relationship: `Entity.provides_to` from Allocation (source_entity → target_entity)
+- Target concept: `is_high_priority` filter (e.g., role='CONSUMER' AND priority_tier='HIGH')
+- PyRel: `Graph(model, directed=True, weighted=False, node_concept=Entity)`
 
 ### Reasoner handoff (→ graph workflow)
-- Define target: `model.Relationship("Target Customer")` filtered to high-value
-- `BusinessGraph.reachable(to=target_customer)` → returns `(source, target)` pairs
-- Filter `source.type == "SUPPLIER"` for upstream suppliers only
-- Output: per-customer supplier dependency list with reliability scores
-
-### Reference
-`hero-user-journey/src/hero_user_journey/queries/q5_high_value_customer_dependency.py`
+- Define target: `model.Relationship("Target Entity")` filtered to high-priority
+- `EntityGraph.reachable(to=target_entity)` → returns `(source, target)` pairs
+- Filter source role for upstream entities only as needed
+- Output: per-target upstream dependency list with reliability scores
 
 ---
 
-## "If WaferTech Taiwan goes offline, which products and customers are impacted?"
+## "If a key entity goes offline, which downstream entities and resources are impacted?"
 
 ### Ontology signals
-- Same directed `BusinessGraph` as Q5 (Business → Business via `ships_to`)
-- Parameterized by supplier name → impact analysis for a specific entity
-- SKU and Shipment concepts with quantity data → can quantify impact
+- Same directed `EntityGraph` as the upstream example (Entity → Entity via `provides_to`)
+- Parameterized by entity name → impact analysis for a specific node
+- `Resource` and `Allocation` concepts with quantity data → can quantify impact
 
 ### Reasoner classification: Graph (reachability, downstream)
 - "Goes offline" + "what's affected" → downstream reachability from a specific node
-- Same graph as Q5, but traversal direction is reversed (`from_=` instead of `to=`)
-- Impact quantification (quantity at risk) requires joining graph results back to Shipment/SKU data
+- Same graph as the upstream example, but traversal direction is reversed (`from_=` instead of `to=`)
+- Impact quantification (quantity at risk) requires joining graph results back to Allocation/Resource data
 
 ### Implementation hint
 ```json
-{"algorithm": "reachable", "graph_construction": {"node_concept": "Business",
+{"algorithm": "reachable", "graph_construction": {"node_concept": "Entity",
   "directed": true, "weighted": false,
-  "edge_definition": "Business.ships_to relationship"},
- "target_filter": "Business.name == 'WaferTech Taiwan' (parameterized)",
- "output_binding": "(source_supplier, affected_customer) reachable pairs"}
+  "edge_definition": "Entity.provides_to relationship"},
+ "target_filter": "Entity.name == '<key entity>' (parameterized)",
+ "output_binding": "(source_entity, affected_entity) reachable pairs"}
 ```
 
 ### Modeling needs (→ rai-ontology-design)
-- Same `BusinessGraph` as upstream reachability — no additional graph construction needed
-- Join path to SKU: `customer.receives_shipment.SKU` for product impact
-- Join path to quantities: `Shipment.quantity` for volume at risk
+- Same `EntityGraph` as upstream reachability — no additional graph construction needed
+- Join path to Resource: `target.receives_allocation.Resource` for resource impact
+- Join path to quantities: `Allocation.quantity` for volume at risk
 
 ### Reasoner handoff (→ graph workflow)
-- Define target: `model.Relationship("Target Supplier")` filtered by name
-- `BusinessGraph.reachable(from_=target_supplier)` → returns all downstream entities
-- Join to Customer and SKU concepts for impact quantification
-- Output: affected customers with products at risk and quantity exposure
+- Define target: `model.Relationship("Target Entity")` filtered by name
+- `EntityGraph.reachable(from_=target_entity)` → returns all downstream entities
+- Join to downstream entities and Resource concepts for impact quantification
+- Output: affected entities with resources at risk and quantity exposure
 
 ### Cumulative discovery note
-This question pairs naturally with prescriptive: "Given the impact of WaferTech going offline, how should we re-source components to minimize cost?" (graph → prescriptive chain). The reachability output identifies which alternatives are available.
-
-### Reference
-`hero-user-journey/src/hero_user_journey/queries/q6_at_risk_customers_skus.py`
+This question pairs naturally with prescriptive: "Given the impact of the key entity going offline, how should we re-allocate to minimize cost?" (graph → prescriptive chain). The reachability output identifies which alternatives are available.

@@ -41,10 +41,10 @@ model.define(model.HighMarginMenuItem(model.MenuItem)).where(
 )
 ```
 
-### CRITICAL LIMITATION: OR Operator (`|`) in Subtype Conditions
+### Limitation: OR Operator (`|`) in Subtype Conditions
 
-**Subtypes CANNOT use `|` (OR) operator** in their `where()` conditions. This causes `Query error`
-and **poisons ALL queries on the parent entity** — not just the subtype.
+**Subtypes CANNOT use `|` (OR) operator** in their `where()` conditions. **This raises a `Query error`
+at runtime and poisons ALL queries on the parent entity** — not just the subtype.
 
 **Note:** The `&` (AND) operator DOES work in `where()` conditions — e.g.,
 `(model.Entity.score >= 1.0) & (model.Entity.score < 2.0)` is valid for range checks in classification.
@@ -70,10 +70,11 @@ model.define(model.LoyalCustomer(model.Customer)).where(
 )
 ```
 
-### CRITICAL LIMITATION: model.define() Cannot Chain on Aggregation-Computed Properties
+### Limitation: model.define() Cannot Chain on Aggregation-Computed Properties
 
 **`model.define()` CANNOT reference aggregation-computed properties in arithmetic** — not just subtypes,
-but ANY downstream `model.define()`. This causes "Unreachable" error and **poisons the entire model**.
+but ANY downstream `model.define()`. **This raises an "Unreachable" error at runtime and poisons the
+entire model.**
 
 This includes:
 - Properties defined with `aggregates.avg`, `aggregates.sum`, `aggregates.count` + `.per()` (direct aggregation)
@@ -91,24 +92,24 @@ further `model.define()` chains on them fail.
 
 ```python
 # FAILS: subtype referencing aggregation-computed property
-model.FoodTruckAvgOrders = model.Concept("FoodTruckAvgOrders", extends=[Float])
-model.FoodTruck.avg_daily_orders = model.Property(f"{model.FoodTruck} has avg_daily_orders {model.FoodTruckAvgOrders}")
+model.AssetAvgUtilization = model.Concept("AssetAvgUtilization", extends=[Float])
+model.Asset.avg_daily_orders = model.Property(f"{model.Asset} has avg_daily_orders {model.AssetAvgUtilization}")
 model.define(
-    model.FoodTruck.avg_daily_orders(
-        model.FoodTruckAvgOrders(aggregates.avg(model.DailyDeployment.actual_orders_count).per(model.FoodTruck))
+    model.Asset.avg_daily_orders(
+        model.AssetAvgUtilization(aggregates.avg(model.DailyUsage.actual_orders_count).per(model.Asset))
     )
-).where(model.FoodTruck.has_deployment(model.DailyDeployment))
+).where(model.Asset.has_usage(model.DailyUsage))
 
 # THIS WILL CRASH — avg_daily_orders is aggregation-computed
-model.UnderutilizedFoodTruck = model.Concept("UnderutilizedFoodTruck", extends=[model.FoodTruck])
-model.define(model.UnderutilizedFoodTruck(model.FoodTruck)).where(
-    model.FoodTruck.avg_daily_orders < 50,  # FAILS: Query error
+model.UnderutilizedAsset = model.Concept("UnderutilizedAsset", extends=[model.Asset])
+model.define(model.UnderutilizedAsset(model.Asset)).where(
+    model.Asset.avg_daily_orders < 50,  # FAILS: Query error
 )
 
 # ALSO FAILS — inline aggregation in subtype condition
-model.define(model.UnderutilizedFoodTruck(model.FoodTruck)).where(
-    model.FoodTruck.has_deployment(model.DailyDeployment),
-    aggregates.avg(model.DailyDeployment.actual_orders_count).per(model.FoodTruck) < 50,  # FAILS
+model.define(model.UnderutilizedAsset(model.Asset)).where(
+    model.Asset.has_usage(model.DailyUsage),
+    aggregates.avg(model.DailyUsage.actual_orders_count).per(model.Asset) < 50,  # FAILS
 )
 ```
 
@@ -118,24 +119,24 @@ at query time instead of defining a subtype:
 ```python
 # Define the property — this works
 model.define(
-    model.FoodTruck.avg_daily_orders(
-        model.FoodTruckAvgOrders(aggregates.avg(model.DailyDeployment.actual_orders_count).per(model.FoodTruck))
+    model.Asset.avg_daily_orders(
+        model.AssetAvgUtilization(aggregates.avg(model.DailyUsage.actual_orders_count).per(model.Asset))
     )
-).where(model.FoodTruck.has_deployment(model.DailyDeployment))
+).where(model.Asset.has_usage(model.DailyUsage))
 
 # Query-time filter instead of subtype — this works
 results = model.where(
-    model.FoodTruck.avg_daily_orders < model.FoodTruck.max_daily_capacity * 0.5,
+    model.Asset.avg_daily_orders < model.Asset.max_daily_capacity * 0.5,
 ).select(
-    model.FoodTruck.truck_name.alias("name"),
-    model.FoodTruck.avg_daily_orders.alias("avg_orders"),
+    model.Asset.asset_name.alias("name"),
+    model.Asset.avg_daily_orders.alias("avg_orders"),
 ).to_df()
 ```
 
-### CRITICAL LIMITATION: Cross-Entity Property Access in model.define()
+### Limitation: Cross-Entity Property Access in model.define()
 
-Dot-chain navigation (`model.EntityA.relationship.property`) in `model.define()` arithmetic causes
-"Unreachable" error. You MUST use explicit joins instead.
+Dot-chain navigation (`model.EntityA.relationship.property`) in `model.define()` arithmetic **raises
+an "Unreachable" error at runtime**. Use explicit joins instead.
 
 **Impact on classification rules:** When a classification rule computes a threshold from a
 related entity's property (e.g., "classify orders by their customer's credit tier"), use

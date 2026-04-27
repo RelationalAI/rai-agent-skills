@@ -378,13 +378,13 @@ df = (
 ```python
 src, dst, length = graph.Node.ref("s"), graph.Node.ref("d"), Float.ref("len")
 df = (
-    model.where(graph.distance()(src, dst, length))
+    model.where(graph.distance(full=True)(src, dst, length))
     .select(src.id.alias("from"), dst.id.alias("to"), length.alias("distance"))
     .to_df()
 )
 ```
 
-**Note:** Produces O(n^2) rows. For large graphs, filter to specific source/destination pairs.
+**Note:** Produces O(n^2) rows. For large graphs, prefer `from_=`, `to=`, or `between=` to scope to specific node subsets instead of `full=True`.
 
 ---
 
@@ -395,6 +395,8 @@ df = (
 **When to use:** "What's the maximum separation in the network?"
 
 **Output:** `(lower_bound, upper_bound)` tuple.
+
+**Constraints:** Not available for directed or weighted graphs — requires `directed=False, weighted=False`.
 
 ```python
 lower, upper = graph.diameter_range()
@@ -508,7 +510,7 @@ Also available: `graph.triangle()` returns ternary `(n1, n2, n3)` of all triangl
 | `is_connected()` | Yes | Yes | N/A | N/A |
 | `reachable()` | Yes | Yes | N/A | N/A |
 | `distance()` | Yes | Yes | Yes (non-neg) | Yes |
-| `diameter_range()` | Yes | Yes | Yes | Yes |
+| `diameter_range()` | No | Yes | No | Yes |
 | `jaccard_similarity()` | Yes | Yes | N/A | N/A |
 | `cosine_similarity()` | Yes | Yes | Yes | Yes |
 | `adamic_adar()` | Yes | Yes | N/A | N/A |

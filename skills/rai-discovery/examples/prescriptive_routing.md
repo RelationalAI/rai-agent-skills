@@ -4,53 +4,50 @@ Discovery-to-routing walkthroughs for prescriptive reasoner questions. Each exam
 
 ---
 
-## "How should we re-source components if a supplier goes offline?"
+## "How should we re-allocate components if an entity goes offline?"
 
 ### Ontology signals
-- `Operation` concept with `source_site`, `output_site`, `cost_per_unit`, `capacity_per_day` → flow network with costs and capacity
-- `BillOfMaterials` with `input_sku`, `output_sku`, `input_quantity` → component requirements per product
-- `Demand` with `quantity` per `business_id` and `sku_id` → forcing requirement (demand must be met)
-- Binary scenario: exclude one supplier entirely → contingency planning
+- `Activity` concept with `source_node`, `target_node`, `cost_per_unit`, `capacity_per_period` → flow network with costs and capacity
+- `Dependency` with `input_resource`, `output_resource`, `input_quantity` → component requirements per output
+- `Demand` with `quantity` per `entity_id` and `resource_id` → forcing requirement (demand must be met)
+- Binary scenario: exclude one entity entirely → contingency planning
 
 ### Reasoner classification: Prescriptive (network flow LP)
-- "How should we re-source" → optimization decision
-- Network structure (supplier → manufacturer → warehouse) → network flow type
+- "How should we re-allocate" → optimization decision
+- Network structure (entity → intermediary → hub) → network flow type
 - Capacity constraints + cost minimization → linear program
 - NOT graph — question is "what should we do?", not "what's the structure?"
 
 ### Implementation hint
 ```json
 {"problem_type": "network_flow",
- "decision_scope": "ComponentFlow through Operation — quantity to ship per operation route",
- "forcing_requirement": "BOM component demand satisfaction per (SKU, Site)",
+ "decision_scope": "ComponentFlow through Activity — quantity to move per activity route",
+ "forcing_requirement": "Dependency component demand satisfaction per (Resource, Entity)",
  "objective_property": "total_cost (flow * cost_per_unit) + unmet_penalty",
- "scenario_parameter": "excluded_supplier (binary: force flow=0 for that supplier's operations)"}
+ "scenario_parameter": "excluded_entity (binary: force flow=0 for that entity's activities)"}
 ```
 
 ### Modeling needs (→ rai-ontology-design, rai-prescriptive-problem-formulation)
-- Decision concept: `ComponentFlow` defined on `Operation` with `quantity` variable
-- Slack concept: `UnmetComponent` per (SKU, Site) for infeasibility handling
+- Decision concept: `ComponentFlow` defined on `Activity` with `quantity` variable
+- Slack concept: `UnmetComponent` per (Resource, Entity) for infeasibility handling
 - Variables: `ComponentFlow.quantity` (continuous, 0 to capacity), `UnmetComponent.quantity` (continuous, >= 0)
-- Constraints: per (SKU, Site): sum(inflow) + unmet >= BOM requirement
-- Constraint: if excluded supplier, force `ComponentFlow.quantity == 0` for that supplier's operations
+- Constraints: per (Resource, Entity): sum(inflow) + unmet >= Dependency requirement
+- Constraint: if excluded entity, force `ComponentFlow.quantity == 0` for that entity's activities
 
 ### Reasoner handoff (→ prescriptive workflow)
 - Define variables → define constraints → define objective → validate formulation → solve
 - Solver: HiGHS (LP/MIP)
-- Scenario comparison: baseline (all suppliers) vs offline (excluded supplier)
-
-### Reference
-`hero-user-journey/src/hero_user_journey/queries/q7_component_sourcing.py`
+- Scenario comparison: baseline (all entities) vs offline (excluded entity)
 
 ---
 
-## "Minimize transportation costs while meeting demand given supplier reliability"
+## "Minimize total flow cost while meeting demand given entity reliability"
 
 ### Ontology signals
-- Same `Operation` network as Q7 with costs and capacity
-- `Demand` concept with quantity per customer and SKU → forcing requirement
-- `Business.reliability_score` → supplier quality metric
-- `DelayPrediction.predicted_delay_prob` → predicted reliability from predictive stage
+- Same `Activity` network as the previous example with costs and capacity
+- `Demand` concept with quantity per target and resource → forcing requirement
+- `Entity.reliability_score` → entity quality metric
+- `RiskPrediction.predicted_risk_prob` → predicted reliability from predictive stage
 
 ### Reasoner classification: Prescriptive (network flow LP with predictive input)
 - "Minimize costs" + "meeting demand" + "given reliability" → constrained optimization
@@ -60,29 +57,26 @@ Discovery-to-routing walkthroughs for prescriptive reasoner questions. Each exam
 ### Implementation hint
 ```json
 {"problem_type": "network_flow",
- "decision_scope": "SupplyFlow through Operation — quantity to ship per route",
- "forcing_requirement": "demand satisfaction per SKU (sum of inflow + unmet >= demand)",
- "objective_property": "transport_cost + unmet_penalty + reliability_penalty",
+ "decision_scope": "AllocationFlow through Activity — quantity to move per route",
+ "forcing_requirement": "demand satisfaction per Resource (sum of inflow + unmet >= demand)",
+ "objective_property": "flow_cost + unmet_penalty + reliability_penalty",
  "scenario_parameters": ["reliability_weight (soft penalty multiplier)",
-                         "min_reliability (hard threshold, exclude suppliers below)"]}
+                         "min_reliability (hard threshold, exclude entities below)"]}
 ```
 
 ### Modeling needs (→ rai-ontology-design, rai-prescriptive-problem-formulation)
-- Decision concept: `SupplyFlow` defined on `Operation` with `quantity` variable
-- Slack concept: `UnmetDemand` per SKU
-- Reliability integration: `Business.reliability_score` as constraint parameter
+- Decision concept: `AllocationFlow` defined on `Activity` with `quantity` variable
+- Slack concept: `UnmetDemand` per Resource
+- Reliability integration: `Entity.reliability_score` as constraint parameter
 - Three scenario framings:
   1. Pure cost: minimize `sum(flow * cost_per_unit) + unmet_penalty`
   2. Reliability-weighted: add `reliability_weight * sum(flow * (1 - reliability_score))`
-  3. Hard threshold: force `SupplyFlow.quantity == 0` where `source.reliability_score < min_reliability`
+  3. Hard threshold: force `AllocationFlow.quantity == 0` where `source.reliability_score < min_reliability`
 
 ### Reasoner handoff (→ prescriptive workflow)
-- Same prescriptive workflow as Q7
+- Same prescriptive workflow as the previous example
 - `configure_scenarios` to set up reliability parameter sweeps before solving
 - Output: cost-vs-reliability tradeoff frontier across scenarios
 
 ### Cumulative discovery note
-This problem uses predictive output (DelayPrediction) as a prescriptive parameter — a key predictive → prescriptive chain. Discovery should suggest: "Given predicted supplier delays (from the prediction stage), optimize sourcing to minimize cost while maintaining reliability."
-
-### Reference
-`hero-user-journey/src/hero_user_journey/queries/q8_supplier_reliability_transport.py`
+This problem uses predictive output (RiskPrediction) as a prescriptive parameter — a key predictive → prescriptive chain. Discovery should suggest: "Given predicted entity risks (from the prediction stage), optimize allocation to minimize cost while maintaining reliability."

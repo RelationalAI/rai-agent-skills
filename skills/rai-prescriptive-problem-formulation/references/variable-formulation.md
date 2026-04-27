@@ -106,8 +106,8 @@ The entity creation strategy for cross-product concepts depends on the **problem
 model.define(WorkerShift.new(worker=Worker, shift=Shift))
 
 # FLOW/TOPOLOGY: Grounded by relationship (only existing routes)
-model.define(IssueAssignment.new(issue=JiraIssue, sprint=JiraSprint)).where(
-    JiraIssue.sprint == JiraSprint
+model.define(TaskAssignment.new(task=Task, sprint=Sprint)).where(
+    Task.sprint == Sprint
 )
 
 # AGGREGATION: Grounded via shared dimension
@@ -141,30 +141,30 @@ For v1 entity creation syntax (junction table patterns, filtered cross-products,
 
 When a decision variable is naturally indexed by an existing concept plus one or more dimensions, use a **multi-argument property** on the existing concept. Do NOT create a cross-product concept just to carry a variable.
 
-**Common hallucination to avoid:** Given concepts `TransportType` and `FreightGroup`, do NOT invent `TransportFreightDecision` as a cross-product concept. Instead, add a multi-index property to the concept that naturally carries the decision:
+**Common hallucination to avoid:** Given concepts `Mode` and `ResourceGroup`, do NOT invent `ModeResourceDecision` as a cross-product concept. Instead, add a multi-index property to the concept that naturally carries the decision:
 
 ```python
 # WRONG — hallucinated cross-product concept:
-TransportFreightDecision = model.Concept("TransportFreightDecision")
-TransportFreightDecision.transport = model.Relationship(...)
-TransportFreightDecision.freight = model.Relationship(...)
+ModeResourceDecision = model.Concept("ModeResourceDecision")
+ModeResourceDecision.mode = model.Relationship(...)
+ModeResourceDecision.resource = model.Relationship(...)
 # This creates unnecessary entities and complexity
 
 # CORRECT — multi-index property on existing concept:
-TransportType.qty_tra = model.Property(
-    f"{TransportType} ships {FreightGroup} quantity {Float:qty_tra}"
+Mode.qty_mode = model.Property(
+    f"{Mode} ships {ResourceGroup} quantity {Float:qty_mode}"
 )
-fg = FreightGroup.ref()
+rg = ResourceGroup.ref()
 x = Float.ref()
 problem.solve_for(
-    TransportType.qty_tra(fg, x), lower=0,
-    name=["qty_tra", TransportType.name, fg.name],
-    where=[TransportType.available_for(fg)],  # Grounded by existing relationship
+    Mode.qty_mode(rg, x), lower=0,
+    name=["qty_mode", Mode.name, rg.name],
+    where=[Mode.available_for(rg)],  # Grounded by existing relationship
 )
 ```
 
 **Decision rule for multi-index vs cross-product:**
-- If the decision naturally belongs on one concept but is indexed by another → **multi-index property** (e.g., "how much TransportType ships per FreightGroup")
+- If the decision naturally belongs on one concept but is indexed by another → **multi-index property** (e.g., "how much Mode ships per ResourceGroup")
 - If the decision is inherently about a pairing with no natural owner → **cross-product concept** (e.g., "assign Worker to Shift")
 - If the model already has a relationship between the concepts → **always prefer multi-index** using `where=[]` to ground variables on the relationship
 
@@ -179,8 +179,8 @@ problem.solve_for(
 
 # Ground by data range (parametric/time-indexed)
 problem.solve_for(
-    FreightGroup.inv(t, x_inv), lower=0,
-    where=[t == std.common.range(FreightGroup.inv_start_t, FreightGroup.inv_end_t + 1)],
+    ResourceGroup.inv(t, x_inv), lower=0,
+    where=[t == std.common.range(ResourceGroup.inv_start_t, ResourceGroup.inv_end_t + 1)],
 )
 ```
 
@@ -363,8 +363,8 @@ For variables indexed by a primitive type rather than a named concept, use a sta
 
 ```python
 # Standalone property — created via model.Property(), not attached to a concept
-bin_tl = model.Property(f"departure day {Integer:t} has {Float:bin_tl}")
-problem.solve_for(bin_tl(t, y_bin_tl), type="bin", name=["y_bin_tl", t],
+bin_fast = model.Property(f"departure day {Integer:t} has {Float:bin_fast}")
+problem.solve_for(bin_fast(t, y_bin_fast), type="bin", name=["y_bin_fast", t],
             where=[t == departure_days])
 ```
 
@@ -389,11 +389,11 @@ problem.solve_for(
     where=[Worker.available_for(Shift)]
 )
 
-# Only create inventory variables for valid time windows per freight group
+# Only create inventory variables for valid time windows per resource group
 problem.solve_for(
-    FreightGroup.inv(t, x_inv), lower=0,
-    name=["x_inv", FreightGroup.name, t],
-    where=[t == std.common.range(FreightGroup.inv_start_t, FreightGroup.inv_end_t + 1)]
+    ResourceGroup.inv(t, x_inv), lower=0,
+    name=["x_inv", ResourceGroup.name, t],
+    where=[t == std.common.range(ResourceGroup.inv_start_t, ResourceGroup.inv_end_t + 1)]
 )
 
 # Scope to a specific factory's products
@@ -428,9 +428,9 @@ Assignment.worker = model.Relationship(f"{Assignment} assigns {worker:Worker}") 
 **Property names must be valid Python identifiers** — no spaces, no special characters:
 ```python
 # CORRECT:
-AdPlacement.min_budget = model.Property(f"{AdPlacement} has {Float:min_budget}")
+Asset.min_budget = model.Property(f"{Asset} has {Float:min_budget}")
 # WRONG — spaces in names cause syntax errors:
-AdPlacement.min budget = model.Property(...)  # ERROR!
+Asset.min budget = model.Property(...)  # ERROR!
 ```
 
 When accessing decision variables through `.ref()` aliases, use the Python attribute name (with `x_` prefix), not the semantic slot name. The solver resolves variables by attribute name:
@@ -453,7 +453,7 @@ problem.solve_for(Food.amount, name=Food.name, lower=0)
 
 # Multi-index: prefix + identifiers
 problem.solve_for(Edge.flow, name=["x", Edge.i, Edge.j], lower=0, upper=Edge.cap)
-problem.solve_for(FreightGroup.inv(t, x_inv), name=["x_inv", FreightGroup.name, t])
+problem.solve_for(ResourceGroup.inv(t, x_inv), name=["x_inv", ResourceGroup.name, t])
 
 # Named constraints and objectives
 problem.satisfy(fix_node, name="fix0")
@@ -579,9 +579,9 @@ model.require(Node.u == 1).where(Node.v(1))                          # Fix TSP o
 
 ```python
 problem.satisfy(model.require(x == fixed.fix).where(cell(fixed.i, fixed.j, x)))  # Sudoku known cells
-problem.satisfy(model.require(x_inv == 0).where(FreightGroup.inv(FreightGroup.inv_end_t, x_inv)))  # End inventory
-problem.satisfy(model.require(x_inv == FreightGroup.inv_start).where(
-    FreightGroup.inv(FreightGroup.inv_start_t, x_inv)
+problem.satisfy(model.require(x_inv == 0).where(ResourceGroup.inv(ResourceGroup.inv_end_t, x_inv)))  # End inventory
+problem.satisfy(model.require(x_inv == ResourceGroup.inv_start).where(
+    ResourceGroup.inv(ResourceGroup.inv_start_t, x_inv)
 ))  # Start inventory
 ```
 

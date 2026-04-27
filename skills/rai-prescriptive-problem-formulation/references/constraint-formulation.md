@@ -166,13 +166,13 @@ model.where(
 
 ```python
 # Fix initial inventory where time matches start
-model.require(x_inv == FreightGroup.inv_start).where(
-    FreightGroup.inv(FreightGroup.inv_start_t, x_inv)
+model.require(x_inv == ResourceGroup.inv_start).where(
+    ResourceGroup.inv(ResourceGroup.inv_start_t, x_inv)
 )
 
-# Capacity constraint for a specific transport type
-model.require(x_weight <= tl_cap * y_bin_tl).where(
-    TransportType.name("tl"), TransportType.weight(t, x_weight), bin_tl(t, y_bin_tl),
+# Capacity constraint for a specific mode
+model.require(x_weight <= fast_cap * y_bin_fast).where(
+    Mode.name("fast"), Mode.weight(t, x_weight), bin_fast(t, y_bin_fast),
 )
 ```
 
@@ -377,15 +377,15 @@ problem.satisfy(model.require(
     sum(Product.quantity / Product.rate) <= Factory.avail
 ).where(this_product, Factory.name(factory_name)))
 
-# TL weight <= capacity (big-M with binary activation)
-problem.satisfy(model.require(x_weight <= tl_cap * y_bin_tl).where(
-    TransportType.name("tl"), TransportType.weight(t, x_weight), bin_tl(t, y_bin_tl),
+# Fast-mode weight <= capacity (big-M with binary activation)
+problem.satisfy(model.require(x_weight <= fast_cap * y_bin_fast).where(
+    Mode.name("fast"), Mode.weight(t, x_weight), bin_fast(t, y_bin_fast),
 ))
 
 # Ship all-or-nothing: quantity = capacity * binary
-problem.satisfy(model.require(x_qty_tra == FreightGroup.inv_start * y_bin_tra).where(
-    TransportType.qty_tra(FreightGroup, t, x_qty_tra),
-    TransportType.bin_tra(FreightGroup, t, y_bin_tra),
+problem.satisfy(model.require(x_qty_mode == ResourceGroup.inv_start * y_bin_mode).where(
+    Mode.qty_mode(ResourceGroup, t, x_qty_mode),
+    Mode.bin_mode(ResourceGroup, t, y_bin_mode),
 ))
 ```
 
@@ -395,8 +395,8 @@ problem.satisfy(model.require(x_qty_tra == FreightGroup.inv_start * y_bin_tra).w
 - Big-M too loose degrades LP relaxation quality and solver performance
 
 ```python
-# GOOD: M = actual capacity       | BAD: arbitrary M
-x_weight <= tl_cap * y_bin_tl     # x_weight <= 999999 * y_bin_tl
+# GOOD: M = actual capacity            | BAD: arbitrary M
+x_weight <= fast_cap * y_bin_fast      # x_weight <= 999999 * y_bin_fast
 ```
 
 ---

@@ -25,9 +25,9 @@ from relationalai.agent.cortex import (
 # ---------------------------------------------------------------------------
 # Configuration
 # ---------------------------------------------------------------------------
-AGENT_NAME = "EXAMPLE_VERBALIZER_QUERIES"
+AGENT_NAME = "EXAMPLE_AGENT"
 DATABASE = "EXAMPLE"
-SCHEMA = "CORTEX_VERBALIZER_QUERIES"
+SCHEMA = "CORTEX_DEMO"
 AGENT_SCHEMA = None  # e.g. "SNOWFLAKE_INTELLIGENCE.AGENTS"
 WAREHOUSE = "TEAM_ECO"
 

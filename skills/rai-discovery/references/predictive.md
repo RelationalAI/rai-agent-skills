@@ -17,7 +17,7 @@ Predictive reasoning uses historical data patterns to forecast outcomes, classif
 |------|-----------------|-----------------|
 | **Classification / Risk Scoring** | "Which category / risk tier does X belong to?" | Categorical target, labeled historical data, status/tier fields |
 | **Regression** | "How much / what value will X be?" | Numeric target + numeric/categorical features, historical actuals |
-| **Forecasting** | "What will happen next period/quarter/year?" | Temporal properties (date, fiscal_quarter, period index), time-series data |
+| **Forecasting** | "What will happen next period?" | Temporal properties (date, time_period, period index), time-series data |
 | **Anomaly Detection** | "What's unusual or unexpected?" | Many numeric properties, historical baselines, status/flag fields |
 | **Clustering** | "What natural segments exist?" (unsupervised) | Many numeric/categorical properties, no obvious target variable |
 
@@ -42,22 +42,22 @@ How prediction is delivered:
 - **`rai_predictive`**: Future — when the RAI predictive reasoner is platform-integrated.
 
 ### target_concept / target_property
-What to predict. E.g., `Supplier` / `delay_days`, or `Customer` / `churn_flag`.
+What to predict. E.g., `Entity` / `risk_value`, or `Customer` / `churn_flag`.
 
 ### feature_properties (for rai_predictive mode)
-Which ontology properties serve as model inputs. E.g., `["Supplier.reliability_score", "Shipment.quantity", "SKU.category"]`.
+Which ontology properties serve as model inputs. E.g., `["Entity.reliability_score", "Activity.quantity", "Resource.category"]`.
 
 ### temporal_column (for forecasting)
-Which property provides the time dimension. E.g., `Shipment.fiscal_quarter`, `Order.order_date`.
+Which property provides the time dimension. E.g., `Activity.time_period`, `Order.order_date`.
 
 ### prediction_horizon (for forecasting)
-What future period to predict. E.g., "next quarter", "next 30 days".
+What future period to predict. E.g., "next period", "next 30 days".
 
 ### output_concept / output_properties
-What the prediction produces. E.g., `DelayPrediction` / `["predicted_delay_prob", "risk_tier", "confidence"]`.
+What the prediction produces. E.g., `RiskPrediction` / `["predicted_risk_prob", "risk_tier", "confidence"]`.
 
 ### pre_computed_table (for pre_computed mode)
-Which schema table contains the predictions. E.g., `DELAY_PREDICTION`.
+Which schema table contains the predictions. E.g., `RISK_PREDICTION`.
 
 ---
 
@@ -85,22 +85,22 @@ Look for tables or concepts with columns/properties like:
 - `predicted_*`, `forecast_*`, `expected_*` — prediction values
 - `probability`, `confidence`, `score` — prediction certainty
 - `risk_tier`, `risk_level`, `risk_category` — derived classifications
-- Temporal scope columns (`fiscal_quarter`, `prediction_date`, `horizon`) alongside prediction values
+- Temporal scope columns (`time_period`, `prediction_date`, `horizon`) alongside prediction values
 
 ### Discovery behavior for pre-computed predictions
 When a prediction table is detected:
 1. **Classify it** — what kind of prediction is it? (classification, regression, forecasting)
 2. **Identify downstream use** — which other reasoners can consume this data?
-   - Prescriptive: use predicted values as parameters/constraints (e.g., predicted delay probability as reliability threshold)
-   - Rules: use predicted categories for alerting (e.g., flag "HIGH" risk tier suppliers)
+   - Prescriptive: use predicted values as parameters/constraints (e.g., predicted risk probability as reliability threshold)
+   - Rules: use predicted categories for alerting (e.g., flag "HIGH" risk tier entities)
    - Graph: use predicted scores as edge weights or node properties
 3. **Suggest the chain** — frame as "Given predicted X, optimize/validate/analyze Y"
 
 ### Example pattern
-A `DelayPrediction` table with `predicted_delay_prob` and `risk_tier` per supplier per quarter:
-- Direct question: "Which suppliers are predicted to delay next quarter?" → query the prediction table
-- Chained: "Given predicted delays, how should we re-source to minimize cost?" → predictive → prescriptive
-- Chained: "Flag all suppliers with predicted delay > 70%" → predictive → rules
+A `RiskPrediction` table with `predicted_risk_prob` and `risk_tier` per entity per period:
+- Direct question: "Which entities are predicted to be at risk next period?" → query the prediction table
+- Chained: "Given predicted risks, how should we re-allocate to minimize cost?" → predictive → prescriptive
+- Chained: "Flag all entities with predicted risk > 70%" → predictive → rules
 
 ---
 
@@ -110,7 +110,7 @@ Predictive reasoning (whether pre-computed or future RAI-native) adds concepts t
 
 | Prediction Type | Output Concept | Downstream Use |
 |----------------|----------------|----------------|
-| Delay/Risk classification | `PredictedDelay` with probability, risk_tier | Prescriptive: reliability constraint. Rules: risk alerting. |
+| Risk classification | `RiskPrediction` with probability, risk_tier | Prescriptive: reliability constraint. Rules: risk alerting. |
 | Demand forecasting | `DemandForecast` with predicted_quantity | Prescriptive: demand parameter for allocation/inventory. |
 | Churn classification | `ChurnProbability` with probability | Prescriptive: optimize retention resource allocation. |
 | Anomaly scoring | `AnomalyScore` with score | Rules: flag entities above threshold. |
@@ -126,11 +126,11 @@ What ontology patterns indicate prediction potential:
 ### For pre-computed mode (available now)
 - Does a prediction/forecast table already exist in the schema?
 - Look for columns named `predicted_*`, `probability`, `risk_*`, `forecast_*`, `confidence`
-- Check if the prediction table links to other ontology concepts via FK (e.g., supplier_id linking predictions to Supplier concept)
+- Check if the prediction table links to other ontology concepts via FK (e.g., entity_id linking predictions to Entity concept)
 
 ### For rai_predictive mode (future)
 - **Feature availability**: Target property with sufficient non-null values; 3+ candidate features with variance
-- **Temporal span**: For forecasting, at least 2 full cycles of the target period (quarterly prediction needs 6+ months of history)
+- **Temporal span**: For forecasting, at least 2 full cycles of the target period (period-level prediction needs 2+ periods of history)
 - **Label quality**: For classification, labels exist and are reasonably balanced (flag extreme imbalance like 99%/1%)
 - **Row count**: Rough minimums (regression 50+, classification 30+ per class, forecasting 2+ full periods)
 - **Feature-target relationship**: At least some features plausibly related to target (domain signal)

@@ -4,7 +4,6 @@
 
 from relationalai.semantics import Float, Integer, Model, String
 from relationalai.semantics.std import math
-import relationalai.semantics as rai
 
 model = Model("reconciliation_rule")
 
@@ -15,6 +14,20 @@ Match = model.Concept("Match", identify_by={"id": Integer})
 Match.source_a_amount = model.Property(f"{Match} has {Float:source_a_amount}")
 Match.source_b_amount = model.Property(f"{Match} has {Float:source_b_amount}")
 Match.description = model.Property(f"{Match} has {String:description}")
+
+# --- Sample data ---
+match_source = model.data([
+    {"ID": 1, "SRC_A": 100.00, "SRC_B": 100.00, "DESC": "exact match"},
+    {"ID": 2, "SRC_A": 250.00, "SRC_B": 249.95, "DESC": "minor delta"},
+    {"ID": 3, "SRC_A": 1000.00, "SRC_B": 1150.00, "DESC": "major delta"},
+    {"ID": 4, "SRC_A": 5000.00, "SRC_B": 3500.00, "DESC": "critical delta"},
+])
+model.define(
+    m := Match.new(id=match_source.ID),
+    m.source_a_amount(match_source.SRC_A),
+    m.source_b_amount(match_source.SRC_B),
+    m.description(match_source.DESC),
+)
 
 # --- Reconciliation Rule ---
 # NL: "Flag matched records where the two source amounts differ by more than $0.01"
@@ -58,8 +71,8 @@ model.where(Match.has_discrepancy()).select(
 
 # --- Coverage check ---
 
-total_matches = model.select(aggregates.count(Match)).to_df().iloc[0, 0]
+total_matches = model.select((aggregates.count(Match) | 0).alias("count")).to_df().iloc[0, 0]
 discrepancy_count = model.where(Match.has_discrepancy()).select(
-    aggregates.count(Match)
+    (aggregates.count(Match) | 0).alias("count")
 ).to_df().iloc[0, 0]
 print(f"\nDiscrepancies: {discrepancy_count}/{total_matches}")

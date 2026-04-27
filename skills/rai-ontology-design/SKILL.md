@@ -14,7 +14,6 @@ description: Covers RAI domain modeling decisions — concepts, relationships, d
 - **As design authority** — consulted by `rai-build-starter-ontology` during greenfield builds for concept, relationship, and property design decisions
 - **Enriching an existing model** — adding properties, relationships, or subtypes to a model that already loads and queries
 - **Reviewing or evolving a model** — assessing model gaps, examining ontology inventories, applying advanced patterns
-- **Working with modeler exports** — understanding and extending models exported from the RAI modeler (latest or legacy format)
 - Mapping schema columns to model properties and relationships
 - Assessing model gaps for optimization (READY / MODEL_GAP / DATA_GAP)
 - Designing cross-product decision concepts for optimization
@@ -178,7 +177,7 @@ LineItem = model.Concept(
 ### Additional concept patterns
 
 - **Value type concepts:** `CustomerID`, `ProductPrice` extend base types for type safety. Use `{ConceptName}{AttributeName}` naming. Required for reference models; raw types OK for prototyping.
-- **Concept creation with identify_by:** Three valid patterns — `identify_by={"field": Type}` at creation, `Property` + `.new()` (modeler style), `Concept.identify_by(existing_prop)` for custom reading strings.
+- **Concept creation with identify_by:** Three valid patterns — `identify_by={"field": Type}` at creation, separate `Property` for identity followed by `.new()`, or `Concept.identify_by(existing_prop)` for custom reading strings.
 
 See [advanced-modeling.md](references/advanced-modeling.md) for examples of both.
 
@@ -265,7 +264,7 @@ Enrollment.grade = model.Property(f"{Enrollment} has {Float:grade}")
 | Pattern | Summary | Reference |
 |---------|---------|-----------|
 | Reading string quality | ≤8 static words, precise verbs, max 3 fields, don't echo owner concept | [advanced-modeling.md](references/advanced-modeling.md) |
-| Property grouping | Group by topic; `short_name` in modeler exports | [advanced-modeling.md](references/advanced-modeling.md) |
+| Property grouping | Group by topic; use `short_name` for programmatic relationship access | [advanced-modeling.md](references/advanced-modeling.md) |
 | Inverse relationships | `.alt()` for concise inverse declaration | [advanced-modeling.md](references/advanced-modeling.md) |
 | Role naming | Named roles when same concept appears twice: `{Person:payer}` | [advanced-modeling.md](references/advanced-modeling.md) |
 | Same-type references | `.ref()` for relating two instances of the same type | [advanced-modeling.md](references/advanced-modeling.md) |
@@ -312,7 +311,7 @@ Each concept has two kinds of source table relationships:
 - **Authoritative source**: The table where the concept's identity is defined (where the PK lives). Use this for `model.define(C.new(id=TABLE.key))`.
 - **Joinable source**: A table that references the concept via FK but does not define it. Use this for relationship binding with `model.define(...).where(...)`.
 
-**Why this matters for enrichment:** When a MODEL_GAP fix needs to map a new property, the `source_table` must be the authoritative source for the target concept (or a table with a reliable FK to it). Mapping from the wrong table produces incorrect or missing data. In the schema-to-ontology example above, CUSTOMERS is authoritative for Customer (used in `model.define(C.new(...))`), while ORDERS is joinable (references Customer via FK).
+**Why this matters for enrichment:** When a MODEL_GAP fix needs to map a new property, the `source_table` must be the authoritative source for the target concept (or a table with a reliable FK to it). Mapping from the wrong table produces incorrect or missing data. For example, if `CUSTOMERS` is the table where Customer identity is defined (`model.define(Customer.new(id=CUSTOMERS.customer_id))`), it is the authoritative source for Customer; `ORDERS`, which references Customer via FK, is a joinable source for that concept.
 
 **Decision rule for enrichment source selection:**
 1. Find the authoritative table for the target concept (the table used in `model.define(C.new(id=TABLE.key))`)
@@ -347,7 +346,7 @@ define(_Supplier.new(id=TABLE__BUSINESS.id)).where(TABLE__BUSINESS.type == "SUPP
 define(_Supplier.name(TABLE__BUSINESS.name)).where(_Supplier.id == TABLE__BUSINESS.id)
 ```
 
-This pattern is common in modeler exports where a single `BUSINESS` table contains suppliers, customers, manufacturers, and warehouses differentiated by a `TYPE` column.
+This pattern is common when a single source table contains multiple business roles differentiated by a `TYPE` column (e.g., suppliers, customers, manufacturers, warehouses all in one table).
 
 
 ---
@@ -473,11 +472,10 @@ For detailed enrichment patterns, property vs relationship mapping, and source c
 | Derived concept + bridge | Sources class, derived concepts from column values, bridge entity, `.alias()` for inverse | [examples/derived_concept_bridge_entity.py](examples/derived_concept_bridge_entity.py) |
 | Self-referential hierarchy | Many concepts, individual Properties, self-referential Entity→Entity, identity limited to natural key | [examples/self_referential_bom.py](examples/self_referential_bom.py) |
 | Cross-product decision concept | CSV data, cross-product decision concepts, constrained cartesian via `.where()`, `.ref()` derived properties, generated Period concept | [examples/cross_product_decision_concept.py](examples/cross_product_decision_concept.py) |
-| Large-scale bidirectional | Large-scale (14 tables, 12+ concepts), unary flags, bidirectional inverses, self-referential caller/callee, walrus operator binding | [examples/large_scale_bidirectional.py](examples/large_scale_bidirectional.py) |
+| Large-scale bidirectional | Large-scale (14 tables, 12+ concepts), unary flags, bidirectional inverses, self-referential source/target, walrus operator binding | [examples/large_scale_bidirectional.py](examples/large_scale_bidirectional.py) |
 | Multi-schema cross-system | Multi-schema sources (4 domains), individual Properties, boolean flags as unary Relationships, cross-system entity linking | [examples/multi_schema_cross_system.py](examples/multi_schema_cross_system.py) |
 | Pairwise property + ref | Binary/pairwise property, `.ref()` for same-type binding, junction concept for many-to-many | [examples/pairwise_property_ref.py](examples/pairwise_property_ref.py) |
 | Auxiliary schema enrichment | Auxiliary schema loading, composite key enrichment, filter_by for cross-schema binding | [examples/auxiliary_schema_enrichment.py](examples/auxiliary_schema_enrichment.py) |
-| Modeler export (legacy) | Legacy `initialize()` format, `_Concept` prefix, `Property("{...}")` strings, standalone `define()`, `.where()` binding | [examples/modeler_legacy_export.py](examples/modeler_legacy_export.py) |
 
 ---
 
@@ -486,7 +484,6 @@ For detailed enrichment patterns, property vs relationship mapping, and source c
 - Enriching a model for optimization (relationship promotion, cross-products, multi-hop relationships, gap classification)? See [enrichment-patterns.md](references/enrichment-patterns.md)
 - Categorization, subtypes, derivation modes, temporal tracking, or semantic stability? See [categorization-and-advanced.md](references/categorization-and-advanced.md)
 - Advanced modeling (value types, identity patterns, ternary properties, inverse relationships, role naming, scenario modeling)? See [advanced-modeling.md](references/advanced-modeling.md)
-- Modeler exports or model composition? See [modeler-and-composition.md](references/modeler-and-composition.md)
 - Model inventory or unmapped data classification? See [examination-guidance.md](references/examination-guidance.md)
 - Decomposition quality gates (irreducibility, sample data validation, counterexample)? See [fact-decomposition-and-validation.md](references/fact-decomposition-and-validation.md)
 - Constraint patterns beyond FD (mandatory/optional, subset, exclusion, self-referential, frequency, value-comparison)? See [constraint-patterns.md](references/constraint-patterns.md)

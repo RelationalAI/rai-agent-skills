@@ -114,16 +114,16 @@ problem.solve_for(Node.u, type="int", lower=1, upper=node_count)
 
 ### Multi-period / time-indexed models
 
-**Key:** Two approaches -- (1) cross-product concept (`MachinePeriod`) for entity-per-period decisions, or (2) multiarity property (`FreightGroup.inv(t, x_inv)`) for time-indexed variables with `where=[t == range(...)]`.
+**Key:** Two approaches -- (1) cross-product concept (`MachinePeriod`) for entity-per-period decisions, or (2) multiarity property (`ResourceGroup.inv(t, x_inv)`) for time-indexed variables with `where=[t == range(...)]`.
 
 **Inventory balance** links consecutive time steps:
 
 ```python
 problem.satisfy(model.where(
     x_inv1 := Float.ref(), x_inv2 := Float.ref(),
-    FreightGroup.inv(t, x_inv1), FreightGroup.inv(t + 1, x_inv2),
-    TransportType.qty_tra(FreightGroup, t, x_qty_tra),
-).require(x_inv1 == x_inv2 + sum(x_qty_tra).per(FreightGroup, t)))
+    ResourceGroup.inv(t, x_inv1), ResourceGroup.inv(t + 1, x_inv2),
+    Mode.qty_mode(ResourceGroup, t, x_qty_mode),
+).require(x_inv1 == x_inv2 + sum(x_qty_mode).per(ResourceGroup, t)))
 ```
 
 **Cumulative / running-sum** uses two refs with time-ordering:
