@@ -185,21 +185,17 @@ For all hyperparameters and tuning guidance, see [references/hyperparameters.md]
 
 ## Predictions
 
-After training, generate predictions on the test set. There are two valid patterns:
+After training, generate predictions on the test set. Two valid binding patterns:
 
-**Pattern 1 — bind to a concept attribute (query with `select()`):**
 ```python
+# Pattern 1 — bind to a concept attribute (queryable via select()):
 Source.predictions = gnn.predictions(domain=Test)
-```
-This registers the predictions as a named relationship on the concept. Each attribute name can only be assigned **once per session** — assigning `Source.predictions` a second time raises `[Duplicate relationship]`. Use a different attribute name if you need multiple prediction sets on the same concept (e.g. `Source.predictions_v2`).
 
-**Pattern 2 — assign to a plain Python variable (call as many times as needed):**
-```python
-predictions = gnn.predictions(domain=Test)
-# can be called again without error
+# Pattern 2 — assign to a plain Python variable (re-callable):
 predictions = gnn.predictions(domain=Test)
 ```
-Use this pattern when calling `predictions()` multiple times in the same session.
+
+Each concept-attribute name can be assigned **once per session** — re-binding `Source.predictions` raises `[Duplicate relationship]`. To call `predictions()` multiple times in one session, use Pattern 2 or a fresh attribute name (e.g. `Source.predictions_v2`).
 
 ### Classification (binary, multiclass, multilabel)
 
@@ -267,16 +263,7 @@ select(
 ).inspect()
 ```
 
-### Accessing `prediction_concept` Directly
-
-`gnn.predictions()` returns a Relationship. You can also access the underlying prediction concept directly via `gnn.prediction_concept` — useful when you need to reference it without binding it to a source concept attribute:
-
-```python
-PredResult = gnn.prediction_concept
-select(Beer.name, PredResult.predicted_labels, PredResult.probs).where(
-    Beer.churn(DateTime, PredResult)
-).inspect()
-```
+**Direct access via `gnn.prediction_concept`.** Exposes the underlying prediction concept without binding to a source attribute — useful when the source concept name conflicts with an existing attribute. Use it as the head in `select(...)`: `select(Source.source_id, gnn.prediction_concept.predicted_labels).where(Source.predictions(DateTime, gnn.prediction_concept)).inspect()`.
 
 For the full prediction attributes reference (per-task attribute types, code shapes), see [references/prediction-attributes.md](references/prediction-attributes.md). The summary table is in Quick Reference above.
 
@@ -359,18 +346,12 @@ For a full predict-then-optimize example chaining multiple GNNs into optimizers 
 After `gnn.fit()`, inspect what data the engine received:
 
 ```python
-# Visual graph of the dataset schema (requires pydot)
-graph_viz = gnn.visualize_dataset()
-graph_viz.write_png("dataset_schema.png")
-
-# With data types shown
+# Visual schema with data types (requires pydot; omit show_dtypes for the simple variant)
 graph_viz = gnn.visualize_dataset(show_dtypes=True)
 graph_viz.write_png("dataset_schema.png")
 
-# Export full metadata as a dictionary (useful for debugging feature types)
+# Full metadata dict (debugging feature types) and data-config printout
 config = gnn.dataset.metadata_dict
-
-# Print the data config to console
 gnn.dataset.print_data_config()
 ```
 
@@ -474,9 +455,7 @@ User.predictions = gnn.predictions(domain=Test)
 |---------|-------|-----|
 | Missing `has_time_column=True` | Templates with the "at" keyword require the flag so the trainer finds the time column | Set `has_time_column=True` when templates contain "at" |
 | Using `.predicted_Item` (uppercase) | Target-attribute names are always lowercased from the Target concept name | Use `.predicted_item` |
-| Assigning `Source.predictions = gnn.predictions(...)` twice in the same session | Concept attributes are immutable once registered — reassignment raises `[Duplicate relationship]` | Either use a different attribute name (e.g. `Source.predictions_v2`) or assign to a plain Python variable instead: `predictions = gnn.predictions(...)` |
 | Invalid `task_type`/`eval_metric` combination | Not every metric applies to every task type | Check [references/task-types-and-metrics.md](references/task-types-and-metrics.md) for valid pairs |
-| Passing `select(...)` fragments to `train=` or `validation=` | GNN expects Relationship objects | Use `train=Train` with the Relationship object directly |
 | `register_model()` before `fit()` | Registration requires a trained model | Always call `gnn.fit()` before `gnn.register_model()` |
 | `model_name` or `version_name` with spaces or special characters (e.g. `"my model"`, `"v1.0!"`) | Snowflake rejects non-identifier strings as model names, but validation only happens after full training completes | Use plain alphanumeric names with underscores only (e.g. `"my_model"`, `"V1"`) |
 | Calling `register_model()` with a `(model_name, version_name)` pair that already exists in the registry | The registry enforces uniqueness — duplicate versions raise `ModelManagerError` | Use a new `version_name` (e.g. `"V2"`) or delete the existing version first |
