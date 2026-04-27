@@ -185,11 +185,21 @@ For all hyperparameters and tuning guidance, see [references/hyperparameters.md]
 
 ## Predictions
 
-After training, generate predictions on the test set:
+After training, generate predictions on the test set. There are two valid patterns:
 
+**Pattern 1 — bind to a concept attribute (query with `select()`):**
 ```python
 Source.predictions = gnn.predictions(domain=Test)
 ```
+This registers the predictions as a named relationship on the concept. Each attribute name can only be assigned **once per session** — assigning `Source.predictions` a second time raises `[Duplicate relationship]`. Use a different attribute name if you need multiple prediction sets on the same concept (e.g. `Source.predictions_v2`).
+
+**Pattern 2 — assign to a plain Python variable (call as many times as needed):**
+```python
+predictions = gnn.predictions(domain=Test)
+# can be called again without error
+predictions = gnn.predictions(domain=Test)
+```
+Use this pattern when calling `predictions()` multiple times in the same session.
 
 ### Classification (binary, multiclass, multilabel)
 
@@ -254,6 +264,17 @@ select(
     PredRelation["timestamp"],
     PredRelation["prediction"].predicted_labels,
     PredRelation["prediction"].probs,
+).inspect()
+```
+
+### Accessing `prediction_concept` Directly
+
+`gnn.predictions()` returns a Relationship. You can also access the underlying prediction concept directly via `gnn.prediction_concept` — useful when you need to reference it without binding it to a source concept attribute:
+
+```python
+PredResult = gnn.prediction_concept
+select(Beer.name, PredResult.predicted_labels, PredResult.probs).where(
+    Beer.churn(DateTime, PredResult)
 ).inspect()
 ```
 
@@ -338,9 +359,16 @@ For a full predict-then-optimize example chaining multiple GNNs into optimizers 
 After `gnn.fit()`, inspect what data the engine received:
 
 ```python
-# Visual graph of the dataset schema
+# Visual graph of the dataset schema (requires pydot)
+graph_viz = gnn.visualize_dataset()
+graph_viz.write_png("dataset_schema.png")
+
+# With data types shown
 graph_viz = gnn.visualize_dataset(show_dtypes=True)
 graph_viz.write_png("dataset_schema.png")
+
+# Export full metadata as a dictionary (useful for debugging feature types)
+config = gnn.dataset.metadata_dict
 
 # Print the data config to console
 gnn.dataset.print_data_config()
@@ -446,14 +474,21 @@ User.predictions = gnn.predictions(domain=Test)
 |---------|-------|-----|
 | Missing `has_time_column=True` | Templates with the "at" keyword require the flag so the trainer finds the time column | Set `has_time_column=True` when templates contain "at" |
 | Using `.predicted_Item` (uppercase) | Target-attribute names are always lowercased from the Target concept name | Use `.predicted_item` |
+| Assigning `Source.predictions = gnn.predictions(...)` twice in the same session | Concept attributes are immutable once registered — reassignment raises `[Duplicate relationship]` | Either use a different attribute name (e.g. `Source.predictions_v2`) or assign to a plain Python variable instead: `predictions = gnn.predictions(...)` |
 | Invalid `task_type`/`eval_metric` combination | Not every metric applies to every task type | Check [references/task-types-and-metrics.md](references/task-types-and-metrics.md) for valid pairs |
+| Passing `select(...)` fragments to `train=` or `validation=` | GNN expects Relationship objects | Use `train=Train` with the Relationship object directly |
 | `register_model()` before `fit()` | Registration requires a trained model | Always call `gnn.fit()` before `gnn.register_model()` |
+| `model_name` or `version_name` with spaces or special characters (e.g. `"my model"`, `"v1.0!"`) | Snowflake rejects non-identifier strings as model names, but validation only happens after full training completes | Use plain alphanumeric names with underscores only (e.g. `"my_model"`, `"V1"`) |
+| Calling `register_model()` with a `(model_name, version_name)` pair that already exists in the registry | The registry enforces uniqueness — duplicate versions raise `ModelManagerError` | Use a new `version_name` (e.g. `"V2"`) or delete the existing version first |
+| Calling `register_model()` on a GNN instance created in load mode | Load-mode GNN instances cannot re-register — only fit-mode instances can register models | Call `register_model()` on the `fit_gnn` instance after `fit()`, not on the `gnn` instance after `load()` |
 | Omitting `graph`/`property_transformer` when loading | Load reconstructs against the same schema used during training | Provide the same `graph` and `property_transformer` used during training |
 | Passing training-only params when loading | Load ignores training-time params | Omit `train`, `validation`, and hyperparameters when loading |
 | Omitting `source_concept` when loading | Required to bind the loaded model to the source concept for prediction | Add `source_concept=<YourConcept>` to the load constructor |
 | Omitting `task_type` when loading | Not persisted in the registry | Add `task_type="<your_task_type>"` to the load constructor |
 | Omitting `target_concept` for link-prediction load | Required to resolve the prediction target concept | Add `target_concept=<YourTargetConcept>` for link prediction |
 | Omitting `has_time_column` when loading a temporal model | Not persisted in the registry | Re-supply `has_time_column=True` at load time |
+| Calling `fit()` on a GNN instance created in load mode | Load-mode GNN instances do not support training | Create a separate fit-mode GNN instance (with `train=`, `validation=`) and call `fit()` on that |
+| Calling `load()` on a GNN instance created in fit mode (with `train=`, `validation=`) | Fit-mode GNN instances do not support `load()` | Create a separate load-mode GNN instance (with `source_concept=`, `model_name=`, `version_name=`) and call `load()` on that |
 | `has_time_column=True` fails with "no time column defined in data tables" | The concept carrying `time_col` is an edge, not a node — `time_col` only propagates for node concepts | Use `has_time_column=False` with non-temporal Relationships as workaround |
 | `has_time_column=True` fails with `ValidationError: Error processing datetime column '<name>'` at scale | Server-side datetime processing rejects the column despite clean data, node-level concept, and correct `datetime`/`time_col` config — second known limitation | Verify the timestamp column type matches the GNN datetime pipeline's expected format (see `rai-predictive-modeling`); fall back to non-temporal Relationships if it persists |
 | Experiment schema not accessible by the RAI native app | RAI app needs explicit grants to read from the experiment schema | `GRANT USAGE ON DATABASE <db> TO APPLICATION RELATIONALAI; GRANT ALL ON SCHEMA <db>.<schema> TO APPLICATION RELATIONALAI` |

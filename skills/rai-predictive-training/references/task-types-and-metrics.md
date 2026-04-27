@@ -54,7 +54,7 @@ Valid `(task_type, eval_metric)` combinations for the GNN constructor.
 | `"repeated_link_prediction"` | `"link_prediction_recall@k"` |
 | `"repeated_link_prediction"` | `"link_prediction_map@k"` |
 
-Replace `@k` with the desired top-k value, e.g. `"link_prediction_precision@5"`.
+`@k` is optional. Omit it to evaluate without a top-k cutoff (e.g. `"link_prediction_precision"`), or append a value to restrict to the top k results (e.g. `"link_prediction_precision@5"`).
 
 ## Task Type Summary
 
