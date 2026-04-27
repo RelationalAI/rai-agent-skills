@@ -25,3 +25,4 @@
 | Chained rules → prescriptive | Rules-derived boolean flags as hard constraints + cost surcharges in optimizer | [examples/chained_rules_prescriptive.py](../examples/chained_rules_prescriptive.py) |
 | Union heterogeneous objective | `model.union()` combining costs from different concept scopes into single objective | [examples/union_heterogeneous_objective.py](../examples/union_heterogeneous_objective.py) |
 | Slack variables penalty | Slack variables absorbing shortfall + penalty term for soft constraints | [examples/slack_variables_penalty.py](../examples/slack_variables_penalty.py) |
+| Pre-solve feasibility gate | Aggregation-query gate via `aggs.count` / `aggs.sum().per()` — trivial-solution detection + per-scope feasibility precheck (push-down for source-table-backed models) | [examples/presolve_feasibility_gate.py](../examples/presolve_feasibility_gate.py) |

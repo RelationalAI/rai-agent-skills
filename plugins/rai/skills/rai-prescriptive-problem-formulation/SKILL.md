@@ -116,9 +116,10 @@ What are we optimizing?
 Is the formulation complete and correct?
 - Every variable appears in at least one constraint or the objective
 - Every constraint references at least one decision variable
-- Forcing constraints exist for minimize objectives
 - Join paths in `.where()` clauses connect to actual data
 - Bounds are consistent (lower <= upper)
+- **Trivial-solution gate (run before presenting or solving):** substitute every decision variable with its objective-preferred bound (typically zero for minimize) and evaluate against the actual input data, not abstractly. If every constraint still holds and the objective is at its preferred end, the solver will return that trivial point as optimal — the formulation is wrong, not merely under-specified. The non-obvious failure is a forcing constraint that exists in the formulation but is vacuous against the current data (its `where=` predicate matches no rows); see the *Missing forcing requirement* and `.per(Concept.property)` rows in Common Pitfalls for related modes. Do not present a formulation that fails this gate — a non-OR user will accept it, run it, and conclude optimization "doesn't work." If the gate's outcome depends on the input data, state that dependence with row-count evidence.
+- **Data-driven feasibility precheck:** when constraint bounds derive from input data, verify the constraint system admits at least one feasible point given that data. Aggregate at the **constraint's natural disaggregation level** — per-entity for per-entity constraints, per-group for grouped ones; a single global total can mask per-slice infeasibility (`Σ supply ≥ Σ demand` may hold while every per-entity slice fails). Run the check as PyRel aggregation queries (see `rai-querying`) so it pushes down to the warehouse (e.g., Snowflake) without pulling rows. If lower-bound exceeds upper-bound at any slice, the formulation is infeasible by construction; surface to the user before solve. See [examples/presolve_feasibility_gate.py](examples/presolve_feasibility_gate.py).
 
 **Pre-solver audit:** before calling `problem.solve(...)`, run a two-step check.
 
@@ -350,6 +351,7 @@ For detailed heuristics, examples, and the over-specification recognition table,
 | Infeasible but not caught before solve | Feasibility arithmetic not validated — e.g., 50 entities need service, 4 periods, max 5/period = 20 slots < 50 needed | Before formulating, verify: `entity_count / periods / capacity_per_period` fits. If not, adjust parameters or confirm the problem allows partial coverage |
 | Linear objective over continuous decision variables collapses to one entity | LP pushes to the boundary — without a per-entity upper cap the max-coefficient entity absorbs all budget/weight. Symptom: "+X% lift" headlines masking a single-winner solution. | Add a per-entity upper cap (e.g., `w_i <= 3 * current_i`), switch to a concave objective (`sqrt`, `log`), or piecewise-linear saturation curves. |
 | `solve_for(where=expr)` raises `[Invalid operator] Cannot use python's 'bool check'` | `where` argument is iterated as a tuple; passing a bare expression triggers PyRel's `__bool__` guard | Wrap in a list: `where=[Concept.prop >= threshold, ...]` |
+| `problem.satisfy(<expr>)` raises `TypeError: satisfy() expects a Fragment from model.require(...)` | Bare comparison expression passed to `problem.satisfy()` instead of a Fragment | Wrap with `model.require(<expr>)` or use `model.where(<scope>).require(<expr>)`. See [constraint-formulation.md](references/constraint-formulation.md) > Style 1/Style 2 |
 
 For detailed unwired relationship symptoms, checks, and code examples, see [constraint-formulation.md](references/constraint-formulation.md) > Unwired Relationships (Detailed).
 
