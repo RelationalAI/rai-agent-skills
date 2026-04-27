@@ -28,6 +28,7 @@ Start from the question, not the algorithm name.
 | "What depends on X? / What does X affect?" | Reachability | `reachable(from_=X)` or `reachable(to=X)` |
 | "How far apart are two nodes?" | Distance | `distance()` |
 | "What's the maximum separation in the network?" | Distance | `diameter_range()` |
+| "Which **edges** are single points of failure (bridges)?" | Components | No named primitive — express as WCC with per-edge ablation, see [Bridge edges](#bridge-edges-no-named-primitive) |
 | "Which nodes are structurally similar?" | Similarity | `jaccard_similarity()` |
 | "Which nodes are likely to connect?" | Similarity | `adamic_adar()` or `preferential_attachment()` |
 | "How tightly knit are local neighborhoods?" | Clustering | `local_clustering_coefficient()` |
@@ -291,6 +292,74 @@ graph.Node.component = graph.weakly_connected_component()
 ```python
 connected = graph.is_connected()
 ```
+
+---
+
+### Bridge edges (no named primitive)
+
+**What you want:** Edges whose removal disconnects the graph — single-points-of-failure in the *edge* sense.
+
+**Don't substitute `betweenness_centrality()`.** It scores *nodes* on a relative scale and does not answer "would removing this edge disconnect the graph." A node can have high betweenness without any incident edge being a true bridge; a bridge can have endpoints with modest betweenness.
+
+**Express it directly in RAI as WCC with per-edge ablation.** For each candidate edge, build a Graph excluding that edge, run `weakly_connected_component()`, and check whether the edge's endpoints land in different components — if they do, the edge is a bridge. The loop creates one Graph instance per candidate edge on the same model, then binds the bridge result back as a Relationship on the edge concept so downstream rules, optimization, and other graph algorithms see it natively.
+
+Two patterns must be honored together for the loop to work:
+
+1. **Use the direct-query pattern for WCC, not the shorthand.** The shorthand `graph.Node.X = graph.weakly_connected_component()` creates a property on the host node concept. In a loop, the second iteration fails with `RAIException: Duplicate relationship 'X' on <NodeConcept>` because the property already exists. The direct-query pattern (`graph.weakly_connected_component()(node_ref, comp_ref)` inside `where()`) does not pollute the concept and is loop-safe.
+2. **Pass edge-endpoint relationships by attribute name, not as Property objects.** Calling a Property-as-parameter unbound (`src_rel(e).id`) trips type inference; bound attribute access via `getattr(e, "from_substation").id` is the form the rest of the skill uses and the typer accepts.
+
+```python
+def find_bridges(model, EdgeConcept, NodeConcept, src_attr, dst_attr):
+    """Bridge detection via per-edge ablation + WCC.
+
+    src_attr / dst_attr: attribute names (strings) on EdgeConcept resolving to NodeConcept,
+    e.g., "from_substation" / "to_substation".
+    """
+    e = EdgeConcept.ref()
+    cand = (
+        model.select(
+            e.id.alias("edge_id"),
+            getattr(e, src_attr).id.alias("src_id"),
+            getattr(e, dst_attr).id.alias("dst_id"),
+        )
+        .to_df()
+    )
+
+    bridges = []
+    for _, row in cand.iterrows():
+        excluded_id = row["edge_id"]
+        g = Graph(model, directed=False, weighted=False, node_concept=NodeConcept)
+        other = EdgeConcept.ref()
+        model.where(other.id != excluded_id).define(
+            g.Edge.new(src=getattr(other, src_attr), dst=getattr(other, dst_attr))
+        )
+        # Direct-query pattern — does NOT define a property on NodeConcept (loop-safe)
+        node_ref, comp_ref = g.Node.ref(), g.Node.ref()
+        comps = (
+            model.where(g.weakly_connected_component()(node_ref, comp_ref))
+            .select(node_ref.id.alias("id"), comp_ref.id.alias("component"))
+            .to_df()
+        )
+        comps["component"] = comps["component"].astype(str)
+        src_c = comps.loc[comps["id"] == row["src_id"], "component"].iloc[0]
+        dst_c = comps.loc[comps["id"] == row["dst_id"], "component"].iloc[0]
+        if src_c != dst_c:
+            bridges.append(excluded_id)
+    return bridges
+
+bridge_ids = find_bridges(model, EdgeConcept, NodeConcept, "from_substation", "to_substation")
+EdgeConcept.is_bridge = model.Relationship(f"{EdgeConcept} is a bridge")
+model.where(EdgeConcept.id.in_(bridge_ids)).define(EdgeConcept.is_bridge())
+```
+
+**Expected runtime warnings (informational, not errors):**
+- **`Multi-edges are not allowed when aggregator=None`** fires once per Graph build whenever the data has parallel edges (e.g., two transmission lines between the same substation pair, or one edge in each direction on an undirected graph). It is required that you let this warning fire — silencing it by setting `aggregator="sum"` would collapse parallel edges into one and falsely flag both members of the pair as bridges. See the parallel-edges row in the SKILL.md Common Pitfalls.
+- **`Rules created in a loop`** fires because each iteration adds a fresh `Edge.new(...)` rule for that ablation Graph. Expected, no action needed.
+
+**Caveats:**
+- N Graph instances on one model compounds the type-inference scope limit — stay below a few hundred candidate edges. See the `TypeError` row in the SKILL.md Common Pitfalls. If your candidate set is larger, scope the loop first (e.g., restrict to edges within a single WCC of interest, or to edges meeting a domain filter), then ablate over that subset.
+- The component column from the direct-query pattern arrives as string hashes when the node concept is string-identified; cast with `.astype(str)` for the equality comparison. See [result-extraction.md](result-extraction.md#int128array-from-rai) for the full type-handling matrix across node identifier types.
+- **Stay in the RAI Graph reasoner.** A scaling concern is not a license to drop to a Python graph library — doing so loses the concept binding that lets the bridge result feed downstream rules and optimization on the same model, and forces an extra round-trip to load results back. Scope the candidate set instead.
 
 ---
 
