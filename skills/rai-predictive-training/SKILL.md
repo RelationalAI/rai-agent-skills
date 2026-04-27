@@ -159,8 +159,6 @@ For link prediction, also consider: `head_layers=2`, `num_negative=20`, `label_s
 
 **Auto-suspend during iteration.** Set a low `auto_suspend_mins` on every engine you're using — idle pool cost can dominate total spend on small workloads. Warm pools make sense only for scheduled/production cadence. Specific tier names and per-cloud memory-vs-compute tradeoffs change over time — ask the RelationalAI team for current sizing. Full `raiconfig.yaml` structure (including the `reasoners:` block for all engine types) lives in the RAI configuration/setup skill.
 
-**Resume suspended GPU pools before runs -- required, not optional.** A suspended GPU compute pool does not auto-resume when `gnn.fit()` or `gnn.predictions()` submits; the client has been observed polling indefinitely (over 90 minutes idle) with no error surfaced. Before any training or prediction run -- especially after a period of idle when auto-suspend has fired -- explicitly resume the pool so it is `READY` when the job submits. Run `ALTER COMPUTE POOL <pool_name> RESUME` in Snowflake (the `<pool_name>` is the predictive reasoner entry in `raiconfig.yaml`), or use the RAI CLI's reasoner resume. See the RAI configuration/setup skill for current CLI syntax.
-
 For all hyperparameters and tuning guidance, see [references/hyperparameters.md](references/hyperparameters.md).
 
 ---
@@ -471,7 +469,6 @@ User.predictions = gnn.predictions(domain=Test)
 | `has_time_column=True` fails with "no time column defined in data tables" | The concept carrying `time_col` is an edge, not a node — `time_col` only propagates for node concepts | Use `has_time_column=False` with non-temporal Relationships as workaround |
 | `has_time_column=True` fails with `ValidationError: Error processing datetime column '<name>'` at scale | Server-side datetime processing rejects the column despite clean data, node-level concept, and correct `datetime`/`time_col` config — second known limitation | Verify the timestamp column type matches the GNN datetime pipeline's expected format (see `rai-predictive-modeling`); fall back to non-temporal Relationships if it persists |
 | Experiment schema not accessible by the RAI native app | RAI app needs explicit grants to read from the experiment schema | `GRANT USAGE ON DATABASE <db> TO APPLICATION RELATIONALAI; GRANT ALL ON SCHEMA <db>.<schema> TO APPLICATION RELATIONALAI` |
-| `gnn.fit()` or `gnn.predictions()` hangs with no error output | GPU compute pool is suspended; client polls indefinitely instead of auto-resuming or failing fast (observed >90 min idle) | Run `ALTER COMPUTE POOL <pool_name> RESUME` (or the RAI CLI equivalent) before the run — pool name comes from the predictive reasoner entry in `raiconfig.yaml` |
 
 ---
 
