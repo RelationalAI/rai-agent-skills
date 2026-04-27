@@ -244,13 +244,13 @@ results = model.where(
 ```python
 # CORRECT — count parent concept, filter by subtype binding
 results = model.select(
-    aggs.count(FoodTruck).alias("count"),
+    aggs.count(Asset).alias("count"),
 ).where(
-    UnderutilizedFoodTruck(FoodTruck),
+    UnderutilizedAsset(Asset),
 ).to_df()
 
 # WRONG — counting subtype directly causes TyperError
-# results = model.select(rai.count(UnderutilizedFoodTruck).alias("count")).to_df()
+# results = model.select(aggs.count(UnderutilizedAsset).alias("count")).to_df()
 ```
 
 **Boolean relationships as filters (not selectable):**
@@ -390,7 +390,7 @@ Lower-level `model.concepts` / `model.relationships` / `model.tables` / `model.d
 | Duplicate rows in aggregation results | Missing `distinct()` wrapper | Wrap `select(distinct(...))` — ALL columns must be inside `distinct()` |
 | Grouped aggregation returns N rows instead of grouped rows | Grouping by a property value without `distinct()` | Use `select(distinct(property.alias(...), agg.per(property).alias(...)))` — see Grouped Aggregation pattern above |
 | Subtype query returns TypeError | Accessing properties directly on subtype (`model.Subtype.prop`) | Bind subtype to parent: `model.where(model.Subtype(model.Parent)).select(model.Parent.prop.alias(...))` |
-| `rai.count(model.SubtypeName)` in bare select fails | Counting subtype directly without parent binding | Use `model.select(rai.count(model.Parent).alias("n")).where(model.Subtype(model.Parent))` |
+| `aggs.count(model.SubtypeName)` in bare select fails | Counting subtype directly without parent binding | Use `model.select(aggs.count(model.Parent).alias("n")).where(model.Subtype(model.Parent))` |
 | Mixing bare select with distinct | `select(X.name, distinct(X.cat))` — can't mix | Either wrap ALL columns in `distinct()` or none |
 | `.where()` on wrong target | Calling `.where()` directly on a Concept (`Site.where(...)`) | `.where()` goes on aggregations, constraints, definitions, or queries — not on bare concepts |
 | Using standalone `where()`/`select()` with multiple models | `"Multiple Models have been defined."` error | Use `model.where()`/`model.select()` instead of standalone imports |

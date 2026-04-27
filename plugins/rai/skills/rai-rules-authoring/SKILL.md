@@ -196,16 +196,25 @@ model.where(math.abs(Match.delta) > tolerance).define(Match.has_discrepancy())
 
 Run these checks on every rule before considering it complete:
 
-| Check | What to verify | Failure signal |
-|-------|---------------|----------------|
-| Output type correct | `Relationship` for boolean, `Property` for values | `FDError` if Property gets multiple values |
-| Conditions exhaustive | Classification covers all entities (if intended) | Entities with no assigned value |
-| Conditions exclusive | No entity matches two classification branches | `FDError` on Property |
-| Join paths valid | `.where()` relationships traverse existing paths | Zero results despite matching data |
-| Type alignment | Condition compares same types | Zero matches from silent type mismatch |
-| Aggregation scoped | `.per()` present when aggregating across entities | Single global result instead of per-entity |
+| # | Check | What to verify | Failure signal |
+|---|-------|---------------|----------------|
+| 1 | **Output type** | `Relationship` for boolean flags, `Property` for values | `FDError` if Property gets multiple values per entity |
+| 2 | **Property exists** | All referenced properties are declared in the model | `AttributeError` or zero results |
+| 3 | **Join path valid** | `.where()` relationships traverse existing paths | Zero results despite matching data |
+| 4 | **Type alignment** | Compared values are same type (`Integer` vs `Float` vs `String`) | Silent zero matches from type mismatch |
+| 5 | **Classification exclusive** | No entity matches two classification conditions | `FDError` on the Property |
+| 6 | **Aggregation scoped** | `.per()` present when aggregating across entities | Single global result instead of per-entity |
+| 7 | **No circular deps** | Rule outputs do not feed back into their own conditions | Runtime error or infinite loop |
 
-For exhaustiveness validation (finding unclassified entities, diagnosing gaps, and adding catch-all rules), see [rule-validation-and-testing.md](references/rule-validation-and-testing.md#exhaustiveness-validation).
+**Quick validation pattern:**
+
+```python
+result = model.where(Entity.is_flagged()).select(Entity.id).to_df()
+print(f"Flagged: {len(result)} entities")
+assert len(result) > 0, "Rule produced zero results — check conditions"
+```
+
+For testing approaches (known-data, boundary, coverage, negative), debugging common failures, and exhaustiveness validation (finding unclassified entities, diagnosing gaps, adding catch-all rules), see [rule-validation-and-testing.md](references/rule-validation-and-testing.md).
 
 ### Step 6: Connect to Downstream
 
@@ -290,7 +299,7 @@ and [expression-rules.md](../rai-pyrel-coding/references/expression-rules.md).
 
 ### Data Exploration Before Threshold Selection
 
-**CRITICAL:** Always explore the actual data distribution before choosing threshold values for rules. Assumptions about data scales can be wrong:
+Always explore the actual data distribution before choosing threshold values for rules. Assumptions about data scales can be wrong:
 
 ```python
 # Step 1: Check the actual data range BEFORE setting thresholds

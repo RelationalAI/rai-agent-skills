@@ -6,8 +6,6 @@ advanced patterns for optimization modeling beyond the starter build.
 Patterns: CSV data loading, generated Period concept, compound identity,
 cross-product decision concepts (Technician x Machine x Period) constrained via `.where()`,
 `.ref()` for derived properties, conditional binary flags.
-
-Illustrated with a machine-maintenance scheduling model.
 """
 from relationalai.semantics import Float, Integer, Model, String
 

@@ -256,12 +256,12 @@ For data indexed by time periods or numeric sequences, prefer multiarity propert
 
 ```python
 # Define property with time and value slots
-FreightGroup.inv = model.Property(f"{FreightGroup} on day {Integer:t} has {Float:inv}")
+ResourceGroup.inv = model.Property(f"{ResourceGroup} on day {Integer:t} has {Float:inv}")
 
 # Load time-indexed data
-fg_data = model.data(freight_csv)
-fg = FreightGroup.new(name=fg_data.name)
-model.define(fg, fg.inv(fg_data.day, fg_data.inventory_level))
+rg_data = model.data(resource_csv)
+rg = ResourceGroup.new(name=rg_data.name)
+model.define(rg, rg.inv(rg_data.day, rg_data.inventory_level))
 ```
 
 **Decision rule for multiarity vs. cross-product:**

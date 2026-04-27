@@ -1,33 +1,11 @@
 <!-- TOC -->
-- [Validation Checklist](#validation-checklist)
 - [Testing Approaches](#testing-approaches)
 - [Debugging Common Failures](#debugging-common-failures)
 - [Classification Completeness Verification](#classification-completeness-verification)
 - [Exhaustiveness Validation](#exhaustiveness-validation)
 <!-- /TOC -->
 
-## Validation Checklist
-
-Run these checks on every rule before considering it complete.
-
-| # | Check | What to verify | Failure signal |
-|---|-------|---------------|----------------|
-| 1 | **Output type** | `Relationship` for boolean flags, `Property` for values | `FDError` if Property gets multiple values per entity |
-| 2 | **Property exists** | All referenced properties are declared in the model | `AttributeError` or zero results |
-| 3 | **Join path valid** | `.where()` relationships traverse existing paths | Zero results despite matching data |
-| 4 | **Type alignment** | Compared values are same type (`Integer` vs `Float` vs `String`) | Silent zero matches from type mismatch |
-| 5 | **Classification exclusive** | No entity matches two classification conditions | `FDError` on the Property |
-| 6 | **Aggregation scoped** | `.per()` present when aggregating across entities | Single global result instead of per-entity |
-| 7 | **No circular deps** | Rule outputs do not feed back into their own conditions | Runtime error or infinite loop |
-
-**Quick validation pattern:**
-
-```python
-# Check that a rule produces results on test data
-result = model.where(Entity.is_flagged()).select(Entity.id).to_df()
-print(f"Flagged: {len(result)} entities")
-assert len(result) > 0, "Rule produced zero results — check conditions"
-```
+The validation checklist (Step 5) lives in the main SKILL.md. This file covers testing approaches, debugging, and exhaustiveness.
 
 ---
 

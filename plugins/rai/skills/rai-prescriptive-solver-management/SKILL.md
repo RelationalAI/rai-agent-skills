@@ -20,7 +20,7 @@ description: Covers solver lifecycle including problem type classification, solv
 - Running parametric/scenario solves
 
 **When NOT to use:**
-- Interpreting solver status or assessing solution quality after solve (OPTIMAL, INFEASIBLE, DUAL_INFEASIBLE, TIME_LIMIT, gap assessment, trivial solution detection) — see `rai-prescriptive-results-interpretation`
+- Post-solve result interpretation and communication — presenting OPTIMAL/INFEASIBLE/DUAL_INFEASIBLE/TIME_LIMIT status to users, solution quality assessment, trivial solution detection, sensitivity analysis — see `rai-prescriptive-results-interpretation`. (Formulation-level diagnosis of infeasibility and unboundedness root causes is covered here.)
 - Variable/constraint/objective formulation patterns — see `rai-prescriptive-problem-formulation`
 - PyRel syntax (imports, types, properties) — see `rai-pyrel-coding`
 
@@ -166,7 +166,7 @@ Choose the solver based on variable types and objective/constraint structure:
 - No quadratic constraints (QCP) — quadratic terms in constraints will fail. Only convex quadratic *objectives* (QP) are supported.
 - No nonlinear functions (`exp`, `log`, `sqrt`, trig) — use Ipopt or Gurobi.
 
-**Gurobi** (`solver="gurobi"`): Commercial (available via RAI). Best for large-scale MILP, QP, QCP. Industry-leading MILP performance, discrete + continuous + quadratic + some NLP, excellent diagnostics, multi-objective support. Params: `TimeLimit`, `MIPGap`, `MIPFocus` (0=balanced, 1=feasibility, 2=optimality, 3=bound), `Presolve` (2 for aggressive), `Threads` (0 for auto). **License required:** Gurobi requires a named prescriptive engine with a Snowflake secret and external access integration configured in `raiconfig.yaml`. See [rai-configuration](../rai-configuration/SKILL.md) for setup. If unavailable, fall back to HiGHS (LP/MILP) or Ipopt (NLP). Large MIP problems may solve significantly faster with Gurobi than HiGHS.
+**Gurobi** (`solver="gurobi"`): Commercial (available via RAI). Best for large-scale MILP, QP, QCP. Industry-leading MILP performance, discrete + continuous + quadratic + some NLP, excellent diagnostics, multi-objective support. Params: `TimeLimit`, `MIPGap`, `MIPFocus` (0=balanced, 1=feasibility, 2=optimality, 3=bound), `Presolve` (2 for aggressive), `Threads` (0 for auto). **License required:** Gurobi requires a named prescriptive engine with a Snowflake secret and external access integration configured in `raiconfig.yaml`. See [rai-setup](../rai-setup/SKILL.md) for setup. If unavailable, fall back to HiGHS (LP/MILP) or Ipopt (NLP). Large MIP problems may solve significantly faster with Gurobi than HiGHS.
 
 **MiniZinc** (`solver="minizinc"`): Open-source (Chuffed backend). Best for CP, combinatorial, constraint satisfaction. Powerful propagation, global constraints (`all_different`, `circuit`), multiple solutions. Params: `time_limit_sec`, `solution_limit`. Cannot handle continuous variables, LP, QP, NLP.
 
@@ -377,7 +377,7 @@ The following operators are **not supported by any solver backend** and will rai
 | `problem.termination_status == "OPTIMAL"` is always False | Missing parens — `problem.termination_status` returns a bound method, not a string | Use `problem.termination_status()` (with parens) in `model.require()`, or `problem.solve_info().termination_status` for Python-side |
 | `AttributeError` on `problem.solve()` return value | Assigning `result = problem.solve()` and accessing `result.status` | `problem.solve()` returns `None`. Use `problem.solve_info()` for status. For solution values, use `model.select()` (populate=True) or `Variable.values()` (populate=False). |
 
-Post-solve diagnosis (trivial all-zero solutions, infeasibility root causes, quality assessment) is covered in `rai-prescriptive-results-interpretation`.
+Post-solve diagnosis (trivial all-zero solutions, infeasibility root causes, quality assessment) is covered in `rai-prescriptive-results-interpretation`. The unified lifecycle failure taxonomy (`generates` → `compiles` → `solves` → `optimal` → `non-trivial` → `meaningful`) lives at `rai-prescriptive-results-interpretation/references/failure-taxonomy.md` — consult it for the `solves` and `optimal` levels.
 
 ---
 

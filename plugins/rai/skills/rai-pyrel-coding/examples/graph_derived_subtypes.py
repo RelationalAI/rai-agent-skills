@@ -4,7 +4,7 @@ from relationalai.semantics import Float, Integer, Model, String, distinct
 from relationalai.semantics.reasoners.graph import Graph
 from relationalai.semantics.std import aggregates
 
-model = Model("customer_segmentation")
+model = Model("graph_derived_subtypes")
 
 # Declare Customer, Product, and Order concepts and their properties
 Customer = model.Concept("Customer", identify_by={"id": Integer})

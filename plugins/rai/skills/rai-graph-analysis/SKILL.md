@@ -136,10 +136,7 @@ graph = Graph(
 | **Similarity** | `jaccard_similarity()`, `cosine_similarity()`, `adamic_adar()`, `preferential_attachment()` | `(node1, node2, score)` | Entity comparison, link prediction |
 | **Clustering** | `local_clustering_coefficient()`, `average_clustering_coefficient()`, `triangle_count()`, `triangle()`, `unique_triangle()` | `(node, value)` or `(n1, n2, n3)` | Local density, tightness |
 
-**Key compatibility constraints:**
-- `betweenness_centrality()` -- cannot use with `weighted=True`
-- `louvain()` -- cannot use with `directed=True` (use `infomap()` for directed graphs)
-- `local_clustering_coefficient()` -- cannot use with `directed=True` (requires undirected)
+For compatibility constraints (directed/weighted limits per algorithm), see Algorithm Selection below.
 
 ---
 
@@ -231,7 +228,7 @@ Match the question to the algorithm family:
 - **PageRank** — directed influence: importance flows along directed edges. Best for: "which nodes receive the most flow/attention?"
 - **Degree** — local connectivity: count of direct connections. Best for: "which nodes have the most direct relationships?"
 
-See [algorithm-selection.md](references/algorithm-selection.md) for full per-algorithm guidance.
+When choosing between algorithm variants within a family, or needing parameter details, output shape, or compatibility specifics, see [algorithm-selection.md](references/algorithm-selection.md).
 
 ### Step 8: Configure, Execute, and Bind Results
 
@@ -367,7 +364,7 @@ For per-algorithm deep dives (parameters, output shapes, interpretation, compati
 
 ## Domain Constraints
 
-Domain constraints control which subset of an output relationship gets materialized. Some algorithms (e.g., `preferential_attachment`, `common_neighbor`, `jaccard_similarity`, `reachable`, `triangle`) are expensive to materialize in full and require explicit domain constraints via `of=`, `from_=`, `to=`, `between=`, or `full=True` to proceed.
+Domain constraints control which subset of an output relationship gets materialized. Some algorithms (e.g., `preferential_attachment`, `common_neighbor`, `jaccard_similarity`, `reachable`, `triangle`, `distance`) are expensive to materialize in full and require explicit domain constraints via `of=`, `from_=`, `to=`, `between=`, or `full=True` to proceed.
 
 | Keyword | Meaning |
 |---------|---------|
@@ -496,7 +493,7 @@ Each example targets a distinct combination of edge construction, topology, algo
 | Identity graph self-join | Self-join edges from shared identifiers (phone, email) | Undirected, unweighted | WCC | Identity cluster detection | [self_join_wcc_subtypes.py](examples/self_join_wcc_subtypes.py) |
 | Multiple graphs, same model | Multiple Graph instances on same node concept | Weighted + unweighted | Eigenvector + betweenness | Parallel graph views, separate Edge defs | [multi_graph_same_model.py](examples/multi_graph_same_model.py) |
 | Jaccard similarity | Co-occurrence edges via shared attribute | Undirected, unweighted | Jaccard similarity | Top-k similar pairs extraction | [similarity_jaccard.py](examples/similarity_jaccard.py) |
-| Shortest path + diameter | `edge_concept` with cost weight | Directed, weighted | Distance + diameter_range | All-pairs shortest paths, graph extent | [shortest_path_distance.py](examples/shortest_path_distance.py) |
+| Shortest path distances | `edge_concept` with cost weight | Directed, weighted | Distance | All-pairs shortest paths, filter by source/target | [shortest_path_distance.py](examples/shortest_path_distance.py) |
 
 ---
 

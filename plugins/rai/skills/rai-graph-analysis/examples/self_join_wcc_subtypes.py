@@ -1,7 +1,7 @@
 # Pattern: Self-join edge construction for identity graphs + WCC community detection
 # Key ideas: User.ref() creates a second variable over the same concept for self-join
 # comparisons; shared-identifier edges (phone, email) are built without an explicit
-# edge table; WCC groups users into identity clusters for ring/fraud detection.
+# edge table; WCC groups users into identity clusters for shared-identifier analysis.
 
 from relationalai.semantics import Integer, Model, String
 from relationalai.semantics.reasoners.graph import Graph
@@ -25,12 +25,12 @@ User.address = model.Property(f"{User} has address {String:address}")
 #   Isolated  (id 10):   no overlap with anyone
 
 user_data = model.data([
-    # -- Cluster A: fraud ring sharing phone 555-0001 and email chains --
+    # -- Cluster A: users sharing phone 555-0001 and email chains --
     {"id": 1, "name": "Alice Martin",   "phone": "555-0001", "email": "a.martin@mail.com",  "address": "100 Oak St"},
     {"id": 2, "name": "A. Martin",      "phone": "555-0001", "email": "amartin@webmail.com", "address": "200 Pine Ave"},
     {"id": 3, "name": "Alice M.",       "phone": "555-0099", "email": "amartin@webmail.com", "address": "300 Elm Dr"},
     {"id": 4, "name": "Al Martin",      "phone": "555-0099", "email": "al.m@mail.com",       "address": "100 Oak St"},
-    # -- Cluster B: small ring --
+    # -- Cluster B: small cluster --
     {"id": 5, "name": "Bob Jones",      "phone": "555-0002", "email": "bjones@mail.com",     "address": "400 Maple Ln"},
     {"id": 6, "name": "Robert Jones",   "phone": "555-0002", "email": "r.jones@mail.com",    "address": "500 Cedar Ct"},
     {"id": 7, "name": "R. Jones",       "phone": "555-0003", "email": "bjones@mail.com",     "address": "600 Birch Rd"},
@@ -74,12 +74,12 @@ LargeGroupUser = model.Concept("LargeGroupUser", extends=[User])
 community_size = aggregates.count(User).per(User.community)
 model.define(LargeGroupUser(User)).where(community_size >= LARGE_GROUP_SIZE)
 
-# --- Suspicious users: same community, shared identifier, different address ---
+# --- Flagged users: same community, shared identifier, different address ---
 
-SuspiciousUser = model.Concept("SuspiciousUser", extends=[User])
+FlaggedUser = model.Concept("FlaggedUser", extends=[User])
 
 peer = LargeGroupUser.ref()
-model.define(SuspiciousUser(LargeGroupUser)).where(
+model.define(FlaggedUser(LargeGroupUser)).where(
     LargeGroupUser(peer),
     LargeGroupUser != peer,
     LargeGroupUser.community == peer.community,
@@ -109,23 +109,23 @@ for cid, group in community_df.groupby("community"):
     if len(members) >= 2:
         print(f"Community {cid} ({len(members)} members): {members}")
 
-# --- Query: suspicious users in large communities ---
+# --- Query: flagged users in large communities ---
 
-print("\n=== Suspicious Users (large community + shared id + different address) ===\n")
+print("\n=== Flagged Users (large community + shared id + different address) ===\n")
 
-suspicious_df = (
+flagged_df = (
     model.select(
-        SuspiciousUser.id.alias("id"),
-        SuspiciousUser.name.alias("name"),
-        SuspiciousUser.phone.alias("phone"),
-        SuspiciousUser.email.alias("email"),
-        SuspiciousUser.address.alias("address"),
-        SuspiciousUser.community.alias("community"),
+        FlaggedUser.id.alias("id"),
+        FlaggedUser.name.alias("name"),
+        FlaggedUser.phone.alias("phone"),
+        FlaggedUser.email.alias("email"),
+        FlaggedUser.address.alias("address"),
+        FlaggedUser.community.alias("community"),
     )
     .to_df()
     .sort_values(["community", "id"])
     .reset_index(drop=True)
 )
 
-print(suspicious_df.to_string(index=False))
-print(f"\nTotal suspicious users: {len(suspicious_df)}")
+print(flagged_df.to_string(index=False))
+print(f"\nTotal flagged users: {len(flagged_df)}")

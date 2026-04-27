@@ -33,6 +33,7 @@ description: Formulates optimization problems from ontology models covering deci
 4. Define objective (direction, coefficients, multi-component handling)
 5. Validate the complete formulation (structure, completeness, feasibility, data) — includes pre-solver audit that decision variables / constraints / objectives registered correctly
 6. Simplify (static parameters, goals vs constraints, grouped constraints)
+7. Post-solve refinement — present results, surface user reactions, iterate on the formulation (see Workflow Step 7)
 
 ---
 
@@ -149,6 +150,8 @@ for var_concept in variables:
 
 Together, (a) and (b) are the downstream complement to Step 1's base-ontology grounding: Step 1 verifies the *inputs* to formulation exist; Step 5 verifies the *outputs* registered correctly and bound to data.
 
+When the formulation fails to generate or compile (before a solve is even attempted), look up the root cause in the unified failure taxonomy at `rai-prescriptive-results-interpretation/references/failure-taxonomy.md` (`generates` and `compiles` levels).
+
 ### Step 6: Simplify (iterate)
 Can we reduce complexity without losing correctness?
 - Static parameters over dynamic calculations
@@ -185,12 +188,7 @@ These are overarching principles that apply to all optimization formulations reg
 
 When presenting variables, constraints, and objectives to the user, describe them in business terms first ("ensure each customer's demand is met," "don't exceed warehouse capacity"), then provide the technical formulation. The analyst selects based on business understanding; the code is generated behind the scenes. Never force users to think in mathematical terms -- business language in, business language out, with valid PyRel as the executable bridge.
 
-**Natural language rule for all user-facing text:** Use domain-natural language in every `description`, `rationale`, `business_mapping`, problem `statement`, and explanation field. Technical `Concept.property` references confuse business users — translate them to readable phrases:
-- `Operation.cost_per_unit` -> "cost per unit for each operation"
-- `sum(Shipment.quantity)` -> "total shipment volume"
-- `Site.capacity` -> "each site's available capacity"
-- `UnmetDemand.x_slack` -> "unmet demand quantity"
-- `sum(Assignment.x_assigned).per(Worker)` -> "number of assignments per worker"
+**Natural language rule for all user-facing text:** Use domain-natural language in every `description`, `rationale`, `business_mapping`, problem `statement`, and explanation field. Technical `Concept.property` references confuse business users — translate them to readable phrases (e.g., `sum(X.quantity).per(Entity)` → "total X quantity per entity"; `Entity.capacity` → "each entity's available capacity").
 
 Code snippets in `solver_registration`, `expression`, and `entity_creation` fields remain technical (valid PyRel). But every field the user reads should sound like a business analyst wrote it, not a database query.
 
@@ -232,7 +230,7 @@ Common business phrases are ambiguous between constraint and objective. Always c
 
 Pre-solve elicitation has a fundamental limit: users cannot always articulate preferences until they see a concrete result that violates them. "No constraints" often means "I can't think of any right now," not "anything goes." Preferences may be real but latent — only surfaceable through confrontation with a specific proposal.
 
-**Principle: Use results as an elicitation tool.** The first solve with minimal constraints is diagnostic, not prescriptive — its purpose is to provoke reactions that reveal the real formulation. This is Step 6 of the Formulation Workflow.
+**Principle: Use results as an elicitation tool.** The first solve with minimal constraints is diagnostic, not prescriptive — its purpose is to provoke reactions that reveal the real formulation. This is Step 7 of the Formulation Workflow.
 
 **The refinement loop:**
 
@@ -269,7 +267,7 @@ When a user rejects an aspect of the result, the rejection is ambiguous. Before 
 - **Specific vs. vague** — if the rejection is vague ("this seems aggressive"), probe which dimension: concentration, deviation from current, absolute level, or something else entirely. Each maps to a different constraint type.
 
 **When to stop iterating:**
-- The user accepts the result — explicitly, or by shifting to implementation questions. If the user accepts on the first pass, Step 6 is done; do not probe for objections that aren't there.
+- The user accepts the result — explicitly, or by shifting to implementation questions. If the user accepts on the first pass, Step 7 is done; do not probe for objections that aren't there.
 - The user provides a specific value ("just cap it at 10%") — take the bound directly, no need to run the disambiguation protocol.
 - Changes between iterations become marginal
 - The user starts making trade-offs between constraints — this signals the efficient frontier has been found and the remaining decisions are genuinely preferential
@@ -378,15 +376,15 @@ Do not use `+` to combine cost terms from independent concept groups — this ca
 ```python
 # CORRECT: per-entity cost expressions inside model.union()
 problem.minimize(sum(model.union(
-    FreightGroup.holding_cost * sum(x_inv).per(FreightGroup).where(...),  # per-FreightGroup
-    Arc.transport_cost * Arc.x_flow,                                       # per-Arc
-    Factory.unit_cost * Factory.x_production,                              # per-Factory
+    ResourceGroup.holding_cost * sum(x_inv).per(ResourceGroup).where(...),  # per-ResourceGroup
+    Arc.transport_cost * Arc.x_flow,                                        # per-Arc
+    Factory.unit_cost * Factory.x_production,                               # per-Factory
 )))
 
 # WRONG: scalar sums inside model.union()
 problem.minimize(sum(model.union(
-    sum(x * FreightGroup.cost),   # scalar — causes AssertionError
-    sum(Arc.x_flow * Arc.cost),   # scalar — causes AssertionError
+    sum(x * ResourceGroup.cost),   # scalar — causes AssertionError
+    sum(Arc.x_flow * Arc.cost),    # scalar — causes AssertionError
 )))
 ```
 

@@ -14,7 +14,7 @@
 
 Rules reasoning enforces business logic, validates compliance, and derives classifications from known facts.
 
-Business rules are expressed as **derived ontology properties and concepts** — e.g., `Business.is_high_value_customer` defined as `TYPE='BUYER' AND value_tier='HIGH'`. Complex conditional logic, threshold checks, and derived classifications are modeled directly in PyRel as ontology-layer definitions.
+Business rules are expressed as **derived ontology properties and concepts** — e.g., `Entity.is_high_priority` defined as `TYPE='BUYER' AND value_tier='HIGH'`. Complex conditional logic, threshold checks, and derived classifications are modeled directly in PyRel as ontology-layer definitions.
 
 | Type | Question Pattern | Ontology Signal |
 |------|-----------------|-----------------|
@@ -120,7 +120,7 @@ Rules participate in chains both as producers (rule output feeds another reasone
 | **Rules → Prescriptive** | Rule output constrains optimization | Compliance flag filters which entities the solver can assign; derived LTV weights the objective |
 | **Rules → Predictive** | Rule classification becomes a predictive feature | `risk_tier` used as feature in churn prediction model |
 | **Graph → Rules** | Graph metric feeds rule threshold | Centrality score below threshold flags structurally isolated nodes |
-| **Predictive → Rules** | Predicted score feeds rule condition | `predicted_risk > 0.8` triggers alert rule |
+| **Predictive → Rules** | Predicted score feeds rule condition | `predicted_risk_prob > 0.8` triggers alert rule |
 | **Rules → Rules** | Layered derivations | Classification rule → alerting rule based on classification + additional condition |
 | **Graph → Rules → Prescriptive** | Three-stage chain | Centrality → flag at-risk nodes → optimize allocation avoiding at-risk nodes |
 

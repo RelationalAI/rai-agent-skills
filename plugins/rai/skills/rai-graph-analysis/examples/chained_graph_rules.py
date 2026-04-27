@@ -1,7 +1,7 @@
 # Pattern: Graph algorithm (WCC) feeding rule-based classification.
 # Key ideas: multi-concept co-occurrence edges (shared address, phone, email);
 # WCC for identity graph communities; Relationship flags for layered rule
-# application (is_in_large_group -> is_suspicious);
+# application (is_in_large_group -> is_flagged for shared-identifier patterns);
 # rules combine graph results with domain conditions.
 
 
@@ -111,14 +111,14 @@ large_group_df = (
 print(f"\n=== Large Group Users ({len(large_group_df)} users) ===")
 print(large_group_df.to_string(index=False))
 
-# --- Rule layer 2: Flag suspicious users within large groups ---
-# Suspicious = in large group AND (shares email or phone with another member
-# at a different address). Layered rules: large group flag feeds suspicious flag.
+# --- Rule layer 2: Flag users within large groups sharing identifiers ---
+# Flagged = in large group AND (shares email or phone with another member
+# at a different address). Layered rules: large group flag feeds shared-identifier flag.
 
-User.is_suspicious = model.Relationship(f"{User} is suspicious")
+User.is_flagged = model.Relationship(f"{User} is flagged")
 
 u1, u2 = User.ref(), User.ref()
-model.define(User.is_suspicious(u1)).where(
+model.define(User.is_flagged(u1)).where(
     u1.is_in_large_group(),
     u2.is_in_large_group(),
     u1 != u2,
@@ -129,8 +129,8 @@ model.define(User.is_suspicious(u1)).where(
 
 # --- Query results ---
 
-suspicious_df = (
-    model.where(User.is_suspicious())
+flagged_df = (
+    model.where(User.is_flagged())
     .select(
         User.id,
         User.name,
@@ -143,5 +143,5 @@ suspicious_df = (
     .reset_index(drop=True)
 )
 
-print("\n=== Suspicious Users ===")
-print(suspicious_df.to_string(index=False))
+print("\n=== Flagged Users ===")
+print(flagged_df.to_string(index=False))

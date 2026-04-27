@@ -120,11 +120,43 @@ See `_build_manager()` in [examples/deploy.py](examples/deploy.py) for a complet
 
 The `init_tools` function is executed inside each stored procedure invocation. It must be **self-contained** — do not close over local runtime state (sessions, connections, dataframes). Import your model code inside the function so it resolves from the packaged sproc code and initializes within the sproc session. See `init_tools()` in [examples/deploy.py](examples/deploy.py).
 
-**Three configuration levels** — each adds more capability via `ToolRegistry.add()`:
+**Three configuration levels** — each adds more capability via `ToolRegistry.add()`. [examples/deploy.py](examples/deploy.py) shows the full (level 3) form; the snippets below show the registry shape for each level.
 
-1. **Default** — model discovery and schema verbalization only. See [examples/cortex.py](examples/cortex.py).
-2. **With verbalizer** — adds source-code-aware concept explanation. See [examples/cortex_verbalizer.py](examples/cortex_verbalizer.py).
-3. **With verbalizer + queries** — adds pre-defined analytical queries (requires `allow_preview=True`). See [examples/cortex_verbalizer_queries.py](examples/cortex_verbalizer_queries.py).
+1. **Default** — model discovery and schema verbalization only.
+
+   ```python
+   def init_tools():
+       from .model.core import model
+       return ToolRegistry().add(
+           model=model,
+           description="Customers and orders",
+       )
+   ```
+
+2. **With verbalizer** — adds source-code-aware concept explanation.
+
+   ```python
+   def init_tools():
+       from .model import core, computed
+       return ToolRegistry().add(
+           model=core.model,
+           description="Customers and orders",
+           verbalizer=SourceCodeVerbalizer(core.model, core, computed),
+       )
+   ```
+
+3. **With verbalizer + queries** — adds pre-defined analytical queries (requires `allow_preview=True` in `DeploymentConfig`).
+
+   ```python
+   def init_tools():
+       from .model import core, computed, queries
+       return ToolRegistry().add(
+           model=core.model,
+           description="Customers and orders",
+           verbalizer=SourceCodeVerbalizer(core.model, core, computed),
+           queries=QueryCatalog(queries.segment_summary),
+       )
+   ```
 
 **`init_tools` shapes**:
 1. **Recommended** — zero-argument `init_tools()` that imports module-defined model code and returns `ToolRegistry().add(model=<imported module>.model, ...)`
@@ -138,7 +170,7 @@ Verbalizers control how model structure is presented to the agent.
 
 **ModelVerbalizer (default)** — returns relationship readings extracted from the model (e.g., "Customer has many Orders"). Used automatically when no verbalizer is specified.
 
-**SourceCodeVerbalizer** — extends `ModelVerbalizer`. `explain_model` returns the standard relationship readings, while `explain_concept` returns Python source code from the modules you provide, filtered to definitions that reference the requested concept. Comments are included, so clarifications in your code benefit the agent. Pass the imported model **modules** that define the model. See [examples/cortex_verbalizer.py](examples/cortex_verbalizer.py).
+**SourceCodeVerbalizer** — extends `ModelVerbalizer`. `explain_model` returns the standard relationship readings, while `explain_concept` returns Python source code from the modules you provide, filtered to definitions that reference the requested concept. Comments are included, so clarifications in your code benefit the agent. Pass the imported model **modules** that define the model. See `init_tools()` in [examples/deploy.py](examples/deploy.py) and the level 2 snippet in Step 3.
 
 Use `SourceCodeVerbalizer` when important domain logic is encoded in rule definitions, computed properties, subtype logic, or inline comments rather than being obvious from concept/relationship structure alone. This is what enables the agent to answer questions that go deeper than "what concepts exist and how are they related?", such as whether a `Cancel Transaction` can cancel another `Cancel Transaction`, or why a concept is derived under a particular set of rule conditions.
 
@@ -262,7 +294,7 @@ SI users need:
 | Mistake | Cause | Fix |
 |---------|-------|-----|
 | `use schema` fails during deploy | Deployment schema doesn't exist | Run `CREATE SCHEMA IF NOT EXISTS` before deploying. If `agent_schema` is different, ensure that schema exists and the deployer can use it too |
-| Object "does not exist" errors from Snowflake | Role lacks required privileges — Snowflake reports missing permissions as "does not exist" | Verify deployer and SI user privileges against the tables in Steps 1 and 6 (Deployed Stored Procedures) |
+| Object "does not exist" errors from Snowflake | Role lacks required privileges — Snowflake reports missing permissions as "does not exist" | Verify deployer and SI user privileges against the tables in Step 1 and the Deployed Stored Procedures section |
 | Agent does not show up where expected in the UI | Agent was created in `database`.`schema`, not the SI schema | Set `agent_schema="SNOWFLAKE_INTELLIGENCE.AGENTS"` or promote the deployed agent from the UI |
 | `agent_schema` validation fails | Value is not a two-part `DATABASE.SCHEMA` name | Use a fully qualified two-part name such as `SNOWFLAKE_INTELLIGENCE.AGENTS` |
 | `QueryCatalog` rejects a query definition | Wrapped queries lost `__name__` or `__doc__` metadata | Prefer module-level query functions with docstrings; avoid `functools.partial` |
@@ -279,8 +311,5 @@ SI users need:
 
 | Pattern | Description | File |
 |---------|-------------|------|
-| **Deployment script** | **Complete CLI with deploy/update/status/chat/teardown — primary reference** | [**examples/deploy.py**](examples/deploy.py) |
-| Default deployment | Minimal CortexAgentManager with model tools only | [examples/cortex.py](examples/cortex.py) |
-| Verbalizer deployment | Adds SourceCodeVerbalizer for concept explanation | [examples/cortex_verbalizer.py](examples/cortex_verbalizer.py) |
-| Full deployment | Verbalizer + QueryCatalog with pre-defined queries | [examples/cortex_verbalizer_queries.py](examples/cortex_verbalizer_queries.py) |
+| **Deployment script** | **Complete CLI with deploy/update/status/chat/teardown — primary reference. Uses verbalizer + queries (level 3); see Step 3 for level 1 and level 2 registry shapes** | [**examples/deploy.py**](examples/deploy.py) |
 | Model modules | Core, computed, and query modules for the recommended zero-arg `init_tools()` pattern | [examples/model/](examples/model/) |

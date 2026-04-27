@@ -257,9 +257,9 @@ model.where(
 ).define(Customer.inactive())
 ```
 
-**CRITICAL: Negation of boolean relationships in QUERIES:**
+### Negation of Boolean Relationships in Queries
 
-The `~` (bitwise NOT) operator does NOT work on boolean relationships. It raises
+The `~` (bitwise NOT) operator does **not** work on boolean relationships in query contexts. It raises
 `bad operand type for unary ~: 'Chain'`. There is no direct negation operator for boolean
 relationships in PyRel v1.
 
@@ -328,7 +328,9 @@ model.where(
 ).define(Customer.needs_review())
 ```
 
-**CRITICAL: Querying subtype entities — bind to parent, access properties via parent:**
+### Querying Subtype Entities
+
+Bind the subtype to the parent and access properties through the parent concept. Accessing properties directly on the subtype raises a **type-inference error**.
 
 ```python
 # CORRECT — bind subtype to parent, access properties through parent concept

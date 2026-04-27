@@ -1,6 +1,6 @@
 # Pattern: multi-concept coordination — inventory flow conservation + mode selection
 # Key ideas: three variable types (continuous inv, continuous qty, binary indicator)
-# across two concepts (FreightGroup, TransportType); inventory balance links them;
+# across two concepts (ResourceGroup, Mode); inventory balance links them;
 # model.union() combines heterogeneous cost components into a single objective.
 
 from relationalai.semantics import Float, Integer, Model, String, std, sum
@@ -10,107 +10,107 @@ model = Model("multi_concept_union_objective")
 Concept, Property = model.Concept, model.Property
 
 # --- Ontology (abbreviated) ---
-FreightGroup = Concept("FreightGroup", identify_by={"name": String})
-FreightGroup.inv_start_t = Property(f"{FreightGroup} has {Integer:inv_start_t}")
-FreightGroup.inv_end_t = Property(f"{FreightGroup} has {Integer:inv_end_t}")
-FreightGroup.tra_start_t = Property(f"{FreightGroup} has {Integer:tra_start_t}")
-FreightGroup.tra_end_t = Property(f"{FreightGroup} has {Integer:tra_end_t}")
-FreightGroup.inv_start = Property(f"{FreightGroup} has {Float:inv_start}")
+ResourceGroup = Concept("ResourceGroup", identify_by={"name": String})
+ResourceGroup.inv_start_t = Property(f"{ResourceGroup} has {Integer:inv_start_t}")
+ResourceGroup.inv_end_t = Property(f"{ResourceGroup} has {Integer:inv_end_t}")
+ResourceGroup.mode_start_t = Property(f"{ResourceGroup} has {Integer:mode_start_t}")
+ResourceGroup.mode_end_t = Property(f"{ResourceGroup} has {Integer:mode_end_t}")
+ResourceGroup.inv_start = Property(f"{ResourceGroup} has {Float:inv_start}")
 
-TransportType = Concept("TransportType", identify_by={"name": String})
-TransportType.transit_time = Property(f"{TransportType} has {Integer:transit_time}")
+Mode = Concept("Mode", identify_by={"name": String})
+Mode.transit_time = Property(f"{Mode} has {Integer:transit_time}")
 
 # --- Inline data ---
-fg_data = model.data(
+rg_data = model.data(
     [
-        ("FG_East", 1, 5, 1, 4, 100.0),
-        ("FG_West", 1, 5, 1, 4, 80.0),
+        ("RG_East", 1, 5, 1, 4, 100.0),
+        ("RG_West", 1, 5, 1, 4, 80.0),
     ],
     columns=[
         "name",
         "inv_start_t",
         "inv_end_t",
-        "tra_start_t",
-        "tra_end_t",
+        "mode_start_t",
+        "mode_end_t",
         "inv_start",
     ],
 )
-model.define(FreightGroup.new(fg_data.to_schema()))
+model.define(ResourceGroup.new(rg_data.to_schema()))
 
-tt_data = model.data(
-    [("tl", 2), ("ltl", 1)],
+mode_data = model.data(
+    [("fast", 1), ("slow", 2)],
     columns=["name", "transit_time"],
 )
-model.define(TransportType.new(tt_data.to_schema()))
+model.define(Mode.new(mode_data.to_schema()))
 
 # --- Decision variables ---
 t = Integer.ref()
-fg = FreightGroup.ref()
+rg = ResourceGroup.ref()
 
 problem = Problem(model, Float)
 
-# Inventory level per (freight group, day)
-FreightGroup.x_inv = Property(f"{FreightGroup} on day {Integer:t} has {Float:inv}")
+# Inventory level per (resource group, day)
+ResourceGroup.x_inv = Property(f"{ResourceGroup} on day {Integer:t} has {Float:inv}")
 x_inv = Float.ref()
 problem.solve_for(
-    FreightGroup.x_inv(t, x_inv),
+    ResourceGroup.x_inv(t, x_inv),
     lower=0,
-    name=["x_inv", FreightGroup.name, t],
-    where=[t == std.common.range(FreightGroup.inv_start_t, FreightGroup.inv_end_t + 1)],
+    name=["x_inv", ResourceGroup.name, t],
+    where=[t == std.common.range(ResourceGroup.inv_start_t, ResourceGroup.inv_end_t + 1)],
 )
 
-# Quantity shipped per (transport type, freight group, day)
-TransportType.x_qty_tra = Property(f"{TransportType} for {FreightGroup} on day {Integer:t} has {Float:qty_tra}")
-TransportType.y_bin_tra = Property(f"{TransportType} for {FreightGroup} on day {Integer:t} has {Float:bin_tra}")
-x_qty_tra = Float.ref()
-y_bin_tra = Float.ref()
+# Quantity moved per (mode, resource group, day)
+Mode.x_qty_mode = Property(f"{Mode} for {ResourceGroup} on day {Integer:t} has {Float:qty_mode}")
+Mode.y_bin_mode = Property(f"{Mode} for {ResourceGroup} on day {Integer:t} has {Float:bin_mode}")
+x_qty_mode = Float.ref()
+y_bin_mode = Float.ref()
 problem.solve_for(
-    TransportType.x_qty_tra(fg, t, x_qty_tra),
+    Mode.x_qty_mode(rg, t, x_qty_mode),
     lower=0,
-    name=["x_qty_tra", TransportType.name, fg.name, t],
-    where=[t == std.common.range(fg.tra_start_t, fg.tra_end_t + 1)],
+    name=["x_qty_mode", Mode.name, rg.name, t],
+    where=[t == std.common.range(rg.mode_start_t, rg.mode_end_t + 1)],
 )
 problem.solve_for(
-    TransportType.y_bin_tra(fg, t, y_bin_tra),
+    Mode.y_bin_mode(rg, t, y_bin_mode),
     type="bin",
-    name=["y_bin_tra", TransportType.name, fg.name, t],
-    where=[t == std.common.range(fg.tra_start_t, fg.tra_end_t + 1)],
+    name=["y_bin_mode", Mode.name, rg.name, t],
+    where=[t == std.common.range(rg.mode_start_t, rg.mode_end_t + 1)],
 )
 
-# --- Inventory flow conservation: inv[t] = inv[t+1] + sum(shipped on day t) ---
-# This is the core linking constraint between inventory variables and shipping variables.
+# --- Inventory flow conservation: inv[t] = inv[t+1] + sum(qty_mode on day t) ---
+# This is the core linking constraint between inventory variables and quantity variables.
 problem.satisfy(
     model.where(
         x_inv1 := Float.ref(),
         x_inv2 := Float.ref(),
-        FreightGroup.x_inv(t, x_inv1),
-        FreightGroup.x_inv(t + 1, x_inv2),
-        TransportType.x_qty_tra(FreightGroup, t, x_qty_tra),
-    ).require(x_inv1 == x_inv2 + sum(x_qty_tra).per(FreightGroup, t))
+        ResourceGroup.x_inv(t, x_inv1),
+        ResourceGroup.x_inv(t + 1, x_inv2),
+        Mode.x_qty_mode(ResourceGroup, t, x_qty_mode),
+    ).require(x_inv1 == x_inv2 + sum(x_qty_mode).per(ResourceGroup, t))
 )
 
 # --- Boundary conditions ---
 # Initial inventory matches starting position; final inventory is zero
 problem.satisfy(
-    model.require(x_inv == FreightGroup.inv_start).where(FreightGroup.x_inv(FreightGroup.inv_start_t, x_inv))
+    model.require(x_inv == ResourceGroup.inv_start).where(ResourceGroup.x_inv(ResourceGroup.inv_start_t, x_inv))
 )
-problem.satisfy(model.require(x_inv == 0).where(FreightGroup.x_inv(FreightGroup.inv_end_t, x_inv)))
+problem.satisfy(model.require(x_inv == 0).where(ResourceGroup.x_inv(ResourceGroup.inv_end_t, x_inv)))
 
-# --- Linking: all-or-nothing shipping (binary indicator scales quantity) ---
+# --- Linking: all-or-nothing activation (binary indicator scales quantity) ---
 problem.satisfy(
-    model.require(x_qty_tra == FreightGroup.inv_start * y_bin_tra).where(
-        TransportType.x_qty_tra(FreightGroup, t, x_qty_tra),
-        TransportType.y_bin_tra(FreightGroup, t, y_bin_tra),
+    model.require(x_qty_mode == ResourceGroup.inv_start * y_bin_mode).where(
+        Mode.x_qty_mode(ResourceGroup, t, x_qty_mode),
+        Mode.y_bin_mode(ResourceGroup, t, y_bin_mode),
     )
 )
 
 # --- Objective: multi-component cost (use model.union() to combine heterogeneous terms) ---
-inv_cost = 0.001 * sum(x_inv).where(FreightGroup.x_inv(t, x_inv), t > FreightGroup.inv_start_t)
-tl_fixed_cost = 2000.0 * sum(y_bin_tra).where(
-    TransportType.name("tl"),
-    TransportType.y_bin_tra(FreightGroup, t, y_bin_tra),
+inv_cost = 0.001 * sum(x_inv).where(ResourceGroup.x_inv(t, x_inv), t > ResourceGroup.inv_start_t)
+fast_fixed_cost = 2000.0 * sum(y_bin_mode).where(
+    Mode.name("fast"),
+    Mode.y_bin_mode(ResourceGroup, t, y_bin_mode),
 )
-total_cost = sum(model.union(inv_cost, tl_fixed_cost))
+total_cost = sum(model.union(inv_cost, fast_fixed_cost))
 problem.minimize(total_cost)
 
 # --- Solve ---

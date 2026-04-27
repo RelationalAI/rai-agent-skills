@@ -12,12 +12,13 @@ description: Interprets optimization solver output including solution extraction
 
 **When to use:**
 - Extracting solution values after a successful solve
-- Interpreting any solver status after solve completes (OPTIMAL, INFEASIBLE, DUAL_INFEASIBLE, TIME_LIMIT)
+- Communicating any solver status to stakeholders (OPTIMAL, INFEASIBLE, DUAL_INFEASIBLE, TIME_LIMIT)
 - Diagnosing why a solved-OPTIMAL result is trivial, wrong, or has coverage gaps (all zeros, all at bounds, concentrated on one entity)
-- Diagnosing INFEASIBLE status (demand vs capacity, contradictory constraints, bound conflicts)
 - Assessing TIME_LIMIT results (gap interpretation, whether to increase time or simplify model)
 - Explaining results to stakeholders in business language
 - Running sensitivity / what-if analysis
+
+For formulation-level root-cause diagnosis of INFEASIBLE/DUAL_INFEASIBLE (demand vs capacity, contradictory constraints, missing bounds), see `rai-prescriptive-solver-management`.
 
 **When NOT to use:**
 - Designing or fixing the formulation itself (adding constraints, changing variables) — see `rai-prescriptive-problem-formulation`. In particular, if the result is OPTIMAL and technically valid but the user rejects it on preference grounds ("that's too much X", "I don't like this allocation"), this indicates latent constraints, not a solver or formulation bug — route to `rai-prescriptive-problem-formulation` > Constraint Elicitation > Post-Solve: Iterative Refinement.
