@@ -39,9 +39,9 @@ What Snowflake database and schema should we use for **experiment artifacts**?
 (e.g., `MY_DB.EXPERIMENTS`)
 ```
 
-## What to Auto-Discover
+## What to Auto-Discover (and what NOT to ask)
 
-Once the user provides the table names, the agent must automatically discover the following by querying Snowflake (`DESCRIBE TABLE` or `INFORMATION_SCHEMA`). Use the snowflake-schema tool to get the schema of each table.
+The user-input boundary is the 3 prompts above (source FQNs, task FQNs, experiment location). **Do not ask the user** for column names, PKs, FKs, label/target columns, timestamp columns, task type, or feature types — those are friction the user often can't answer without checking the schema themselves. Query Snowflake (`DESCRIBE TABLE` or `INFORMATION_SCHEMA.COLUMNS`; use the snowflake-schema tool) and infer:
 
 1. **Column names and types** for all source and task tables
 2. **Primary keys** -- identify PK columns

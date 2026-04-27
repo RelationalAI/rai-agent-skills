@@ -24,6 +24,10 @@ description: Configure and train GNN models, generate predictions, evaluate resu
 
 **Overview:** 4 steps: configure GNN -> train -> predict/evaluate -> optional: register/load.
 
+**By user intent — sections to focus on:**
+- Train + read validation metric → Quick Reference + GNN Constructor + `gnn.fit()`
+- + predict + downstream rule / optimization → also Predictions + Using Predictions Downstream
+- + register + reload across sessions → also Model Management
 
 ## Quick Reference
 
