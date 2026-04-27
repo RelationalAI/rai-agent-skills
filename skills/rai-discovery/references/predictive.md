@@ -11,7 +11,7 @@
 
 Predictive reasoning uses historical data patterns to forecast outcomes, classify entities, or detect anomalies.
 
-**Current platform status:** The RAI predictive reasoner is not yet integrated into the platform. Today, predictive capabilities are delivered via **pre-computed prediction tables** — external ML outputs loaded into Snowflake and mapped as ontology concepts. Discovery should identify both pre-computed predictions already in the data and predictive questions the data could support.
+**Two modes:** Predictive capabilities can be delivered via **pre-computed prediction tables** (external ML outputs loaded into Snowflake) or via the **RAI predictive pipeline** (GNN-based models trained directly on the knowledge graph — see `rai-predictive-modeling` and `rai-predictive-training`). Discovery should identify both pre-computed predictions already in the data and predictive questions the data could support via GNN training.
 
 | Type | Question Pattern | Ontology Signal |
 |------|-----------------|-----------------|
@@ -39,7 +39,7 @@ Problem type: `classification`, `regression`, `forecasting`, `anomaly_detection`
 ### mode
 How prediction is delivered:
 - **`pre_computed`**: A prediction/forecast table already exists in the schema. Discovery identifies it and suggests downstream use by other reasoners.
-- **`rai_predictive`**: Future — when the RAI predictive reasoner is platform-integrated.
+- **`rai_predictive`**: Build and train a graph neural network (GNN) using the RAI predictive pipeline (**early access** — APIs and behavior may change). See `rai-predictive-modeling` for data modeling and `rai-predictive-training` for training and evaluation.
 
 ### target_concept / target_property
 What to predict. E.g., `Entity` / `risk_value`, or `Customer` / `churn_flag`.
@@ -106,7 +106,7 @@ A `RiskPrediction` table with `predicted_risk_prob` and `risk_tier` per entity p
 
 ## Output Concepts
 
-Predictive reasoning (whether pre-computed or future RAI-native) adds concepts to the ontology that downstream reasoners consume:
+Predictive reasoning (whether pre-computed or via the RAI predictive pipeline) adds concepts to the ontology that downstream reasoners consume:
 
 | Prediction Type | Output Concept | Downstream Use |
 |----------------|----------------|----------------|
@@ -128,11 +128,11 @@ What ontology patterns indicate prediction potential:
 - Look for columns named `predicted_*`, `probability`, `risk_*`, `forecast_*`, `confidence`
 - Check if the prediction table links to other ontology concepts via FK (e.g., entity_id linking predictions to Entity concept)
 
-### For rai_predictive mode (future)
+### For rai_predictive mode (GNN training)
 - **Feature availability**: Target property with sufficient non-null values; 3+ candidate features with variance
 - **Temporal span**: For forecasting, at least 2 full cycles of the target period (period-level prediction needs 2+ periods of history)
 - **Label quality**: For classification, labels exist and are reasonably balanced (flag extreme imbalance like 99%/1%)
 - **Row count**: Rough minimums (regression 50+, classification 30+ per class, forecasting 2+ full periods)
 - **Feature-target relationship**: At least some features plausibly related to target (domain signal)
 
-**Minimum viable ontology for prediction:** For pre-computed: a prediction table exists and links to other concepts. For future rai_predictive: at least one concept with a target property (what to predict) and 2+ feature properties (what to predict from), backed by sufficient historical data.
+**Minimum viable ontology for prediction:** For pre-computed: a prediction table exists and links to other concepts. For rai_predictive (GNN): at least one concept with a target property (what to predict) and 2+ feature properties (what to predict from), backed by sufficient historical data. See `rai-predictive-modeling` for the full data modeling workflow.
