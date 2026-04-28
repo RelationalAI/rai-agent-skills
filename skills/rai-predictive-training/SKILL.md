@@ -163,6 +163,13 @@ For link prediction, also consider: `head_layers=2`, `num_negative=20`, `label_s
 
 **Auto-suspend during iteration.** Set a low `auto_suspend_mins` on every engine you're using — idle pool cost can dominate total spend on small workloads. Warm pools make sense only for scheduled/production cadence. Specific tier names and per-cloud memory-vs-compute tradeoffs change over time — ask the RelationalAI team for current sizing. Full `raiconfig.yaml` structure (including the `reasoners:` block for all engine types) lives in the RAI configuration/setup skill.
 
+**Pre-flight check the GPU compute pool before long `fit()` runs.** The predictive reasoner provisions onto a Snowpark Container Services GPU compute pool. Confirming the pool is active up front is cheap hygiene; if it's auto-suspended, jobs may queue without surfacing a clear progress signal. Substitute the pool name your account uses — `SYSTEM_COMPUTE_POOL_GPU` is the Snowflake-provided default; some accounts have a custom pool referenced from `raiconfig.yaml`:
+
+```sql
+SHOW COMPUTE POOLS;                                    -- list all + check state
+ALTER COMPUTE POOL <your_gpu_pool> RESUME;             -- if state=SUSPENDED
+```
+
 For all hyperparameters and tuning guidance, see [references/hyperparameters.md](references/hyperparameters.md).
 
 ---
@@ -182,6 +189,8 @@ For all hyperparameters and tuning guidance, see [references/hyperparameters.md]
 
 1. **Edge-intermediary `time_col`.** When the concept carrying `time_col` is used only as an edge intermediary (no `identify_by`), validation fails with "no time column defined in data tables". `time_col` only propagates for node concepts.
 2. **Datetime column processing at scale.** On larger Snowflake-loaded datasets the trainer can fail server-side with `ValidationError: Error processing datetime column '<name>'` even with the time-bearing concept as a node, clean data, and the column properly listed in both `datetime=[...]` and `time_col=[...]`. The failure is loud at submit time, not silent. Confirm the timestamp column type matches what the GNN datetime pipeline accepts (see `rai-predictive-modeling` § Define and Populate Concepts) and fall back to non-temporal Relationships if the issue persists.
+
+**Engine-side compiled-relation cache footgun (not datetime-specific — surfaces after any column-type change on a bound table):** the engine caches the compiled relation type per RAI relation name and doesn't invalidate it on `ALTER TABLE`, even after stream delete + recreate. Symptom: `Encountered reference to a base relation with a mismatched signature` — but the client only shows the opaque `Failed to pull data into index: transaction was aborted (runtime error)` wrapper. Pull the real error via `RELATIONALAI.API.GET_TRANSACTION_ARTIFACTS('<txn_id>')` -> `problems.json` (presigned URL) and look at the `report` field. Workaround: rename `Model(...)` to force a fresh RAI relation namespace (downstream queries that depend on the old name need updating). Better: do schema changes before the first bind — see `rai-predictive-modeling` § Populate from Snowflake.
 
 ---
 
@@ -472,6 +481,7 @@ User.predictions = gnn.predictions(domain=Test)
 | Calling `load()` on a GNN instance created in fit mode (with `train=`, `validation=`) | Fit-mode GNN instances do not support `load()` | Create a separate load-mode GNN instance (with `source_concept=`, `model_name=`, `version_name=`) and call `load()` on that |
 | `has_time_column=True` fails with "no time column defined in data tables" | The concept carrying `time_col` is an edge, not a node — `time_col` only propagates for node concepts | Use `has_time_column=False` with non-temporal Relationships as workaround |
 | `has_time_column=True` fails with `ValidationError: Error processing datetime column '<name>'` at scale | Server-side datetime processing rejects the column despite clean data, node-level concept, and correct `datetime`/`time_col` config — second known limitation | Verify the timestamp column type matches the GNN datetime pipeline's expected format (see `rai-predictive-modeling`); fall back to non-temporal Relationships if it persists |
+| `SnowflakeTableObjectsException: Failed to pull data into index: transaction was aborted (runtime error)` | Opaque client wrapper that hides the actual server-side error (commonly a stale compiled-relation signature after schema drift, but other causes possible) | Pull `problems.json` via `RELATIONALAI.API.GET_TRANSACTION_ARTIFACTS('<txn_id>')` (presigned URL) and read the `report` field for the real error. For the schema-drift case specifically, see § Known Limitations |
 | Experiment schema not accessible by the RAI native app | RAI app needs explicit grants to read from the experiment schema | `GRANT USAGE ON DATABASE <db> TO APPLICATION RELATIONALAI; GRANT ALL ON SCHEMA <db>.<schema> TO APPLICATION RELATIONALAI` |
 
 ---
