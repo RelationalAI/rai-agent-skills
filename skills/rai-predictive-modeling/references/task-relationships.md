@@ -72,6 +72,25 @@ Val = Relationship(f"{Interaction} has {Any:value}")
 Test = Relationship(f"{Interaction}")
 ```
 
+## Link Prediction — Task Table Format Requirements
+
+The GNN framework requires link prediction task tables in **flat format**: one row per `(src, timestamp, tgt)` pair.
+
+| Split | Required columns | Notes |
+|-------|-----------------|-------|
+| Train | `src_id`, `timestamp`, `tgt_id` | One target per row |
+| Val | `src_id`, `timestamp`, `tgt_id` | One target per row |
+| Test | `src_id`, `timestamp` | No target column |
+
+> ⚠️ **If your target column is `VARIANT` type** (e.g. a JSON array of target IDs per row), the table is in the wrong format and the join `Target.target_id == train_table_concept.target_id` will silently fail or error. Before proceeding, choose one of:
+> 1. Use a flat version of the table if one exists.
+> 2. Create a Snowflake view that unnests the array into individual rows:
+>    ```sql
+>    SELECT src_id, timestamp, f.value::INT AS tgt_id
+>    FROM my_task_table, LATERAL FLATTEN(input => tgt_array) f
+>    ```
+> 3. Proceed to observe the error.
+
 ## Link Prediction (with time / repeated_link_prediction)
 
 ```python
