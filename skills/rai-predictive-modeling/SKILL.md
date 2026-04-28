@@ -285,7 +285,7 @@ For the full feature type reference including drop patterns, see [references/pro
 | Column name has spaces or special characters | Python identifier rules prevent `Concept.weight(kg)` | Use `getattr(People, "weight(kg)")` to reference the field |
 | `identify_by` key or property access doesn't match Snowflake column name | Typo or wrong column — matching is case-insensitive, but the column name must exist | Check `INFORMATION_SCHEMA.COLUMNS` / run `DESCRIBE TABLE` for the exact spelling |
 | Train/Val/Test Relationships have different schemas | Test omits the label but also changes concept or timestamp structure | Train, Val, and Test must share the same concept and timestamp structure — only the label/target is omitted in Test |
-| Link prediction join key or target column is `VARIANT` in task table | Task table stores target IDs as an array instead of one row per pair — applies to train, val, and test (some users include labels in test for evaluation) | Run `DESCRIBE TABLE` on all three split tables before writing task relationships; if `VARIANT` is found, propose a LATERAL FLATTEN view and wait for user approval before creating anything in Snowflake |
+| Link prediction join key or target column is `VARIANT` in task table | Task table stores target IDs as an array instead of one row per pair — applies to train, val, and test (some users include labels in test for evaluation) | Run `DESCRIBE TABLE` on all three split tables before writing task relationships; if `VARIANT` is found, propose a LATERAL FLATTEN table (not a view — Snowflake does not support change tracking on LATERAL views) and wait for user approval before creating anything in Snowflake |
 
 ---
 
