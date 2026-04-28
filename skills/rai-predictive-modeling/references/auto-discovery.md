@@ -34,20 +34,20 @@ What are your **task table** fully qualified names for train/val/test?
 (e.g., `MY_DB.TASKS.TRAIN`, `MY_DB.TASKS.VAL`, `MY_DB.TASKS.TEST`)
 ```
 
-### Phase 1c -- Experiment Artifacts
+### Phase 1c -- Experiment Tracking
 
 Ask exactly this (after user responds to 1b):
 
 ```
-Phase 1c: Experiment Artifacts
+Phase 1c: Experiment Tracking
 
-What Snowflake database and schema should we use for **experiment artifacts**?
+What Snowflake database and schema should we use for **experiment tracking**?
 (e.g., `MY_DB.EXPERIMENTS`)
 ```
 
 ## What to Auto-Discover (and what NOT to ask)
 
-The user-input boundary is the 3 prompts above (source FQNs, task FQNs, experiment location). **Do not ask the user** for column names, PKs, FKs, label/target columns, timestamp columns, task type, or feature types — those are friction the user often can't answer without checking the schema themselves. Use the in-skill helper below first (`get_table_schema(table_name, database, schema)`), then infer:
+The user-input boundary is the 3 prompts above (source FQNs, task FQNs, experiment db and schema). **Do not ask the user** for column names, PKs, FKs, label/target columns, timestamp columns, task type, or feature types — those are friction the user often can't answer without checking the schema themselves. Use the in-skill helper below first (`get_table_schema(table_name, database, schema)`), then infer:
 
 1. **Column names and types** for all source and task tables
 2. **Primary keys** -- identify PK columns

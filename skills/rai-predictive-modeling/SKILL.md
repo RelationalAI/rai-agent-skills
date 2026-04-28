@@ -84,7 +84,7 @@ Three concept categories show up in a GNN pipeline, distinguished by whether the
 | Category | `identify_by`? | Role | Constraints |
 |----------|---------------|------|-------------|
 | **Graph (node)** | yes | Source, target, or other node entities the GNN reasons over | Can carry features and `time_col` |
-| **Edge-intermediary** | no | Used only as `src=`/`dst=` in `Edge.new(...)` to express many-to-many or attributed relationships | **Cannot carry `time_col`** -- `time_col` only propagates for node concepts (with `identify_by`); see `rai-predictive-training` § Known Limitations |
+| **Edge-intermediary** | no | Used only as `src=`/`dst=` in `Edge.new(...)` to express many-to-many or attributed relationships | **Cannot carry `time_col`** -- `time_col` only propagates for node concepts|
 | **Task table** | no | Holds train/val/test split rows, joined to a graph concept by FK | Not used in edges; not a feature source |
 
 > If you have an existing ontology from `rai-build-starter-ontology`, create a new `Model` for the GNN pipeline -- concepts need `identify_by` for GNN to resolve primary keys.
