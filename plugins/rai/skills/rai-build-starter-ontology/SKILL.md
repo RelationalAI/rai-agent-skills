@@ -172,6 +172,8 @@ Work domain-first: brainstorm business entities, then map to tables. Each concep
 - Each concept has a clear identity
 - Concepts are orthogonal (no two with identical entity sets)
 
+**Identity hygiene.** Prefer minimal identity (1-2 natural-key fields). Oversized identity is a signal: usually it means a surrogate ID was missed, or the entity is really a measurement that belongs as a `Relationship` payload on a smaller concept — both cases inflate the model and complicate downstream queries. If the only natural identity you can find is >3 fields, pause and ask: (a) does a surrogate ID exist in the source table that you missed?, (b) is this really a domain concept, or a measurement / derived row that belongs as a `Relationship` payload on a smaller concept? When the answer to both is no — keep the compound identity, but flag the concept as a candidate for scope cuts in Step 1.
+
 ---
 
 ### Step 4 — Identify relationships and properties
@@ -180,6 +182,10 @@ Work domain-first: brainstorm business entities, then map to tables. Each concep
 
 - **Property** — when each input uniquely determines one output. Covers scalar attributes AND functional FKs (e.g., each Order has exactly one Customer → `Order.customer = model.Property(f"{Order} placed by {Customer:customer}")`).
 - **Relationship** — when one input can have many outputs (one Customer → many Orders), the association has multiple fields, or it's a Boolean flag (`{Entity} is <flag>`, unary).
+
+**Anti-bundle rule.** Each scalar attribute should be its own `Property`. If you find yourself packing more than two unrelated scalars into a single `Relationship`, split them into individual `Property` declarations. Bundles become un-queryable: you can't filter or aggregate on a single field. Reserve multi-field Relationships for genuinely co-occurring data (e.g., a date range `{Promotion} active from {DateTime:start} to {DateTime:end}`).
+
+**Same-type-slot disambiguation.** When a `Relationship` has two slots of the same concept type (e.g., `{Location} ... {Location}`), the slots are roles and must be distinguished. Either (a) split into two `Property` declarations with role short_names, or (b) label both slots: `f"{Lane} from {Location:origin} to {Location:destination}"`. Without this, `model.define(...)` will silently bind both slots to whichever column you list first, collapsing source and destination into the same entity. Verify with a Step 7c query that origin ≠ destination on at least one row.
 
 See `rai-ontology-design` § Property vs. Relationship and `rai-pyrel-coding` § Properties and Relationships for the full decision rule.
 

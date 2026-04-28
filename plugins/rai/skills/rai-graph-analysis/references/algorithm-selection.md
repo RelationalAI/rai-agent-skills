@@ -97,7 +97,9 @@ graph.Node.degree = graph.degree()
 - "Which entities are best-connected to other well-connected entities?"
 - Best general-purpose centrality measure when you don't have a specific bottleneck or flow question.
 
-**Parameters:** None required. Works on directed and undirected graphs.
+**Parameters:** None required.
+
+**Requires `directed=False`.** Eigenvector centrality is defined as the principal eigenvector of the (symmetric) adjacency matrix; on a directed graph the operator is asymmetric and the recurrence may not converge — use `pagerank()` instead for directed networks.
 
 **Output:** `(node, score)` — float score per node, normalized. Higher = more central.
 
@@ -303,7 +305,14 @@ connected = graph.is_connected()
 
 **Express it directly in RAI as WCC with per-edge ablation.** For each candidate edge, build a Graph excluding that edge, run `weakly_connected_component()`, and check whether the edge's endpoints land in different components — if they do, the edge is a bridge. The loop creates one Graph instance per candidate edge on the same model, then binds the bridge result back as a Relationship on the edge concept so downstream rules, optimization, and other graph algorithms see it natively.
 
-Two patterns must be honored together for the loop to work:
+**Step 1 — Scope the candidate set first.** The ablation runs N graphs sequentially; each is fast individually but the runtime is linear in N. Before building the loop, narrow the candidate set:
+- Restrict to edges within a single weakly-connected component of interest (bridges across components are trivially "bridges" — usually not what's asked).
+- Apply any domain filter from the question (e.g., `is_active=True`, edges meeting a capacity threshold, edges in a specific region).
+- For >100 candidates, scope further or accept that the analysis will take 5+ minutes.
+
+A `betweenness_centrality()` pre-pass on edges does NOT pre-filter cleanly (high node betweenness ≠ bridge edge); use a simpler structural filter instead.
+
+**Step 2 — Run the ablation loop.** Two patterns must be honored together:
 
 1. **Use the direct-query pattern for WCC, not the shorthand.** The shorthand `graph.Node.X = graph.weakly_connected_component()` creates a property on the host node concept. In a loop, the second iteration fails with `RAIException: Duplicate relationship 'X' on <NodeConcept>` because the property already exists. The direct-query pattern (`graph.weakly_connected_component()(node_ref, comp_ref)` inside `where()`) does not pollute the concept and is loop-safe.
 2. **Pass edge-endpoint relationships by attribute name, not as Property objects.** Calling a Property-as-parameter unbound (`src_rel(e).id`) trips type inference; bound attribute access via `getattr(e, "from_substation").id` is the form the rest of the skill uses and the typer accepts.
@@ -415,6 +424,27 @@ downstream = graph.reachable(from_=Site.is_critical)
 # Upstream: what feeds the critical site?
 upstream = graph.reachable(to=Site.is_critical)
 ```
+
+**Targeting in multi-concept graphs.** When the graph spans multiple node concepts (Pattern 1 — no `node_concept` set), `graph.Node` is a synthetic node concept distinct from any domain concept. The `from_=` / `to=` Relationship must be defined over `graph.Node`, not over a domain concept — otherwise `reachable()` returns empty because the type doesn't match the graph's node type.
+
+```python
+# Multi-concept graph: nodes drawn from ConceptA and ConceptB
+graph = Graph(model, directed=True, weighted=False)
+# ... define edges connecting nodes from both concepts ...
+
+# WRONG — ConceptA.is_target won't match graph.Node
+# bad_target = model.Relationship(f"{ConceptA} is target")
+# model.where(ConceptA.id == X).define(bad_target())
+
+# RIGHT — target Relationship is over graph.Node
+target = model.Relationship(f"target: {graph.Node}")
+n = graph.Node.ref()
+model.define(target(n)).where(n == ConceptA.filter_by(id=X))
+
+downstream = graph.reachable(from_=target)
+```
+
+For single-concept graphs (Pattern 2 / 3 with a `node_concept` set), the target Relationship can be over the domain concept directly — `graph.Node` IS that concept so they're interchangeable.
 
 **Output:** `(source, target)` pairs — binary relation of reachable node pairs.
 
