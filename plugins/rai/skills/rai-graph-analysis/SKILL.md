@@ -224,11 +224,14 @@ Match the question to the algorithm family:
 | "Which entities are most similar?" | Similarity | Based on shared neighborhoods |
 | "How tightly connected are local regions?" | Clustering | Triangle-based metrics |
 
-**Centrality variant selection** (the most common decision):
-- **Eigenvector** — global influence: a node is important if its neighbors are important. Best for: "which nodes are the most influential overall?"
-- **Betweenness** — bottleneck identification: nodes that sit on many shortest paths. Best for: "which nodes are critical connectors / single points of failure?"
-- **PageRank** — directed influence: importance flows along directed edges. Best for: "which nodes receive the most flow/attention?"
+**Centrality variant selection** — start from the **structural test**, not vague semantic labels:
+
+- **Eigenvector** — undirected mutual importance: a node ranks high when its undirected neighbors do. Requires `directed=False`. Use on symmetric / co-occurrence / similarity-style graphs.
+- **Betweenness** — bottleneck identification: nodes that sit on many shortest paths. Best for: "which nodes are critical connectors / single points of failure?" Requires `weighted=False`.
+- **PageRank** — directed inbound flow: importance accumulates along incoming edges. **Default for any directed graph** where the question is about which nodes receive the most flow or attention.
 - **Degree** — local connectivity: count of direct connections. Best for: "which nodes have the most direct relationships?"
+
+**One algorithm per question.** Pick the single algorithm that matches the structural test above. Don't combine multiple centrality measures into a "composite criticality score" — the resulting ranking has no clean interpretation, depends on arbitrary normalization choices, and typically reorders results vs. any one of its inputs. If the question genuinely requires multiple lenses, run them as separate columns in the output, but rank by one and explain why.
 
 When choosing between algorithm variants within a family, or needing parameter details, output shape, or compatibility specifics, see [algorithm-selection.md](references/algorithm-selection.md).
 
@@ -354,12 +357,14 @@ For per-algorithm deep dives (parameters, output shapes, interpretation, compati
 
 ## Parameter Guidance
 
+**Defaults: `directed=False, weighted=False`.** Only deviate when the question's structure justifies it. Flipping either flag changes algorithm outputs significantly — Louvain communities partition differently, PageRank scores invert, eigenvector is undefined on directed graphs. Add direction or weight only when the question explicitly demands it (see "When to use" below).
+
 | Parameter | Values | When to use |
 |-----------|--------|-------------|
-| `directed` | `True` | Flow/dependency networks (supply chain, org hierarchy, reachability) |
-| | `False` | Co-occurrence, infrastructure connectivity, similarity |
-| `weighted` | `True` | Edge property (cost, volume, distance) matters for analysis. **Weights must be floats** — use `floats.float()` to cast. |
-| | `False` | Only connection existence matters |
+| `directed` | `True` | Promote to directed only when the question is about flow, dependency, or causality — i.e., the edge's direction has semantic meaning the answer depends on. |
+| | `False` | **Default.** Symmetric relationships, co-occurrence, infrastructure connectivity, similarity. |
+| `weighted` | `True` | Promote to weighted only when an edge-property quantity is **explicitly named in the question**. Don't add weights speculatively because a numeric column on the edge "looks relevant" — for community detection in particular, weighting changes the partition. **Weights must be floats** — cast with `floats.float()`. |
+| | `False` | **Default.** Only connection existence matters. |
 | `aggregator` | `"sum"` | **Only supported alternative** to the default `None`. Collapses multi-edges by summing weights. Only use when multi-edges are expected — see [Aggregator guidance](#graph-constructor-aggregator-parameter-guidance). |
 | `node_concept` | Concept | Which concept forms nodes. Required with `edge_concept`. Optional otherwise (inferred from edges). |
 
@@ -478,6 +483,7 @@ model.where(Site.centrality_score < 0.1).define(Site.is_at_risk())
 | `TypeError` with large local models | In local execution mode, models with many (200+) Relationships in scope alongside a Graph can exceed type inference limits, producing a `TypeError` | First try: isolate the Graph in a separate script/model that imports only the concepts the Graph needs, reducing the type inference scope. Fallback: keep large datasets as pandas DataFrames for Python-side analysis. This limitation is specific to local execution; Snowflake-backed models handle larger schemas. |
 | Empty graph when extending existing model | Script creates `Model("name")` without importing base model definitions — concepts exist but have no instances | Import the base model module (e.g., `from my_model import model, Site`) so base `define()` rules are in scope |
 | `ValidationError: Unused variable` when using `rank()` with graph properties | Using `rank(desc(graph.Node.betweenness))` alongside other graph properties in `select()` triggers the unused variable validator | Sort in pandas instead: `.to_df().sort_values("betweenness", ascending=False).reset_index(drop=True)` — avoid `rank()` in graph queries |
+| DataFrame column name doesn't match the property name you assigned | Column names follow the algorithm's default output binding (often `centrality`, `score`, `community`) or the variable name used in `.select()` — they don't inherit the attribute name from `graph.Node.my_name = graph.algorithm()` | Always set names explicitly with `.alias("my_name")` in `select(...)`. Don't rely on assignment-name propagation: `model.select(Site.id, score.alias("centrality")).to_df()` |
 | `RAIException: Ungrounded variables` when mixing chained derived properties + Graph + boolean rules | Defining chained derived properties (e.g., `peak_forecast` → `future_headroom`) alongside Graph construction and boolean Relationship rules in the same model causes ungrounded variable errors | Query raw data via simple selects and compute derived values / rules in pandas. Root cause is related to the type inference limit noted above — chained derivations compound the issue |
 
 ---
