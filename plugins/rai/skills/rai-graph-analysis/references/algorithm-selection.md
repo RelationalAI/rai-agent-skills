@@ -598,7 +598,7 @@ Also available: `graph.triangle()` returns ternary `(n1, n2, n3)` of all triangl
 | `inneighbor()` / `outneighbor()` | Yes | Yes | N/A | N/A |
 | `degree()` / `indegree()` / `outdegree()` | Yes | Yes | N/A | N/A |
 | `weighted_degree()` / variants | Yes | Yes | **Required** | N/A |
-| `eigenvector_centrality()` | Yes | Yes | Yes | Yes |
+| `eigenvector_centrality()` | **No** | Yes | Yes | Yes |
 | `betweenness_centrality()` | Yes | Yes | **No** | Yes |
 | `degree_centrality()` | Yes | Yes | N/A | N/A |
 | `pagerank()` | **Best** | Yes | Yes | Yes |

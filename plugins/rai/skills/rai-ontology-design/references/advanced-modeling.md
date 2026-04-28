@@ -204,6 +204,8 @@ Site.capacity_info = model.Relationship(
 
 Both patterns are valid. Individual Properties give FD enforcement per attribute. Multi-field Relationships are more concise and self-documenting but lose per-field uniqueness guarantees.
 
+> **Note:** `short_name` is metadata for index lookup and disambiguation only — it is NOT the binding key for invocation. See `rai-pyrel-coding/references/common-pitfalls.md` § `short_name` is metadata, not the binding key.
+
 **Guidelines:**
 - Each property group should ideally draw from the same source table
 - If topically related columns span multiple tables, create separate groups per source and document the join path in comments

@@ -125,6 +125,8 @@ with connect_sync() as client:
 
 Warm reasoners are pre-provisioned reasoners kept running and ready to accept jobs immediately, eliminating cold-start latency. When a user creates or resumes a reasoner and a warm instance is available for the requested size, the system assigns the warm reasoner instead of provisioning a new one.
 
+> **Note:** Unwarmed logic-reasoner cold-start compounds with per-table CDC stream sync on first model query, producing a 5–10 minute `Initializing data index` hang. See `rai-build-starter-ontology` § Common Pitfalls for the full row.
+
 **Enable a warm reasoner** (requires `app_admin` application role):
 
 ```sql

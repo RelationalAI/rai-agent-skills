@@ -124,7 +124,7 @@ graph = Graph(
 
 | Family | Methods | Output Shape | Typical Use |
 |--------|---------|-------------|-------------|
-| **Basic Stats** | `num_nodes()`, `num_edges()`, `num_triangles()` | scalar | Graph validation, sanity checks |
+| **Basic Stats** | `num_nodes()`, `num_edges()`, `num_triangles()` | relation; use `.inspect()` to print | Graph validation, sanity checks |
 | **Neighbors** | `neighbor()`, `inneighbor()`, `outneighbor()`, `common_neighbor()` | `(node, node)` or `(node, node, node)` | Neighborhood exploration |
 | **Degree** | `degree()`, `indegree()`, `outdegree()`, `weighted_degree()`, `weighted_indegree()`, `weighted_outdegree()` | `(node, value)` | Connection counts |
 | **Centrality** | `eigenvector_centrality()`, `betweenness_centrality()`, `degree_centrality()`, `pagerank()` | `(node, score)` | Importance, influence, bottlenecks |
