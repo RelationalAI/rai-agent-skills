@@ -77,7 +77,7 @@ Additional type imports as needed: `Date`, `DateTime`, `Float`.
 
 ## Define and Populate Concepts
 
-> **User-input boundary:** the only things you need from the user are the 3 inputs in [`references/auto-discovery.md`](references/auto-discovery.md) -- source table FQNs, task table FQNs, and the experiment-artifact location. Auto-derive PKs, FKs, columns, types, edges, task type, and timestamp candidates from `INFORMATION_SCHEMA` / `DESCRIBE TABLE`. Don't ask the user for column-level details.
+> **User-input boundary:** the only things you need from the user are the 3 inputs in [`references/auto-discovery.md`](references/auto-discovery.md) -- source table FQNs, task table FQNs, and the experiment-artifact location. Auto-derive PKs, FKs, columns, types, edges, task type, and timestamp candidates from Snowflake schema introspection. Use the in-skill `get_table_schema(table_name, database, schema)` helper in `references/auto-discovery.md` as the default schema source before any manual SQL fallback. Don't ask the user for column-level details.
 
 Three concept categories show up in a GNN pipeline, distinguished by whether they declare a primary key and how they participate in the graph:
 

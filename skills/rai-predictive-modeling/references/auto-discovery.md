@@ -2,7 +2,13 @@
 
 After the user provides table names, the agent automatically discovers schema details by querying Snowflake. This reference documents the conversation templates and discovery process.
 
+## How to use this workflow
+
+Walk through each phase **sequentially**. For each phase, use the **exact question template** below -- do not rephrase, reorder, or add extra questions. Wait for the user's answers before proceeding to the next phase. If the user provides information that covers multiple phases, acknowledge it and skip to the next uncovered phase.
+
 ## Conversation Templates
+
+**Phase 1 is split into three sub-steps. Ask each one separately and wait for the user's response before moving to the next.**
 
 ### Phase 1a -- Source Tables
 
@@ -41,7 +47,7 @@ What Snowflake database and schema should we use for **experiment artifacts**?
 
 ## What to Auto-Discover (and what NOT to ask)
 
-The user-input boundary is the 3 prompts above (source FQNs, task FQNs, experiment location). **Do not ask the user** for column names, PKs, FKs, label/target columns, timestamp columns, task type, or feature types — those are friction the user often can't answer without checking the schema themselves. Query Snowflake (`DESCRIBE TABLE` or `INFORMATION_SCHEMA.COLUMNS`; use the snowflake-schema tool) and infer:
+The user-input boundary is the 3 prompts above (source FQNs, task FQNs, experiment location). **Do not ask the user** for column names, PKs, FKs, label/target columns, timestamp columns, task type, or feature types — those are friction the user often can't answer without checking the schema themselves. Use the in-skill helper below first (`get_table_schema(table_name, database, schema)`), then infer:
 
 1. **Column names and types** for all source and task tables
 2. **Primary keys** -- identify PK columns
@@ -55,8 +61,73 @@ The user-input boundary is the 3 prompts above (source FQNs, task FQNs, experime
 7. **Task type** -- infer from the label column:
    - Binary/boolean or 2-value categorical -> `binary_classification`
    - Multi-value categorical -> `multiclass_classification`
+   - Multiple label columns for the same row, or array/list-of-labels target -> `multilabel_classification`
    - Numeric/float -> `regression`
    - Column matching another concept's PK -> `link_prediction` (ask user to confirm)
+
+**Note: multiclass vs multilabel**
+- **Multiclass**: each row has exactly one label chosen from many classes (e.g., `sports` *or* `news` *or* `finance`).
+- **Multilabel**: each row can have multiple labels at the same time (e.g., `sports` *and* `news`).
+
+### Required execution pattern (Snowpark first, then helper)
+
+Set up a Snowpark session once (follow `rai-setup`), then reuse it for schema discovery.
+
+Use this implementation directly:
+
+```python
+import re
+from relationalai.config import SnowflakeConnection, create_config
+from snowflake import snowpark
+
+_IDENTIFIER_RE = re.compile(r"^[A-Za-z0-9_]+$")
+session: snowpark.Session = create_config().get_session(SnowflakeConnection)
+
+
+def get_table_schema(table_name: str, database: str, schema: str) -> list[dict]:
+    """Return Snowflake table columns as [{'column_name': ..., 'data_type': ...}]."""
+    table_name = table_name.strip()
+    database = database.strip()
+    schema = schema.strip()
+
+    if not table_name or not database or not schema:
+        return [{"error": "table_name, database, and schema are required and cannot be empty."}]
+
+    for field_name, value in [("database", database), ("schema", schema), ("table_name", table_name)]:
+        if not _IDENTIFIER_RE.fullmatch(value):
+            return [{"error": f"Invalid {field_name}: '{value}'. Use only letters, numbers, and underscores."}]
+
+    query = """
+        SELECT COLUMN_NAME, DATA_TYPE
+        FROM {database}.INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = '{schema}'
+          AND TABLE_NAME = '{table}'
+        ORDER BY ORDINAL_POSITION
+    """.format(
+        database=database.upper(),
+        schema=schema.upper(),
+        table=table_name.upper(),
+    )
+
+    try:
+        rows = session.sql(query).collect()
+    except Exception as exc:
+        return [{"error": f"Snowflake query failed: {exc}"}]
+
+    if not rows:
+        return [{"error": f"No columns found for {database}.{schema}.{table_name}. Check the name and permissions."}]
+
+    return [{"column_name": row["COLUMN_NAME"], "data_type": row["DATA_TYPE"]} for row in rows]
+```
+
+For each user-provided fully qualified table name `DB.SCHEMA.TABLE`:
+
+1. Parse into `database=DB`, `schema=SCHEMA`, `table_name=TABLE`.
+2. Call the in-skill helper `get_table_schema(table_name=TABLE, database=DB, schema=SCHEMA)`.
+3. Treat the returned `column_name` values as canonical Snowflake column names (case-insensitive matching allowed for concept/property references, but spelling must match).
+4. If the helper returns an `error`, retry once after uppercasing parts; if still failing, ask the user for `DESCRIBE TABLE` output for only the failing table.
+
+Use `DESCRIBE TABLE` / manual SQL only as fallback when the Snowpark helper cannot return schema.
 
 ## Link Prediction Detection
 
@@ -102,4 +173,4 @@ Does this look correct? I'll proceed with this structure.
 
 ## Fallback
 
-If the agent cannot connect to Snowflake or auto-discovery fails, fall back to asking the user for column details directly.
+If the helper cannot connect to Snowflake or auto-discovery fails, fall back to asking the user for `DESCRIBE TABLE` output (or column lists with types) for only the affected tables.
