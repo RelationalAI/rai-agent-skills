@@ -82,14 +82,13 @@ The GNN framework requires link prediction task tables in **flat format**: one r
 | Val | `src_id`, `timestamp`, `tgt_id` | One target per row |
 | Test | `src_id`, `timestamp` | No target column |
 
-> ⚠️ **If your target column is `VARIANT` type** (e.g. a JSON array of target IDs per row), the table is in the wrong format and the join `Target.target_id == train_table_concept.target_id` will silently fail or error. Before proceeding, choose one of:
-> 1. Use a flat version of the table if one exists.
-> 2. Create a Snowflake view that unnests the array into individual rows:
->    ```sql
->    SELECT src_id, timestamp, f.value::INT AS tgt_id
->    FROM my_task_table, LATERAL FLATTEN(input => tgt_array) f
->    ```
-> 3. Proceed to observe the error.
+> **Before writing link prediction task table definitions, run `DESCRIBE TABLE` on each split table and check column types.**
+>
+> ⚠️ **If the target column is `VARIANT` type** (e.g. a JSON array of target IDs per row), the table is in the wrong format and the join `Target.target_id == train_table_concept.target_id` will fail with `[UnresolvedType]`. Do not flatten automatically — propose creating a LATERAL FLATTEN view to the user and wait for explicit approval before creating anything in Snowflake:
+> ```sql
+> SELECT src_id, timestamp, f.value::INT AS tgt_id
+> FROM my_task_table, LATERAL FLATTEN(input => tgt_array) f
+> ```
 
 ## Link Prediction (with time / repeated_link_prediction)
 
