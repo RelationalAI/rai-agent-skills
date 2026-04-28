@@ -113,13 +113,9 @@ graph = Graph(
 
 ### `Graph` constructor `aggregator` parameter guidance
 
-`aggregator` is an optional parameter to the `Graph` constructor that defaults to `None`. When it is `None`, if the graph's edge definitions imply, or explicitly include, a multi-edge (multiple edges between the same pair of nodes), the graph logic will emit warnings.
+`aggregator` defaults to `None`; multi-edges (parallel edges between the same node pair) emit warnings when present. `aggregator="sum"` (the only supported alternative) collapses multi-edges by summing weights — works on unweighted too.
 
-`aggregator="sum"` is currently the only supported alternative. It collapses multi-edges by summing their weights. It also works on unweighted graphs to collapse multi-edges.
-
-**When to use:** Only add `aggregator="sum"` when your graph construction is expected to produce multiple edges between the same node pair (e.g., co-occurrence patterns where multiple shared attributes each generate an edge, or intermediary concepts where multiple operations connect the same two sites).
-
-**When NOT to use:** If your edge definitions are expected to produce at most one edge per node pair, omit the aggregator. Using it unnecessarily can mask data issues, semantic errors, or implementation mistakes — unexpected multi-edges often indicate, e.g., a bug in the edge derivation logic rather than valid data to be summed, or data with unexpected or incorrect elements.
+**Use it only when multi-edges are expected** (co-occurrence with multiple shared attributes, or intermediary concepts where multiple operations connect the same pair). **Omit otherwise** — silencing unexpected multi-edges masks bugs in edge-derivation logic.
 
 ### Algorithm cheat sheet
 
@@ -290,31 +286,11 @@ model.where(
 ).define(graph.Edge.new(src=left_order.customer, dst=right_order.customer, weight=1.0))
 ```
 
-**Concept-based edges with `edge_concept`** — when each interaction is already a concept:
+**Concept-based edges with `edge_concept`** — when each interaction is already a concept, pass it via `edge_concept=` + the three required relationships (`edge_src_relationship`, `edge_dst_relationship`, and `edge_weight_relationship` when weighted). See Quick Reference Pattern 3 for the full constructor signature.
 
-```python
-graph = Graph(
-    model, directed=True, weighted=True, node_concept=Account,
-    edge_concept=Transaction,
-    edge_src_relationship=Transaction.payer,
-    edge_dst_relationship=Transaction.payee,
-    edge_weight_relationship=Transaction.amount,
-)
-# Every Transaction instance automatically becomes an edge — no Edge.new() needed
-```
+**Filtered edges:** restrict via `.where(t.amount >= 100.0).define(graph.Edge.new(src=t.payer, dst=t.payee))`.
 
-Requirements: must pass `node_concept` with `edge_concept`. All three of `edge_concept`, `edge_src_relationship`, `edge_dst_relationship` are required together. Add `edge_weight_relationship` when weighted.
-
-**Filtered edges** — use `.where()` to restrict which relationships become edges:
-
-```python
-t = Transaction.ref()
-model.where(t.amount >= 100.0).define(graph.Edge.new(src=t.payer, dst=t.payee))
-```
-
-For detailed patterns (multi-intermediary, hierarchy, self-referencing, multi-graph, weight construction, validation), see [graph-construction.md](references/graph-construction.md).
-
-**Multi-reasoner note:** Graph algorithms and prescriptive optimization work on the same `Model` without conflict — use domain concepts directly as `node_concept` (no mirror concepts or separate models needed).
+For detailed patterns (multi-intermediary, hierarchy, self-referencing, multi-graph, weight construction, validation), see [graph-construction.md](references/graph-construction.md). Graph algorithms and prescriptive optimization coexist on the same `Model` — use domain concepts directly as `node_concept` (no mirror concepts or separate models needed).
 
 ---
 
@@ -324,9 +300,9 @@ Start from the question, not the algorithm name:
 
 | Question Type | Algorithm Family | Default Choice |
 |--------------|-----------------|----------------|
-| "Who/what is most important?" | Centrality | `eigenvector_centrality()` (global influence) |
+| "Who/what is most important?" (directed graph) | Centrality | `pagerank()` (inbound flow) |
+| "Who/what is most important?" (undirected graph) | Centrality | `eigenvector_centrality()` (mutual importance) |
 | "Which nodes are bottlenecks?" | Centrality | `betweenness_centrality()` (bridge nodes) |
-| "Which nodes receive the most flow?" | Centrality | `pagerank()` (directed networks) |
 | "What natural groups exist?" | Community | `louvain()` (undirected) or `infomap()` (directed) |
 | "Is the network fragmented?" | Components | `weakly_connected_component()` |
 | "Which **edges** are single points of failure (bridges)?" | Components | No named primitive — WCC with per-edge ablation. See [algorithm-selection.md](references/algorithm-selection.md#bridge-edges-no-named-primitive) |
@@ -348,6 +324,7 @@ Start from the question, not the algorithm name:
 | Algorithm | Cannot use with |
 |-----------|----------------|
 | `betweenness_centrality()` | `weighted=True` |
+| `eigenvector_centrality()` | `directed=True` (use `pagerank()` for directed) |
 | `louvain()` | `directed=True` (use `infomap()` for directed) |
 | `local_clustering_coefficient()` | `directed=True` (requires undirected) |
 
