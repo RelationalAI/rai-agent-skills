@@ -129,8 +129,6 @@ The GNN pipeline expects pre-existing train/val/test split tables in Snowflake. 
 
 `PropertyTransformer` and the task-table pattern also work with concepts populated from local data via `model.data(df)` -- not just `Table(...).to_schema()`. Useful when some concept data lives in local CSVs (e.g. optimizer parameters) while the graph comes from Snowflake.
 
-**Timestamp column type matters for the GNN datetime pipeline.** Columns intended for `time_col` / `datetime` features need a type the trainer accepts; native Snowflake `TIMESTAMP_NTZ` has been observed to be silently incompatible (loads cleanly, but the trainer doesn't pick the column up as temporal). VARCHAR ISO-8601 is the safer default for time-bearing columns, though large-scale loads can still trip a server-side `ValidationError` (see `rai-predictive-training` § Known Limitations). Confirm the trainer's currently-accepted timestamp formats with the RelationalAI team if you're hitting datetime errors at scale.
-
 ---
 
 ## Task Relationships

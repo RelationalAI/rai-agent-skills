@@ -176,13 +176,6 @@ For all hyperparameters and tuning guidance, see [references/hyperparameters.md]
 2. Model training over `n_epochs`
 3. Evaluation on the validation set
 
-### Known Limitations
-
-`has_time_column=True` has two known failure modes; both share the same workaround (turn temporal off — switch to non-temporal Relationships and `has_time_column=False`):
-
-1. **Edge-intermediary `time_col`.** When the concept carrying `time_col` is used only as an edge intermediary (no `identify_by`), validation fails with "no time column defined in data tables". `time_col` only propagates for node concepts.
-2. **Datetime column processing at scale.** On larger Snowflake-loaded datasets the trainer can fail server-side with `ValidationError: Error processing datetime column '<name>'` even with the time-bearing concept as a node, clean data, and the column properly listed in both `datetime=[...]` and `time_col=[...]`. The failure is loud at submit time, not silent. Confirm the timestamp column type matches what the GNN datetime pipeline accepts (see `rai-predictive-modeling` § Define and Populate Concepts) and fall back to non-temporal Relationships if the issue persists.
-
 ---
 
 ## Predictions
