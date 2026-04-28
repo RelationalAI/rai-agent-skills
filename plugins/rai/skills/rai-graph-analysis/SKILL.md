@@ -110,6 +110,7 @@ graph = Graph(
 **Important:**
 - When using `edge_concept`, you must also pass `node_concept`, `edge_src_relationship`, and `edge_dst_relationship`. Add `edge_weight_relationship` when the graph is weighted.
 - **Weights must be floats.** Use `floats.float()` to cast from other numeric types: `weight=floats.float(Transaction.amount)`.
+- **Note:** `edge_src_relationship`, `edge_dst_relationship`, and `edge_weight_relationship` accept only a `Relationship` or `Chain` — not a `Property`, not an `Expression`. If your ontology models the link as a `Property` (e.g., `f"{Edge} from {Node:source}"`), or if you need to cast (`floats.float(...)`), use Pattern 1 or 2 with manual `Edge.new(src=..., dst=..., weight=...)` instead. Pattern 3 will fail silently with a model warning and produce 0 edges.
 
 ### `Graph` constructor `aggregator` parameter guidance
 
@@ -118,6 +119,8 @@ graph = Graph(
 **Use it only when multi-edges are expected** (co-occurrence with multiple shared attributes, or intermediary concepts where multiple operations connect the same pair). **Omit otherwise** — silencing unexpected multi-edges masks bugs in edge-derivation logic.
 
 ### Algorithm cheat sheet
+
+> **Compatibility constraints in this section are non-exhaustive.** For any algorithm you plan to call, load [algorithm-selection.md](references/algorithm-selection.md) and confirm its compatibility row before writing the `Graph(...)` constructor. The Pre-flight table at the end of [Algorithm Selection](#algorithm-selection) below summarizes the most common gotchas, but is also non-exhaustive.
 
 | Family | Methods | Output Shape | Typical Use |
 |--------|---------|-------------|-------------|
@@ -179,7 +182,7 @@ Once you know what nodes and edges you need, scan the ontology for these structu
 | Ontology Signal | What to Look For | How It Becomes Edges |
 |-----------------|-----------------|---------------------|
 | **Direct relationship** | Concept A has a relationship to Concept B (or to itself) | The relationship itself is an edge — use `Edge.new(src=a, dst=b)` |
-| **Intermediary concept** | A concept C with two relationships pointing to the same node type (e.g., `source` and `destination` both referencing Concept A) | Each instance of C becomes an edge between the two endpoints — use `Edge.new()` or `edge_concept` |
+| **Intermediary concept** | A concept C with two relationships pointing to the same node type (e.g., `source` and `destination` both referencing Concept A) | Each instance of C becomes an edge between the two endpoints — use `Edge.new()` or `edge_concept` (`edge_concept` only when the src/dst are `Relationship`s) |
 | **Shared attribute** | Two instances of Concept A both relate to the same instance of Concept B (e.g., two users sharing an address, two customers ordering the same product) | Co-occurrence — entities sharing an attribute are connected. Requires `id <` guard to prevent duplicates |
 | **Self-referencing** | A concept with a relationship back to itself (e.g., `parent`, `reports_to`, `depends_on`, `subcomponent`, `follows`) | Instance-to-instance edges within one concept — may be acyclic (hierarchies, DAGs) or contain cycles |
 | **Multi-concept co-occurrence** | Multiple distinct attributes shared between entities (e.g., shared address OR shared phone OR shared email) | Each shared attribute type creates edges — combine in a single graph for richer connectivity |
@@ -327,8 +330,9 @@ Start from the question, not the algorithm name:
 | `eigenvector_centrality()` | `directed=True` (use `pagerank()` for directed) |
 | `louvain()` | `directed=True` (use `infomap()` for directed) |
 | `local_clustering_coefficient()` | `directed=True` (requires undirected) |
+| `diameter_range()` | `directed=True` or `weighted=True` (requires undirected, unweighted) |
 
-For per-algorithm deep dives (parameters, output shapes, interpretation, compatibility matrix), see [algorithm-selection.md](references/algorithm-selection.md).
+This table is non-exhaustive. For per-algorithm deep dives (parameters, output shapes, interpretation, compatibility matrix), see [algorithm-selection.md](references/algorithm-selection.md) and confirm the row for any algorithm you plan to call.
 
 ---
 
