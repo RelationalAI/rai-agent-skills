@@ -463,7 +463,7 @@ User.predictions = gnn.predictions(domain=Test)
 | Omitting `has_time_column` when loading a temporal model | Not persisted in the registry | Re-supply `has_time_column=True` at load time |
 | Calling `fit()` on a GNN instance created in load mode | Load-mode GNN instances do not support training | Create a separate fit-mode GNN instance (with `train=`, `validation=`) and call `fit()` on that |
 | Calling `load()` on a GNN instance created in fit mode (with `train=`, `validation=`) | Fit-mode GNN instances do not support `load()` | Create a separate load-mode GNN instance (with `source_concept=`, `model_name=`, `version_name=`) and call `load()` on that |
-| Experiment schema not accessible by the RAI native app | RAI app needs explicit grants to read from the experiment schema | `GRANT USAGE ON DATABASE <db> TO APPLICATION RELATIONALAI; GRANT USAGE ON SCHEMA <db>.<schema> TO APPLICATION RELATIONALAI; GRANT CREATE EXPERIMENT ON SCHEMA <db>.<schema> TO APPLICATION RELATIONALAI` |
+| Experiment schema not accessible by the RAI native app | RAI app needs explicit grants to write to the experiment schema | `GRANT USAGE ON DATABASE <db> TO APPLICATION RELATIONALAI; GRANT USAGE ON SCHEMA <db>.<schema> TO APPLICATION RELATIONALAI; GRANT CREATE EXPERIMENT ON SCHEMA <db>.<schema> TO APPLICATION RELATIONALAI` |
 
 ---
 
