@@ -41,8 +41,28 @@ description: Formulates optimization problems from ontology models covering deci
 
 ```python
 from relationalai.semantics.reasoners.prescriptive import Problem
+from relationalai.semantics.std import aggregates as aggs
 
 problem = Problem(model, Float)
+
+# Decision variable — prefer scoped form (where=[...]) over unscoped
+problem.solve_for(
+    Lane.flow,
+    where=[Lane.active],
+    name=["item_id", "src_id", "dst_id"],
+    lower=0.0,
+    type="cont",
+)
+
+# Constraint
+problem.satisfy(
+    model.require(
+        aggs.sum(Lane.flow).per(Source).where(Lane.from_source(Source)) <= Source.capacity
+    )
+)
+
+# Objective
+problem.minimize(aggs.sum(Lane.flow * Lane.unit_cost))
 ```
 
 | Method | Signature | Purpose |

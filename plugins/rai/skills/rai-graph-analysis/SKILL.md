@@ -299,7 +299,7 @@ For detailed patterns (multi-intermediary, hierarchy, self-referencing, multi-gr
 
 ## Algorithm Selection
 
-Start from the question, not the algorithm name:
+Start from the question, not the algorithm name. **First check whether the question reduces to an aggregation** — per-entity counts and one-hop group-bys ("how many sources per target?", "which targets have only one predecessor?") run as `aggs.count(distinct(...)).per(target)` with no Graph constructor needed. Reserve graph reasoners for multi-hop traversal, partitioning, and centrality.
 
 | Question Type | Algorithm Family | Default Choice |
 |--------------|-----------------|----------------|
