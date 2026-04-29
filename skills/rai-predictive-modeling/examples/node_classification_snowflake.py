@@ -19,7 +19,6 @@ Concept, Table, Relationship = model.Concept, model.Table, model.Relationship
 # graph (node) concepts
 User = Concept("User", identify_by={"user_id": Integer})
 Event = Concept("Event", identify_by={"event_id": Integer})
-# edge-intermediary concept (no identify_by, used only as Edge src/dst)
 EventAttendee = Concept("EventAttendee")
 
 # task table concepts
@@ -75,9 +74,6 @@ continuous_event = [Event.lat, Event.lng]
 category_event_attendee = [EventAttendee.status]
 datetime_event_attendee = [EventAttendee.start_time]
 
-# time_col only propagates for node concepts -- list it on Event (a node), not
-# on EventAttendee (edge-intermediary, no identify_by). See
-# `rai-predictive-training` § Known Limitations for the failure mode this avoids.
 pt = PropertyTransformer(
     category=[*category_user, *category_event, *category_event_attendee],
     datetime=[*datetime_user, *datetime_event, *datetime_event_attendee],
