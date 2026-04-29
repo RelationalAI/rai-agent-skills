@@ -2,10 +2,10 @@
 GNN Link Prediction -- Data Modeling (Phases 1-6)
 =================================================
 Repeated link prediction on a bipartite User-Item graph with an Interaction
-edge-intermediary concept carrying timestamps.
+concept carrying timestamps.
 
 Demonstrates: concepts, population, task relationships (link prediction with
-time), graph edges via an intermediary concept, and PropertyTransformer.
+time), graph edges, and PropertyTransformer.
 
 For training and prediction, see `rai-predictive-training`.
 """
@@ -19,10 +19,7 @@ model = Model("gnn_link_prediction_example")
 Concept, Table, Relationship = model.Concept, model.Table, model.Relationship
 
 # -- Phase 2: Define Concepts --
-# graph (node) concepts -- User is source (predicting from), Item is target (predicting to).
-# Interaction has its own identify_by because it carries `time_col` (timestamp); time_col
-# only propagates for node concepts, so an edge-intermediary version (no identify_by) would
-# fail validation. See `rai-predictive-training` § Known Limitations.
+# graph (node) concepts
 User = Concept("User", identify_by={"user_id": Integer})
 Item = Concept("Item", identify_by={"item_id": Integer})
 Interaction = Concept("Interaction", identify_by={"interaction_id": Integer})
