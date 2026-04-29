@@ -56,6 +56,8 @@ unique = model.select(distinct(Product.category.alias("cat"))).to_df()
 
 Core pattern: `model.where(conditions).select(expressions)` chained with `.to_df()` for execution.
 
+**Default reflex: compose results in a single `model.select(...)`, not multiple `to_df()` calls merged in pandas.** Express grouping, joining, filtering, and aggregation inline (`aggs.<f>(...).per(<group>).where(...).alias(...)`). Reach for pandas only when the consumer needs DataFrame arithmetic the ontology can't express. Multiple `.to_df()` + `.merge()` re-derives joins the ontology already defines.
+
 **Best practice: Use `model.where()` / `model.select()` instead of standalone `where()` / `select()`.** The standalone forms are convenience wrappers that only work when exactly one Model exists in the process. With two or more models, they raise `"Multiple Models have been defined."` Using `model.where()`/`model.select()` guarantees compatibility in multi-model scenarios, makes code portable when copying between scripts, and reduces import requirements.
 
 ```python

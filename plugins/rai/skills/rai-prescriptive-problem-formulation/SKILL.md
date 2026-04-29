@@ -41,8 +41,34 @@ description: Formulates optimization problems from ontology models covering deci
 
 ```python
 from relationalai.semantics.reasoners.prescriptive import Problem
+from relationalai.semantics.std import aggregates as aggs
 
 problem = Problem(model, Float)
+
+# Decision variable — scoped form (default)
+problem.solve_for(
+    Lane.flow,
+    where=[Lane.active, Lane.lead_time <= 24],
+    name=["item_id", "src_id", "dst_id"],
+    lower=0.0,
+    type="cont",
+)
+
+# Constraint — equality + slack (default for demand-balance)
+problem.satisfy(
+    model.require(
+        aggs.sum(Lane.flow).per(Demand).where(Lane.serves(Demand))
+        + Demand.unmet == Demand.gap
+    )
+)
+
+# Objective with terms from multiple concepts — use model.union()
+problem.minimize(
+    aggs.sum(model.union(
+        Lane.flow * Lane.unit_cost,
+        Demand.unmet * Demand.shortfall_cost,
+    ))
+)
 ```
 
 | Method | Signature | Purpose |
@@ -55,6 +81,15 @@ problem = Problem(model, Float)
 | `verify` | `(*fragments)` | Post-solve constraint verification |
 | `Variable.values` | `(sol_index, value_ref)` | Property on `ProblemVariable`. Extracts solution values at `sol_index` (0-based), binding each value to `value_ref` (a `Float.ref()` or `Integer.ref()`). Use inside `model.select(...).where(var.values(sol_index, value_ref))`. Primary pattern for `populate=False` workflows. |
 | `display` | `(part=)` | Print formulation summary |
+
+### Standard patterns — apply by default, not exceptions
+
+| Pattern | When | Why |
+|---|---|---|
+| **Pre-derive solver inputs as Properties via `rai-rules-authoring`, read them as data here** | Objective or constraint references aggregations of raw source data | Keeps the prescriptive layer on decision logic. If a needed Property isn't on the ontology yet, route to rules-authoring first. |
+| **Equality + slack** (`Σ allocated + unmet == gap`) instead of inequality (`Σ allocated >= demand`) | Demand satisfaction with possible shortfall | Slack guarantees the constraint binds even when allocations are zero — eliminates the trivial-solve failure mode. |
+| **`model.union()` for cross-concept objective terms** | Objective sums per-entity expressions from two or more concepts | `+` between separate `aggs.sum()` calls drops the second term silently; `model.union()` collects all branches into one aggregation. See [Known Limitations](#known-limitations). |
+| **Single what-if = fresh `Problem` with modified objective; ≥ 3 parameter values = Scenario Concept** | Scenario analysis | Cross-product Scenario Concept is overhead for a 2-point comparison. See `scenario-analysis.md`. |
 
 ---
 
