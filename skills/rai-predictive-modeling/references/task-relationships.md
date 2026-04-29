@@ -72,7 +72,7 @@ Val = Relationship(f"{Interaction} has {Any:value}")
 Test = Relationship(f"{Interaction}")
 ```
 
-## Link Prediction — Task Table Format Requirements
+## Link Prediction — Task Table Format Requirements (VARIANT check)
 
 The GNN framework requires link prediction task tables in **flat format**: one row per `(src, timestamp, tgt)` pair.
 
@@ -84,7 +84,7 @@ The GNN framework requires link prediction task tables in **flat format**: one r
 
 > **Before writing link prediction task table definitions, run `DESCRIBE TABLE` on all three split tables (train, val, and test) and check column types. This includes the test table — some users provide labels there for evaluation purposes.**
 >
-> ⚠️ **If any join key or target column is `VARIANT` type** (e.g. a JSON array of target IDs per row), the table is in the wrong format and the join `Target.target_id == train_table_concept.target_id` will fail with `[UnresolvedType]`. Do not flatten automatically — propose creating a LATERAL FLATTEN table to the user and wait for explicit approval before creating anything in Snowflake:
+> **Warning:** if any join key or target column is `VARIANT` type (e.g. a JSON array of target IDs per row), the table is in the wrong format and the join `Target.tgt_id == train_table_concept.tgt_id` will fail with `[UnresolvedType]`. Do not flatten automatically — propose creating a LATERAL FLATTEN table to the user and wait for explicit approval before creating anything in Snowflake:
 > ```sql
 > -- Use CREATE TABLE (not VIEW) — Snowflake does not support change tracking on LATERAL views
 > CREATE OR REPLACE TABLE my_db.my_schema.my_task_table_flat AS
