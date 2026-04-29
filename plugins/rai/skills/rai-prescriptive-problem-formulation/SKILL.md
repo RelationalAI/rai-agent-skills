@@ -49,7 +49,7 @@ problem = Problem(model, Float)
 problem.solve_for(
     Lane.flow,
     where=[Lane.active],
-    name=["item_id", "src_id", "dst_id"],
+    name=["item_id", "src_id"],
     lower=0.0,
     type="cont",
 )

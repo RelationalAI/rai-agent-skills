@@ -186,7 +186,7 @@ Worker.assignment = model.Property(f"{Worker} has {Shift} if {Integer:assigned}"
 
 **Scalar / standalone properties** (primitives only, no user-defined concepts): `bin_fast = model.Property(f"departure day {Integer:t} has {Float:bin_fast}")`
 
-**`short_name=` is metadata, not a binding key.** Calling `Concept.cf_foo(...)` when the Property was declared as `Concept.foo = m.Property(..., short_name="cf_foo")` silently creates a parallel implicit Property and surfaces as `UnresolvedType` or `[TyperError] ... see above for details` with empty diagnostic. Always invoke via the Python attribute name (`Concept.foo`); `short_name` is for `model.relationship_index[...]` lookup and same-type-slot disambiguation. See [common-pitfalls.md](references/common-pitfalls.md).
+**`short_name=` is metadata, not a binding key.** Calling `Concept.cf_foo(...)` instead of `Concept.foo(...)` (where `cf_foo` is the `short_name=` value) silently creates a parallel implicit Property — symptoms include NaN-everywhere reads in queries and `UnresolvedType` / `[TyperError]` on joins. Always invoke via the Python attribute name; `short_name` is for `model.relationship_index[...]` lookup and same-type-slot disambiguation. See [common-pitfalls.md](references/common-pitfalls.md).
 
 ---
 
