@@ -328,12 +328,7 @@ problem.solve_for(MachinePeriod.x_maintain, type="bin",
 problem.solve_for(MachinePeriod.x_maintain, type="bin", name=["x_maintain"])
 ```
 
-With `populate=True` (default), values write back to the Property and are queryable via `model.select(Concept.name, Concept.x_var)`. With `populate=False` (parametric/loop workflows), read results via `var.values(sol_index, val_ref)`:
-
-```python
-val = Float.ref()
-model.select(var.name, val).where(var.values(0, val)).to_df()
-```
+With `populate=True` (default), values write back to the Property and are queryable via `model.select(Concept.name, Concept.x_var)`. With `populate=False` (parametric/loop workflows), read results via `var.values(sol_index, val_ref)` paired with the back-pointer attribute on the returned `ProblemVariable` — see `rai-prescriptive-results-interpretation` > Solution Extraction for the back-pointer naming rule.
 
 ### Variable bounds from data vs literals
 

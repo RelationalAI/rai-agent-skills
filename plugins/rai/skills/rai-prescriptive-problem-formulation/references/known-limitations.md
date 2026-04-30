@@ -25,20 +25,19 @@ Re-solving the same `Problem` instance is safe. Result import uses replace seman
 
 When solving multiple scenarios in a loop (e.g., varying parameters, what-if analysis), create a **fresh `Problem` per iteration**, use `populate=False` on `solve_for`, and extract results via `var.values(sol_idx, val)`. This avoids `Duplicate relationship` / `FDError` caused by writing conflicting results back to the graph on each iteration.
 
-`var.values` is an arity-2 read-only Property mapping `(sol_index, value)` populated after `solve()`. Pair it with a labelled `name=[...]` so the variable name encodes the entity identity.
+`var.values` is an arity-2 read-only Property mapping `(sol_index, value)` populated after `solve()`. Read it through the back-pointer attribute (lowercased Concept name from the format string — see `rai-prescriptive-results-interpretation` > Solution Extraction for the naming rule):
 
 ```python
 results = []
 for scenario in scenarios:
     problem = Problem(model, Float)               # fresh Problem each iteration
-    var = problem.solve_for(Entity.x_var, populate=False,
-                            name=["x_var", Entity.name], ...)
+    var = problem.solve_for(Entity.x_var, populate=False, ...)
     problem.satisfy(...)
     problem.minimize(...)
     problem.solve(solver, ...)
     val = Float.ref()
     df = (
-        model.select(var.name, val)
+        model.select(var.entity.name.alias("entity"), val.alias("value"))
         .where(var.values(0, val))
         .to_df()
     )
