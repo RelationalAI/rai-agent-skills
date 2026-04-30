@@ -399,22 +399,13 @@ When reviewing an existing formulation, see [formulation-analysis-context.md](re
 
 ### Multi-component objectives with `model.union()`
 
-Do not use `+` to combine cost terms from independent concept groups — this causes `AssertionError: Union outputs must be Vars`. Use `model.union()` instead.
-
-**Critical:** Each branch of `model.union()` must be a **per-entity expression** (bound to a concept), NOT a fully-aggregated scalar. Keep costs at concept level and let the outer `sum()` aggregate:
+The cleanest pattern for combining cost terms across independent concept groups is `model.union()` with one per-entity expression per branch and an outer `sum()`:
 
 ```python
-# CORRECT: per-entity cost expressions inside model.union()
 problem.minimize(sum(model.union(
     ResourceGroup.holding_cost * sum(x_inv).per(ResourceGroup).where(...),  # per-ResourceGroup
     Arc.transport_cost * Arc.x_flow,                                        # per-Arc
     Factory.unit_cost * Factory.x_production,                               # per-Factory
-)))
-
-# WRONG: scalar sums inside model.union()
-problem.minimize(sum(model.union(
-    sum(x * ResourceGroup.cost),   # scalar — causes AssertionError
-    sum(Arc.x_flow * Arc.cost),    # scalar — causes AssertionError
 )))
 ```
 

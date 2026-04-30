@@ -524,23 +524,24 @@ See templates for complete working examples.
 
 ### Cross-Concept Join Rules
 
-These rules prevent the most common code generation failures. Violating them produces RAI engine errors like "Type could not be determined" or silently returns 0 matches.
+These rules cover patterns that frequently cause code generation issues — engine errors, empty results, or unintended cross products.
 
-**Rule 1: Never compare two relationships in `.where()`**
+**Rule 1: Prefer the shared dimension Concept on the RHS in `.where()` joins**
 ```python
-# WRONG: Both sides are relationship traversals, not concept types
+# Common pattern: Group flow by the shared dimension concept directly
 sum(Operation.x_flow).where(
-    Operation.destination_site(SiteProduction.site),  # BAD: comparing two relationships
-    Operation.output_sku(SiteProduction.sku)           # BAD: same issue
-).per(SiteProduction)
-# Result: "Type could not be determined" — RAI can't resolve two relationship refs
-
-# CORRECT: RHS is a Concept type, not a relationship
-sum(Operation.x_flow).where(
-    Operation.destination_site(Site),                   # GOOD: RHS is concept Site
-    Operation.output_sku(SKU)                            # GOOD: RHS is concept SKU
+    Operation.destination_site(Site),                   # RHS is concept Site
+    Operation.output_sku(SKU)                            # RHS is concept SKU
 ).per(Site)
-# Group by the shared dimension concept directly
+
+# Alternative: traversing through an extended concept (SiteProduction has .site, .sku)
+# also resolves, but routes the join through SiteProduction's cross-product —
+# easy to introduce unintended row blow-up. Prefer the dimension concepts when
+# they carry enough identity for the grouping you want.
+sum(Operation.x_flow).where(
+    Operation.destination_site(SiteProduction.site),
+    Operation.output_sku(SiteProduction.sku)
+).per(SiteProduction)
 ```
 
 **Rule 2: Multi-hop chains in `.where()` are valid**
@@ -570,7 +571,7 @@ The RHS of a `.where()` equality may be:
 - A **property reference**: `.where(A.prop(B.prop))` — matches on shared values; multi-hop chains (`B.rel.nested_prop`) are also valid when populated
 - A **literal value**: `.where(A.prop("value"))` or `.where(A.prop(42))`
 
-Avoid: relationship-to-relationship comparisons (`.where(A.rel(B.rel))` with both sides relationships) and nested `.where()` calls.
+Avoid: nested `.where()` calls.
 
 **Rule 6: `.per()` on extended concepts — group via the extended concept's relationship, not the base concept**
 
