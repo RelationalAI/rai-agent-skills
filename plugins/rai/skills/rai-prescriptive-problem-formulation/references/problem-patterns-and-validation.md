@@ -337,11 +337,12 @@ When validating a formulation, apply these checks in priority order.
 
 7. **Per-Entity Constraints Missing `.per()` Grouping** — For per-entity constraints, the aggregation must be grouped via `.per(Entity)` and the constraint must iterate via `.where(Entity)`. **Relationship-based `.per()` is equivalent:** `.per(Concept.relationship)` where the relationship returns `Entity` is equivalent to `.per(Entity)`. Only flag if the constraint references `Entity.property` on RHS but neither the sum nor the constraint uses `.per(Entity)` or an equivalent relationship-based `.per()`.
 
-8. **Invalid `.where()` Join Patterns** — Check all `.where()` clauses for these known-bad patterns that cause "Type could not be determined" errors or silent 0-match joins:
+8. **Invalid `.where()` Join Patterns** — Check all `.where()` clauses for these known-bad patterns:
    - **Two relationship refs compared:** `.where(A.rel(B.rel))` — both sides are relationships to other concepts. Fix: use a Concept type on RHS (`.where(A.rel(ConceptName))`).
-   - **Multi-hop RHS:** `.where(A.rel(B.other_rel.nested_prop))` — 2+ hops on RHS silently returns 0 matches. Fix: pre-materialize as enrichment property.
    - **Nested `.where()`:** `.where(.where(...))` — syntax error. Fix: use single `.where()` with comma-separated conditions.
    - **Invented relationship/property names:** References to properties not in the model schema. Fix: verify against RELATIONSHIPS and PROPERTIES sections in context.
+
+   Note: multi-hop chains in `.where()` are valid — both `.where(A.rel == B.chain.prop)` and `.where(A.rel(B.chain.prop))` resolve correctly when the chain is populated. If a chained `.where()` returns empty, the cause is usually the chain being unpopulated (an FK Property declared but never filled by `model.define(...)`), not the chaining mechanic.
 
 **RECOMMENDED checks (violations are severity: warning):**
 
