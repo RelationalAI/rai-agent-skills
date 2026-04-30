@@ -550,7 +550,7 @@ sum(X.x_var).where(X.rel(Y.other_rel.nested_prop))  # OK: relation arg with 2-ho
 sum(X.x_var).where(X.rel == Y.other_rel.nested_prop)  # OK: equality with 2-hop chain
 ```
 
-If a chained `.where()` returns empty results, the cause is usually the chain itself being unpopulated (an FK Property declared but never filled by `model.define(...)`), not the chaining mechanic. Pre-materializing as an enrichment property is an optimization, not a correctness requirement.
+If a chained `.where()` returns empty results, the cause is usually the chain itself being unpopulated (an FK Property declared but never filled by `model.define(...)`), not the chaining mechanic. Pre-materializing as an enrichment property is an ergonomic/reuse choice, not a correctness requirement.
 
 **Rule 3: Avoid cross-product entity concepts in `.where()` joins**
 When using extended concepts (e.g., SiteProduction with `.site` and `.sku` relationships):
