@@ -23,3 +23,4 @@
 | Double counting in objective | Same quantity in both fixed and variable cost terms | Check for overlapping aggregation scope in objective terms |
 | Missing/null data silently dropped | Null/NaN values cause variables or constraints to vanish | Verify all referenced properties have populated values |
 | Wrong data type | String or boolean where number expected | Check that cost, capacity, demand columns are numeric |
+| Silent: `getattr(ref, dyn_attr) > 0.0` returns 0 rows on 3rd+ sequential solve | After 3+ sequential `Problem` solves on the same model with dynamically-named Properties, ref-level `getattr(ref, attr)` queries silently return empty even though `solve_info().objective_value` confirms the variable is populated | Use concept-level `getattr(Concept, attr)` (not ref-level) — capture into a local variable, then use directly in the query |

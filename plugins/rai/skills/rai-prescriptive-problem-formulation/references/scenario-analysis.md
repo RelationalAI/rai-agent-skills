@@ -73,7 +73,7 @@ for excluded in [None, "SupplierC", "SupplierB"]:
 | Problem size | Cross-product of entities x scenarios (can be large) | Each sub-problem is small and independent |
 
 **Decision rule:**
-- Only parameter values change -> **Scenario Concept**. Results are part of the ontology, which is the key advantage — they can be queried, joined, and composed like any other model data.
+- Only parameter values change -> **Scenario Concept**. Results are part of the ontology, which is the key advantage — they can be queried, joined, and composed like any other model data. *Exception:* for a 2-point baseline-vs-alternative comparison, prefer two fresh `Problem` instances — cross-product overhead of one Scenario Concept solve isn't worth it for two points.
 - Entities are added/removed or constraint structure changes -> **Loop + where=**. Required when the problem graph itself differs between scenarios (e.g., removing a supplier changes which entities exist).
 - Independent partitions (per-factory, per-region) -> **Loop + where=**. Each partition is a separate problem with no cross-partition coupling.
 

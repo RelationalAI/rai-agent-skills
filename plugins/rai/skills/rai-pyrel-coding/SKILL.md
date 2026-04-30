@@ -186,6 +186,10 @@ Worker.assignment = model.Property(f"{Worker} has {Shift} if {Integer:assigned}"
 
 **Scalar / standalone properties** (primitives only, no user-defined concepts): `bin_fast = model.Property(f"departure day {Integer:t} has {Float:bin_fast}")`
 
+**`short_name=` is metadata, not a binding key.** Calling `Concept.cf_foo(...)` instead of `Concept.foo(...)` (where `cf_foo` is the `short_name=` value) silently creates a parallel implicit Property — symptoms include NaN-everywhere reads in queries and `UnresolvedType` / `[TyperError]` on joins. Always invoke via the Python attribute name; `short_name` is for `model.relationship_index[...]` lookup and same-type-slot disambiguation. See [common-pitfalls.md](references/common-pitfalls.md).
+
+**Dynamic Property names need `setattr`.** Declaring via `model.Property(f"{Concept} has {Float:%s}" % attr)` registers the Property with that field name, but `getattr(Concept, attr)` may surface as `value type Any` in `solve_for(...)`. Bind the typed attribute explicitly: `setattr(Concept, attr, prop)`. Required for scenario sweeps and any pattern that programmatically generates Property names.
+
 ---
 
 ## Relationships
@@ -322,6 +326,32 @@ Snowflake table loading follows the same `model.Table("DB.SCHEMA.TABLE")` + `fil
 ## References and Aliasing
 
 Use `.ref()` to create independent variables of the same concept or type for pairwise expressions, multiarity value binding, and complex aggregation contexts. Use `.alias("name")` for readable debug output. The walrus operator `:=` creates inline refs inside `where()`. See [expression-rules.md](references/expression-rules.md#references-and-aliasing) for full patterns including named refs, `Float.ref()` value binding, and bracket notation.
+
+### Free-Variable Scoping: bare `Concept` vs `.ref()`
+
+PyRel scoping has two rules; getting either wrong is silent.
+
+**Within one clause** (single `.where()` / `.require()`): bare `Concept` references auto-unify into one implicit free variable. **Mixing bare + `.ref()` for the same Concept** creates two free variables → cartesian product. Fix: pick one style — drop the ref entirely, or route every reference through the same ref instance.
+
+**Across scope boundaries** (outer `.where(Concept...)` → inner `aggregate.per(Concept).where(Concept...)`): bare references DON'T unify. Bridge with a shared `.ref()`.
+
+```python
+# WRONG — outer ItemLocation ≠ inner .per(ItemLocation); constraint vacuously satisfied
+problem.satisfy(
+    model.where(IL.demand > 0).require(
+        aggs.sum(SM.alloc).per(IL).where(SM.dest_il(IL)) + IL.unmet == IL.demand
+    )
+)
+# RIGHT — bridge with a shared ref across the boundary
+il = IL.ref()
+problem.satisfy(
+    model.where(il.demand > 0).require(
+        aggs.sum(SM.alloc).per(il).where(SM.dest_il(il)) + il.unmet == il.demand
+    )
+)
+```
+
+**Special case — aggregates of decision variables can't be materialized as Properties.** `model.define(Concept.total(aggs.sum(DecisionVar).per(Concept)))` decouples the aggregate from the solver's symbolic graph; later constraints reference the materialized total as a constant and raise `ValueError: Expression does not reference any decision variables`. Keep aggregates of decision variables INLINE in `.require(...)`. Data-derived aggregates can be materialized normally.
 
 ---
 
