@@ -4,7 +4,7 @@ Run these checks after building the formulation and before calling `problem.solv
 
 ### 1. Entity population — do variables exist?
 
-The most common pre-solve failure: `Variables (0)` in `problem.display()`. This means entity creation produced nothing — typically a join mismatch in `.where()` or missing data.
+The most common pre-solve failure: `problem.display()` prints `Problem (...): empty` (and `problem.num_variables() == 0`). This means entity creation produced nothing — typically a join mismatch in `.where()` or missing data.
 
 **What to check:**
 - `problem.num_variables() > 0` — if zero, no solve will produce results

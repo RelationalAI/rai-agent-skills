@@ -46,24 +46,33 @@ all_results = pd.concat(results)
 
 See [examples/partitioned_subproblem.py](../examples/partitioned_subproblem.py) for a complete working example of this pattern.
 
-## `| 0` Fallback in Solver Constraints
+## `| <literal>` Fallback in Solver Constraints (RAI-49989)
 
-The `| 0` (default-value) operator inside `problem.satisfy(model.require(...))` with nested `sum().per().where()` aggregation causes `TyperError: Type errors detected during type inference`. This occurs when the RHS of a constraint combines a property with a conditional aggregation that uses `| 0` as a fallback.
+A `| <literal>` (default-value) fallback on a decision-variable-bearing aggregate inside `problem.satisfy(model.require(...))` raises:
+
+> `NotImplementedError: Prescriptive rewriter cannot handle a Match with mixed symbolic (decision-variable-bearing) and non-symbolic (constant / literal) arms ...`
+
+The rewriter requires homogeneous Match arm types, but the symbolic arm gets lifted to a node Hash reference while the literal arm stays at its original numeric type.
 
 ```python
-# BROKEN — | 0 inside solver constraint with nested aggregation
+# BROKEN — | 0 fallback on a decision-variable aggregate
 problem.satisfy(model.require(
     Entity.supply >= sum(Flow.x_qty).per(Entity).where(Flow.dest(Entity)) | 0
 ))
+```
 
-# CORRECT — pre-compute aggregation in pandas, load as flat property
+**Two workarounds:**
+
+1. **Aggregate-default form** (in-engine, both arms symbolic): replace the literal arm with another aggregate over the same decision-variable Property — e.g. `sum(Flow.x_qty).where(Flow.dest(Entity)) | sum(Flow.x_qty)`. Both arms are then symbolic and the rewriter handles it.
+2. **Pre-compute in pandas** (out-of-engine): aggregate in Python and load the result as a flat denormalized property on the decision concept.
+
+```python
+# CORRECT — pre-compute aggregation, load as flat property
 combos = pd.merge(entity_df, flow_df, how="left", on="entity_id")
 combos["inflow"] = combos.groupby("entity_id")["qty"].transform("sum").fillna(0)
 model.define(Entity.filter_by(id=entity_data.entity_id).inflow(entity_data.inflow))
 problem.satisfy(model.require(Entity.supply >= Entity.inflow))
 ```
-
-**Workaround:** Pre-compute the aggregation in Python (e.g., enumerate combinations and build a denormalized parameter DataFrame), then pass the result as a flat property on the decision concept. Avoid nested `per().where() | 0` inside solver constraints.
 
 ## numpy Types as Solver Literals
 

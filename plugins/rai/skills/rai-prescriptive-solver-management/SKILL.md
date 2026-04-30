@@ -252,9 +252,9 @@ See [pre-solve-validation.md](references/pre-solve-validation.md) for full check
 
 ## Common Compilation Errors
 
-**Entity reference error** ("Source X.y is an entity reference to Z, not a scalar value"): The entity_creation copies an entity reference where a scalar is expected. Fix by removing the property or using `.id` to extract scalar. Must update BOTH concept_definition AND entity_creation together.
+**Entity reference passed as scalar:** `model.define(...)` accepts the schema, but the next query/solve raises a generic `[TyperError]`. Cause: an entity-typed Property (FK) was copied into a slot declared with a scalar type. Fix by removing the property or using `.id` to extract scalar. Must update BOTH concept_definition AND entity_creation together.
 
-**Zero entities** ("Variables (0)" in formulation display): The entity_creation produced no entities — likely a join mismatch, non-existent concept reference, or over-filtering. Verify join conditions match actual data.
+**Zero entities** (`problem.display()` prints `Problem (...): empty`, `problem.num_variables() == 0`): The entity_creation produced no entities — likely a join mismatch, non-existent concept reference, or over-filtering. Verify join conditions match actual data.
 
 For full diagnostic patterns (type mismatch, undefined concept, entity creation taxonomy, simplest fix principle), see [compilation-errors.md](references/compilation-errors.md). For numerical stability categories and MIP formulation techniques (big-M, indicator constraints), see [numerical-and-mip.md](references/numerical-and-mip.md).
 

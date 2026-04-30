@@ -10,31 +10,29 @@
 
 # Compilation Errors — Detailed Diagnostics
 
-## Entity Reference Error — Detailed Diagnostics
+## Entity Reference Passed as Scalar
 
-**Error:** "Source X.y is an entity reference to Z, not a scalar value"
+**Symptom:** `model.define(...)` accepts the schema, but the next query/solve raises a generic `RAIException: [TyperError] Type errors detected during type inference (see above for details).` (the diagnostic body is often blank — see `rai-pyrel-coding/references/common-pitfalls.md` § `TyperError` with empty diagnostic body for surfacing tips).
 
-The entity_creation is copying an entity reference where a scalar is expected. You must update BOTH concept_definition AND entity_creation together.
+Cause: `entity_creation` copies an entity-typed Property (FK) into a slot declared with a scalar type (Integer, Float, String).
 
 **Option A (simpler — remove the problematic property):** Remove the property from concept_definition and entity_creation entirely. Only keep properties needed for optimization.
 
-**Option B (if you need the ID for constraints):** In concept_definition, keep Property with string type. In entity_creation, use `.id` to extract scalar: `sku_id=Demand.sku.id`.
+**Option B (if you need the ID for constraints):** In concept_definition, keep Property with the scalar type. In entity_creation, use `.id` to extract scalar: `sku_id=Demand.sku.id`.
 
 ## Type Mismatch
 
-**Error:** "declared as 'int' but source is DATE"
-
-Property type doesn't match source column type. Fix: change the property type to match (DATE columns should use `:str` or `:date`).
+Property declared with one scalar type but the source DataFrame column is a different type (e.g., declared `:int` but source is a date string, or declared `:str` but source is `Int64`). Surfaces at query time as a generic `[TyperError]`. Fix: align the Property's declared type with the source column dtype, or convert the column upstream (e.g., `df["col"] = pd.to_datetime(df["col"]).dt.date` before `model.data(df)`).
 
 ## Undefined Concept/Property
 
-**Error:** "Concept X not found"
+**Symptom:** depends on the access pattern — `model.concept_index["Foo"]` raises `KeyError: 'Foo'`; `model.Foo` (attribute access on a name never declared) raises `AttributeError: 'Model' object has no attribute 'Foo'`. There is no PyRel error string `"Concept X not found"`.
 
-Referenced concept doesn't exist in base model. Fix: use correct concept name from available concepts, or create via concept_definition.
+Cause: referencing a concept name that was never created via `model.Concept(...)`. Fix: typo check, or declare the concept before referencing.
 
 ## Zero Entities — Detailed Diagnostics
 
-**Symptom:** "Variables (0)" in formulation display
+**Symptom:** `problem.display()` prints `Problem (numeric type: Float): empty` (or `Integer`) when the registered variables are all bound to entity sets with zero rows. Confirm with `problem.num_variables() == 0` (engine-side) or by checking `problem.display(part)` of a specific variable group.
 
 The entity_creation expression produced no entities — likely a join mismatch. Fix: verify join conditions match actual data relationships.
 
