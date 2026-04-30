@@ -543,16 +543,14 @@ sum(Operation.x_flow).where(
 # Group by the shared dimension concept directly
 ```
 
-**Rule 2: No multi-hop on RHS of `.where()` equality**
+**Rule 2: Multi-hop chains in `.where()` are valid**
 ```python
-# WRONG: 2-hop chain on RHS — silently returns 0 matches or type error
-sum(X.x_var).where(X.rel(Y.other_rel.nested_prop))  # BAD: Y.other_rel.nested_prop is 2 hops
-
-# CORRECT: Pre-materialize the multi-hop as an enrichment property
-# First: add enrichment Y.nested_value (derived from Y.other_rel.nested_prop)
-# Then: use the flat property
-sum(X.x_var).where(X.rel(Y.nested_value))  # GOOD: single-hop property
+# Both forms resolve correctly when the chain is populated:
+sum(X.x_var).where(X.rel(Y.other_rel.nested_prop))  # OK: relation arg with 2-hop chain
+sum(X.x_var).where(X.rel == Y.other_rel.nested_prop)  # OK: equality with 2-hop chain
 ```
+
+If a chained `.where()` returns empty results, the cause is usually the chain itself being unpopulated (an FK Property declared but never filled by `model.define(...)`), not the chaining mechanic. Pre-materializing as an enrichment property is an optimization, not a correctness requirement.
 
 **Rule 3: Avoid cross-product entity concepts in `.where()` joins**
 When using extended concepts (e.g., SiteProduction with `.site` and `.sku` relationships):
@@ -567,12 +565,12 @@ Before using `Concept.some_relationship` in a constraint:
 - Common mistake: guessing names like `reviewer_githubpullrequest` when the actual name is `pull_request`
 
 **Rule 5: Valid RHS types in `.where()` equality**
-The RHS of a `.where()` equality must be ONE of:
+The RHS of a `.where()` equality may be:
 - A **Concept type**: `.where(A.rel(ConceptName))` — groups by that concept
-- A **single-hop property**: `.where(A.prop(B.prop))` — matches on shared values
+- A **property reference**: `.where(A.prop(B.prop))` — matches on shared values; multi-hop chains (`B.rel.nested_prop`) are also valid when populated
 - A **literal value**: `.where(A.prop("value"))` or `.where(A.prop(42))`
 
-Never use: chained properties (2+ hops), relationship-to-relationship comparisons, or nested `.where()` calls.
+Avoid: relationship-to-relationship comparisons (`.where(A.rel(B.rel))` with both sides relationships) and nested `.where()` calls.
 
 **Rule 6: `.per()` on extended concepts — group via the extended concept's relationship, not the base concept**
 
