@@ -427,7 +427,7 @@ prod_cost = ProdCapacity.production_cost * sum(x_prod).per(ProdCapacity).where(
 `model.union()` collects ALL matching values from each branch (set union semantics). This is distinct from `|` (pipe), which picks the first successful branch (ordered fallback).
 
 **Additional v1 pitfalls with parametric variables:**
-- **`name=[]` must NOT traverse relationships** — use identity fields (e.g., `ProdCapacity.site_id`) not `ProdCapacity.site.name` (causes FD violation)
+- **`name=[]` parts must resolve to scalars** — primitive Property, Integer/String ref, or a multi-hop chain ending in a primitive (e.g. `ProdCapacity.site.name` is fine). A bare Concept-typed Relationship ref (e.g. `ProdCapacity.site` alone) errors because it resolves to an entity, not a label.
 - **Cross-concept joins need distinct attribute names** — if two concepts both have `site_id` as `identify_by`, rename one (e.g., `wk_site_id`) to avoid ambiguity
 - **Only one objective supported** — HiGHS rejects multiple `minimize()`/`maximize()` calls
 - **Bi-objective via epsilon constraint**: To optimize two competing objectives, use the epsilon constraint loop — convert the secondary objective to a parameterized constraint and sweep it across the feasible range. Each iteration is a standard single-objective Problem. See [multi-objective-formulation.md](references/multi-objective-formulation.md).
