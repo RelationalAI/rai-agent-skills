@@ -311,7 +311,7 @@ Use the ATTRIBUTES & STATISTICS section to set meaningful bounds:
 
 ### Variable naming (`name=[]`)
 
-The `name=[]` parameter labels variables in solver output. Use **primitive identity fields** (String, Integer) only — Concept-typed Relationship refs cause TyperError. List elements are joined with underscores; multi-hop chains like `Concept.rel.id` are accepted.
+The `name=[]` parameter labels variables in solver output. Each part must resolve to a **scalar** — a primitive Property, an Integer/String ref, or a multi-hop chain ending in a primitive (e.g. `Concept.rel.id`). A bare Concept-typed Relationship ref errors because it resolves to an entity. List elements are joined with underscores.
 
 ```python
 # CORRECT — primitive identity fields and multi-hop chains:
