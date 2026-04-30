@@ -241,6 +241,8 @@ model.where(strings.contains(Customer.legal_name, "Acme")).select(...)
 
 `model.where(conditions).select(expressions).to_df()` is the executable form.
 
+**Default reflex: compose results in a single `model.select(...)`, not multiple `to_df()` calls merged in pandas.** Express grouping, joining, filtering, and aggregation inline (`aggs.<f>(...).per(<group>).where(...).alias(...)`). Reach for pandas only when the consumer needs DataFrame arithmetic the ontology can't express. Multiple `.to_df()` + `.merge()` re-derives joins the ontology already defines.
+
 **Use `model.where()` / `model.select()` over the standalone functions.** The standalone forms only work when exactly one Model exists in the process; with multiple they raise `"Multiple Models have been defined."`. The model-method form is portable.
 
 **`.to_df()`** — execute and return a pandas DataFrame.
