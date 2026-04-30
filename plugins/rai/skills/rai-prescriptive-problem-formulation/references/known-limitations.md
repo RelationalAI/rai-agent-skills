@@ -23,22 +23,25 @@ Re-solving the same `Problem` instance is safe. Result import uses replace seman
 
 **Multi-scenario re-solve pattern:**
 
-When solving multiple scenarios in a loop (e.g., varying parameters, what-if analysis), create a **fresh `Problem` per iteration**, use `populate=False` on `solve_for`, and extract results via `Variable.values()`. This avoids `Duplicate relationship` / `FDError` caused by writing conflicting results back to the graph on each iteration.
+When solving multiple scenarios in a loop (e.g., varying parameters, what-if analysis), create a **fresh `Problem` per iteration**, use `populate=False` on `solve_for`, and extract results via `var.values(sol_idx, val)`. This avoids `Duplicate relationship` / `FDError` caused by writing conflicting results back to the graph on each iteration.
+
+`var.values` is an arity-2 read-only Property mapping `(sol_index, value)` populated after `solve()`. Pair it with a labelled `name=[...]` so the variable name encodes the entity identity.
 
 ```python
 results = []
 for scenario in scenarios:
     problem = Problem(model, Float)               # fresh Problem each iteration
-    var = problem.solve_for(Entity.x_var, populate=False, ...)
+    var = problem.solve_for(Entity.x_var, populate=False,
+                            name=["x_var", Entity.name], ...)
     problem.satisfy(...)
     problem.minimize(...)
     problem.solve(solver, ...)
-    # Preferred: use Variable.values() for structured access via back-pointers
-    value_ref = Float.ref()
-    df = model.select(
-        var.entity.name.alias("entity"),
-        value_ref.alias("value"),
-    ).where(var.values(0, value_ref)).to_df()
+    val = Float.ref()
+    df = (
+        model.select(var.name, val)
+        .where(var.values(0, val))
+        .to_df()
+    )
     df["scenario"] = scenario
     results.append(df)
 all_results = pd.concat(results)

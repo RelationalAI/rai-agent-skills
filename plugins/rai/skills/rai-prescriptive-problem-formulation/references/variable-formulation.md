@@ -311,22 +311,29 @@ Use the ATTRIBUTES & STATISTICS section to set meaningful bounds:
 
 ### Variable naming (`name=[]`)
 
-The `name=[]` parameter labels variables in solver output. Use **primitive identity fields** (String, Integer) only — relationship refs cause TyperError. With `Variable.values()` (see below), structured access via back-pointers is preferred for result extraction; `name=[]` remains useful for solver-output labeling and debugging.
+The `name=[]` parameter labels variables in solver output. Use **primitive identity fields** (String, Integer) only — Concept-typed Relationship refs cause TyperError. List elements are joined with underscores; multi-hop chains like `Concept.rel.id` are accepted.
 
 ```python
-# CORRECT — primitive identity fields:
+# CORRECT — primitive identity fields and multi-hop chains:
 problem.solve_for(Food.x_amount, lower=0, name=["x_amount", Food.name])
 problem.solve_for(Edge.x_edge, type="bin", name=["x", Edge.i, Edge.j])
+problem.solve_for(PlacementSegment.x_alloc, lower=0,
+            name=["seg", PlacementSegment.placement.pid, PlacementSegment.seg_idx])
 
-# WRONG — relationship refs (cause TyperError):
+# WRONG — Concept-typed Relationship refs (cause TyperError):
 problem.solve_for(MachinePeriod.x_maintain, type="bin",
-            name=["x_maintain", MachinePeriod.machine])  # machine is a relationship!
+            name=["x_maintain", MachinePeriod.machine])  # machine is a Concept ref!
 
 # SAFE for cross-product concepts — use just the variable name:
 problem.solve_for(MachinePeriod.x_maintain, type="bin", name=["x_maintain"])
 ```
 
-With `populate=True` (default), results are accessible via `model.select()` which provides entity-aware output regardless of `name=[]`. The preferred approach for result extraction is `Variable.values(sol_index, value_ref)` on the `ProblemVariable` returned by `solve_for()`, which provides structured access via back-pointers to the original entity. Use `name=[]` primarily for solver-output labeling and when `populate=False` (scenario/loop workflows).
+With `populate=True` (default), values write back to the Property and are queryable via `model.select(Concept.name, Concept.x_var)`. With `populate=False` (parametric/loop workflows), read results via `var.values(sol_index, val_ref)`:
+
+```python
+val = Float.ref()
+model.select(var.name, val).where(var.values(0, val)).to_df()
+```
 
 ### Variable bounds from data vs literals
 
@@ -443,7 +450,7 @@ sum(OpRef.flow)        # Wrong -- semantic slot name, solver can't resolve
 
 Variable names are lists of components that produce readable solver output. Use a descriptive prefix (`"qty_"`, `"sel_"`, `"x_"`, `"inv_"`) so post-solve DataFrames can be filtered by `name.str.startswith("prefix")`.
 
-`name=[]` parts must be single-hop only (`Concept.property`). Multi-hop chains (`Concept.rel.property`) fail at solve time because `Column._compile_lookup` cannot resolve relationship traversals. Use the concept's own identifier property or the relationship directly (e.g., `PlacementSegment.placement` not `PlacementSegment.placement.pid`).
+`name=[]` parts must resolve to scalar values — a primitive Property, an Integer/String ref, or a multi-hop chain ending in a primitive (e.g. `PlacementSegment.placement.pid`). A bare Concept-typed Relationship (`PlacementSegment.placement`) errors because the name component is an entity, not a label.
 
 ```python
 # Single-index: property name as identifier
