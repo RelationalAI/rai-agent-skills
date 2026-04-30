@@ -13,12 +13,28 @@
 # Negate a comparison
 model.not_(Person.age > 40)
 
-# Negate a union (NOT OR) — people aged 20-30
-model.where(model.not_(model.union(Person.age > 30, Person.age < 20)))
-
 # Negate relationship existence (no siblings)
 model.select(aggs.count(Person.name)).where(model.not_(Person.brother))
 ```
+
+### Negation inside an aggregation scope
+
+When the aggregation needs to exclude entities matching some predicate, attach
+the `not_()` to the aggregate's own `.where()` and bind the concepts with refs
+so the predicate can reference them:
+
+```python
+order = Order.ref()
+product = Product.ref()
+orderitem = OrderItem.ref()
+
+avg_without = aggs.avg(order.total).per(product).where(
+    model.not_(order_has_product(order, orderitem, product))
+)
+```
+
+The refs make the negated predicate a proper quantifier — "average order total,
+per product, restricted to orders that do NOT contain that product".
 
 ---
 
@@ -31,13 +47,13 @@ model.where(model.union(
     Person.age >= 65,
 )).select(Person.name).to_df()
 
-# Combine NOT with union
+# Combine NOT with union (and ordered fallback via |)
 model.where(
     model.not_(model.union(Person.age > 30, Person.age < 20)) | (Person.name == "Cleve")
 ).select(Person.name, Person.age).to_df()
 ```
 
-The `|` operator evaluates branches left-to-right and picks the first that succeeds (ordered fallback / if-then-else), while `model.union()` collects ALL matching branches (set union). Use `|` for defaults (`status | "missing"`) and case-when chains; use `model.union()` for multi-term objectives or OR-filtering. For full semantics, CASE-WHEN patterns, and multi-component objective use, see `rai-pyrel-coding/expression-rules.md`.
+For `|` vs `union()` semantics, CASE-WHEN patterns, and multi-component objectives, see `rai-pyrel-coding/expression-rules.md`.
 
 ---
 

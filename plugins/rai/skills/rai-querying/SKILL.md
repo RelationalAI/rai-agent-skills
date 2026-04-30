@@ -1,426 +1,400 @@
 ---
 name: rai-querying
-description: Covers query construction in PyRel v1 including aggregation, derived concepts, filtering, ordering, multi-concept joins, and data export. Use when building queries or extracting data from RAI models.
+description: PyRel v1 query construction against `relationalai.semantics.Model` — selects, filters, joins, aggregates, grouping, export. Load this BEFORE writing any PyRel query, even your first one — your prior knowledge of the syntax is likely stale. Use whenever the user asks to query, count, list, rank, aggregate, join, or export data from a RAI model, even if they don't say "PyRel".
 ---
 
 # Querying
 <!-- v1-SENSITIVE -->
 
-## Summary
-
-**What:** Query construction — producing actual table output via `select().to_df()`. Covers aggregation, filtering, joins, ordering, and data export in PyRel v1.
-
-**Scope boundary:** A "query" in this skill means code that produces a DataFrame output via `select().to_df()`. Model logic (definitions, computed properties, derived relationships, entity creation) belongs in `rai-pyrel-coding` — see its Definitions section. **Queries should be simple.** Most logic should live in definitions; queries should primarily select and aggregate values that definitions have already computed. If a query has complex logic, consider extracting it into a definition instead.
-
-**When to use:**
-- Writing queries to extract data from a model (`select`, `where`, `to_df`)
-- Building aggregations for output (`count`, `sum`, `min`, `max`, `avg` with `per`/`where`)
-- Filtering and ordering query results (`in_`, `not_`, `union`, `rank`/`top`/`bottom`)
-- Joining across concepts or self-joining with `.ref()` in select contexts
-- Exporting results to Snowflake tables
-- Extracting solution values after a solve (used alongside `rai-prescriptive-results-interpretation`)
-
-**When NOT to use:**
-- Defining model logic (concepts, properties, relationships, derived properties via define/where) — see `rai-pyrel-coding`
-- Solver formulation patterns (variables, constraints, objectives) — see `rai-prescriptive-problem-formulation`
-- Post-solve interpretation logic (quality assessment, explanation, sensitivity) — see `rai-prescriptive-results-interpretation`
-
-**Overview:** Reference skill. Key lookup areas: Query Basics (where/select/to_df), Aggregation (sum/count/per), Filtering (in_/not_/union), Multi-Concept Joins, Data Export.
+For `define()` / computed properties, see `rai-pyrel-coding`.
+For solver formulation, see `rai-prescriptive-problem-formulation`.
 
 ---
 
-## Quick Reference
+## Recipe Card
+
+The 80% of queries fit one of these shapes. Copy, adapt the concept names, alias every column.
 
 ```python
+from relationalai.semantics import distinct
 from relationalai.semantics.std import aggregates as aggs
+from relationalai.semantics.std.aggregates import string_join, rank, desc, asc, top, bottom
+```
 
-# Basic query — prefer model.where/model.select for multi-model safety
-result = model.where(Order.status == "active").select(Order.id, Order.total).to_df()
+**Basic select + filter:**
+```python
+model.where(Order.status == "active").select(
+    Order.id.alias("order_id"),
+    Order.total.alias("total"),
+).to_df()
+```
 
-# Grouped aggregation
-revenue = model.where(Order).select(
-    aggs.sum(Order.total).per(Order.customer).alias("revenue"),
-    Order.customer.name.alias("customer")
+**Grouped aggregation by entity:**
+```python
+model.where(Order.placed_by(Customer)).select(
+    Customer.name.alias("customer"),
+    aggs.sum(Order.total).per(Customer).alias("revenue"),
+).to_df()
+```
+
+**Grouped aggregation by property value (REQUIRES `distinct()`):**
+```python
+# Without distinct, you get one row per Item with duplicated counts.
+model.select(
+    distinct(
+        Item.category.alias("category"),
+        aggs.count(Item).per(Item.category).alias("count"),
+        aggs.sum(Item.value).per(Item.category).alias("total"),
+    )
+).to_df()
+```
+
+**Multi-key property-value grouping (also REQUIRES `distinct()`):**
+```python
+model.select(
+    distinct(
+        RevenueForecast.region.alias("region"),
+        RevenueForecast.forecast_month.alias("month"),
+        aggs.sum(RevenueForecast.actual).per(
+            RevenueForecast.region, RevenueForecast.forecast_month
+        ).alias("actual"),
+    )
+).to_df()
+```
+
+**Multi-hop join (linear path, each concept once):**
+```python
+# Bare concept references work — they are bound by the where() applications
+# and resolved consistently across select(). Use .ref() only when a concept
+# appears twice (self-join) or in independent aggregation contexts.
+model.where(
+    LineItem.part_of_order(Order),
+    Order.placed_by(Customer),
+    Customer.located_in(Country),
+    LineItem.extended_price > 1000.0,
+).select(
+    LineItem.id.alias("line_item_id"),
+    Customer.name.alias("customer"),
+    Country.name.alias("country"),
+).to_df()
+```
+
+**Ratio of two aggregates:**
+```python
+# Both sums must group by the same key. distinct() collapses to one row per group.
+model.select(
+    distinct(
+        Item.group.alias("group"),
+        (aggs.sum(Item.numerator).per(Item.group)
+         / aggs.sum(Item.denominator).per(Item.group)
+        ).alias("ratio"),
+    )
+).to_df()
+```
+
+**HAVING (filter on an aggregated value):**
+```python
+# Bind the aggregate in where() with :=, then filter on it.
+model.where(
+    Customer.placed_order(Order),
+    Order.ordered_at_location(Store),
+    revenue := aggs.sum(Order.total).per(Store),
+    revenue > 10000,
+).select(
+    Store.name.alias("store"),
+    revenue.alias("revenue"),
+).to_df()
+```
+
+**Top-N by ranking:**
+```python
+# rank(desc(expr)) gives full ordering; filter or sort in pandas to get top N.
+model.where(FailurePrediction.period == 12).select(
+    FailurePrediction.machine_id.alias("machine_id"),
+    FailurePrediction.failure_probability.alias("p"),
+    rank(desc(FailurePrediction.failure_probability)).alias("rank"),
+).to_df()
+```
+
+---
+
+## Silent Corruptions — Read First
+
+These produce wrong results without errors. They are responsible for most "the numbers look right but they're wrong" bugs.
+
+### 1. Missing `.alias()` triggers silent `_2` / `_3` column suffixes
+
+When two concepts in a `select()` share a property name (`.name`, `.id`), `to_df()` silently appends `_2` to disambiguate. Downstream code expecting the original name gets a `KeyError` or, worse, reads the wrong column.
+
+```python
+# WRONG — both Business and Site have .name. Output columns are
+#   name, name_2, count   (not supplier, destination, count)
+model.where(Shipment.supplier(Business), Shipment.destination(Site)).select(
+    Business.name,
+    Site.name,
+    aggs.count(Shipment).per(Business).alias("count"),
 ).to_df()
 
-# Conditional aggregation
-delayed = aggs.count(Shipment).per(Supplier).where(Shipment.is_delayed())
-
-# Distinct wrapper — everything inside distinct()
-unique = model.select(distinct(Product.category.alias("cat"))).to_df()
+# CORRECT — explicit .alias() on every property guarantees the column name.
+model.where(Shipment.supplier(Business), Shipment.destination(Site)).select(
+    Business.name.alias("supplier"),
+    Site.name.alias("destination"),
+    aggs.count(Shipment).per(Business).alias("count"),
+).to_df()
 ```
+
+**Rule: alias every column in every multi-concept query.** Cost is one line; savings is silent column corruption.
+
+### 2. Property-value grouping without `distinct()` returns N rows, not one per group
+
+Grouping by an entity is unique by definition. Grouping by a *property value* (a string, a date, a status) is not — without `distinct()` you get one row per source entity with the aggregate repeated.
+
+```python
+# WRONG — returns one row per Item, each carrying the same per-category total.
+model.select(
+    Item.category.alias("category"),
+    aggs.sum(Item.value).per(Item.category).alias("total"),
+).to_df()
+
+# CORRECT — distinct() collapses to one row per category.
+model.select(distinct(
+    Item.category.alias("category"),
+    aggs.sum(Item.value).per(Item.category).alias("total"),
+)).to_df()
+```
+
+**Decision rule:**
+- Group by **entity** (`.per(Customer)`, `.per(Machine, Product)`): `distinct()` usually unnecessary.
+- Group by **property value** (`.per(Customer.region)`): `distinct()` required.
+- Group by **mix** (`.per(Customer, Customer.region)`): treat as property-value — use `distinct()`.
+
+### 3. Dot-chains in `select` drop `where`-bindings
+
+A dot-chain like `Employee.uses.id` compiles as a fresh independent lookup of `uses` — it does NOT pick up filters established by `Employee.uses(Asset)` in a sibling `where()`.
+
+```python
+# WRONG — returns id of every Asset that any Employee uses, not just asset 102.
+model.select(Employee.nr, Employee.uses.id).where(
+    Employee.uses(Asset),
+    Asset.id == 102,
+).to_df()
+
+# CORRECT (option A) — chain through the relationship application:
+model.select(Employee.nr, Employee.uses(Asset).id).where(
+    Employee.uses(Asset),
+    Asset.id == 102,
+).to_df()
+
+# CORRECT (option B) — reference the bound concept directly:
+model.select(Employee.nr, Asset.id).where(
+    Employee.uses(Asset),
+    Asset.id == 102,
+).to_df()
+```
+
+**Rule: avoid bare dot-chains in `select()`.** Either reference the bound concept directly (`Asset.id`) or route through the relationship application (`Employee.uses(Asset).id`).
+
+### 4. Multi-relationship select inflates aggregations via cartesian product
+
+Binding two relationships through the same concept in one `select` creates a cartesian product of matching pairs. Aggregations over this scope silently double- or triple-count.
+
+```python
+# WRONG — pairs every shipment-from-supplier with every shipment-to-destination
+# through the shared Site, multiplying counts.
+model.where(Shipment.supplier(Site), Shipment.destination(Site)).select(
+    aggs.count(Shipment).alias("n"),
+).to_df()
+
+# CORRECT — split into separate queries, or pre-aggregate via define()d properties.
+```
+
+When a query touches multiple relationships through a shared concept and the numbers feel high, suspect this first.
+
+### 5. String-equality filter on a value the data doesn't have → empty result, no error
+
+The user's question is phrased in their vocabulary; the data uses whatever spelling and casing the source system stored. `Order.status == "Active"` returns zero rows if the column actually holds `"ACTIVE"` or `"active_orders"`. Stack two or three of these silent mismatches in one query and the join collapses to nothing, with no error — the agent then assumes the join itself is broken and divide-and-conquers for many turns.
+
+**Discover actual values before filtering on them:**
+
+```python
+# One-line discovery query for any property you'll filter on:
+model.select(distinct(Order.status)).to_df()
+# Then filter with the exact spelling/casing you saw.
+```
+
+**For partial / informal names from the question, use substring match instead of `==`:**
+
+```python
+from relationalai.semantics.std import strings
+
+# User refers to a company informally; data has the full registered name.
+model.where(strings.contains(Customer.legal_name, "Acme")).select(...)
+
+# Also available in the same module: startswith, endswith, like
+```
+
+**Rule: every `==` against a string literal that came from a natural-language question is a discovery opportunity. Run `distinct()` on the property first, or fall back to `strings.contains()`.**
 
 ---
 
 ## Query Basics
 
-Core pattern: `model.where(conditions).select(expressions)` chained with `.to_df()` for execution.
+`model.where(conditions).select(expressions).to_df()` is the executable form.
 
 **Default reflex: compose results in a single `model.select(...)`, not multiple `to_df()` calls merged in pandas.** Express grouping, joining, filtering, and aggregation inline (`aggs.<f>(...).per(<group>).where(...).alias(...)`). Reach for pandas only when the consumer needs DataFrame arithmetic the ontology can't express. Multiple `.to_df()` + `.merge()` re-derives joins the ontology already defines.
 
-**Best practice: Use `model.where()` / `model.select()` instead of standalone `where()` / `select()`.** The standalone forms are convenience wrappers that only work when exactly one Model exists in the process. With two or more models, they raise `"Multiple Models have been defined."` Using `model.where()`/`model.select()` guarantees compatibility in multi-model scenarios, makes code portable when copying between scripts, and reduces import requirements.
+**Use `model.where()` / `model.select()` over the standalone functions.** The standalone forms only work when exactly one Model exists in the process; with multiple they raise `"Multiple Models have been defined."`. The model-method form is portable.
+
+**`.to_df()`** — execute and return a pandas DataFrame.
+
+**`distinct(...)`** — deduplicate rows. All columns in a `select()` must be either ALL inside `distinct()` or ALL outside; mixing raises a runtime error. For multi-column `distinct()` over joined concepts (dedup without aggregation), see [distinct-patterns.md](references/distinct-patterns.md).
+
+**Set membership and negation:**
 
 ```python
-# Preferred: model method form
-result = model.where(
-    Business.is_high_value_customer(),
-    Business.receives_shipment(Shipment),
-    Shipment.is_delayed()
-).select(
-    Business.name.alias("customer_name"),
-    Shipment.delay_days.alias("delay_days")
-).to_df()
-```
+model.where(LineItem.ship_mode.in_(["AIR", "AIR REG"])).select(...)
 
-**`.alias("name")`** — rename output columns for clean DataFrames:
-
-```python
+# Entities WITHOUT a relationship — bind the concept with a ref so you can
+# both negate against it and surface it in select().
 model.where(
-    Shipment.supplier(Shipment, Supplier)
-).select(
-    Supplier.name.alias("supplier_name"),
-    Supplier.id.alias("supplier_id"),
-)
+    order := Order.ref(),
+    model.not_(order.customer),
+).select(order.id.alias("orphan_order_id"))
+
+# NOT (A AND B) — together inside one not_()
+model.not_(Person.pets, Person.pets.name == "boots")
+# (NOT A) AND (NOT B) — separate not_() calls
+model.not_(Person.pets), model.not_(Person.pets.name == "boots")
 ```
 
-**`.to_df()`** — execute query and return a pandas DataFrame.
+**`model.union()` vs `|`:** `model.union()` collects ALL matching branches (set union / OR-filter). `|` evaluates left-to-right and picks the first that succeeds (case-when / default). Use `|` for fallbacks; `union()` for OR-filtering.
 
-**`print(expr)`** — shows the PyRel structure of an expression, concept, or relationship without executing a query. Use to verify expression composition before running:
-
-```python
-print(Order.customer)                          # → Order.customer
-print(aggs.sum(Order.total).per(Customer))     # → (sum Order.total (per Customer))
-print(model.where(Order.status == "active"))   # → (where Order.status == 'active')
-```
-
-**`.inspect()`** — convenience for debugging; executes the query and prints the DataFrame to stdout. Equivalent to `print(rel.to_df())`.
-
-```python
-Shipment.supplier.inspect()  # Quick check of a relationship's contents
-```
-
-**`distinct(...)`** — deduplicate result rows. Frequently needed with aggregations to prevent validation errors.
-
-All columns in a `select()` must be either all inside `distinct()` or all outside — mixing causes a runtime error. Grouped aggregation queries (grouping by a property value, not an entity) require `distinct()` to get one row per group; without it, PyRel returns one row per entity with duplicated aggregation values.
-
-**When to use `distinct()`:**
-- Grouping by a **property value** (e.g., `weather_condition`, `category`): use `distinct()` — without it you get duplicated rows
-- Grouping by an **entity concept** (e.g., `.per(Customer)`): usually not needed, since each entity is already unique
-- Grouping by a **mix of entity and property value** (e.g., `.per(Supplier, Dest.region)`): treat as property-value grouping — use `distinct()`
-- Deduplicating rows from multi-hop joins: use `distinct()`
-
-For detailed `distinct()` code examples (multi-column, grouped aggregation, common mistakes), see [distinct-patterns.md](references/distinct-patterns.md).
+For extended `not_()` examples and OR-filter patterns, see [filtering-advanced.md](references/filtering-advanced.md).
 
 ---
 
 ## Aggregation Patterns
 
-Import aggregates via module alias to avoid shadowing Python builtins:
+Available: `count`, `sum`, `min`, `max`, `avg`, `string_join`. **`avg` is query-only — it raises `NotImplementedError` in solver `satisfy/minimize/maximize` contexts.** Solver-supported aggregates: `sum, min, max, count`.
+
+**`.per(K)` declares the dimensions of the result — one row per distinct value of K.** Use the same concept variables that appear in your `select()`. Given `Shipment.supplier(Supplier)` in `where()`, write `.per(Supplier)`, not `.per(Shipment.supplier)` — the bare concept names an entity cleanly, while a relationship application carries its source concept (Shipment) into the implicit key and over-groups.
 
 ```python
-from relationalai.semantics.std import aggregates as aggs
-# Use aggs.count, aggs.sum, aggs.max, aggs.min, aggs.avg
+# Single entity grouping (Supplier bound via Shipment.supplier(Supplier) in where)
+aggs.count(Shipment).per(Supplier).alias("shipments")
 
-from relationalai.semantics.std.aggregates import string_join, rank, desc, asc
+# Multi-key
+aggs.sum(Shipment.quantity).per(Supplier, Destination).alias("qty")
+
+# Arithmetic inside aggregate (NOT the same as ratio of two aggregates)
+aggs.sum(Shipment.quantity * Shipment.delay_days).per(Supplier).alias("qty_delay")
+
+# Filter the aggregation scope
+aggs.count(Shipment).per(Supplier).where(Shipment.is_delayed()).alias("delayed")
 ```
 
-**Available aggregates:** `count`, `sum`, `min`, `max`, `avg`, `string_join`.
+**Empty aggregations return no row, not zero.** Use `| 0` for missing groups: `aggs.count(Shipment).where(...).alias("n") | 0`.
 
-**`avg` — available in queries, NOT in solver contexts:**
+**Integer aggregate division.** `aggs.count(X)` is integer; `aggs.sum(X)` matches input. Dividing two integers hits integer-division semantics — multiply one operand by `1.0` (or `100.0` for a percentage) to get a float ratio.
 
-```python
-# Query: average order value per customer
-aggs.avg(Order.total).per(Customer).alias("avg_order_value")
-
-# WILL RAISE NotImplementedError if used in problem.satisfy() or problem.minimize/maximize
-# Solver-supported aggregates: sum, min, max, count only
-```
-
-**`.per(group)` for group-by semantics:**
-
-```python
-# Count shipments per supplier
-aggs.count(Shipment).per(Shipment.supplier).alias("total_shipments")
-
-# Sum with arithmetic in aggregate
-aggs.sum(Shipment.quantity * Shipment.delay_days).per(Shipment.supplier).alias("qty_delay_impact")
-
-# Sum per entity
-aggs.sum(Shipment.delay_days).per(Shipment.supplier).alias("total_delay_days")
-```
-
-**Multi-key grouping:**
-
-```python
-aggs.sum(customer.receives_shipment.quantity).per(customer, SKU).alias("quantity_at_risk")
-```
-
-**Aggregation with unary relationship filter:**
-
-```python
-# Count only delayed shipments (where is_delayed is a unary relationship)
-aggs.count(Shipment.is_delayed()).per(Shipment.supplier).alias("delayed_shipments")
-```
-
-**Full query with mixed aggregations:**
-
-```python
-return model.where(
-    Business.is_high_value_customer(),
-    Business.receives_shipment(Shipment),
-    Shipment.is_delayed()
-).select(
-    aggs.count(Business).alias("high_value_customers"),
-    aggs.count(Shipment).alias("total_shipments"),
-    aggs.sum(Shipment.quantity).alias("delayed_quantity")
-)
-```
-
-**Advanced aggregation:** Conditional `.where()` on aggregates (subquery filters), `per(group).sum(expr)` standalone form, and conditional `count(X, condition)`.
-See [aggregation-advanced.md](references/aggregation-advanced.md) for examples.
+For `count(X, condition)`, conditional `.where()` on aggregates, and `per(X).sum(Y)` standalone form, see [aggregation-advanced.md](references/aggregation-advanced.md).
 
 ---
 
-## Derived Concepts and Relationships
+## Multi-Concept Joins
 
-> **Note:** These `define()`/`where()` patterns are model logic, not queries. They are included here as a quick reference because they often precede query construction. For the full treatment of definitions — the core of PyRel coding — see `rai-pyrel-coding` § Definitions.
-
-**`model.define(...).where(...)` — derive from conditions:**
+Join concepts by relationship application in `where()`. Use `.ref()` when the same concept appears multiple times.
 
 ```python
-# Unary relationship as boolean flag
-model.define(Shipment.is_delayed()).where(Shipment.delay_days > 0)
-
-# Named intermediate relationship for staged computation
-relevant_shipment = model.Relationship(f"Delayed Shipment in Last Quarter: {Shipment}")
-model.define(relevant_shipment(Shipment)).where(
-    Shipment.fiscal_quarter == aggs.max(Shipment.fiscal_quarter)
-)
+# Self-join: pairs (Edge, alternative-Edge-from-same-source)
+Alt = Edge.ref()
+model.where(Edge.source == Alt.source, Alt.cost < Edge.cost).select(
+    Edge.id.alias("edge"),
+    (Edge.cost - Alt.cost).alias("savings"),
+).to_df()
 ```
 
-**`model.where(...).define(...)` — both directions are valid:**
-
-```python
-# Define a target subset
-target_supplier = model.Relationship(f"Target Supplier: {Business}")
-model.define(target_supplier(Business)).where(
-    Business.name == supplier_name
-)
-```
-
-**Computed properties from aggregation:**
-
-```python
-# Computed metric: count of operations per site
-model.where(
-    Operation.destination_site(op, site),
-    Operation.type(op, "SHIP")
-).define(Site.count_is_destination(site, aggs.count(op).per(site)))
-```
-
-For multi-concept joins, reusable query fragments, and Snowflake export patterns, see [joins-and-export.md](references/joins-and-export.md).
+For multi-hop join patterns, lambda helpers, parameterized query functions, and Snowflake export (`Table.into().exec()`), see [joins-and-export.md](references/joins-and-export.md).
 
 ---
 
-## Subtype Query Patterns
+## Subtype Queries
 
-Subtypes inherit parent properties, but you MUST bind the subtype to its parent and access properties through the PARENT concept. Accessing properties directly on the subtype causes `TyperError`.
+Subtypes (`HighChurnRiskCustomer` defined as a subset of `Customer`) cannot be selected from or counted directly — accessing a property or passing the subtype to `aggs.count()` raises `TyperError`. Bind the parent concept and constrain it with the subtype as a filter.
 
 ```python
-# CORRECT — bind subtype to parent, access properties via parent
-results = model.where(
-    HighChurnRiskCustomer(Customer),
-).select(
+# WRONG — direct property access on the subtype
+model.where(HighChurnRiskCustomer).select(HighChurnRiskCustomer.full_name)
+# TyperError
+
+# CORRECT — bind parent, filter by subtype
+model.where(HighChurnRiskCustomer(Customer)).select(
     Customer.full_name.alias("name"),
-    Customer.churn_score.alias("churn_score"),
-).to_df()
-
-# WRONG — accessing properties on subtype causes TyperError
-# results = model.where(HighChurnRiskCustomer).select(
-#     HighChurnRiskCustomer.full_name.alias("name"),  # FAILS!
-# ).to_df()
-```
-
-**Counting subtypes:**
-
-```python
-# CORRECT — count parent concept, filter by subtype binding
-results = model.select(
-    aggs.count(Asset).alias("count"),
-).where(
-    UnderutilizedAsset(Asset),
-).to_df()
-
-# WRONG — counting subtype directly causes TyperError
-# results = model.select(aggs.count(UnderutilizedAsset).alias("count")).to_df()
-```
-
-**Boolean relationships as filters (not selectable):**
-
-Boolean relationships (unary flags like `is_event_day`, `is_active`) can ONLY be used as filters in `.where()`. They CANNOT be placed in `select()` with `.alias()`.
-
-```python
-# CORRECT — boolean flag as filter in where()
-results = model.where(
-    DailyDeployment.is_event_day(),
-).select(
-    DailyDeployment.deployment_date.alias("date"),
-).to_df()
-
-# WRONG — boolean relationship in select() causes TyperError
-# results = model.select(DailyDeployment.is_event_day.alias("flag")).to_df()
-```
-
-To project a boolean flag as a column, use the **two-query pandas pattern**: query all entities, query the flagged subset, then merge with `df["flag"] = df["id"].isin(flagged_ids)`.
-
----
-
-## Filtering and Ordering
-
-Chain `.where()` conditions to filter results. Each `.where()` adds an AND condition and can introduce new concept refs.
-
-```python
-# Numeric and string filtering
-model.where(Product.price > 100, Product.category("electronics")).select(Product.name)
-
-# Sorting: order_by() is NOT yet available in v1.
-# Use std.aggregates for ranking/ordering:
-from relationalai.semantics.std.aggregates import rank, rank_asc, rank_desc, desc, asc, top, bottom, limit
-
-# Rank by descending value
-model.where(Order.status("open")).select(
-    rank(desc(Order.value)).alias("rank"),
-    Order.id, Order.value
-)
-
-# Top-N / Bottom-N
-top(3, Order.value)       # Top 3 by value
-bottom(5, Product.price)  # Bottom 5 by price
-```
-
-**Set membership with `.in_()`:**
-
-```python
-model.where(LineItem.ship_mode.in_(["AIR", "AIR REG"])).select(...)
-model.where(Part.container.in_(["SM CASE", "SM BOX", "SM PACK"])).select(...)
-```
-
-**Negation with `model.not_()`:**
-
-```python
-# Entities that DON'T have a relationship
-model.where(
-    order := Order.ref(),
-    model.not_(order.customer),          # orders without a customer
-).select(order.id.alias("orphan_order_id"))
-
-# Negated condition in aggregation
-avg_without = aggs.avg(order.total).per(product).where(
-    model.not_(order_has_product(order, orderitem, product))
 )
 ```
 
-**`not_()` — grouped vs. separate negation:**
+**Counting subtypes — count the parent, bind the subtype in `model.where()`:**
 
 ```python
-# NOT (A AND B):
-model.not_(Person.pets, Person.pets.name == "boots")
-# (NOT A) AND (NOT B):
-model.not_(Person.pets), model.not_(Person.pets.name == "boots")
-```
+# CORRECT
+model.select(aggs.count(Customer).alias("at_risk")).where(
+    HighChurnRiskCustomer(Customer),
+).to_df()
 
-**`model.union()` vs `|`:** `model.union()` collects ALL matching branches (set union / OR-filter). `|` evaluates left-to-right and picks the first that succeeds (ordered fallback / if-then-else). Use `|` for defaults and case-when chains; use `model.union()` for OR-filtering. For full semantics, see `rai-pyrel-coding/expression-rules.md`.
-
-For extended `not_()` examples, `union()` patterns, and the HAVING equivalent, see [filtering-advanced.md](references/filtering-advanced.md).
-
-**Dynamic query construction:** Build a base query and conditionally append `.where()` clauses. Each additional `.where()` narrows the result set without modifying prior conditions. This is useful when filter criteria come from user input or runtime parameters.
-
----
-
-## Requirements (Semantic Data Validation)
-
-Requirements are reusable checks that express what must be true in your domain. They fire at materialization time (`to_df()` or `exec()`). A failing requirement makes **all** queries on that model fail.
-
-Three forms with distinct semantics:
-
-```python
-# 1. Global — passes if AT LEAST ONE entity satisfies expr
-model.require(Order.status == "pending")
-
-# 2. Per-entity — EVERY instance must satisfy; fails if any violates
-Order.require(Order.amount >= 0)
-# Equivalent to:
-model.where(Order).require(Order.amount >= 0)
-
-# 3. Scoped — every match in the where scope must satisfy
-model.where(Order.amount > 0).require(Order.customer)
-```
-
-**Key distinction:** `model.require(expr)` is an existence check ("at least one"); `Concept.require(expr)` is a universal check ("all of them"). Choose based on your invariant.
-
-**Requirements fire at `to_df()` / `exec()` time** — not at definition time. There is no `.check()` or `.validate()` method.
-
-**In solver context:** `problem.satisfy(model.require(expr))` promotes the requirement to a solver constraint:
-
-```python
-problem.satisfy(model.require(supply >= demand))  # hard constraint in the solver
+# WRONG — aggs.count(HighChurnRiskCustomer) raises TyperError
 ```
 
 ---
 
-## Model Introspection
+## Debugging Queries
 
-`relationalai.semantics.inspect` (v1.0.14+) is the recommended public API for discovering model structure at runtime:
+**Wrong values?** Check silent corruptions #1–4 above. Order of suspicion: missing alias → missing distinct → dot-chain binding → cartesian inflation.
 
-- `inspect.schema(model)` — full frozen `ModelSchema` with concepts, properties (including inherited), relationships, tables, inline data sources, enums, and rules. Supports `ms["Person"]` dict-style access and `ms.to_dict()` for JSON-safe serialization.
-- `inspect.fields(rel)` — `tuple[FieldRef, ...]` usable directly in `select(*inspect.fields(rel))`; handles inheritance and alt readings.
-- `inspect.to_concept(obj)` — resolve any DSL handle (Chain, Ref, FieldRef, Expression) to its underlying `Concept`.
+**Empty DataFrame?** Triage in this order — the join itself is rarely the cause:
 
-Use inspect-before-authoring to catch duplicate/hallucinated properties, inspect-after-scaffolding to verify what actually registered, and re-inspect after long sessions or `/compact` to avoid acting on stale mental models. See [inspect-module.md](references/inspect-module.md).
+1. **String-equality filters first.** For each `==` against a string literal, run `model.select(distinct(Concept.prop)).to_df()` and compare against what you wrote. Watch for casing, suffixes, and underscores.
+2. **Drop filters one at a time.** Comment them out and re-run; the first one whose removal restores rows is your culprit.
+3. **Only then suspect the structure** — a missing `define()` for a derived property, a `.new()` that matched no rows, or wrong relationship direction.
 
-Lower-level `model.concepts` / `model.relationships` / `model.tables` / `model.data_items` remain available as a fallback — see [model-introspection.md](references/model-introspection.md).
+**`ValidationError: Unused variable`?** A concept ref is reused across independent aggregation contexts. Use separate named refs: `Customer.ref("t1")`, `Customer.ref("t2")`.
 
----
+**Inspect:** `print(expr)` shows the AST without executing (works for relationships, aggregates, where-clauses). `Shipment.supplier.inspect()` executes and prints the result DataFrame.
 
-## Common Pitfalls
-
-| Mistake | Cause | Fix |
-|---------|-------|-----|
-| Dot-chain returns ALL related entities, not filtered ones | `.uses.id` in `select` creates independent lookup, ignoring `where` bindings | Use bound concept in select (`Asset.id`) or chain through application (`Employee.uses(Asset).id`) |
-| Empty DataFrame from query | Missing `define()` for computed values, or `.new()` matched no rows | Verify entities exist and derived values are `define()`d before querying |
-| `ValidationError: Unused variable` | Same concept ref reused in independent aggregation contexts | Use separate named refs (`Customer.ref("t1")`, `Customer.ref("t2")`) |
-| Duplicate rows in aggregation results | Missing `distinct()` wrapper | Wrap `select(distinct(...))` — ALL columns must be inside `distinct()` |
-| Grouped aggregation returns N rows instead of grouped rows | Grouping by a property value without `distinct()` | Use `select(distinct(property.alias(...), agg.per(property).alias(...)))` — see Grouped Aggregation pattern above |
-| Subtype query returns TypeError | Accessing properties directly on subtype (`model.Subtype.prop`) | Bind subtype to parent: `model.where(model.Subtype(model.Parent)).select(model.Parent.prop.alias(...))` |
-| `aggs.count(model.SubtypeName)` in bare select fails | Counting subtype directly without parent binding | Use `model.select(aggs.count(model.Parent).alias("n")).where(model.Subtype(model.Parent))` |
-| Mixing bare select with distinct | `select(X.name, distinct(X.cat))` — can't mix | Either wrap ALL columns in `distinct()` or none |
-| `.where()` on wrong target | Calling `.where()` directly on a Concept (`Site.where(...)`) | `.where()` goes on aggregations, constraints, definitions, or queries — not on bare concepts |
-| Using standalone `where()`/`select()` with multiple models | `"Multiple Models have been defined."` error | Use `model.where()`/`model.select()` instead of standalone imports |
-| Aggregation returns empty DataFrame instead of zero | `aggs.count(X).where(no_match)` returns no rows, not a row with 0 | Use `\| 0` default: `aggs.count(Shipment).where(Shipment.supplier.name == "foo") \| 0` |
-| `.exists()` on Properties raises error | `Concept.prop.exists()` — `RAIException: Cannot access relationships on core concept 'Float'.` | Use ref binding: `r = Float.ref(); model.where(Concept.prop(r)).select(r.alias("val"))` |
-| Multi-relationship aggregation in one `select` inflates via cartesian product | When a single `select(...)` contains aggregations whose join paths bind two relationships through a shared intermediary concept (e.g., `A.r1(C)` and `B.r2(C)`), the cartesian product of matching pairs silently inflates counts/sums | Split into one `model.select(...)` per relationship, or pre-aggregate each as a derived Property and select from those. Distinct from prescriptive cross-product concepts — applies to any `select` with multiple join paths through a shared concept |
-| Silent column renaming (`_2`, `_3` suffixes) | Two concepts in a query share a property name (e.g., both have `.name`) — `to_df()` silently appends `_2` to disambiguate | Always apply `.alias()` to every selected property. Without explicit aliases, downstream code referencing the original column name gets wrong data or `KeyError` |
+**Re-ground after long sessions or `/compact`:** drift makes "I remember `Customer` has a `tier` property" the kind of confidently-wrong recall that ruins queries. Use `inspect.schema(model)` to verify before authoring. See [inspect-module.md](references/inspect-module.md). If `inspect.schema()` is unavailable in your installed version, see [model-introspection.md](references/model-introspection.md) for the `model.concepts/relationships` fallback.
 
 ---
 
 ## Examples
 
-| Pattern | Description | File |
-|---|---|---|
-| Aggregation queries | `model.select()`, `.alias()`, `sum/count` with `.per()`, multi-hop joins, `.to_df()` | [examples/aggregation_queries.py](examples/aggregation_queries.py) |
-| Computed properties | `std.datetime` arithmetic, enum-subconcept segmentation, argmax with tiebreaker | [examples/datetime_argmax_segmentation.py](examples/datetime_argmax_segmentation.py) |
-| `inspect.schema()` summary | Dump registered concepts/properties, dict-style access, does-property-exist check, JSON-safe `to_dict()` | [examples/inspect_schema_summary.py](examples/inspect_schema_summary.py) |
-| `inspect.fields()` unpack | `select(*inspect.fields(rel))` canonical idiom + `include_owner=True` variant | [examples/inspect_fields_unpack.py](examples/inspect_fields_unpack.py) |
+| Pattern | File |
+|---|---|
+| Aggregation queries — basic select, grouped agg, multi-hop join | [examples/aggregation_queries.py](examples/aggregation_queries.py) |
+| Computed properties — datetime, segmentation, argmax tiebreaker | [examples/datetime_argmax_segmentation.py](examples/datetime_argmax_segmentation.py) |
+| `inspect.schema()` summary | [examples/inspect_schema_summary.py](examples/inspect_schema_summary.py) |
+| `inspect.fields()` unpack | [examples/inspect_fields_unpack.py](examples/inspect_fields_unpack.py) |
 
 ---
 
-## Reference files
+## Other Pitfalls
 
-| Reference | Description | File |
-|-----------|-------------|------|
-| Joins & export | Multi-concept joins, reusable query fragments, Snowflake write-back | [joins-and-export.md](references/joins-and-export.md) |
-| Distinct patterns | Code examples for `distinct()` usage in select queries | [distinct-patterns.md](references/distinct-patterns.md) |
-| Advanced aggregation | Conditional `.where()` on aggregates, `per().sum()` standalone, conditional count | [aggregation-advanced.md](references/aggregation-advanced.md) |
-| Advanced filtering | Extended `not_()` examples, `union()` patterns, HAVING equivalent | [filtering-advanced.md](references/filtering-advanced.md) |
-| `inspect` module | Public model-introspection API: `inspect.schema`, `inspect.fields`, `inspect.to_concept` | [inspect-module.md](references/inspect-module.md) |
-| Model introspection (lower level) | `model.concepts`/`relationships`/`tables`/`data_items` fallback API | [model-introspection.md](references/model-introspection.md) |
+One-liner gotchas that don't justify a Silent Corruption prose treatment but will bite you. These all raise loud errors, so reach for this table when you see an unexpected `TyperError` / `RAIException` / `ValidationError`.
+
+| Pitfall | Cause / Symptom | Fix |
+|---|---|---|
+| Boolean relationship as `select()` column raises `TyperError` | `Entity.was_clicked.alias("col")` placed in `select()` | Boolean unary relationships are filter-only — use in `where()` to constrain the result set |
+| `Property.exists()` raises `RAIException` | `Concept.prop.exists()` — `Cannot access relationships on core concept 'Float'` | Use ref binding: `r = Float.ref(); model.where(Concept.prop(r)).select(r.alias("v"))` |
+| `.where()` on a bare Concept fails | `Site.where(...)` doesn't work | `.where()` lives on the model, aggregations, constraints, or definitions — not on bare concepts |
+| Mixing bare select with `distinct()` | `select(X.name, distinct(X.cat))` — runtime error | Wrap ALL columns in `distinct()` or none |
+
+---
+
+## References
+
+| Reference | File |
+|---|---|
+| Joins, multi-hop binding, parameterized queries, Snowflake export | [joins-and-export.md](references/joins-and-export.md) |
+| `distinct()` code examples | [distinct-patterns.md](references/distinct-patterns.md) |
+| Conditional aggregation, `per().sum()` standalone, `count(X, cond)` | [aggregation-advanced.md](references/aggregation-advanced.md) |
+| Extended `not_()`, `union()` patterns, HAVING extras | [filtering-advanced.md](references/filtering-advanced.md) |
+| `inspect` module — schema, fields, to_concept | [inspect-module.md](references/inspect-module.md) |
+| Lower-level `model.concepts/relationships` (fallback) | [model-introspection.md](references/model-introspection.md) |
