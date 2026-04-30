@@ -105,18 +105,9 @@ After identifying variables, use these prompts to systematically discover missin
 
 ## Constraint Principles
 
-### RAI Expression Restrictions (Quick Reference)
+### RAI Expression Restrictions
 
-Python boolean keywords (`and`, `or`, `not`, `if/else`) are **invalid** in RAI constraint expressions. Use operator overloads instead:
-
-| Invalid | Correct |
-|---------|---------|
-| `x >= 1 and y >= 1` | `(x >= 1) & (y >= 1)` |
-| `x >= 1 or y >= 1` | `(x >= 1) \| (y >= 1)` |
-| `not x_active` | `model.not_(x_active)` or `not_(x_active)` (from `relationalai.semantics`) |
-| `value if cond else fallback` | `value \| fallback`, or `.where(cond)` scoping |
-
-For full expression rules, see `rai-pyrel-coding` > Boolean Logic in Expressions.
+Python boolean keywords (`and`, `or`, `not`, `if/else`) are invalid inside RAI expressions — use the operator overloads (`&`, `|`, `model.not_()`) and `.where()` scoping. This rule applies to all PyRel expressions, not just constraints. For the full table and `|` vs `model.union()` semantics, see `rai-pyrel-coding` > Boolean Logic in Expressions.
 
 ### Constraint categories
 

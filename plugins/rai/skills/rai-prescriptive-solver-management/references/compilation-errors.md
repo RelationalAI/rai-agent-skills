@@ -10,25 +10,23 @@
 
 # Compilation Errors — Detailed Diagnostics
 
-## Entity Reference Passed as Scalar
+> **General PyRel compile errors** (`[TyperError]` with empty body, type mismatches between Property and DataFrame dtype, `KeyError` from `model.concept_index["Foo"]`, `AttributeError` from `model.Foo` on a name never declared) live in `rai-pyrel-coding/references/common-pitfalls.md` — see § `TyperError` with empty diagnostic body and surrounding rows. The notes below cover the same errors as they appear specifically in optimization formulations.
 
-**Symptom:** `model.define(...)` accepts the schema; the failure surfaces later as a `TyperError` at query/solve time. The diagnostic body is often empty — see `rai-pyrel-coding/references/common-pitfalls.md` § `TyperError` with empty diagnostic body for tips on surfacing the underlying error.
+## Entity Reference Passed as Scalar (in entity_creation)
 
-Cause: `entity_creation` copies an entity-typed Property (FK) into a slot declared with a scalar type (Integer, Float, String).
+`entity_creation` copies an entity-typed Property (FK) into a slot declared with a scalar type (Integer, Float, String). Surfaces later as a `[TyperError]` at query/solve time.
 
 **Option A (simpler — remove the problematic property):** Remove the property from concept_definition and entity_creation entirely. Only keep properties needed for optimization.
 
-**Option B (if you need the ID for constraints):** In concept_definition, keep Property with the scalar type. In entity_creation, use `.id` to extract scalar: `sku_id=Demand.sku.id`.
+**Option B (if you need the ID for constraints):** In concept_definition, keep the Property with the scalar type. In entity_creation, use `.id` to extract the scalar: `sku_id=Demand.sku.id`.
 
-## Type Mismatch
+## Type Mismatch (Property vs DataFrame column)
 
-Property declared with one scalar type but the source DataFrame column is a different type (e.g., declared `:int` but source is a date string, or declared `:str` but source is `Int64`). Surfaces at query time as a `TyperError`. Fix: align the Property's declared type with the source column dtype, or convert the column upstream (e.g., `df["col"] = pd.to_datetime(df["col"]).dt.date` before `model.data(df)`).
+Same root cause as the general PyRel case (declared `:int` but source is a date string, etc.) — see `rai-pyrel-coding/references/common-pitfalls.md`. In a prescriptive formulation, the symptom typically appears at the first `problem.solve()` rather than at an earlier query, because optimization workflows often defer materialization until solve time.
 
 ## Undefined Concept/Property
 
-**Symptom:** standard Python lookup errors — `KeyError` from `model.concept_index["Foo"]`, `AttributeError` from `model.Foo` attribute access on a name never declared.
-
-Cause: referencing a concept name that was never created via `model.Concept(...)`. Fix: typo check, or declare the concept before referencing.
+Standard Python lookup errors (`KeyError` from `model.concept_index["Foo"]`, `AttributeError` from `model.Foo`) when the concept name was never declared via `model.Concept(...)`. Same pattern as in any PyRel code — fix by typo-checking or declaring the concept before referencing it.
 
 ## Zero Entities — Detailed Diagnostics
 

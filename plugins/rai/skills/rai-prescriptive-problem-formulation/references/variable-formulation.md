@@ -405,33 +405,14 @@ problem.solve_for(
 
 ### Decision variable `x_` prefix convention
 
-Decision variable attributes use `x_` prefix on the concept attribute (`Concept.x_prop`) to distinguish solver-controlled quantities from fixed data.
+Decision variable attributes use `x_` prefix on the concept attribute (`Concept.x_prop`) to distinguish solver-controlled quantities from fixed data:
 
-**V1 Madlib syntax — TYPE FIRST, then colon, then field name:**
 ```python
-# CORRECT v1 syntax — Type object first, field name as format spec:
 Food.x_amount = model.Property(f"{Food} has {Float:amount}")
 Edge.x_flow = model.Property(f"{Edge} has {Float:flow}")
-
-# WRONG — reversed order causes "Invalid format specifier" compile error:
-Food.x_amount = model.Property(f"{Food} has {amount:Float}")  # ERROR!
 ```
 
-The same pattern applies to Relationships (concept type first):
-```python
-# CORRECT:
-Assignment.worker = model.Relationship(f"{Assignment} assigns {Worker:worker}")
-# WRONG:
-Assignment.worker = model.Relationship(f"{Assignment} assigns {worker:Worker}")  # ERROR!
-```
-
-**Property names must be valid Python identifiers** — no spaces, no special characters:
-```python
-# CORRECT:
-Asset.min_budget = model.Property(f"{Asset} has {Float:min_budget}")
-# WRONG — spaces in names cause syntax errors:
-Asset.min budget = model.Property(...)  # ERROR!
-```
+For the underlying f-string Madlib rules (TYPE FIRST, then field name; valid Python identifiers; same pattern for Relationships), see `rai-pyrel-coding` > Property Definition F-Strings. Those rules are general PyRel grammar, not prescriptive-specific.
 
 When accessing decision variables through `.ref()` aliases, use the Python attribute name (with `x_` prefix), not the semantic slot name. The solver resolves variables by attribute name:
 
