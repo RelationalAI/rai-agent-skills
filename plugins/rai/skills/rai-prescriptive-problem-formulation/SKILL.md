@@ -169,7 +169,16 @@ for var_concept in variables:
         raise ValueError(f"{var_concept.name} has 0 bindings")
 ```
 
-Together, (a) and (b) are the downstream complement to Step 1's base-ontology grounding: Step 1 verifies the *inputs* to formulation exist; Step 5 verifies the *outputs* registered correctly and bound to data.
+**(c) Coefficient presence.** Properties referenced as objective or constraint coefficients must be populated by `model.define(...)` — declared-but-unbound coefficient Properties yield silent zero-coefficient terms; the solver returns OPTIMAL with a vacuous objective. Distinct from (b): (b) catches empty *decision-variable scope*, (c) catches unbound *coefficient data*. Both surface as OPTIMAL with `obj=0`.
+
+```python
+for coef_prop in objective_coefficient_properties:
+    n = len(model.select(coef_prop).to_df())
+    if n == 0:
+        raise ValueError(f"Coefficient {coef_prop} is unbound — objective term silently zero")
+```
+
+Together, (a), (b), and (c) are the downstream complement to Step 1's base-ontology grounding: Step 1 verifies the *inputs* to formulation exist; Step 5 verifies the *outputs* registered correctly, bound to data, and weighted by populated coefficients.
 
 When the formulation fails to generate or compile (before a solve is even attempted), look up the root cause in the unified failure taxonomy at `rai-prescriptive-results-interpretation/references/failure-taxonomy.md` (`generates` and `compiles` levels).
 
@@ -372,6 +381,7 @@ For detailed heuristics, examples, and the over-specification recognition table,
 | Linear objective over continuous decision variables collapses to one entity | LP pushes to the boundary — without a per-entity upper cap the max-coefficient entity absorbs all budget/weight. Symptom: "+X% lift" headlines masking a single-winner solution. | Add a per-entity upper cap (e.g., `w_i <= 3 * current_i`), switch to a concave objective (`sqrt`, `log`), or piecewise-linear saturation curves. |
 | `solve_for(where=expr)` raises `[Invalid operator] Cannot use python's 'bool check'` | `where` argument is iterated as a tuple; passing a bare expression triggers PyRel's `__bool__` guard | Wrap in a list: `where=[Concept.prop >= threshold, ...]` |
 | `problem.satisfy(<expr>)` raises `TypeError: satisfy() expects a Fragment from model.require(...)` | Bare comparison expression passed to `problem.satisfy()` instead of a Fragment | Wrap with `model.require(<expr>)` or use `model.where(<scope>).require(<expr>)`. See [constraint-formulation.md](references/constraint-formulation.md) > Style 1/Style 2 |
+| `solve_for(concept_ref.property)` raises `TypeError: Chain must have Concept start and Relationship next` | First arg requires bare `Concept.property` — refs are valid only inside `where=[...]`. Symmetric instinct from using refs in scope clauses doesn't extend to the variable declaration itself | Pass bare `Concept.property` to `solve_for(...)`; reserve refs for `where=[...]` joins |
 
 For detailed unwired relationship symptoms, checks, and code examples, see [constraint-formulation.md](references/constraint-formulation.md) > Unwired Relationships (Detailed).
 
