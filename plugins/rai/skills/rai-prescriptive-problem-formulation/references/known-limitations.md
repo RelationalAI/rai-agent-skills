@@ -48,11 +48,7 @@ See [examples/partitioned_subproblem.py](../examples/partitioned_subproblem.py) 
 
 ## `| <literal>` Fallback in Solver Constraints (RAI-49989)
 
-A `| <literal>` (default-value) fallback on a decision-variable-bearing aggregate inside `problem.satisfy(model.require(...))` raises:
-
-> `NotImplementedError: Prescriptive rewriter cannot handle a Match with mixed symbolic (decision-variable-bearing) and non-symbolic (constant / literal) arms ...`
-
-The rewriter requires homogeneous Match arm types, but the symbolic arm gets lifted to a node Hash reference while the literal arm stays at its original numeric type.
+A `| <literal>` (default-value) fallback on a decision-variable-bearing aggregate inside `problem.satisfy(model.require(...))` raises a `NotImplementedError` from the prescriptive rewriter — it requires homogeneous Match arm types, but the symbolic arm gets lifted to a node-Hash reference while the literal arm stays at its original numeric type, so the two arms can't be unified.
 
 ```python
 # BROKEN — | 0 fallback on a decision-variable aggregate

@@ -12,7 +12,7 @@
 
 ## Entity Reference Passed as Scalar
 
-**Symptom:** `model.define(...)` accepts the schema, but the next query/solve raises a generic `RAIException: [TyperError] Type errors detected during type inference (see above for details).` (the diagnostic body is often blank — see `rai-pyrel-coding/references/common-pitfalls.md` § `TyperError` with empty diagnostic body for surfacing tips).
+**Symptom:** `model.define(...)` accepts the schema; the failure surfaces later as a `TyperError` at query/solve time. The diagnostic body is often empty — see `rai-pyrel-coding/references/common-pitfalls.md` § `TyperError` with empty diagnostic body for tips on surfacing the underlying error.
 
 Cause: `entity_creation` copies an entity-typed Property (FK) into a slot declared with a scalar type (Integer, Float, String).
 
@@ -22,17 +22,17 @@ Cause: `entity_creation` copies an entity-typed Property (FK) into a slot declar
 
 ## Type Mismatch
 
-Property declared with one scalar type but the source DataFrame column is a different type (e.g., declared `:int` but source is a date string, or declared `:str` but source is `Int64`). Surfaces at query time as a generic `[TyperError]`. Fix: align the Property's declared type with the source column dtype, or convert the column upstream (e.g., `df["col"] = pd.to_datetime(df["col"]).dt.date` before `model.data(df)`).
+Property declared with one scalar type but the source DataFrame column is a different type (e.g., declared `:int` but source is a date string, or declared `:str` but source is `Int64`). Surfaces at query time as a `TyperError`. Fix: align the Property's declared type with the source column dtype, or convert the column upstream (e.g., `df["col"] = pd.to_datetime(df["col"]).dt.date` before `model.data(df)`).
 
 ## Undefined Concept/Property
 
-**Symptom:** depends on the access pattern — `model.concept_index["Foo"]` raises `KeyError: 'Foo'`; `model.Foo` (attribute access on a name never declared) raises `AttributeError: 'Model' object has no attribute 'Foo'`. There is no PyRel error string `"Concept X not found"`.
+**Symptom:** standard Python lookup errors — `KeyError` from `model.concept_index["Foo"]`, `AttributeError` from `model.Foo` attribute access on a name never declared.
 
 Cause: referencing a concept name that was never created via `model.Concept(...)`. Fix: typo check, or declare the concept before referencing.
 
 ## Zero Entities — Detailed Diagnostics
 
-**Symptom:** `problem.display()` prints `Problem (numeric type: Float): empty` (or `Integer`) when the registered variables are all bound to entity sets with zero rows. Confirm with `problem.num_variables() == 0` (engine-side) or by checking `problem.display(part)` of a specific variable group.
+**Symptom:** `problem.display()` reports the problem as empty / shows zero registered variables; equivalently `problem.num_variables() == 0`. Use `problem.display(part)` to inspect a specific variable group.
 
 The entity_creation expression produced no entities — likely a join mismatch. Fix: verify join conditions match actual data relationships.
 

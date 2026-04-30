@@ -371,7 +371,7 @@ model.where(TMP.machine == MP.machine, TMP.period == MP.period).require(
 
 **When `.ref()` is genuinely needed:** pairwise / quadratic constraints (`Stock1, Stock2 = Stock, Stock.ref()`), self-joins inside aggregates (`T_in, T_out = Transaction.ref(), Transaction.ref()`), value binding from multiarity properties (`qty = Float.ref()`), and named refs to disambiguate multiple aggregation contexts. Don't reach for `.ref()` to "bridge scopes" in single-clause `.per(Concept)` aggregates or in cross-concept dimension joins — there is no scope boundary to bridge.
 
-**Special case — aggregates of decision variables can't be materialized as Properties.** `model.define(Concept.total(aggs.sum(DecisionVar).per(Concept)))` decouples the aggregate from the solver's symbolic graph; later constraints reference the materialized total as a constant and raise `ValueError: Expression does not reference any decision variables`. Keep aggregates of decision variables INLINE in `.require(...)`. Data-derived aggregates can be materialized normally.
+**Special case — aggregates of decision variables can't be materialized as Properties.** `model.define(Concept.total(aggs.sum(DecisionVar).per(Concept)))` decouples the aggregate from the solver's symbolic graph; later constraints reference the materialized total as a constant and the solver raises a `ValueError` complaining that the expression contains no decision variables. Keep aggregates of decision variables INLINE in `.require(...)`. Data-derived aggregates can be materialized normally.
 
 ---
 
