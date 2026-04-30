@@ -333,7 +333,7 @@ These parameters are solver-independent and work with any solver:
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `time_limit_sec` | float | Maximum solve time in seconds (default: 300s) |
+| `time_limit_sec` | float | Maximum solve time in seconds (Python kwarg defaults to `None`; if not provided, the solver service applies its own default — currently 300s) |
 | `silent` | bool | Suppress solver output |
 | `solution_limit` | int | Maximum number of solutions to find |
 | `relative_gap_tolerance` | float | Relative optimality gap in [0, 1] (e.g., 0.01 = 1%) |
