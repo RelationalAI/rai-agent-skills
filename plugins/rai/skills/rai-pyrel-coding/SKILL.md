@@ -329,27 +329,47 @@ Use `.ref()` to create independent variables of the same concept or type for pai
 
 ### Free-Variable Scoping: bare `Concept` vs `.ref()`
 
-PyRel scoping has two rules; getting either wrong is silent.
+Inside a single `model.where(...).require(...)` chain, references to the same Python `Concept` symbol — including those in aggregate `.per(...)` keys and aggregate inner `.where(...)` predicates — refer to ONE shared free variable. The chain is one scope; symbol identity carries throughout.
 
-**Within one clause** (single `.where()` / `.require()`): bare `Concept` references auto-unify into one implicit free variable. **Mixing bare + `.ref()` for the same Concept** creates two free variables → cartesian product. Fix: pick one style — drop the ref entirely, or route every reference through the same ref instance.
+A `Concept`-typed Property (e.g., `Item.bin`, an FK) introduces an anonymous variable iterating over the linked concept's range. **It is NOT automatically equal to a bare reference to the linked Concept** — they are separate variables and produce a cartesian product unless explicitly linked via an equality predicate in a `.where(...)` clause.
 
-**Across scope boundaries** (outer `.where(Concept...)` → inner `aggregate.per(Concept).where(Concept...)`): bare references DON'T unify. Bridge with a shared `.ref()`.
+`Concept.ref()` always creates a fresh, independent variable. Mixing bare + ref produces a cartesian product unless an equality binding links them.
 
 ```python
-# WRONG — outer ItemLocation ≠ inner .per(ItemLocation); constraint vacuously satisfied
-problem.satisfy(
-    model.where(IL.demand > 0).require(
-        aggs.sum(SM.alloc).per(IL).where(SM.dest_il(IL)) + IL.unmet == IL.demand
-    )
-)
-# RIGHT — bridge with a shared ref across the boundary
-il = IL.ref()
-problem.satisfy(
-    model.where(il.demand > 0).require(
-        aggs.sum(SM.alloc).per(il).where(SM.dest_il(il)) + il.unmet == il.demand
-    )
+# WRONG — Item.bin (anon var iterating bins-reached-by-items) and Bin (var over all bins)
+# are independent; this generates a cartesian: 4 constraints instead of 2.
+model.require(sum(Item.x_assigned).per(Item.bin) <= Bin.cap)
+
+# RIGHT — outer where(Item.bin == Bin) binds the FK to the Concept, so bare references
+# inside the require chain unify into one Bin variable.
+model.where(Item.bin == Bin).require(sum(Item.x_assigned).per(Bin) <= Bin.cap)
+# Equivalent: .per(Item.bin) is fine here because the outer where ties them together.
+model.where(Item.bin == Bin).require(sum(Item.x_assigned).per(Item.bin) <= Bin.cap)
+```
+
+For aggregates whose contributing rows are linked to the grouping Concept by a relationship rather than an FK property, the link can be made by an inner `.where(Relationship(Concept))` predicate — the bare `Concept` still unifies with outside references because it's the same Python symbol:
+
+```python
+# CORRECT — bare IL throughout (outer where, .per, inner .where, RHS comparison)
+# all refer to the same free variable. The inner .where(SM.dest_il(IL)) is what
+# ties SM rows to that IL; it is NOT a scope boundary.
+model.where(IL.demand > 0).require(
+    sum(SM.alloc).per(IL).where(SM.dest_il(IL)) + IL.unmet == IL.demand
 )
 ```
+
+**Cross-concept joins on shared dimensions** (e.g., `TechnicianMachinePeriod ↔ MachinePeriod` joined on `(machine, period)`) work with bare references — no `.ref()` aliasing required. The same scoping rule applies: bare `TMP` and bare `MP` are each a single free variable across the chain.
+
+```python
+# CORRECT — bare TMP and MP, joined on shared dims via inner .where():
+sum(TMP.x_assigned).where(TMP.machine == MP.machine, TMP.period == MP.period).per(MP) <= MP.cap
+# Equivalent — outer where instead of inner:
+model.where(TMP.machine == MP.machine, TMP.period == MP.period).require(
+    sum(TMP.x_assigned).per(MP) <= MP.cap
+)
+```
+
+**When `.ref()` is genuinely needed:** pairwise / quadratic constraints (`Stock1, Stock2 = Stock, Stock.ref()`), self-joins inside aggregates (`T_in, T_out = Transaction.ref(), Transaction.ref()`), value binding from multiarity properties (`qty = Float.ref()`), and named refs to disambiguate multiple aggregation contexts. Don't reach for `.ref()` to "bridge scopes" in single-clause `.per(Concept)` aggregates or in cross-concept dimension joins — there is no scope boundary to bridge.
 
 **Special case — aggregates of decision variables can't be materialized as Properties.** `model.define(Concept.total(aggs.sum(DecisionVar).per(Concept)))` decouples the aggregate from the solver's symbolic graph; later constraints reference the materialized total as a constant and raise `ValueError: Expression does not reference any decision variables`. Keep aggregates of decision variables INLINE in `.require(...)`. Data-derived aggregates can be materialized normally.
 

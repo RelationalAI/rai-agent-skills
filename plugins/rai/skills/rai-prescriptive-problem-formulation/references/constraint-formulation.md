@@ -406,9 +406,9 @@ x_weight <= fast_cap * y_bin_fast      # x_weight <= 999999 * y_bin_fast
 A declared `model.Relationship()` without a corresponding `model.define()` rule has NO DATA at solve time. The relationship exists in the schema but has zero bindings.
 
 **Symptoms:**
-- `TyperError` during solve ("type inference" or "type could not be determined")
-- Constraints silently match zero entities (empty joins)
-- `.per(Concept)` aggregations return nothing
+- The constraint is silently dropped — joins on the unwired relationship match zero entities, so no constraint rows are generated.
+- `.per(Concept)` aggregations return nothing.
+- The solver returns OPTIMAL with a vacuous objective (typically zero on minimize), masking the missing constraint.
 
 **Check:** For every relationship in a constraint `.where()` clause, verify a `model.define()` rule populates it. If no define rule exists, the relationship is unwired — do not use it in constraints.
 
@@ -418,9 +418,7 @@ A declared `model.Relationship()` without a corresponding `model.define()` rule 
 sum(Operation.x_flow).where(Operation.transformation == Site).per(Site) >= Site.demand
 
 # CORRECT: use a relationship with define() data binding, or join via shared identity properties
-Op = Operation.ref()
-UD = UnmetDemand.ref()
-sum(Op.x_flow).where(Op.output_sku == UD.sku).per(UD.sku)
+sum(Operation.x_flow).where(Operation.output_sku == UnmetDemand.sku).per(UnmetDemand.sku)
 ```
 
 ### Historical comparison / tolerance band constraints
@@ -486,41 +484,13 @@ problem.satisfy(model.require(supply + AggConcept.x_slack >= demand))
 
 **LINKING TWO CROSS-PRODUCT CONCEPTS through shared dimensions:**
 
-When two cross-product concepts share dimensions (e.g., TechnicianMachinePeriod and MachinePeriod both have machine and period), use `.ref()` aliases for all concepts in the expression.
+When two cross-product concepts share dimensions (e.g., `TechnicianMachinePeriod` and `MachinePeriod` both have machine and period), join them on the shared dimensions inside the aggregate's `.where()` and group with `.per(GroupingConcept)`:
 
 ```python
-# WRONG — bare concepts without .ref() cause TyperError in cross-concept joins:
-sum(TechnicianMachinePeriod.x_assigned).where(
-    TechnicianMachinePeriod.machine == MachinePeriod.machine,
-    TechnicianMachinePeriod.period == MachinePeriod.period
-).per(MachinePeriod)
-
-# CORRECT — use .ref() aliases for cross-concept joins:
-TMP_ref = TechnicianMachinePeriod.ref()
-MP_ref = MachinePeriod.ref()
-
-assign_per_mp = sum(TMP_ref.x_assigned).where(
-    TMP_ref.machine == MP_ref.machine,
-    TMP_ref.period == MP_ref.period
-).per(MP_ref)
-
-problem.satisfy(model.require(assign_per_mp == MP_ref.x_machine_maintained))
+sum(TMP.x_assigned).where(TMP.machine == MP.machine, TMP.period == MP.period).per(MP) <= MP.cap
 ```
 
-**Why:** `.ref()` creates a reference alias that the type inferencer can disambiguate. Without `.ref()`, when multiple concepts appear in the same expression, the inferencer can't resolve which entity maps to which. Always use `.ref()` when a constraint involves 2+ concepts.
-
-**Single-dimension linking** (simpler — one shared dimension):
-```python
-# relationship == bare concept works for single-dimension joins:
-AssignmentRef = Assignment.ref()
-trip_coverage = sum(AssignmentRef.x_assigned).where(AssignmentRef.trip == Trip).per(Trip)
-problem.satisfy(model.require(trip_coverage >= 1))
-```
-
-**Rule: When to use `.ref()`:**
-- **Always** when 2+ concepts appear in the same `sum().where().per()` expression
-- **Always** when joining cross-product concepts (e.g., linking TechnicianMachinePeriod to MachinePeriod)
-- **Optional** for single-concept constraints (e.g., `Concept.x_var <= Concept.capacity`)
+Bare references unify within the require chain — no `.ref()` aliasing is needed for this pattern. For when `.ref()` is and isn't required, see `rai-pyrel-coding` § Free-Variable Scoping.
 
 **COMPLETE EXAMPLE: Demand satisfaction with slack via shared dimension**
 
@@ -539,12 +509,9 @@ model.define(UnmetDemand.new(sku=Demand.sku))  # One per unique demanded SKU
 problem.solve_for(UnmetDemand.x_slack, lower=0, name=["unmet", UnmetDemand.sku.id])
 
 # 2. Constraint: supply + slack >= demand, per shared dimension
-Op = Operation.ref()
-D = Demand.ref()
-UD = UnmetDemand.ref()
-inflow_per_sku = sum(Op.x_flow).where(Op.output_sku == UD.sku).per(UD.sku)
-demand_per_sku = sum(D.quantity).where(D.sku == UD.sku).per(UD.sku)
-problem.satisfy(model.require(inflow_per_sku + UD.x_slack >= demand_per_sku).where(UD))
+inflow_per_sku = sum(Operation.x_flow).where(Operation.output_sku == UnmetDemand.sku).per(UnmetDemand.sku)
+demand_per_sku = sum(Demand.quantity).where(Demand.sku == UnmetDemand.sku).per(UnmetDemand.sku)
+problem.satisfy(model.require(inflow_per_sku + UnmetDemand.x_slack >= demand_per_sku))
 
 # 3. Objective: minimize cost + penalty for unmet demand
 PENALTY = 1000.0
@@ -607,35 +574,29 @@ The RHS of a `.where()` equality must be ONE of:
 
 Never use: chained properties (2+ hops), relationship-to-relationship comparisons, or nested `.where()` calls.
 
-**Rule 6: No multi-hop property traversals in solver expressions**
+**Rule 6: `.per()` on extended concepts — group via the extended concept's relationship, not the base concept**
 
-`Concept.relationship.property` patterns in `problem.satisfy()`, `problem.minimize()`, `problem.maximize()`, or `problem.solve_for()` cause `UnresolvedOverload` TyperErrors. The solver type inferencer cannot resolve chained property access through relationships.
+When grouping a sum on an extended (cross-product) concept by one of its base concepts, use `.per(AB.a)` (the relationship through the extended concept), not `.per(A)` (the bare base concept):
 
-```python
-# WRONG — multi-hop traversal (TyperError):
-problem.satisfy(model.require(sum(AB_ref.x_active * AB_ref.a.cost)))
-
-# CORRECT — use an enriched flat property:
-problem.satisfy(model.require(sum(AB_ref.x_active * AB_ref.a_cost)))
-```
-
-Multi-hop traversals work in `model.define()`, `model.select()`, and `model.where()` — the restriction applies only to solver expressions. If a property from a related concept is needed in a solver expression, it must first be denormalized onto the decision concept via enrichment. Report as a `model_gap` so enrichment can create it.
-
-**Rule 7: `.per()` with extended concepts**
-When using `.per()` on an extended (cross-product) concept, you CANNOT use `.per(BaseConcept)` — you must traverse through the extended concept's relationship:
 ```python
 # Setup: AB is a cross-product of A x B
 # defined as: model.define(AB.new(a=A, b=B))
 
-# WRONG: .per(A) — solver error, A is not in scope
+# WRONG: .per(A) — solver returns OPTIMAL but constraints are silently mis-scoped.
+# The inner sum does NOT filter to AB rows where AB.a == A; it sums all AB
+# globally and replicates that constraint once per A entity.
 model.require(sum(AB.x_active).per(A) == 1)
+# Generates: sum(all_AB) == 1, sum(all_AB) == 1   (one per A — wrong)
 
-# CORRECT: .per(AB.a) — traverse through the extended concept's relationship
+# CORRECT: .per(AB.a) — generates one constraint per A with the correctly
+# filtered sum.
 model.require(sum(AB.x_active).per(AB.a) == 1)
+# Generates: sum(AB where a==A1) == 1, sum(AB where a==A2) == 1   (right)
 ```
-**Why:** The solver scope is on `AB` entities. `.per(A)` tries to group by a concept that isn't in scope. `.per(AB.a)` navigates from the extended concept to the base concept, which the solver can resolve.
 
-**Rule 8: Access data properties on extended concepts via relationship traversal**
+The failure is silent — solver returns OPTIMAL with the wrong feasibility region. Verify with `problem.display()` that per-group constraints have the expected disaggregated sums.
+
+**Rule 7: Access data properties on extended concepts via relationship traversal**
 Extended/cross-product concepts only have their own declared properties (relationships + decision variables). To access data properties from the base concept they reference, traverse the relationship.
 ```python
 # Setup: AB is an extended concept with relationship to B

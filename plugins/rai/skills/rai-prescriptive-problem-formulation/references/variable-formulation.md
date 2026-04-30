@@ -74,8 +74,6 @@ WHICH PATTERN TO USE:
 
 **Key heuristic:** If the model has Operation/Pipeline/Route/Edge concepts connecting entities, put flow/quantity variables directly on those concepts. Do NOT create a new FlowDecision concept — the existing concept already has the right entity granularity.
 
-**v1 constraint — table-backed concepts:** Variables CANNOT be added directly to table-backed (`identify_by`) concepts in v1. `Problem.solve()` raises `TyperError (UnresolvedOverload)` when solving for properties on these concepts. The code generator automatically wraps such variables in decision concepts (e.g., `Operation` → `OperationDecision` with a Relationship back to `Operation`). Prefer the `extended_concept` pattern explicitly for table-backed concepts when writing templates or formulations by hand.
-
 **5. Entity Creation Strategy (Problem-Type Dependent):**
 
 The entity creation strategy for cross-product concepts depends on the **problem type**:
@@ -548,7 +546,7 @@ problem.solve_for(
 
 ### Pairwise constraints with `.ref()` and walrus `:=`
 
-`.ref()` creates an alias so you can reference two distinct instances of the same concept. Walrus `:=` binds a ref inline.
+For pairwise / quadratic constraints over the same concept, `.ref()` creates a second independent instance and walrus `:=` binds it inline. (For when refs are and aren't needed in general, see `rai-pyrel-coding` § Free-Variable Scoping — pairwise is the canonical correct case.)
 
 ```python
 # Two players: limit shared groups across weeks
