@@ -87,17 +87,15 @@ demand_per_sku = sum(D.quantity).where(D.sku == UD.sku).per(UD.sku)
 
 ### Property Chains in `.where()` Clauses
 
-Multi-hop property chains fail silently in `.where()` clauses — the join produces zero matches, giving empty aggregation results.
+Multi-hop chains (`Concept.fk.prop`) are valid inside `.where()` clauses and resolve to the chained value — the join is materialized in-engine. Both literal-eq (`Customer.site.name == "s1"`) and entity-eq (`Op.dest_site == Demand.customer.site`) forms work.
 
 ```python
-# WRONG — 2-hop chain silently returns 0 matches
-sum(Op.x_flow).where(Op.destination_site == D.customer.site).per(D)
-
-# RIGHT — use a direct property match at a shared dimension
-sum(Op.x_flow).where(Op.output_sku == UD.sku).per(UD.sku)
+# Both compile and produce the expected join:
+sum(Op.x_flow).where(Op.dest_site == Demand.customer.site).per(Demand)
+model.where(Customer.site.name == "s1").select(Customer.cid)
 ```
 
-**Workaround:** Aggregate at a dimension where concepts share a direct property (e.g., SKU, Site). If no direct match exists, denormalize the needed property onto the concept.
+If a chained `.where()` returns empty results, the cause is usually the chain itself being unpopulated (an FK Property declared but never filled by `model.define(...)`), not the chaining mechanic. Aggregating at a shared dimension is sometimes simpler to reason about, but it is not required.
 
 ### Operators: `.in_()`, `model.not_()`, `|`, `&`
 
