@@ -1,0 +1,37 @@
+{
+  "name": "rai",
+  "version": "2.1.1",
+  "description": "RelationalAI semantic models and advanced reasoners",
+  "author": {
+    "name": "RelationalAI",
+    "url": "https://relational.ai"
+  },
+  "homepage": "https://github.com/RelationalAI/rai-agent-skills",
+  "repository": "https://github.com/RelationalAI/rai-agent-skills",
+  "license": "Apache-2.0",
+  "keywords": [
+    "relationalai",
+    "pyrel",
+    "reasoning",
+    "optimization"
+  ],
+  "interface": {
+    "displayName": "RAI",
+    "shortDescription": "RelationalAI skills for semantic modeling and reasoning",
+    "longDescription": "Use RelationalAI skills in Codex for ontology design, PyRel authoring, querying, graph analysis, optimization, and Cortex integration.",
+    "developerName": "RelationalAI",
+    "category": "Coding",
+    "capabilities": [
+      "Interactive",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/RelationalAI/rai-agent-skills",
+    "brandColor": "#2563EB",
+    "defaultPrompt": [
+      "Set up RelationalAI for this repo",
+      "Help me write PyRel for this model",
+      "Route this task to the right RAI skill"
+    ],
+    "screenshots": []
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "name": "relationalai",
+  "interface": {
+    "displayName": "RelationalAI"
+  },
+  "plugins": [
+    {
+      "name": "rai",
+      "source": {
+        "source": "local",
+        "path": "./plugins/rai"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Coding"
+    }
+  ]
+}

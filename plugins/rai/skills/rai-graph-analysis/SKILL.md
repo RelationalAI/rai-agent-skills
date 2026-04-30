@@ -1,0 +1,498 @@
+---
+name: rai-graph-analysis
+description: Graph algorithm selection and execution on PyRel v1 models. Covers graph construction from ontology patterns, algorithm families (centrality, community, reachability, distance, similarity, components), parameter tuning, result extraction, and downstream use. Use when building or running graph analyses on RAI models.
+---
+
+# Graph Analysis
+<!-- v1-SENSITIVE -->
+
+<!-- TOC -->
+- [Summary](#summary)
+- [Quick Reference](#quick-reference)
+- [Graph Analysis Workflow](#graph-analysis-workflow)
+- [Graph Construction from Ontology](#graph-construction-from-ontology)
+- [Algorithm Selection](#algorithm-selection)
+- [Parameter Guidance](#parameter-guidance)
+- [Domain Constraints](#domain-constraints)
+- [Result Extraction and Binding](#result-extraction-and-binding)
+- [Downstream Use](#downstream-use)
+- [Common Pitfalls](#common-pitfalls)
+- [Examples](#examples)
+- [Reference Files](#reference-files)
+<!-- /TOC -->
+
+## Summary
+
+**What:** Graph algorithm selection and execution — building `Graph` instances from PyRel ontology patterns and running the right algorithm to answer structural questions about the data.
+
+**When to use:**
+- Building a `Graph` instance from an existing PyRel model (choosing node concept, edge construction, directed/weighted)
+- Selecting which graph algorithm answers a given question (centrality, community, reachability, etc.)
+- Configuring algorithm parameters (direction, weights, aggregator)
+- Extracting and binding graph results to model properties
+- Feeding graph outputs into downstream reasoning (optimization, rules, predictions)
+
+**When NOT to use:**
+- Discovering whether graph analysis is appropriate for a dataset — see `rai-discovery`
+- PyRel syntax reference (imports, types, model patterns) — see `rai-pyrel-coding`
+- Ontology design decisions (concept modeling, data mapping) — see `rai-ontology-design`
+- Optimization formulation (variables, constraints, objectives) — see `rai-prescriptive-problem-formulation`
+- Business rule authoring (validation, classification, alerting) — see `rai-rules-authoring`
+
+**Overview (process steps):**
+1. Study the existing model — understand base definitions, coding conventions, and what's already wired
+2. Start from the question — identify which concepts and relationships are relevant, and what kinds of analysis best speak to the question
+3. Determine which relevant concepts should constitute nodes in the graph
+4. Determine what edges would best capture the information relevant to the question and the planned analysis
+5. Figure out how to derive those edges from the relevant relationships (sometimes a pass-through, often involving filters or more substantial logic)
+6. Choose which Graph constructor pattern fits given the node/edge decisions
+7. Select the specific algorithm(s) best suited to the question
+8. Execute, extract results, and blend back into the model for downstream use
+
+---
+
+## Quick Reference
+
+```python
+# Imports
+from relationalai.semantics import Model, Float, Integer, String, where, define, data
+from relationalai.semantics.reasoners.graph import Graph
+from relationalai.semantics.std import aggregates, floats
+
+model = Model("my_model")
+```
+
+**Note:** `where`, `define`, and `data` are available as standalone imports and as `model.where()`, `model.define()`, `model.data()` methods. Both are equivalent for single-model scripts. Use the `model.*` form when multiple Models exist — standalone functions fail with `"Multiple Models have been defined."`. See `rai-pyrel-coding` for data loading patterns with `model.data()`.
+
+### Graph constructor — three patterns
+
+**Pattern 1: No existing node or edge concepts** — the most common pattern. Use when nodes are drawn from multiple concepts, or when not all instances of a concept should be nodes. Edges are defined manually with `Edge.new()`.
+
+```python
+graph = Graph(
+    model,
+    directed=True|False,          # Edge directionality
+    weighted=True|False,          # Whether edges carry weights
+)
+Node, Edge = graph.Node, graph.Edge
+# Define nodes and edges manually with Edge.new(src=..., dst=...)
+```
+
+**Pattern 2: Existing node concept, manual edges** — use when a single concept covers all desired nodes and you want all instances as nodes (including isolated nodes with no edges). Isolated nodes can also be added explicitly via `model.define(Node(my_instance))`.
+
+```python
+graph = Graph(
+    model,
+    directed=True|False,
+    weighted=True|False,
+    node_concept=MyConcept,       # All instances of MyConcept become nodes; graph.Node is bound to MyConcept
+)
+Node, Edge = graph.Node, graph.Edge
+# graph.Node IS MyConcept — properties assigned to graph.Node are directly available on MyConcept
+# Define edges manually with Edge.new(src=..., dst=...)
+```
+
+**Pattern 3: Existing node concept + edge concept** — use when each interaction is already modeled as its own concept with source/destination relationships. Rather than deriving new nodes and edges, `graph.Node`, `graph.Edge`, `graph.EdgeSrc`, `graph.EdgeDst`, and `graph.EdgeWeight` bind directly to the provided concepts and relationships — avoiding extra computation, which matters for large graphs.
+
+```python
+graph = Graph(
+    model,
+    directed=True,
+    weighted=True,
+    node_concept=Account,
+    edge_concept=Transaction,                      # Each Transaction instance becomes an edge
+    edge_src_relationship=Transaction.payer,        # Source endpoint
+    edge_dst_relationship=Transaction.payee,        # Destination endpoint
+    edge_weight_relationship=Transaction.amount,    # Edge weight (required when weighted=True)
+)
+```
+
+**Important:**
+- When using `edge_concept`, you must also pass `node_concept`, `edge_src_relationship`, and `edge_dst_relationship`. Add `edge_weight_relationship` when the graph is weighted.
+- **Weights must be floats.** Use `floats.float()` to cast from other numeric types: `weight=floats.float(Transaction.amount)`.
+- **Note:** `edge_src_relationship`, `edge_dst_relationship`, and `edge_weight_relationship` accept only a `Relationship` or `Chain` — not a `Property`, not an `Expression`. If your ontology models the link as a `Property` (e.g., `f"{Edge} from {Node:source}"`), or if you need to cast (`floats.float(...)`), use Pattern 1 or 2 with manual `Edge.new(src=..., dst=..., weight=...)` instead. Pattern 3 will fail silently with a model warning and produce 0 edges.
+
+### `Graph` constructor `aggregator` parameter guidance
+
+`aggregator` defaults to `None`; multi-edges (parallel edges between the same node pair) emit warnings when present. `aggregator="sum"` (the only supported alternative) collapses multi-edges by summing weights — works on unweighted too.
+
+**Use it only when multi-edges are expected** (co-occurrence with multiple shared attributes, or intermediary concepts where multiple operations connect the same pair). **Omit otherwise** — silencing unexpected multi-edges masks bugs in edge-derivation logic.
+
+### Algorithm cheat sheet
+
+> **Compatibility constraints in this section are non-exhaustive.** For any algorithm you plan to call, load [algorithm-selection.md](references/algorithm-selection.md) and confirm its compatibility row before writing the `Graph(...)` constructor. The Pre-flight table at the end of [Algorithm Selection](#algorithm-selection) below summarizes the most common gotchas, but is also non-exhaustive.
+
+| Family | Methods | Output Shape | Typical Use |
+|--------|---------|-------------|-------------|
+| **Basic Stats** | `num_nodes()`, `num_edges()`, `num_triangles()` | relation; use `.inspect()` to print | Graph validation, sanity checks |
+| **Neighbors** | `neighbor()`, `inneighbor()`, `outneighbor()`, `common_neighbor()` | `(node, node)` or `(node, node, node)` | Neighborhood exploration |
+| **Degree** | `degree()`, `indegree()`, `outdegree()`, `weighted_degree()`, `weighted_indegree()`, `weighted_outdegree()` | `(node, value)` | Connection counts |
+| **Centrality** | `eigenvector_centrality()`, `betweenness_centrality()`, `degree_centrality()`, `pagerank()` | `(node, score)` | Importance, influence, bottlenecks |
+| **Community** | `louvain()`, `infomap()`, `label_propagation()` | `(node, label)` | Natural groupings, clusters |
+| **Components** | `weakly_connected_component()`, `is_connected()` | `(node, component_id)` or scalar | Fragmentation, isolation |
+| **Reachability** | `reachable()` | `(source, target)` pairs | Dependency tracing, impact analysis |
+| **Distance** | `distance()`, `diameter_range()` | `(start, end, length)` | Shortest paths, network diameter |
+| **Similarity** | `jaccard_similarity()`, `cosine_similarity()`, `adamic_adar()`, `preferential_attachment()` | `(node1, node2, score)` | Entity comparison, link prediction |
+| **Clustering** | `local_clustering_coefficient()`, `average_clustering_coefficient()`, `triangle_count()`, `triangle()`, `unique_triangle()` | `(node, value)` or `(n1, n2, n3)` | Local density, tightness |
+
+**Bridge edges (single points of failure on the edge side) have no named primitive — express them as WCC with per-edge ablation, in RAI.** `betweenness_centrality()` is *not* a substitute: it scores nodes on a relative scale and does not answer "would removing this edge disconnect the graph." See [Bridge edges in algorithm-selection.md](references/algorithm-selection.md#bridge-edges-no-named-primitive) for the recipe.
+
+For compatibility constraints (directed/weighted limits per algorithm), see Algorithm Selection below.
+
+---
+
+## Graph Analysis Workflow
+
+### Step 1: Study the Existing Model
+
+Before writing any graph or enrichment code, read the existing model file to understand:
+
+1. **How to include base definitions** — graph scripts that extend an existing model must import it (e.g., `from my_model import model, Site, Operation`) so that all base `define()` rules are in scope. Creating a standalone `Model("same name")` reference without the base definitions will produce an empty graph because concept instances won't exist.
+2. **Coding conventions** — check how the existing model references table columns (casing, naming patterns) and follow the same style. The model file is the source of truth for conventions, not external metadata tools.
+3. **What's already wired** — identify which relationships and properties exist vs. what needs enrichment. Only enrich what's missing.
+
+### Steps 2–5: From Question to Nodes and Edges
+
+Start from the question, not the ontology. The question determines which concepts become nodes, what edges you need, and how to derive them.
+
+**Step 2 — Scope the question:**
+- State the question clearly — what property of the data's network structure are you trying to understand?
+- Identify which concepts and relationships in the ontology are relevant to the question
+- In broad strokes, what kinds of graph analysis over those concepts and relationships best speak to the question?
+
+**Step 3 — Identify the nodes:**
+- Which of the relevant concepts should constitute nodes — the actors or objects you want to rank, group, or trace?
+
+**Step 4 — Determine the edges:**
+- What edges would best capture the information relevant to the question and the planned analysis?
+- Does direction matter? Direction often matters for flow, dependency, or causality. Undirected is often appropriate for co-membership or symmetric relationships. Consider whether directionality is semantically meaningful for your question.
+- Note: The edges you need are informed both by the question and by the algorithm you plan to apply.
+
+**Step 5 — Derive edges from relationships:**
+- Sometimes an existing relationship maps directly to edges (the rules are essentially pass-through).
+- Often, edges must be derived from one or more relationships less directly — involving filters, joins, or more substantial logic.
+- Scan the ontology for the structural signals below to find how to build the edges you need.
+
+**Key principle:** A single ontology can support multiple graph constructions. Different questions about the same data lead to different node/edge choices. The question always comes first — the ontology is the source of available structure, not the driver.
+
+**Recognizing edge sources in the ontology:**
+
+Once you know what nodes and edges you need, scan the ontology for these structural signals to find them:
+
+| Ontology Signal | What to Look For | How It Becomes Edges |
+|-----------------|-----------------|---------------------|
+| **Direct relationship** | Concept A has a relationship to Concept B (or to itself) | The relationship itself is an edge — use `Edge.new(src=a, dst=b)` |
+| **Intermediary concept** | A concept C with two relationships pointing to the same node type (e.g., `source` and `destination` both referencing Concept A) | Each instance of C becomes an edge between the two endpoints — use `Edge.new()` or `edge_concept` (`edge_concept` only when the src/dst are `Relationship`s) |
+| **Shared attribute** | Two instances of Concept A both relate to the same instance of Concept B (e.g., two users sharing an address, two customers ordering the same product) | Co-occurrence — entities sharing an attribute are connected. Requires `id <` guard to prevent duplicates |
+| **Self-referencing** | A concept with a relationship back to itself (e.g., `parent`, `reports_to`, `depends_on`, `subcomponent`, `follows`) | Instance-to-instance edges within one concept — may be acyclic (hierarchies, DAGs) or contain cycles |
+| **Multi-concept co-occurrence** | Multiple distinct attributes shared between entities (e.g., shared address OR shared phone OR shared email) | Each shared attribute type creates edges — combine in a single graph for richer connectivity |
+
+**Tip:** When the ontology has an interaction concept with source/destination relationships and edge-relevant properties (volume, weight, intensity), prefer `edge_concept` over manual `Edge.new()` — it's more concise and ensures every instance is included.
+
+### Step 6: Choose Construction Pattern
+
+Map the ontology signal you identified in Steps 2–5 to a construction pattern and decide how to implement it:
+
+| Ontology Signal (from Steps 2–5) | Construction Pattern | Edge Method | Example |
+|-------------------------------|---------------------|-------------|---------|
+| Direct relationship | Entity-level | `Edge.new(src=a, dst=b)` | [Graph Construction from Ontology](#graph-construction-from-ontology) |
+| Intermediary concept | Infrastructure-level | `Edge.new()` from intermediary, or `edge_concept` if concept has src/dst/weight | [centrality_weighted_undirected.py](examples/centrality_weighted_undirected.py), [edge_concept_multi_algorithm.py](examples/edge_concept_multi_algorithm.py) |
+| Shared attribute | Co-occurrence | `Edge.new()` with `id <` guard | [community_to_derived_concept.py](examples/community_to_derived_concept.py) |
+| Multi-concept co-occurrence | Multi-attribute co-occurrence | Multiple `Edge.new()` calls (one per shared attribute) | [chained_graph_rules.py](examples/chained_graph_rules.py) |
+| Self-referencing | Hierarchy, recursive, or cyclic | `Edge.new(src=parent, dst=child)` | [graph-construction.md](references/graph-construction.md) |
+
+Then decide the remaining axes:
+
+1. **Directed or undirected?** — Directed for flow/dependency, undirected for structural analysis
+2. **Weighted or unweighted?** — Weighted when edge properties (cost, volume, distance) matter for the question
+3. **`Edge.new()` or `edge_concept`?** — Prefer `edge_concept` when the interaction is already modeled as a concept with src/dst relationships
+
+See [graph-construction.md](references/graph-construction.md) for detailed patterns including filtered edges, multi-graph, and weight construction.
+
+### Step 7: Select Algorithm
+
+Match the question to the algorithm family:
+
+| Question Type | Algorithm Family | Key Consideration |
+|--------------|-----------------|-------------------|
+| "Who/what is most important/influential?" | Centrality | Choose variant by importance type (see below) |
+| "What natural groups exist?" | Community | Requires undirected for Louvain; infomap handles directed |
+| "Is the network fragmented?" | Components | WCC for undirected; SCC future |
+| "What are all transitive dependencies? / What depends on X? / What does X affect?" | Reachability | `reachable()` |
+| "How far apart are X and Y?" | Distance | Supports weighted (non-negative) |
+| "Which entities are most similar?" | Similarity | Based on shared neighborhoods |
+| "How tightly connected are local regions?" | Clustering | Triangle-based metrics |
+
+**Centrality variant selection** — start from the **structural test**, not vague semantic labels:
+
+- **Eigenvector** — undirected mutual importance: a node ranks high when its undirected neighbors do. Requires `directed=False`. Use on symmetric / co-occurrence / similarity-style graphs.
+- **Betweenness** — bottleneck identification: nodes that sit on many shortest paths. Best for: "which nodes are critical connectors / single points of failure?" Requires `weighted=False`.
+- **PageRank** — directed inbound flow: importance accumulates along incoming edges. **Default for any directed graph** where the question is about which nodes receive the most flow or attention.
+- **Degree** — local connectivity: count of direct connections. Best for: "which nodes have the most direct relationships?"
+
+**One algorithm per question.** Pick the single algorithm that matches the structural test above. Don't combine multiple centrality measures into a "composite criticality score" — the resulting ranking has no clean interpretation, depends on arbitrary normalization choices, and typically reorders results vs. any one of its inputs. If the question genuinely requires multiple lenses, run them as separate columns in the output, but rank by one and explain why.
+
+When choosing between algorithm variants within a family, or needing parameter details, output shape, or compatibility specifics, see [algorithm-selection.md](references/algorithm-selection.md).
+
+### Step 8: Configure, Execute, and Bind Results
+
+Canonical assign → bind → query skeleton:
+
+```python
+graph = Graph(model, directed=True, weighted=True, node_concept=MyConcept, aggregator="sum")
+model.define(graph.Edge.new(src=..., dst=..., weight=...))                  # define edges
+graph.Node.score = graph.eigenvector_centrality()                           # execute — substitute any algorithm
+model.where(graph.Node == MyConcept).define(MyConcept.score(graph.Node.score))  # bind back
+model.select(MyConcept.id, MyConcept.score).to_df()                         # query
+```
+
+For the `directed` / `weighted` / `aggregator` decisions, see [Parameter Guidance](#parameter-guidance). For the full assign → bind → query walkthrough and per-algorithm extraction, see [Result Extraction and Binding](#result-extraction-and-binding) and [result-extraction.md](references/result-extraction.md).
+
+---
+
+## Graph Construction from Ontology
+
+The question determines which construction to use — the same ontology can yield multiple valid graphs.
+
+| Pattern | Nodes | Edges | Typical Use |
+|---------|-------|-------|-------------|
+| Entity-level directed | Business entities | Direct relationships (`ships_to`) | PageRank, reachability |
+| Infrastructure undirected weighted | Locations/sites | Intermediary concepts (`Operation`) | Centrality, WCC, bridges |
+| Co-occurrence / shared-attribute | Entities | Shared membership/purchases | Community detection |
+| Self-referencing | Single concept | Instance-to-instance refs (parent-child, depends_on, etc.) | Reachability, tree traversal, BOM, dependency graphs |
+| `edge_concept` | Any | Existing interaction concept | When edges are already modeled |
+
+### Two main edge definition approaches (Patterns 1–2 vs Pattern 3)
+
+**Manual edges with `Edge.new()`** — most common:
+
+```python
+# Entity-level: direct relationship between concepts
+graph = Graph(model, directed=True, weighted=False, node_concept=Business)
+b1, b2 = Business.ref(), Business.ref()
+model.where(b1.ships_to(b2)).define(graph.Edge.new(src=b1, dst=b2))
+
+# Infrastructure-level: edges from intermediary concept
+graph = Graph(model, directed=False, weighted=True, node_concept=Site, aggregator="sum")
+op = Operation.ref()
+model.where(
+    op.source_site(site1 := Site.ref()),
+    op.output_site(site2 := Site.ref()),
+).define(graph.Edge.new(src=site1, dst=site2, weight=op.shipment_count))
+
+# Co-occurrence: shared attribute (id < guard prevents duplicates)
+graph = Graph(model, directed=False, weighted=True, node_concept=Customer, aggregator="sum")
+left_order, right_order = Order.ref(), Order.ref()
+model.where(
+    left_order.product == right_order.product,
+    left_order.customer.id < right_order.customer.id,
+).define(graph.Edge.new(src=left_order.customer, dst=right_order.customer, weight=1.0))
+```
+
+**Concept-based edges with `edge_concept`** — when each interaction is already a concept, pass it via `edge_concept=` + the three required relationships (`edge_src_relationship`, `edge_dst_relationship`, and `edge_weight_relationship` when weighted). See Quick Reference Pattern 3 for the full constructor signature.
+
+**Filtered edges:** restrict via `.where(t.amount >= 100.0).define(graph.Edge.new(src=t.payer, dst=t.payee))`.
+
+For detailed patterns (multi-intermediary, hierarchy, self-referencing, multi-graph, weight construction, validation), see [graph-construction.md](references/graph-construction.md). Graph algorithms and prescriptive optimization coexist on the same `Model` — use domain concepts directly as `node_concept` (no mirror concepts or separate models needed).
+
+---
+
+## Algorithm Selection
+
+Start from the question, not the algorithm name:
+
+| Question Type | Algorithm Family | Default Choice |
+|--------------|-----------------|----------------|
+| "Who/what is most important?" (directed graph) | Centrality | `pagerank()` (inbound flow) |
+| "Who/what is most important?" (undirected graph) | Centrality | `eigenvector_centrality()` (mutual importance) |
+| "Which nodes are bottlenecks?" | Centrality | `betweenness_centrality()` (bridge nodes) |
+| "What natural groups exist?" | Community | `louvain()` (undirected) or `infomap()` (directed) |
+| "Is the network fragmented?" | Components | `weakly_connected_component()` |
+| "Which **edges** are single points of failure (bridges)?" | Components | No named primitive — WCC with per-edge ablation. See [algorithm-selection.md](references/algorithm-selection.md#bridge-edges-no-named-primitive) |
+| "What are all transitive dependencies?" | Reachability | `reachable()` |
+| "What depends on X? / What does X affect?" | Reachability | `reachable()` |
+| "How far apart are X and Y?" | Distance | `distance()` — supports weighted (non-negative) |
+| "Which entities are most similar?" | Similarity | `jaccard_similarity()` |
+| "How tightly connected locally?" | Clustering | `local_clustering_coefficient()` — **requires undirected** |
+
+**Key constraints:**
+- `louvain()` requires `directed=False`
+- `local_clustering_coefficient()` requires `directed=False`
+- `pagerank()` works on undirected but is most meaningful on directed
+- `reachable()` works on both directed and undirected, but is most meaningful on directed
+- `louvain()`, `infomap()`, and `label_propagation()` are **non-deterministic** — community assignments, counts, and sizes may vary between runs on the same data. Report results as ranges or structural assertions, not exact values.
+
+**Pre-flight compatibility check:** Before proceeding to Step 8, verify your chosen algorithm is compatible with your graph's directed/weighted settings.
+
+| Algorithm | Cannot use with |
+|-----------|----------------|
+| `betweenness_centrality()` | `weighted=True` |
+| `eigenvector_centrality()` | `directed=True` (use `pagerank()` for directed) |
+| `louvain()` | `directed=True` (use `infomap()` for directed) |
+| `local_clustering_coefficient()` | `directed=True` (requires undirected) |
+| `diameter_range()` | `directed=True` or `weighted=True` (requires undirected, unweighted) |
+
+This table is non-exhaustive. For per-algorithm deep dives (parameters, output shapes, interpretation, compatibility matrix), see [algorithm-selection.md](references/algorithm-selection.md) and confirm the row for any algorithm you plan to call.
+
+---
+
+## Parameter Guidance
+
+**Defaults: `directed=False, weighted=False`.** Only deviate when the question's structure justifies it. Flipping either flag changes algorithm outputs significantly — Louvain communities partition differently, PageRank scores invert, eigenvector is undefined on directed graphs. Add direction or weight only when the question explicitly demands it (see "When to use" below).
+
+| Parameter | Values | When to use |
+|-----------|--------|-------------|
+| `directed` | `True` | Promote to directed only when the question is about flow, dependency, or causality — i.e., the edge's direction has semantic meaning the answer depends on. |
+| | `False` | **Default.** Symmetric relationships, co-occurrence, infrastructure connectivity, similarity. |
+| `weighted` | `True` | Promote to weighted only when an edge-property quantity is **explicitly named in the question**. Don't add weights speculatively because a numeric column on the edge "looks relevant" — for community detection in particular, weighting changes the partition. **Weights must be floats** — cast with `floats.float()`. |
+| | `False` | **Default.** Only connection existence matters. |
+| `aggregator` | `"sum"` | **Only supported alternative** to the default `None`. Collapses multi-edges by summing weights. Only use when multi-edges are expected — see [Aggregator guidance](#graph-constructor-aggregator-parameter-guidance). |
+| `node_concept` | Concept | Which concept forms nodes. Required with `edge_concept`. Optional otherwise (inferred from edges). |
+
+---
+
+## Domain Constraints
+
+Domain constraints control which subset of an output relationship gets materialized. Some algorithms (e.g., `preferential_attachment`, `common_neighbor`, `jaccard_similarity`, `reachable`, `triangle`, `distance`) are expensive to materialize in full and require explicit domain constraints via `of=`, `from_=`, `to=`, `between=`, or `full=True` to proceed.
+
+| Keyword | Meaning |
+|---------|---------|
+| `of=R` | Constrain to nodes in relationship `R` (binary relationships: `degree`, `neighbor`, etc.) |
+| `from_=R` | Source / first-argument nodes (paths, reachability) |
+| `to=R` | Destination / second-argument nodes |
+| `from_=R1, to=R2` | Separately constrain both axes |
+| `between=R` | Jointly constrain to specific node pairs (binary Relationship of pairs) |
+| `full=True` | Override guard and compute full relationship |
+
+For detailed guidance — which relationships support which keywords, the `full=True` guard rationale, and a worked constrained-similarity example — see [domain-constraints.md](references/domain-constraints.md).
+
+---
+
+## Result Extraction and Binding
+
+### Core pattern: assign → bind → query
+
+```python
+# 1. Run algorithm — result lives on graph.Node
+graph.Node.centrality_score = graph.eigenvector_centrality()
+
+# 2. Bind to original concept (makes it available for rules, optimization, queries)
+Site.centrality_score = model.Property(f"{Site} has {Float:centrality_score}")
+model.where(graph.Node == Site).define(Site.centrality_score(graph.Node.centrality_score))
+
+# 3. Query as DataFrame
+df = model.select(Site.id, Site.centrality_score).to_df().sort_values("centrality_score", ascending=False)
+```
+
+### Shorthand: assign to graph.Node with `node_concept`
+
+When `node_concept` is set (e.g., `node_concept=User`), `graph.Node` IS the concept — assigning to `graph.Node` directly creates the property on the concept without a separate binding step:
+
+```python
+# graph.Node IS User when node_concept=User — property is automatically available on User
+graph.Node.community = graph.weakly_connected_component()
+
+# Query directly via User — no explicit binding needed
+df = model.select(User.name, User.community).to_df()
+```
+
+### Community labels → concept entities
+
+```python
+graph.Node.community_label = graph.louvain()
+Segment = model.Concept("Segment", identify_by={"id": Integer})
+model.define(Segment.new(id=graph.Node.community_label))
+Customer.segment = model.Property(f"{Customer} belongs to {Segment:segment}")
+model.where(graph.Node == Customer).define(
+    Customer.segment(Segment.filter_by(id=graph.Node.community_label))
+)
+```
+
+### Type handling
+
+**Critical:** Community detection IDs (Louvain, Infomap) always return as `Int128Array` — cast with `.astype(int)` before pandas operations **and** before `model.data()`. WCC is different: its output is a Node, so the shorthand produces **string hashes** (`.astype(str)`) while the direct-query pattern using `graph.Node.ref()` exposes the node identifier type directly. See [result-extraction.md](references/result-extraction.md#int128array-from-rai) for full casting guidance including both WCC access modes.
+
+### Validation
+
+```python
+graph.num_nodes().inspect()  # 0 = edge definitions don't match data
+graph.num_edges().inspect()  # 0 = relationship/join path is wrong
+```
+
+For per-algorithm query patterns (binary, ternary, reachability, similarity filtering, aggregation), see [result-extraction.md](references/result-extraction.md).
+
+---
+
+## Downstream Use
+
+Graph outputs become model properties that other reasoning consumes:
+
+- **Optimization:** Centrality scores as objective weights, community labels for per-group constraints
+- **Rules:** Threshold-based alerting on graph metrics (e.g., `centrality < 0.1` → at-risk flag)
+- **Predictions:** Community membership and centrality as predictive features
+- **Multi-graph:** Run multiple `Graph()` instances on the same model for complementary perspectives (e.g., directed flow graph + undirected connectivity graph)
+
+```python
+# Graph metric feeds optimization
+problem.maximize(aggregates.sum(x * Site.centrality_score))
+
+# Graph metric feeds rule
+Site.is_at_risk = model.Relationship(f"{Site} is at risk")
+model.where(Site.centrality_score < 0.1).define(Site.is_at_risk())
+```
+
+---
+
+## Common Pitfalls
+
+| Mistake | Cause | Fix |
+|---------|-------|-----|
+| `louvain()` fails on directed graph | Louvain requires undirected | Set `directed=False` or use `infomap()` for directed |
+| Empty graph (no edges) | Edge definition doesn't match data — wrong relationship or join path | Verify edge source/destination properties exist and have data; query edge count before running algorithms |
+| `Int128Array` errors in pandas or `model.data()` | Community detection IDs (Louvain, Infomap) are always Int128 — incompatible with pandas ops and `model.data()` type inference | Cast: `df["col"] = df["col"].astype(int)` before pandas operations and before passing to `model.data()`. WCC is different — its output is a Node, not an integer: via shorthand the column arrives as string hashes (`.astype(str)`), via direct-query `comp_ref.id` it inherits the node's identifier type — Int128 when `identify_by={"id": Integer}` (cast with `.astype(int)`), a plain string column otherwise. See [result-extraction.md](references/result-extraction.md#int128array-from-rai) |
+| Duplicate/self-loop edges | Missing guard in co-occurrence pattern | Add `left.id < right.id` to `.where()` clause |
+| `aggregator` missing | Weighted graph with multi-edges requires aggregator for parallel edges | Add `aggregator="sum"` — but only when multi-edges are expected (see [Aggregator guidance](#graph-constructor-aggregator-parameter-guidance)) |
+| Parallel edges mask bridges | Two edges between the same node pair mean removing one doesn't disconnect the pair — neither is a true bridge | Before reporting bridges, check whether the underlying data has parallel edges between the same endpoints. Do not collapse with `aggregator="sum"` before bridge detection — that merges parallel edges into one, making the single result appear to be a bridge when physically it isn't. For the recipe, see [Bridge edges](references/algorithm-selection.md#bridge-edges-no-named-primitive) |
+| Reaching for an external Python graph library when the algorithm isn't in the cheat sheet | Common reflex when the named primitive doesn't exist (e.g., bridge edges, edge betweenness) — but switching to NetworkX/igraph loses the concept binding that lets results feed downstream rules and optimization on the same model, and forces a pandas round-trip back into the model | First check whether the question can be expressed compositionally with the existing primitives — for example, bridge edges fall out of WCC + per-edge ablation, see [Bridge edges](references/algorithm-selection.md#bridge-edges-no-named-primitive). Stay in the RAI Graph reasoner; if scale is the concern, scope the candidate set first |
+| Weight type error | Weights must be floats, but property is Integer/Number | Cast with `floats.float(property)` in Edge.new weight parameter |
+| `ValueError: edge_weight_relationship must have type Float, is Number(38,0)` | Weight property is Integer (count, duration in seconds, etc.), but graph weights must be Float | Cast inline with `weight=floats.float(Entity.int_prop)` in `Edge.new()`, or define a Float-typed derived property on the node concept |
+| Centrality all equal / graph too dense | Two causes: (1) co-occurrence edges built on shared attribute values rather than shared specific entities produce near-complete graphs; (2) even with correct edges, all nodes have identical connectivity | (1) Build edges from shared specific entities (same FK value), not shared attribute categories; (2) add weighted edges to differentiate. If centrality is still uniform after both fixes, the underlying data may lack structural bottlenecks |
+| Similarity produces too many results | O(n^2) output for n nodes | Use [domain constraints](#domain-constraints) to limit computation: e.g. `graph.jaccard_similarity(from_=seed_nodes)`. If you need the full relationship, filter by minimum threshold or limit to top-k per node after `full=True`. |
+| Reachability on undirected connected graph gives trivial results | On undirected connected graphs, all nodes are reachable from all others — results aren't useful | Set `directed=True` for meaningful reachability/impact analysis. (On disconnected undirected graphs, reachable can still be useful for discovering components for specific nodes.) |
+| Wrong node concept | Using intermediary concept as nodes instead of entity concept | Intermediary concepts form edges, not nodes — e.g., `Operation` is an edge between `Site` nodes |
+| Graph results not visible on original concept | Results bound to `graph.Node` but not to the source concept | Add explicit binding: `model.where(graph.Node == MyConcept).define(...)` |
+| `TypeError` with large local models | In local execution mode, models with many (200+) Relationships in scope alongside a Graph can exceed type inference limits, producing a `TypeError` | First try: isolate the Graph in a separate script/model that imports only the concepts the Graph needs, reducing the type inference scope. Fallback: keep large datasets as pandas DataFrames for Python-side analysis. This limitation is specific to local execution; Snowflake-backed models handle larger schemas. |
+| Empty graph when extending existing model | Script creates `Model("name")` without importing base model definitions — concepts exist but have no instances | Import the base model module (e.g., `from my_model import model, Site`) so base `define()` rules are in scope |
+| `ValidationError: Unused variable` when using `rank()` with graph properties | Using `rank(desc(graph.Node.betweenness))` alongside other graph properties in `select()` triggers the unused variable validator | Sort in pandas instead: `.to_df().sort_values("betweenness", ascending=False).reset_index(drop=True)` — avoid `rank()` in graph queries |
+| DataFrame column name doesn't match the property name you assigned | Column names follow the algorithm's default output binding (often `centrality`, `score`, `community`) or the variable name used in `.select()` — they don't inherit the attribute name from `graph.Node.my_name = graph.algorithm()` | Always set names explicitly with `.alias("my_name")` in `select(...)`. Don't rely on assignment-name propagation: `model.select(Site.id, score.alias("centrality")).to_df()` |
+| `RAIException: Ungrounded variables` when mixing chained derived properties + Graph + boolean rules | Defining chained derived properties (e.g., `peak_forecast` → `future_headroom`) alongside Graph construction and boolean Relationship rules in the same model causes ungrounded variable errors | Query raw data via simple selects and compute derived values / rules in pandas. Root cause is related to the type inference limit noted above — chained derivations compound the issue |
+
+---
+
+## Examples
+
+Each example targets a distinct combination of edge construction, topology, algorithm, and result pattern.
+
+| Primary Pattern | Construction | Topology | Algorithms | Result Pattern | File |
+|----------------|-------------|----------|------------|----------------|------|
+| Infrastructure `Edge.new()` | Intermediary concept (Operation) creates edges | Undirected, weighted | Eigenvector centrality | Simple property binding | [centrality_weighted_undirected.py](examples/centrality_weighted_undirected.py) |
+| Co-occurrence `Edge.new()` | Shared-attribute edges with `id <` guard | Undirected, unweighted | WCC + betweenness | Hybrid risk: graph metric + domain attribute | [co_occurrence_wcc_bottleneck.py](examples/co_occurrence_wcc_bottleneck.py) |
+| `edge_concept` + computed weight | Interaction concept as edges, multi-factor weight | Directed, weighted | PageRank + degree centrality | Multi-algorithm classification | [edge_concept_multi_algorithm.py](examples/edge_concept_multi_algorithm.py) |
+| Directed reachability | `edge_concept` for dependency chain | Directed, unweighted | Reachability (4 modes) + betweenness | Graph + ontology enrichment | [reachability_four_modes.py](examples/reachability_four_modes.py) |
+| Louvain → derived concept | Co-occurrence edges, community labels become entities | Undirected, weighted | Louvain + degree centrality | Community → concept + hub-per-community | [community_to_derived_concept.py](examples/community_to_derived_concept.py) |
+| Graph + rules combo | Multi-concept co-occurrence (shared address/phone/email) | Undirected, unweighted | WCC | Layered Relationship flags on graph results | [chained_graph_rules.py](examples/chained_graph_rules.py) |
+| Identity graph self-join | Self-join edges from shared identifiers (phone, email) | Undirected, unweighted | WCC | Identity cluster detection | [self_join_wcc_subtypes.py](examples/self_join_wcc_subtypes.py) |
+| Multiple graphs, same model | Multiple Graph instances on same node concept | Weighted + unweighted | Eigenvector + betweenness | Parallel graph views, separate Edge defs | [multi_graph_same_model.py](examples/multi_graph_same_model.py) |
+| Jaccard similarity | Co-occurrence edges via shared attribute | Undirected, unweighted | Jaccard similarity | Top-k similar pairs extraction | [similarity_jaccard.py](examples/similarity_jaccard.py) |
+| Shortest path distances | `edge_concept` with cost weight | Directed, weighted | Distance | All-pairs shortest paths, filter by source/target | [shortest_path_distance.py](examples/shortest_path_distance.py) |
+
+---
+
+## Reference Files
+
+| Reference | Description | File |
+|-----------|-------------|------|
+| Graph construction | Detailed construction patterns from ontology — entity-level, infrastructure, hierarchy, bridge, self-referencing, filtered, multi-graph | [graph-construction.md](references/graph-construction.md) |
+| Algorithm selection | Per-algorithm deep dive — when to use, parameters, output shape, complexity, decision guidance | [algorithm-selection.md](references/algorithm-selection.md) |
+| Domain constraints | Why they matter, which relationships support which keywords, `full=True` guard rationale, worked constrained-similarity example | [domain-constraints.md](references/domain-constraints.md) |
+| Result extraction | Query patterns for each algorithm output shape, model binding, DataFrame extraction, type handling | [result-extraction.md](references/result-extraction.md) |
