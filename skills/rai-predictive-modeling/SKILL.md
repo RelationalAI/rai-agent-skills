@@ -26,6 +26,47 @@ description: Build GNN data models -- concepts, Snowflake data loading, task rel
 
 ---
 
+## Prerequisites
+
+### Experiment schema setup (one-time, ACCOUNTADMIN)
+
+GNN training writes experiment artifacts to a Snowflake schema. The RELATIONALAI native app must have write access on it. Without this the first `gnn.fit()` raises `PermissionError` (from `relationalai_gnns.core.diagnostics.PermissionDiagnostic`) whose message names the missing grant — typically *"Database does not exist or the GNN RelationalAI Native App lacks permissions"* or *"Schema does not exist or ..."*.
+
+The diagnostic prescribes exactly four grants on top of the database+schema:
+
+```sql
+-- Use a database you own (NOT a Snowflake-shared/marketplace database).
+-- Shared DBs reject schema creation: "Creating schema on shared database
+-- '<X>' is not allowed."
+CREATE DATABASE IF NOT EXISTS <YOUR_DB>;
+CREATE SCHEMA IF NOT EXISTS <YOUR_DB>.EXPERIMENTS;
+
+GRANT USAGE ON DATABASE <YOUR_DB>                       TO APPLICATION RELATIONALAI;
+GRANT USAGE ON SCHEMA <YOUR_DB>.EXPERIMENTS             TO APPLICATION RELATIONALAI;
+GRANT CREATE EXPERIMENT ON SCHEMA <YOUR_DB>.EXPERIMENTS TO APPLICATION RELATIONALAI;
+GRANT CREATE MODEL ON SCHEMA <YOUR_DB>.EXPERIMENTS      TO APPLICATION RELATIONALAI;
+```
+
+`GRANT ALL PRIVILEGES ON SCHEMA <YOUR_DB>.EXPERIMENTS` is a working superset if you don't need least-privilege.
+
+Then in the script:
+
+```python
+gnn = GNN(
+    exp_database="<YOUR_DB>",
+    exp_schema="EXPERIMENTS",
+    ...
+)
+```
+
+The error is a `PermissionError`, not a generic `RuntimeError` — code that wraps `gnn.fit()` can catch it specifically.
+
+### `relationalai` package version
+
+The predictive submodule (`relationalai.semantics.reasoners.predictive`) is not in every published `relationalai` release — `from relationalai.semantics.reasoners.predictive import GNN` raises `ModuleNotFoundError` on releases that pre-date it. Pin a release that ships the submodule (or install from the development branch when iterating against unreleased changes).
+
+---
+
 ## Quick Reference
 
 ```python
@@ -129,7 +170,11 @@ The GNN pipeline expects pre-existing train/val/test split tables in Snowflake. 
 
 `PropertyTransformer` and the task-table pattern also work with concepts populated from local data via `model.data(df)` -- not just `Table(...).to_schema()`. Useful when some concept data lives in local CSVs (e.g. optimizer parameters) while the graph comes from Snowflake.
 
-**Timestamp column type matters for the GNN datetime pipeline.** Columns intended for `time_col` / `datetime` features need a type the trainer accepts; native Snowflake `TIMESTAMP_NTZ` has been observed to be silently incompatible (loads cleanly, but the trainer doesn't pick the column up as temporal). VARCHAR ISO-8601 is the safer default for time-bearing columns, though large-scale loads can still trip a server-side `ValidationError` (see `rai-predictive-training` § Known Limitations). Confirm the trainer's currently-accepted timestamp formats with the RelationalAI team if you're hitting datetime errors at scale.
+**Timestamp column types for the GNN datetime pipeline.** Columns intended for `time_col` / `datetime` features should match a format the trainer accepts; if you're not sure what's currently supported, ask the RelationalAI team.
+
+> **Do schema changes (any column type, not just timestamps) before the first `Model(...)` bind**, not after — `ALTER`-ing a column type on an already-bound table can leave a stale compiled-relation signature on the engine that survives stream delete + recreate. See `rai-predictive-training` § Known Limitations for the symptom, the diagnostic path, and the workaround.
+
+**Avoid `timestamp[ns]` parquet payloads when bulk-loading via `COPY INTO TIMESTAMP_NTZ`.** Snowflake interprets the integer payload as `timestamp[us]`, multiplying every value by 1000 — pandas' default `datetime64[ns]` -> parquet round-trip silently lands timestamps tens of millions of years in the future. Two safe options: write the timestamp column as ISO-8601 strings into parquet, or load the underlying integer time index (e.g. an hour offset) and rebuild server-side via `DATEADD(HOUR, <offset_col>, '<epoch>'::TIMESTAMP_NTZ)` after `COPY INTO`.
 
 ---
 
@@ -286,6 +331,8 @@ For the full feature type reference including drop patterns, see [references/pro
 | `identify_by` key or property access doesn't match Snowflake column name | Typo or wrong column — matching is case-insensitive, but the column name must exist | Check `INFORMATION_SCHEMA.COLUMNS` / run `DESCRIBE TABLE` for the exact spelling |
 | Train/Val/Test Relationships have different schemas | Test omits the label but also changes concept or timestamp structure | Train, Val, and Test must share the same concept and timestamp structure — only the label/target is omitted in Test |
 | Link prediction join key or target column is `VARIANT` in task table | Task table stores target IDs as an array instead of one row per pair | Run `DESCRIBE TABLE` on all three split tables before writing task relationships; see `references/task-relationships.md` § Link Prediction — Task Table Format Requirements (VARIANT check) for the joined-vs-non-joined branch and the `LATERAL FLATTEN` recipe |
+| Bulk-loading parquet `timestamp[ns]` -> Snowflake `TIMESTAMP_NTZ` lands timestamps tens of millions of years in the future | Snowflake interprets the integer payload as `timestamp[us]`, multiplying by 1000 | Write timestamps as ISO-8601 strings, or load an integer time index + rebuild server-side via `DATEADD` (see § Populate from Snowflake) |
+| `Encountered reference to a base relation with a mismatched signature` after changing a column's type on a bound table | Engine's compiled relation cache outlives `ALTER TABLE` + stream recreate | See `rai-predictive-training` § Known Limitations for the diagnostic path and Model-rename workaround |
 
 ---
 

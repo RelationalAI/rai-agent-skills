@@ -315,6 +315,34 @@ for the full step-by-step recovery checklist, schema reference, and official doc
 
 ---
 
+## Predictive train jobs stuck QUEUED
+
+A predictive train job submitted via `gnn.fit()` can sit in `STATE='QUEUED'` in `RELATIONALAI.API.JOBS` indefinitely while `CALL RELATIONALAI.API.GET_REASONER('predictive', '<name>')` still reports `STATUS='READY'`. The SDK only checks reasoner-pod status before submitting — the in-pod worker queue can be out of sync with that status, and the SDK has no way to detect it (`relationalai_gnns/core/connector.py::_check_engine_availability`).
+
+**Recovery (empirical):** suspend then resume the predictive reasoner to force a worker recycle, kill any stuck client, then re-instantiate `GNN(...)` and resubmit (`gnn.fit()` is idempotent — see `rai-predictive-training` § `gnn.fit()` is idempotent). Do **not** call `CREATE_GNN_SERVICE()`.
+
+```sql
+-- 1. Confirm a stuck train job
+SELECT ID, STATE, DATEDIFF('minute', CREATED_ON, CURRENT_TIMESTAMP()) AS AGE_MIN
+FROM RELATIONALAI.API.JOBS
+WHERE STATE IN ('QUEUED','RUNNING')
+  AND PAYLOAD LIKE '%"job_type": "train"%'
+ORDER BY CREATED_ON ASC;
+
+-- 2. Recycle the worker
+CALL RELATIONALAI.API.SUSPEND_REASONER('predictive', '<reasoner_name>');
+CALL RELATIONALAI.API.RESUME_REASONER_ASYNC('predictive', '<reasoner_name>');
+
+-- 3. Wait for STATUS=READY, kill the stuck client, then resubmit (re-instantiate GNN(...))
+CALL RELATIONALAI.API.GET_REASONER('predictive', '<reasoner_name>');
+```
+
+> **Do not use `CALL RELATIONALAI.EXPERIMENTAL.CREATE_GNN_SERVICE();` to recover stuck predictive train jobs.** The SDK never invokes it — train submission goes through `<app>.api.exec_job_async('GNN', <reasoner_name>, ...)` against the predictive reasoner directly (`relationalai_gnns/core/connector.py::exec_job`). `CREATE_GNN_SERVICE` targets a separate code path; if it fails with an image-mismatch error like `Invalid image specified in service spec: image 'rai-gnn-app:<version>' does not exist in current application version`, that does **not** mean GNN training is broken — it just means that orthogonal path can't be brought up. The right escalation is `SUSPEND_REASONER` + `RESUME_REASONER_ASYNC` on the predictive reasoner itself.
+
+See `rai-predictive-training` § Worker not ready to accept jobs for the matching client-side symptom and § Stalled train job: SDK polls without a timeout for stalled-job forensics.
+
+---
+
 ## Step 6 — CDC Engine Management
 
 > **CDC engine ≠ reasoner engine.** The CDC pipeline runs on a dedicated managed engine

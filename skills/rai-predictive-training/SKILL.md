@@ -144,6 +144,8 @@ gnn = GNN(exp_database="DB", exp_schema="EXPERIMENTS", ..., **train_config)
 gnn.fit()
 ```
 
+**Unknown keys raise actionable errors.** `validate_train_params` (`relationalai.semantics.reasoners.predictive.preparation`) rejects unknown `**train_params` keys with a `ValueError` and uses `difflib` to suggest near-matches; if you accidentally pass a `GNN(...)` constructor parameter (e.g. `task_type=`) inside `train_params`, the message tells you it belongs on the constructor. Read the suggestion before second-guessing the typo.
+
 ---
 
 ## Common Hyperparameters
@@ -163,6 +165,13 @@ For link prediction, also consider: `head_layers=2`, `num_negative=20`, `label_s
 
 **Auto-suspend during iteration.** Set a low `auto_suspend_mins` on every engine you're using — idle pool cost can dominate total spend on small workloads. Warm pools make sense only for scheduled/production cadence. Specific tier names and per-cloud memory-vs-compute tradeoffs change over time — ask the RelationalAI team for current sizing. Full `raiconfig.yaml` structure (including the `reasoners:` block for all engine types) lives in the RAI configuration/setup skill.
 
+**Pre-flight check the GPU compute pool before long `fit()` runs.** The predictive reasoner provisions onto a Snowpark Container Services GPU compute pool. Confirming the pool is active up front is cheap hygiene; if it's auto-suspended, jobs may queue without surfacing a clear progress signal. Substitute the pool name your account uses — `SYSTEM_COMPUTE_POOL_GPU` is the Snowflake-provided default; some accounts have a custom pool referenced from `raiconfig.yaml`:
+
+```sql
+SHOW COMPUTE POOLS;                                    -- list all + check state
+ALTER COMPUTE POOL <your_gpu_pool> RESUME;             -- if state=SUSPENDED
+```
+
 For all hyperparameters and tuning guidance, see [references/hyperparameters.md](references/hyperparameters.md).
 
 ---
@@ -181,7 +190,63 @@ For all hyperparameters and tuning guidance, see [references/hyperparameters.md]
 `has_time_column=True` has two known failure modes; both share the same workaround (turn temporal off — switch to non-temporal Relationships and `has_time_column=False`):
 
 1. **Edge-intermediary `time_col`.** When the concept carrying `time_col` is used only as an edge intermediary (no `identify_by`), validation fails with "no time column defined in data tables". `time_col` only propagates for node concepts.
-2. **Datetime column processing at scale.** On larger Snowflake-loaded datasets the trainer can fail server-side with `ValidationError: Error processing datetime column '<name>'` even with the time-bearing concept as a node, clean data, and the column properly listed in both `datetime=[...]` and `time_col=[...]`. The failure is loud at submit time, not silent. Confirm the timestamp column type matches what the GNN datetime pipeline accepts (see `rai-predictive-modeling` § Define and Populate Concepts) and fall back to non-temporal Relationships if the issue persists.
+2. **Datetime column processing at scale.** On larger Snowflake-loaded datasets the trainer can fail server-side with `ValidationError: Error processing datetime column '<name>'` even with the time-bearing concept as a node, clean data, and the column properly listed in both `datetime=[...]` and `time_col=[...]`. The failure is loud at submit time, not silent. Reproduced on a daily date column at ~27K-row scale, so the threshold for "scale" is low. Confirm the timestamp column type matches what the GNN datetime pipeline accepts (see `rai-predictive-modeling` § Define and Populate Concepts) and fall back to non-temporal Relationships if the issue persists. The full fallback is to make four coordinated changes: drop `time_col=` from `PropertyTransformer`, set `has_time_column=False`, drop `temporal_strategy=`, and rewrite the `Train`/`Val`/`Test` `Relationship`s to drop the date argument. Then preserve the temporal split in pandas before building the task tables:
+
+   ```python
+   # Before (fails at scale)
+   pt = PropertyTransformer(
+       datetime=[Sale.date],
+       time_col=[Sale.date],   # <-- remove
+       ...
+   )
+   gnn = GNN(has_time_column=True, ..., temporal_strategy="last")  # <-- both go
+   Train = Relationship(f"{Sale} at {Any:date} has {Any:value}")    # <-- drop date arg
+
+   # After (works) — keep date as a plain datetime feature; the
+   # temporal split lives in pandas (train_mask/val_mask/test_mask).
+   pt = PropertyTransformer(
+       datetime=[Sale.date],   # convention: don't pass time_col= when has_time_column=False
+       ...
+   )
+   gnn = GNN(has_time_column=False, ...)
+   Train = Relationship(f"{Sale} has {Any:value}")
+   model.define(Train(Sale, TrainTable.unit_sales)).where(...)
+   ```
+
+   The `PropertyTransformer` API itself accepts `time_col=` independent of `GNN(has_time_column=...)`; the rule "don't pass `time_col=` when `has_time_column=False`" is a convention to avoid dead annotations, not a code-enforced check.
+
+**Engine-side compiled-relation cache footgun (not datetime-specific — surfaces after any column-type change on a bound table):** the engine caches the compiled relation type per RAI relation name and doesn't invalidate it on `ALTER TABLE`, even after stream delete + recreate. Symptom: `Encountered reference to a base relation with a mismatched signature` — but the client only shows the opaque `Failed to pull data into index: transaction was aborted (runtime error)` wrapper. Pull the real error via `RELATIONALAI.API.GET_TRANSACTION_ARTIFACTS('<txn_id>')` -> `problems.json` (presigned URL) and look at the `report` field. Workaround: rename `Model(...)` to force a fresh RAI relation namespace (downstream queries that depend on the old name need updating). Better: do schema changes before the first bind — see `rai-predictive-modeling` § Populate from Snowflake.
+
+### Worker not ready to accept jobs
+
+`gnn.fit()` submits successfully (Step 3/3 logs `Training job submitted`) but the train job sits in `STATE='QUEUED'` in `RELATIONALAI.API.JOBS` indefinitely, even though `GET_REASONER` returns `STATUS='READY'`. The SDK only checks reasoner-pod readiness via `api.get_reasoner` before submitting (`relationalai_gnns/core/connector.py::_check_engine_availability`); it has no notion of an in-pod worker queue, so a desynced worker on a READY pod is invisible to the client. The server-side error surfaces only when the SDK polls and the `CREATE_JOB` external function reports back:
+
+> Request failed for external function CREATE_JOB with remote service error: 400 `{"status":"Not Found","message":"worker is not ready to accept jobs - please retry the job later"}`
+
+For the SQL recovery runbook (suspend + resume + re-check), see `rai-health` § Predictive train jobs stuck QUEUED. After recovery, resubmit by re-instantiating `GNN(...)` — see § `gnn.fit()` is idempotent below for why bumping `Model("...")` name alone is not enough.
+
+### `gnn.fit()` is idempotent — re-instantiate `GNN(...)` on retry
+
+`gnn.fit()` is a silent no-op if `self.train_job` already exists and isn't `FAILED` (`relationalai/semantics/reasoners/predictive/estimator.py:483-490`). Calling `gnn.fit()` a second time on the same `GNN` Python object will **not** submit a new training job — it just logs `Training job already running/completed` and returns. The next `gnn.predictions(...)` call then resolves the *previous* `train_job.model_run_id` (which is the previous job's `job_id` per `relationalai_gnns/core/job_manager.py:132-146`).
+
+**Symptom this explains**: a re-run of a notebook cell or a retry after a killed mid-flight run reports `model_run_id` from a much-earlier job, not the freshly-submitted one. Subsequent prediction calls operate on stale model artifacts and can hang at "Step 2/4: Preparing model for prediction".
+
+**Workaround:** re-instantiate `GNN(...)` on every retry. Bumping `Model("...")` name is **not** the right fix for this specific bug (the SDK has no name-based experiment matching at the `_wait_obtain_model_run_id` layer) — that bump is the workaround for the engine-side compiled-relation cache footgun above, a separate issue. To force a fresh training run after a partial failure:
+
+```python
+gnn = GNN(...)   # build a new instance — required
+gnn.fit()        # submits a fresh job
+```
+
+---
+
+## Troubleshooting
+
+### Stalled train job: SDK polls without a timeout
+
+`relationalai_gnns/core/job_manager.py::JobMonitor._wait_for_completion` (line 332-340) polls `get_status()` every 5 seconds with no timeout, no retry cap, and no max-poll-count. While the underlying job stays in `QUEUED` or `RUNNING`, the loop is unbounded. If the row is removed from `RELATIONALAI.API.JOBS` (history retention varies by Snowflake/native-app version), `get_status()` raises rather than self-terminating cleanly — but a row that *stays* QUEUED indefinitely will never trigger that exit path.
+
+If a `gnn.fit()` client has been polling for an unreasonable amount of time and `SELECT * FROM RELATIONALAI.API.JOBS WHERE ID = '<id>'` shows the row is still QUEUED (or returns no row), kill the client manually. Use the SUSPEND/RESUME runbook in § Worker not ready to accept jobs to recover, then re-instantiate `GNN(...)` and resubmit. Do **not** rely on `RELATIONALAI.API.JOBS` for forensics on long-stalled jobs; capture state earlier with `GET_TRANSACTION_ARTIFACTS` or engine logs when investigating.
 
 ---
 
@@ -472,6 +537,7 @@ User.predictions = gnn.predictions(domain=Test)
 | Calling `load()` on a GNN instance created in fit mode (with `train=`, `validation=`) | Fit-mode GNN instances do not support `load()` | Create a separate load-mode GNN instance (with `source_concept=`, `model_name=`, `version_name=`) and call `load()` on that |
 | `has_time_column=True` fails with "no time column defined in data tables" | The concept carrying `time_col` is an edge, not a node — `time_col` only propagates for node concepts | Use `has_time_column=False` with non-temporal Relationships as workaround |
 | `has_time_column=True` fails with `ValidationError: Error processing datetime column '<name>'` at scale | Server-side datetime processing rejects the column despite clean data, node-level concept, and correct `datetime`/`time_col` config — second known limitation | Verify the timestamp column type matches the GNN datetime pipeline's expected format (see `rai-predictive-modeling`); fall back to non-temporal Relationships if it persists |
+| `SnowflakeTableObjectsException: Failed to pull data into index: transaction was aborted (runtime error)` | Opaque client wrapper that hides the actual server-side error (commonly a stale compiled-relation signature after schema drift, but other causes possible) | Pull `problems.json` via `RELATIONALAI.API.GET_TRANSACTION_ARTIFACTS('<txn_id>')` (presigned URL) and read the `report` field for the real error. For the schema-drift case specifically, see § Known Limitations |
 | Experiment schema not accessible by the RAI native app | RAI app needs explicit grants to read from the experiment schema | `GRANT USAGE ON DATABASE <db> TO APPLICATION RELATIONALAI; GRANT ALL ON SCHEMA <db>.<schema> TO APPLICATION RELATIONALAI` |
 
 ---
