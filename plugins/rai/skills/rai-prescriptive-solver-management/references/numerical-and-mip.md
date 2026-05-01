@@ -188,7 +188,7 @@ Operators are imported from `relationalai.semantics.std.math` (`math.abs`, `math
 | `all_different(...)` | No | No | No | Yes |
 | `special_ordered_set_type_1(...)` / `_type_2(...)` | No | Yes | No | No |
 
-**Not supported in solver expressions** (compile-time error if used inside `solve_for`/`satisfy`/`minimize`/`maximize`): `%` (modulo), `//` (floor division), `math.floor`, `math.ceil`, `math.round`, `math.sign`, `math.clip`, trig (`math.sin`/`cos`/`tan` and their hyperbolic/inverse variants), `math.factorial`, `math.erf`, division between two decision variables. These are exposed by PyRel for queries but the prescriptive library does not lower them to the solver.
+**Not supported in solver expressions** (compile-time error if used inside `solve_for`/`satisfy`/`minimize`/`maximize`): `%` (modulo), `//` (floor division), `math.floor`, `math.ceil`, `math.round`, `math.sign`, `math.clip`, trig (`math.sin`/`cos`/`tan` and their hyperbolic/inverse variants — including `math.degrees`/`math.radians`/`math.haversine`), `math.factorial`, `math.erf`/`math.erfinv`, division between two decision variables. (These are common examples; the underlying rule is that anything `relationalai.semantics.std.math` exposes for queries is not automatically lowered to the solver.) Use piecewise-linear approximations or reformulations for unsupported operators.
 
 **Decision rule:** If the problem needs nonlinear functions (`math.exp`, `math.log`, `math.sqrt`, `x**n`) → Gurobi (preferred when licensed) or Ipopt. If it needs `all_different(...)` or complex logical constraints → MiniZinc. If it needs integer variables with quadratic terms → Gurobi. For pure linear/MIP → HiGHS (default) or Gurobi.
 

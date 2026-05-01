@@ -181,11 +181,11 @@ Use these rules in order to pick a solver. **Gurobi outperforms open-source solv
    - MiniZinc only if the problem is pure constraint satisfaction with discrete variables.
 
 2. **Check for nonlinearity.**
-   - `math.exp(x)`, `math.log(x)`, `math.sqrt(x)`, `x ** n`, or division by variables?
+   - `math.exp(x)`, `math.log(x)`, `math.sqrt(x)`, or `x ** n`?
      HiGHS and MiniZinc are invalid.
    - Continuous-only NLP: Gurobi (preferred when licensed) or Ipopt (best for smooth local NLP).
    - Discrete + nonlinear: Gurobi only.
-   - Trig (`math.sin`, `math.cos`, etc.) is not lowered to the solver by the prescriptive library — reformulate as piecewise-linear approximation or via auxiliary variables.
+   - Trig (`math.sin`, `math.cos`, etc.) and division between two decision variables are not lowered to the solver by the prescriptive library — reformulate as piecewise-linear approximations or via auxiliary variables.
 
 3. **Check for quadratic constraints.**
    - Quadratic terms in constraints (not just objective): HiGHS is invalid.
@@ -259,7 +259,7 @@ For prescriptive-context compile errors (entity reference passed as scalar, zero
 
 ## Diagnosing Infeasibility and Unboundedness
 
-INFEASIBLE / DUAL_INFEASIBLE root-cause taxonomies and fix strategies live in `rai-prescriptive-results-interpretation` > Status Interpretation (the natural reading order is status → diagnose → fix). For root cause codes (`unbounded_variable`, `missing_upper_bound`, `penalty_structure`, `constraint_conflict`, `capacity_mismatch`), fix action types, and status-specific fix direction, see [diagnostic-taxonomy.md](references/diagnostic-taxonomy.md).
+Status interpretation and prose-level diagnosis live in `rai-prescriptive-results-interpretation` > Status Interpretation (the natural reading order is status → diagnose → fix). The structured diagnostic codes that map status to fix-action types — `unbounded_variable`, `missing_upper_bound`, `penalty_structure`, `constraint_conflict`, `capacity_mismatch` — live here in [diagnostic-taxonomy.md](references/diagnostic-taxonomy.md), since they're a solver-side classification used to drive automated fix routing.
 
 For `si.error` and `print_format=` semantics, see Solve Execution and the solve-info table below in this skill. For solver-log patterns and numerical-error categorization, see [numerical-and-mip.md](references/numerical-and-mip.md).
 

@@ -174,7 +174,7 @@ Food.contains = model.Property(f"{Food} contains {Nutrient} in {Float:qty}")
 
 **Canonical syntax (v1):** `model.Property(f"{Food} has {Float:cost}")` — f-string with type objects interpolated. Always use this form.
 
-**Property name vs madlib verb:** The property name is the f-string field name (e.g., `qty` in `{Float:qty}`), not the verb (`contains`, `in`).
+**Property name vs f-string verb:** The property name is the f-string field name (e.g., `qty` in `{Float:qty}`), not the verb (`contains`, `in`).
 
 **Multi-argument (multiarity) properties:** Field names required when the same type appears multiple times to disambiguate inputs.
 
