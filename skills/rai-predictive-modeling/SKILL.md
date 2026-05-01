@@ -30,7 +30,9 @@ description: Build GNN data models -- concepts, Snowflake data loading, task rel
 
 ### Experiment schema setup (one-time, ACCOUNTADMIN)
 
-GNN training writes experiment artifacts to a Snowflake schema. The RELATIONALAI native app must own write access on it. Without this, the very first `gnn.fit()` fails with a message like *"Schema does not exist or the GNN RelationalAI Native App lacks permissions"* (the wording rotates between "Schema does not exist" and "Database does not exist" depending on which grant is missing first — both grants below are required).
+GNN training writes experiment artifacts to a Snowflake schema. The RELATIONALAI native app must have write access on it. Without this the first `gnn.fit()` raises `PermissionError` (from `relationalai_gnns.core.diagnostics.PermissionDiagnostic`) whose message names the missing grant — typically *"Database does not exist or the GNN RelationalAI Native App lacks permissions"* or *"Schema does not exist or ..."*.
+
+The diagnostic prescribes exactly four grants on top of the database+schema:
 
 ```sql
 -- Use a database you own (NOT a Snowflake-shared/marketplace database).
@@ -39,9 +41,13 @@ GNN training writes experiment artifacts to a Snowflake schema. The RELATIONALAI
 CREATE DATABASE IF NOT EXISTS <YOUR_DB>;
 CREATE SCHEMA IF NOT EXISTS <YOUR_DB>.EXPERIMENTS;
 
-GRANT USAGE ON DATABASE <YOUR_DB> TO APPLICATION RELATIONALAI;
-GRANT ALL PRIVILEGES ON SCHEMA <YOUR_DB>.EXPERIMENTS TO APPLICATION RELATIONALAI;
+GRANT USAGE ON DATABASE <YOUR_DB>                       TO APPLICATION RELATIONALAI;
+GRANT USAGE ON SCHEMA <YOUR_DB>.EXPERIMENTS             TO APPLICATION RELATIONALAI;
+GRANT CREATE EXPERIMENT ON SCHEMA <YOUR_DB>.EXPERIMENTS TO APPLICATION RELATIONALAI;
+GRANT CREATE MODEL ON SCHEMA <YOUR_DB>.EXPERIMENTS      TO APPLICATION RELATIONALAI;
 ```
+
+`GRANT ALL PRIVILEGES ON SCHEMA <YOUR_DB>.EXPERIMENTS` is a working superset if you don't need least-privilege.
 
 Then in the script:
 
@@ -53,9 +59,11 @@ gnn = GNN(
 )
 ```
 
+The error is a `PermissionError`, not a generic `RuntimeError` — code that wraps `gnn.fit()` can catch it specifically.
+
 ### `relationalai` package version
 
-The predictive submodule (`relationalai.semantics.reasoners.predictive`) is not in every published `relationalai` release — `from relationalai.semantics.reasoners.predictive import GNN` will raise `ModuleNotFoundError` on releases that pre-date it. Confirm the current minimum version with the RelationalAI team before pinning in `pyproject.toml`.
+The predictive submodule (`relationalai.semantics.reasoners.predictive`) is not in every published `relationalai` release — `from relationalai.semantics.reasoners.predictive import GNN` raises `ModuleNotFoundError` on releases that pre-date it. Pin a release that ships the submodule (or install from the development branch when iterating against unreleased changes).
 
 ---
 
