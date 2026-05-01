@@ -178,74 +178,6 @@ See `../examples/multi_concept_union_objective.py`.
 
 ---
 
-## Pattern-Specific Optimization Guidance
-
-When a problem pattern is detected, use these detailed guides for formulation.
-
-#### Network Flow Guidance
-
-**Entity Creation Pattern Choice**
-
-When the model has EDGE concepts (with source/destination attributes) and ITEM concepts (with origin/destination attributes), you must choose the correct formulation pattern:
-
-**WRONG (causes INFEASIBLE or trivial solutions):**
-```python
-# Creating Item x Edge cross-product
-define(ShipmentRouting.new(shipment=Shipment, operation=Operation))
-# Then adding site matching constraints in .where()
-# PROBLEM: Most combinations are INVALID because edges don't connect to item locations
-```
-
-**RIGHT (use flow-on-edges):**
-```python
-# Put flow variable directly on the edge concept
-problem.solve_for(Operation.flow_quantity, type='cont', lower=0, upper=Operation.capacity)
-# Add conservation constraints at nodes
-# Add source/sink constraints for supply/demand
-```
-
-**When to use each pattern:**
-- Flow-on-edges: When you DON'T need to track individual items through the network (aggregate flow, water allocation, general network design)
-- Filtered Item x Edge: ONLY if edges actually connect item origins to destinations (verify with data query first)
-
-**Typical Variables:** Continuous flow on edges (0 to capacity), binary edge selection (for network design).
-**Common Constraints:** Flow conservation at intermediate nodes (inflow == outflow), capacity limits on edges, source constraints (outflow >= supply), sink constraints (inflow >= demand).
-**Typical Objectives:** Minimize unmet demand at sinks, maximize throughput, minimize total flow cost.
-**Key Entities:** NODE concepts (Sites, locations, endpoints), EDGE concepts (Operations, routes, pipelines with source and destination), ITEM concepts (optional: Shipments, orders with origin/destination — route THROUGH edges).
-
-#### Assignment Guidance
-
-**Typical Variables:** Binary assignment variables (0 or 1).
-**Common Constraints:** Each task assigned to one resource, resource capacity limits, assignment compatibility constraints.
-**Typical Objectives:** Minimize assignment cost, maximize assignments, balance workload across resources.
-**Key Entities:** Resources (workers, machines), Tasks (shifts, jobs), Assignments (resource-task pairs).
-
-#### Selection Guidance
-
-**Typical Variables:** Binary selection variables (0 or 1).
-**Common Constraints:** Budget constraints (cost limit), dependency constraints (if A then B), cardinality constraints (min/max selections).
-**Typical Objectives:** Maximize total value/profit, minimize cost while meeting requirements, maximize coverage/diversity.
-**Key Entities:** Items/Products (things to select), Bundles/Portfolios (collections), Dependencies (logical relationships).
-
-#### Allocation Guidance
-
-**Typical Variables:** Continuous or integer allocation amounts.
-**Common Constraints:** Total allocation limits (budget), minimum/maximum per entity, balance or fairness constraints.
-**Typical Objectives:** Maximize total utility/benefit, minimize cost, maximize fairness (minimize variance).
-**Key Entities:** Resources (money, time, capacity), Recipients (projects, departments), Allocations (amounts assigned).
-
-#### General Optimization Guidance
-
-**Start with:**
-1. Identify decision variables (what can change?)
-2. Define constraints (what limits decisions?)
-3. Specify objective (what to optimize?)
-
-**Common patterns:** If moving things: consider flow variables. If choosing yes/no: consider binary variables. If assigning amounts: consider continuous variables.
-**Key questions:** What are the decision points? What physical/logical limits exist? What is the ultimate goal?
-
----
-
 ## Temporal Filtering
 
 Time-scoped constraints restrict optimization to a specific time window by applying `.where()` filters on date or epoch timestamp columns.
@@ -337,11 +269,12 @@ When validating a formulation, apply these checks in priority order.
 
 7. **Per-Entity Constraints Missing `.per()` Grouping** — For per-entity constraints, the aggregation must be grouped via `.per(Entity)` and the constraint must iterate via `.where(Entity)`. **Relationship-based `.per()` is equivalent:** `.per(Concept.relationship)` where the relationship returns `Entity` is equivalent to `.per(Entity)`. Only flag if the constraint references `Entity.property` on RHS but neither the sum nor the constraint uses `.per(Entity)` or an equivalent relationship-based `.per()`.
 
-8. **Invalid `.where()` Join Patterns** — Check all `.where()` clauses for these known-bad patterns that cause "Type could not be determined" errors or silent 0-match joins:
+8. **Invalid `.where()` Join Patterns** — Check all `.where()` clauses for these known-bad patterns:
    - **Two relationship refs compared:** `.where(A.rel(B.rel))` — both sides are relationships to other concepts. Fix: use a Concept type on RHS (`.where(A.rel(ConceptName))`).
-   - **Multi-hop RHS:** `.where(A.rel(B.other_rel.nested_prop))` — 2+ hops on RHS silently returns 0 matches. Fix: pre-materialize as enrichment property.
    - **Nested `.where()`:** `.where(.where(...))` — syntax error. Fix: use single `.where()` with comma-separated conditions.
    - **Invented relationship/property names:** References to properties not in the model schema. Fix: verify against RELATIONSHIPS and PROPERTIES sections in context.
+
+   Note: multi-hop chains in `.where()` are valid — both `.where(A.rel == B.chain.prop)` and `.where(A.rel(B.chain.prop))` resolve correctly when the chain is populated. If a chained `.where()` returns empty, the cause is usually the chain being unpopulated (an FK Property declared but never filled by `model.define(...)`), not the chaining mechanic.
 
 **RECOMMENDED checks (violations are severity: warning):**
 

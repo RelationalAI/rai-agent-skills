@@ -20,7 +20,7 @@ description: Covers solver lifecycle including problem type classification, solv
 - Running parametric/scenario solves
 
 **When NOT to use:**
-- Post-solve result interpretation and communication — presenting OPTIMAL/INFEASIBLE/DUAL_INFEASIBLE/TIME_LIMIT status to users, solution quality assessment, trivial solution detection, sensitivity analysis — see `rai-prescriptive-results-interpretation`. (Formulation-level diagnosis of infeasibility and unboundedness root causes is covered here.)
+- Post-solve result interpretation and communication — presenting OPTIMAL/INFEASIBLE/DUAL_INFEASIBLE/TIME_LIMIT status to users, solution quality assessment, trivial solution detection, sensitivity analysis, and root-cause diagnosis of infeasibility/unboundedness — see `rai-prescriptive-results-interpretation`.
 - Variable/constraint/objective formulation patterns — see `rai-prescriptive-problem-formulation`
 - PyRel syntax (imports, types, properties) — see `rai-pyrel-coding`
 
@@ -164,9 +164,9 @@ Choose the solver based on variable types and objective/constraint structure:
 - No indicator constraints — `implies()` will fail. Use Big-M reformulation instead.
 - No SOS constraints — `special_ordered_set_type_1()` / `special_ordered_set_type_2()` will fail. Use explicit binary variable formulations instead.
 - No quadratic constraints (QCP) — quadratic terms in constraints will fail. Only convex quadratic *objectives* (QP) are supported.
-- No nonlinear functions (`exp`, `log`, `sqrt`, trig) — use Ipopt or Gurobi.
+- No nonlinear functions (`math.exp`, `math.log`, `math.sqrt`, `x**n`) — use Gurobi (preferred when licensed) or Ipopt.
 
-**Gurobi** (`solver="gurobi"`): Commercial (available via RAI). Best for large-scale MILP, QP, QCP. Industry-leading MILP performance, discrete + continuous + quadratic + some NLP, excellent diagnostics, multi-objective support. Params: `TimeLimit`, `MIPGap`, `MIPFocus` (0=balanced, 1=feasibility, 2=optimality, 3=bound), `Presolve` (2 for aggressive), `Threads` (0 for auto). **License required:** Gurobi requires a named prescriptive engine with a Snowflake secret and external access integration configured in `raiconfig.yaml`. See [rai-setup](../rai-setup/SKILL.md) for setup. If unavailable, fall back to HiGHS (LP/MILP) or Ipopt (NLP). Large MIP problems may solve significantly faster with Gurobi than HiGHS.
+**Gurobi** (`solver="gurobi"`): Commercial (available via RAI). Best for large-scale MILP, QP, QCP, and nonlinear problems. Industry-leading MILP performance, discrete + continuous + quadratic + nonlinear (`math.exp`, `math.log`, `math.sqrt`, `x ** n`), excellent diagnostics, multi-objective support. Params: `TimeLimit`, `MIPGap`, `MIPFocus` (0=balanced, 1=feasibility, 2=optimality, 3=bound), `Presolve` (2 for aggressive), `Threads` (0 for auto). **License required:** Gurobi requires a named prescriptive engine with a Snowflake secret and external access integration configured in `raiconfig.yaml`. See [rai-setup](../rai-setup/SKILL.md) for setup. If unavailable, fall back to HiGHS (LP/MILP) or Ipopt (NLP). Large MIP problems may solve significantly faster with Gurobi than HiGHS.
 
 **MiniZinc** (`solver="minizinc"`): Open-source (Chuffed backend). Best for CP, combinatorial, constraint satisfaction. Powerful propagation, global constraints (`all_different`, `circuit`), multiple solutions. Params: `time_limit_sec`, `solution_limit`. Cannot handle continuous variables, LP, QP, NLP.
 
@@ -181,10 +181,11 @@ Use these rules in order to pick a solver. **Gurobi outperforms open-source solv
    - MiniZinc only if the problem is pure constraint satisfaction with discrete variables.
 
 2. **Check for nonlinearity.**
-   - `exp()`, `log()`, `sqrt()`, `sin()`, `cos()`, division by variables?
+   - `math.exp(x)`, `math.log(x)`, `math.sqrt(x)`, or `x ** n`?
      HiGHS and MiniZinc are invalid.
-   - Continuous-only NLP: Ipopt (best for smooth NLP) or Gurobi.
+   - Continuous-only NLP: Gurobi (preferred when licensed) or Ipopt (best for smooth local NLP).
    - Discrete + nonlinear: Gurobi only.
+   - Trig (`math.sin`, `math.cos`, etc.) and division between two decision variables are not lowered to the solver by the prescriptive library — reformulate as piecewise-linear approximations or via auxiliary variables.
 
 3. **Check for quadratic constraints.**
    - Quadratic terms in constraints (not just objective): HiGHS is invalid.
@@ -203,7 +204,7 @@ Use these rules in order to pick a solver. **Gurobi outperforms open-source solv
 | Continuous + linear (LP) | **Gurobi** | HiGHS |
 | Continuous + quadratic objective (QP) | **Gurobi** | HiGHS |
 | Continuous + quadratic constraints (QCP) | **Gurobi** | Ipopt |
-| Continuous + nonlinear (NLP) | Ipopt | Ipopt |
+| Continuous + nonlinear (NLP) | **Gurobi** or Ipopt | Ipopt |
 | Discrete + constraint satisfaction (CSP) | MiniZinc | MiniZinc |
 | Need multiple solutions | MiniZinc (best) | MiniZinc |
 
@@ -252,41 +253,15 @@ See [pre-solve-validation.md](references/pre-solve-validation.md) for full check
 
 ## Common Compilation Errors
 
-**Entity reference error** ("Source X.y is an entity reference to Z, not a scalar value"): The entity_creation copies an entity reference where a scalar is expected. Fix by removing the property or using `.id` to extract scalar. Must update BOTH concept_definition AND entity_creation together.
-
-**Zero entities** ("Variables (0)" in formulation display): The entity_creation produced no entities — likely a join mismatch, non-existent concept reference, or over-filtering. Verify join conditions match actual data.
-
-For full diagnostic patterns (type mismatch, undefined concept, entity creation taxonomy, simplest fix principle), see [compilation-errors.md](references/compilation-errors.md). For numerical stability categories and MIP formulation techniques (big-M, indicator constraints), see [numerical-and-mip.md](references/numerical-and-mip.md).
+For prescriptive-context compile errors (entity reference passed as scalar, zero entities, type mismatch, undefined concept), see [compilation-errors.md](references/compilation-errors.md). General PyRel compile errors live in `rai-pyrel-coding/references/common-pitfalls.md`. For numerical stability categories and MIP formulation techniques (big-M, indicator constraints), see [numerical-and-mip.md](references/numerical-and-mip.md).
 
 ---
 
 ## Diagnosing Infeasibility and Unboundedness
 
-### Infeasibility (INFEASIBLE status)
+Status interpretation and prose-level diagnosis live in `rai-prescriptive-results-interpretation` > Status Interpretation (the natural reading order is status → diagnose → fix). The structured diagnostic codes that map status to fix-action types — `unbounded_variable`, `missing_upper_bound`, `penalty_structure`, `constraint_conflict`, `capacity_mismatch` — live here in [diagnostic-taxonomy.md](references/diagnostic-taxonomy.md), since they're a solver-side classification used to drive automated fix routing.
 
-No solution exists that satisfies all constraints simultaneously.
-
-**Common root causes:**
-1. **Minimum-per-entity vs total capacity**: N entities each requiring minimum M units, but total available is less than N*M
-2. **Conflicting equality constraints**: Two constraints that cannot be satisfied simultaneously
-3. **Conflicting bounds**: Variable bounds or constraints that create an empty feasible region
-4. **Recently added constraints**: Focus on recently added constraints as the likely cause
-
-**Fix strategies:** Remove or relax constraints — change `>=` to `<=`, relax bounds, convert hard constraints to soft (penalty-based).
-
-### Unboundedness (DUAL_INFEASIBLE status)
-
-The objective can go to +/-infinity. This is NOT about conflicting constraints — it's about missing bounds.
-
-**Common root causes:**
-1. **Missing variable upper bounds**: A variable can grow without limit, driving objective to infinity
-2. **Penalty term structure**: Penalty terms like `100 * (demand - fulfilled)` can go negative if `fulfilled` exceeds `demand`. Fix: add `fulfilled <= demand`
-3. **Missing capacity constraints**: Flow or production variables without upper bounds
-4. **Removed constraints left gaps**: If a demand satisfaction constraint was removed, variables may now be unbounded
-
-**Fix strategies:** Add bounds or constraints — add upper bounds to variables, add capacity limits, fix penalty term structure.
-
-For root cause codes (`unbounded_variable`, `missing_upper_bound`, `penalty_structure`, `constraint_conflict`, `capacity_mismatch`), fix action types, and status-specific fix direction, see [diagnostic-taxonomy.md](references/diagnostic-taxonomy.md).
+For `si.error` and `print_format=` semantics, see Solve Execution and the solve-info table below in this skill. For solver-log patterns and numerical-error categorization, see [numerical-and-mip.md](references/numerical-and-mip.md).
 
 ---
 
@@ -314,16 +289,7 @@ if si.termination_status != "OPTIMAL":
 
 **Checking solver version:** Use `problem.solve_info().solver_version` after any solve to see the exact version that ran. Do not hardcode version numbers — they change with solver service updates.
 
-**Post-solve constraint verification:** `problem.verify(*fragments)` temporarily installs constraint ICs, triggers a query to evaluate them, and removes them. Useful for checking that the solver's solution satisfies constraints — particularly for exact solvers (HiGHS MIP, MiniZinc):
-
-```python
-coverage_ic = model.where(...).require(...)
-problem.satisfy(coverage_ic)
-problem.solve("minizinc", time_limit_sec=60)
-problem.verify(coverage_ic)  # Warns if any constraint is violated
-```
-
-`verify()` checks `termination_status` first — warns and returns early for non-successful solves. ICs are cleaned up in a `finally` block even on exceptions.
+**Post-solve constraint verification:** `problem.verify(*fragments)` checks that the solver's solution satisfies constraints — see `rai-prescriptive-results-interpretation` > Post-solve constraint verification.
 
 For verifying what the solver actually sees before solving, see [formulation-display.md](references/formulation-display.md).
 
@@ -333,7 +299,7 @@ These parameters are solver-independent and work with any solver:
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `time_limit_sec` | float | Maximum solve time in seconds (default: 300s) |
+| `time_limit_sec` | float | Maximum solve time in seconds (Python kwarg defaults to `None`; if not provided, the solver service applies its own default — currently 300s) |
 | `silent` | bool | Suppress solver output |
 | `solution_limit` | int | Maximum number of solutions to find |
 | `relative_gap_tolerance` | float | Relative optimality gap in [0, 1] (e.g., 0.01 = 1%) |
@@ -357,7 +323,7 @@ Solver-specific parameters (HiGHS, Gurobi, Ipopt kwargs), tuning guidance, cloud
 
 ### Unsupported operators
 
-The following operators are **not supported by any solver backend** and will raise errors if used in solver expressions: `%` (modulo), `//` (floor division), `floor`, `ceil`, `trunc`, `round`. Note: `//` works on concrete data and property-constant combinations (e.g., `Player.p // group_size`), but fails when **both operands are decision variables**. There is no `if_then_else` operator in the prescriptive library — use `implies()` (Gurobi/MiniZinc) or Big-M reformulation (HiGHS) for conditional logic. Use piecewise-linear approximations or reformulations for unsupported operators.
+The following operators are **not lowered to the solver** and will raise errors if used inside `solve_for`/`satisfy`/`minimize`/`maximize`: `%` (modulo), `//` (floor division), `math.floor`, `math.ceil`, `math.round`, `math.sign`, `math.clip`, trig (`math.sin`, `math.cos`, `math.tan` and their hyperbolic/inverse variants), `math.factorial`, `math.erf`. Note: `//` works on concrete data and property-constant combinations (e.g., `Player.p // group_size`), but fails when **both operands are decision variables**. There is no `if_then_else` operator in the prescriptive library — use `implies()` (Gurobi/MiniZinc) or Big-M reformulation (HiGHS) for conditional logic. Use piecewise-linear approximations or reformulations for unsupported operators.
 
 > **See also:** Full operator/construct compatibility table by solver → `numerical-and-mip.md` > Operator and Construct Compatibility by Solver. Reformulation techniques (Big-M linearization, McCormick envelopes, epigraph, SOS2) → `numerical-and-mip.md` > Reformulation Techniques for Solver Compatibility.
 
@@ -371,11 +337,11 @@ The following operators are **not supported by any solver backend** and will rai
 | Cannot remove a constraint | Every `problem.satisfy()` call accumulates | Create a new `Problem` for different constraint sets |
 | Binary variable has no effect | Defined but not linked to quantities via big-M or capacity | Add `flow <= capacity * x_open` style linking constraints |
 | Disconnected objective | Objective references variables with no constraints | Solver sets variables to bound values; add meaningful constraints |
-| Wrong aggregation scope | `sum(X).per(Y)` where Y not joined to X | Add explicit relationship join in `.where()` |
-| Big-M too loose → slow solve | Using arbitrary `999999` | Use tightest data-driven bound (`M = capacity`) |
 | Numerical issues | Coefficients differing by >1e6 | Rescale data to similar magnitudes |
 | `problem.termination_status == "OPTIMAL"` is always False | Missing parens — `problem.termination_status` returns a bound method, not a string | Use `problem.termination_status()` (with parens) in `model.require()`, or `problem.solve_info().termination_status` for Python-side |
 | `AttributeError` on `problem.solve()` return value | Assigning `result = problem.solve()` and accessing `result.status` | `problem.solve()` returns `None`. Use `problem.solve_info()` for status. For solution values, use `model.select()` (populate=True) or `Variable.values()` (populate=False). |
+
+For formulation-time pitfalls (wrong aggregation scope, loose Big-M, missing forcing requirement, unwired relationships, etc.), see `rai-prescriptive-problem-formulation` > Common Pitfalls.
 
 Post-solve diagnosis (trivial all-zero solutions, infeasibility root causes, quality assessment) is covered in `rai-prescriptive-results-interpretation`. The unified lifecycle failure taxonomy (`generates` → `compiles` → `solves` → `optimal` → `non-trivial` → `meaningful`) lives at `rai-prescriptive-results-interpretation/references/failure-taxonomy.md` — consult it for the `solves` and `optimal` levels.
 
@@ -386,11 +352,9 @@ Post-solve diagnosis (trivial all-zero solutions, infeasibility root causes, qua
 | Pattern | Description | File |
 |---|---|---|
 | Scenario Concept (parameter sweep) | Scenario as data concept, single solve, multi-arg variables, `model.select()` results | [examples/scenario_concept_parameter_sweep.py](examples/scenario_concept_parameter_sweep.py) |
-| Scenario Concept (bound scaling) | Scaling constraint bounds by scenario parameter (`Concept.bound * Scenario.scaling_factor`) | [examples/scenario_concept_bound_scaling.py](examples/scenario_concept_bound_scaling.py) |
 | Scenario Concept (multi-binary MILP) | Two binary variable types indexed by Scenario, `.per(Entity, Scenario)` grouping, cross-variable budget | [examples/scenario_concept_milp.py](examples/scenario_concept_milp.py) |
 | Entity exclusion (disruption) | Loop + `where=[]` with `!=` filter to exclude entities, `populate=False`, `Variable.values()` results | [examples/entity_exclusion_disruption.py](examples/entity_exclusion_disruption.py) |
 | Partitioned sub-problems (loop) | Loop + `where=[]` filter per partition, `populate=False`, `Variable.values()` results | [examples/partitioned_iteration_scenarios.py](examples/partitioned_iteration_scenarios.py) |
-| Scenario Concept (demand multiplier) | Demand parameter sweep via Scenario Concept, multiplier-based bound scaling | [examples/scenario_concept_demand_scaling.py](examples/scenario_concept_demand_scaling.py) |
 
 ---
 

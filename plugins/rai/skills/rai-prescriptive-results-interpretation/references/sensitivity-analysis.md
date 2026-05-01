@@ -1,13 +1,11 @@
 <!-- TOC -->
 - [Sensitivity Analysis](#sensitivity-analysis)
-  - [Implementation Patterns](#implementation-patterns)
   - [What-If Framing for Stakeholders](#what-if-framing-for-stakeholders)
   - [Which Parameters to Vary](#which-parameters-to-vary)
   - [Parameter Type Taxonomy](#parameter-type-taxonomy)
   - [Presenting Scenario Results](#presenting-scenario-results)
   - [Identifying Critical Parameters](#identifying-critical-parameters)
   - [Strategic vs. Operational Framing](#strategic-vs-operational-framing)
-- [Translating Shadow Prices](#translating-shadow-prices)
 - [Pareto Frontier / Efficient Frontier Analysis](#pareto-frontier--efficient-frontier-analysis)
   - [Explaining the Frontier to Users](#explaining-the-frontier-to-users)
   - [Quality Gates (before interpretation)](#quality-gates-before-interpretation)
@@ -19,20 +17,7 @@
 
 ## Sensitivity Analysis
 
-### Implementation Patterns
-
-Sensitivity analysis uses one of two PyRel patterns, chosen based on what is being varied:
-
-- **Parameter variations** (budget, demand, service levels): Scenario Concept — single solve,
-  results contain scenario dimension, queryable via `model.select(Scenario.name, ...)`.
-  Variables are multi-argument Properties: `Property(f"{Entity} in {Scenario} is {Float:var}")`.
-  Constraints use `.per(Scenario)` for per-scenario aggregation and `Scenario.param` for
-  scenario-specific values. See `rai-prescriptive-solver-management/examples/scenario_concept_parameter_sweep.py`.
-- **Entity exclusion** (remove a supplier, disable a facility): Loop + `where=[]` filter —
-  multiple solves, results collected per iteration via `Variable.values()`.
-  See `rai-prescriptive-solver-management/examples/partitioned_iteration_scenarios.py`.
-
-Both produce the same output format for stakeholders: comparison tables with business language.
+For implementation patterns (Scenario Concept for parameter variations, Loop + `where=[]` for entity exclusion), see `rai-prescriptive-problem-formulation/references/scenario-analysis.md`. This reference focuses on **interpretation** of scenario results — comparison tables, critical-parameter identification, and Pareto frontier explanation.
 
 ### What-If Framing for Stakeholders
 
@@ -107,18 +92,6 @@ The context determines how to present scenario results:
 - **Operational decisions** (recurring use): Show weighted objective sensitivity — how the solution changes as weights shift. Stakeholders set weights once, then run daily.
 
 Detect context from problem characteristics: one-time capacity planning, facility location, network design → strategic. Daily scheduling, routing, allocation → operational.
-
----
-
-## Translating Shadow Prices (Dual Values)
-
-Shadow prices (dual values) tell you the marginal value of relaxing a constraint by one unit. Translate them as:
-
-| Technical | Business Language |
-|-----------|-------------------|
-| "Shadow price of capacity constraint at Site A = $50" | "Adding one more unit of capacity at Site A would save $50 in total cost." |
-| "Shadow price of budget constraint = 0.12" | "Each additional dollar of budget would generate $0.12 in objective improvement." |
-| "Shadow price = 0 (non-binding)" | "This constraint has slack — relaxing it would not change the solution." |
 
 ---
 

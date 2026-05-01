@@ -34,7 +34,7 @@ When generating fixes for trivial or poor-quality solutions, follow these rules:
 - Base the new variable's scope on existing concepts from the model — variables referencing non-existent concepts cause compile errors
 - Use `.where()` filters based on actual property values from data samples
 - Reference actual relationship paths that exist in the model
-- For concept and variable creation syntax, see `rai-prescriptive-problem-formulation/variable-formulation.md`
+- For concept and variable creation syntax, see [variable-formulation.md](variable-formulation.md)
 
 **Constraint fix requirements** (constraints without decision variables cause `ValueError` at solve time):
 - Reference at least one decision variable (`x_` prefix)
@@ -59,7 +59,7 @@ When fixing trivial solutions, the primary approach is to fix broken join paths 
 
 **Navigation path rules:**
 - When using `.per(Entity)`, ALWAYS navigate FROM that entity
-- Standalone concept references like `Customer.site` or `Site.id` create Cartesian products and match ZERO rows
+- Standalone concept references like `Customer.site` or `Site.id` typically produce a wrong join — either an unintended cartesian product across all `Customer`/`Site` rows, or no overlap with the bound rows the constraint is iterating over
 - Instead use: `Demand.customer.site` (navigating from the `.per()` entity)
 
 **Aggregate workarounds are NOT fixes:**
@@ -104,16 +104,16 @@ The root cause is **over-constraining** — conflicting or too-tight constraints
 
 **RELAXATION-FIRST APPROACH:**
 This formulation was built with comprehensive constraint selection but the solver found NO feasible solution.
-The constraints are mutually contradictory or over-restrictive. Before adding anything, REMOVE or RELAX:
+The constraints are mutually contradictory or over-restrictive. Before adding anything, identify which constraint to relax or drop, then **rebuild the Problem** omitting or replacing the offending `satisfy(...)` call (Problem accumulates `satisfy` calls — there is no in-place removal API):
 - Are existing constraints too tight (equality where inequality would suffice)?
 - Are there redundant constraints that conflict with each other?
 - Can a constraint be softened (e.g., `== demand` to `>= demand * 0.9`)?
-- Should a non-essential constraint be removed entirely?
+- Should a non-essential constraint be omitted from the rebuilt Problem entirely?
 
 **Fix priority order:**
-1. Remove or relax conflicting/redundant constraints (least disruptive)
-2. Modify existing constraints (soften bounds, widen ranges)
+1. Drop or relax conflicting/redundant constraints (least disruptive — rebuild Problem omitting the offending `satisfy(...)`)
+2. Modify existing constraints (soften bounds, widen ranges) when rebuilding
 3. Add slack variables to absorb infeasibility
 4. Add new variables (last resort)
 
-**Emphasis:** PREFER removing or relaxing existing constraints — this is an INFEASIBLE solution caused by over-constraining.
+**Emphasis:** PREFER omitting or relaxing existing constraints in the rebuilt Problem — this is an INFEASIBLE solution caused by over-constraining.

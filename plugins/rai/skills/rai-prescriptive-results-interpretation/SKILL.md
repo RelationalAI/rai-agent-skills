@@ -18,12 +18,13 @@ description: Interprets optimization solver output including solution extraction
 - Explaining results to stakeholders in business language
 - Running sensitivity / what-if analysis
 
-For formulation-level root-cause diagnosis of INFEASIBLE/DUAL_INFEASIBLE (demand vs capacity, contradictory constraints, missing bounds), see `rai-prescriptive-solver-management`.
+Root-cause diagnosis of INFEASIBLE/DUAL_INFEASIBLE (demand vs capacity, contradictory constraints, missing bounds) lives in this skill — see Status Interpretation below. For solver-level error messages and engine-driven debugging (`si.error`, `print_format=`), see `rai-prescriptive-solver-management`.
 
 **When NOT to use:**
 - Designing or fixing the formulation itself (adding constraints, changing variables) — see `rai-prescriptive-problem-formulation`. In particular, if the result is OPTIMAL and technically valid but the user rejects it on preference grounds ("that's too much X", "I don't like this allocation"), this indicates latent constraints, not a solver or formulation bug — route to `rai-prescriptive-problem-formulation` > Constraint Elicitation > Post-Solve: Iterative Refinement.
 - Solver configuration, parameter tuning, or solver-level failures — see `rai-prescriptive-solver-management`
 - Query syntax (select, aggregation, joins) — see `rai-querying`
+- PyRel syntax (imports, types, properties) — see `rai-pyrel-coding`
 
 **Overview:**
 1. Recall the optimization goal captured in the problem's variables and objective — what decisions were being made, and what should success look like?
@@ -57,7 +58,7 @@ After a solve completes, interpret results in this order:
 
 ---
 
-## Quick Reference
+## Status check snippet
 
 ```python
 si = problem.solve_info()
@@ -66,6 +67,8 @@ if si.termination_status == "OPTIMAL":
     # With populate=False: use Variable.values() — see Solution Extraction below
     print(f"Objective: {si.objective_value}")
 ```
+
+For the full extraction patterns and result-attribute tables, see Solution Extraction below.
 
 ---
 
@@ -167,7 +170,16 @@ For per-pattern variations (multiple solutions, iterative solving, scenario/para
 
 ### Post-solve constraint verification
 
-`problem.verify(*fragments)` checks that the solver's solution satisfies constraints post-solve. Particularly useful for exact solvers (HiGHS MIP, MiniZinc). See `rai-prescriptive-solver-management` for full `verify()` documentation and examples.
+`problem.verify(*fragments)` temporarily installs constraint ICs, triggers a query to evaluate them, and removes them. Useful for checking that the solver's solution satisfies constraints — particularly for exact solvers (HiGHS MIP, MiniZinc):
+
+```python
+coverage_ic = model.where(...).require(...)
+problem.satisfy(coverage_ic)
+problem.solve("minizinc", time_limit_sec=60)
+problem.verify(coverage_ic)  # Warns if any constraint is violated
+```
+
+`verify()` checks `termination_status` first — warns and returns early for non-successful solves. ICs are cleaned up in a `finally` block even on exceptions.
 
 ---
 
@@ -186,8 +198,7 @@ No solution satisfies all constraints simultaneously. The problem as stated is i
 1. Check demand vs. capacity: does total demand exceed total supply/capacity?
 2. Look for contradictory constraints (e.g., x >= 10 AND x <= 5).
 3. Check bound consistency: any variable with lower_bound > upper_bound?
-4. Remove constraints one at a time to isolate the conflict.
-5. Use IIS (Irreducible Inconsistent Subsystem) if the solver supports it.
+4. Bisect: rebuild the Problem with one `problem.satisfy(...)` call removed at a time and re-solve. The constraint whose removal makes the problem feasible is the binding conflict. (Problem accumulates `satisfy` calls — there's no in-place `remove_constraint` API; build a fresh Problem each iteration.)
 
 **What to tell users:** "The requirements as stated cannot all be satisfied simultaneously. The most likely conflict is [specific conflict]. Options: relax [constraint], increase [capacity], or allow unmet demand with a penalty."
 **Next steps:** Identify the binding conflict, present trade-off options, add slack/penalty variables. A common and valuable path is moving the conflicting hard constraint to the objective with a penalty — feasibility restoration through softening is often more useful than pure diagnosis.
@@ -205,7 +216,7 @@ The objective can improve infinitely — the solver can keep making the solution
 **Next steps:** Add missing bounds or constraints, verify objective direction and coefficient signs.
 
 ### Feasible (MIP)
-For MIP problems, HiGHS may return `"Feasible"` instead of `"OPTIMAL"` when a solution is found but optimality is not proven within the default MIP gap tolerance. Check `si.relative_gap` (if available) or the solver log — a gap under 1% means the solution is effectively optimal. Treat `"Feasible"` the same as `"TIME_LIMIT"` for gap interpretation below.
+For MIP problems, HiGHS may return `"Feasible"` instead of `"OPTIMAL"` when a solution is found but optimality is not proven within the default MIP gap tolerance. Treat `"Feasible"` the same as `"TIME_LIMIT"` for gap interpretation below; check the solver log for the realized gap.
 
 ### Time Limit
 The solver found a feasible solution but could not prove it is optimal within the time allowed.
@@ -224,7 +235,7 @@ A non-optimal termination status is information about the problem structure, not
 
 **INFEASIBLE as diagnostic tool:**
 - Intentionally solving with a proposed constraint set to test feasibility boundaries is a valid modeling technique. An infeasible result tells you the constraint set is too tight — which constraints to relax.
-- **Constraint relaxation debugging:** Remove constraints one at a time and re-solve. The constraint whose removal makes the problem feasible is the binding conflict. This is faster than manual inspection for large formulations.
+- **Constraint bisection debugging:** Rebuild the Problem omitting one `satisfy(...)` call at a time and re-solve. The omitted constraint whose absence makes the problem feasible is the binding conflict. This is faster than manual inspection for large formulations. (Problem accumulates `satisfy` calls — there's no in-place removal; build a fresh Problem each iteration.)
 
 **TIME_LIMIT with acceptable gap:**
 - A 2% gap after 60 seconds may be perfectly good for operational use. The "optimal" solution is at most 2% better — often indistinguishable in business terms.
@@ -246,10 +257,6 @@ Compilation or solver errors prevented a solution.
 **Common causes:** Undefined properties referenced in formulation, type mismatches, syntax errors in expressions, solver license issues.
 **What to tell users:** "The model could not be solved due to a technical error: [error message]. This needs to be fixed before we can get results."
 **Next steps:** Check compilation output, fix expression syntax, verify all referenced properties exist.
-
-### Re-Solve Behavior (SDK >= 1.0.3)
-
-Re-solving the same `Problem` instance is safe (replace semantics). See `rai-prescriptive-solver-management` for details.
 
 ---
 
@@ -331,12 +338,12 @@ When diagnosing solution quality issues, follow this sequence:
 
 ### Fix Generation Guidelines
 
-Prefer constraint fixes over variable fixes. All fixes must be grounded in actual model context (concept names, properties, relationships). See [references/fix-generation-guidelines.md](references/fix-generation-guidelines.md) for root cause taxonomy, grounding rules, and constraint fix requirements.
+Prefer constraint fixes over variable fixes. All fixes must be grounded in actual model context (concept names, properties, relationships). See `rai-prescriptive-problem-formulation/references/fix-generation-guidelines.md` for root cause taxonomy, grounding rules, and constraint fix requirements.
 
 ### Quality dimensions
 
 - **Actionability**: Can decision makers act on this solution? Does it provide useful granularity? (e.g., "produce 150 units at Site A" is actionable; "total cost = 0" is not)
-- **Interpretability**: Can the solution be explained in business terms? Decision variable attributes have an `x_` prefix (e.g., `x_quantity`, `x_assigned`) — always translate these to business language when presenting results:
+- **Interpretability**: Can the solution be explained in business terms? Decision variable attributes have an `x_` prefix (e.g., `x_quantity`, `x_assigned`). When generating user-facing prose (rationale, business_mapping, result tables shown to the user), translate the `x_` names to business language. Code samples, API references, and Python variable names stay technical.
   - `x_flow` → "shipment quantity" or "units shipped"
   - `x_assigned` → "assigned" or "selected"
   - `x_quantity` → "production quantity" or "units allocated"
@@ -344,7 +351,7 @@ Prefer constraint fixes over variable fixes. All fixes must be grounded in actua
 
 ### Join Path Fix Rules
 
-When fixing trivial solutions, fix broken join paths in constraints — not aggregate workarounds. Navigate from bound concepts (e.g., `Demand.customer.site` not `Customer.site`), and always navigate FROM the `.per()` entity. See [references/fix-generation-guidelines.md](references/fix-generation-guidelines.md) for full diagnosis steps, examples, and navigation path rules.
+When fixing trivial solutions, fix broken join paths in constraints — not aggregate workarounds. Navigate from bound concepts (e.g., `Demand.customer.site` not `Customer.site`), and always navigate FROM the `.per()` entity. See `rai-prescriptive-problem-formulation/references/fix-generation-guidelines.md` for full diagnosis steps, examples, and navigation path rules.
 
 ---
 
@@ -392,17 +399,13 @@ Present results in this order (6-part template):
 
 ### Answering "Why This Decision?" (Explainability)
 
-Decision makers need to understand not just what the solution recommends, but why. Use binding constraints and dual values to answer specific questions:
+Decision makers need to understand not just what the solution recommends, but why. Reason from the formulation — which constraints are tight, which costs/coefficients drove the choice — to answer:
 
 - **"Why was X selected?"** → Identify which constraints and cost/value properties made X optimal. "Entity A gets 60% of allocation because it has the lowest unit cost while meeting the quality threshold."
 - **"Why was Y excluded?"** → Identify which constraint or cost makes Y suboptimal. "Entity C isn't used because its fixed cost exceeds the savings from proximity despite available capacity."
 - **"What's preventing Z?"** → Identify the binding constraint. "Site B can't produce more because its capacity constraint is binding at 500 units."
 
-Frame every explanation in terms the decision maker already knows — their entities, their resources, their constraints — not variable indices or dual values.
-
-### Translating Shadow Prices (Dual Values)
-
-Shadow prices tell you the marginal value of relaxing a constraint. For the translation table and business-language framing, see [references/sensitivity-analysis.md](references/sensitivity-analysis.md).
+Frame every explanation in terms the decision maker already knows — their entities, their resources, their constraints — not variable indices or solver internals. (Shadow prices / dual values are not yet exposed in PyRel v1; reason from binding-constraint identification and scenario deltas instead.)
 
 ### Sensitivity Framing
 
@@ -439,7 +442,7 @@ For parameter sweep patterns, scenario comparison tables, and Pareto frontier co
 | Silent: `problem.termination_status == "OPTIMAL"` (no parens) — always False | `termination_status` on the `Problem` object is a bound method, not a property; comparing a method to a string is never equal and the bug is silent | Read status Python-side: `problem.solve_info().termination_status == "OPTIMAL"` (no parens — `solve_info()` returns a dataclass-like value with a string field). Engine-side inside `model.require(...)`: `problem.termination_status() == "OPTIMAL"` (with parens — that's the engine-side Relationship) |
 | Silent: non-OPTIMAL result extraction returns empty DataFrame / None objective | Loop / scenario workflows extract `Variable.values()` or read `si.objective_value` without checking status first. Infeasible / time-limited solves produce an empty query and `None` objective, silently propagated into downstream code | Always guard: `if si.termination_status not in ("OPTIMAL", "LOCALLY_SOLVED"): continue` (or raise) before touching `si.objective_value` or the extraction query |
 
-For the full pitfalls table (14 entries covering numerical instability, degenerate solutions, wrong aggregation scope, and more), see [references/common-pitfalls.md](references/common-pitfalls.md).
+For additional pitfalls (numerical instability, degenerate solutions, wrong aggregation scope, missing/null data) — distinct from the silent-bug rows above — see [references/common-pitfalls.md](references/common-pitfalls.md).
 
 ## Diagnosis Checklist
 
@@ -454,7 +457,7 @@ Use this after every solve to ensure result quality:
 - [ ] Binding constraints align with known bottlenecks?
 - [ ] Results are stable to minor parameter perturbations?
 
-**If checks fail:** Trivial solution (all zeros) → add forcing constraints first. Infeasible → relax or remove constraints first. See [references/fix-generation-guidelines.md](references/fix-generation-guidelines.md) for fix strategies.
+**If checks fail:** Trivial solution (all zeros) → add forcing constraints first. Infeasible → relax constraints (or rebuild the Problem omitting a conflicting `satisfy(...)` call). See `rai-prescriptive-problem-formulation/references/fix-generation-guidelines.md` for fix strategies.
 
 ---
 
@@ -474,6 +477,5 @@ Use this after every solve to ensure result quality:
 |-----------|-------------|------|
 | Solution extraction details | Query-pattern variations (`populate=True` vs `populate=False` — multiple solutions, iterative, scenario/parametric), `Variable.values()` back-pointer naming rules with examples table, silent-failure warnings, Snowflake export | [solution-extraction-details.md](references/solution-extraction-details.md) |
 | Failure taxonomy | Detailed root causes by solvability level and 5-step diagnosis protocol | [failure-taxonomy.md](references/failure-taxonomy.md) |
-| Fix generation guidelines | Root cause taxonomy, grounding rules, join path fixes, trivial/infeasible fix strategies | [fix-generation-guidelines.md](references/fix-generation-guidelines.md) |
-| Common pitfalls | Full table of 14 common optimization result pitfalls with causes and fixes | [common-pitfalls.md](references/common-pitfalls.md) |
+| Common pitfalls | Additional result-interpretation pitfalls (numerical instability, degenerate solutions, aggregation scope, missing/null data, etc.) — distinct from the silent-bug rows in this SKILL | [common-pitfalls.md](references/common-pitfalls.md) |
 | Sensitivity analysis | Sensitivity analysis techniques and parameter sweeps | [sensitivity-analysis.md](references/sensitivity-analysis.md) |

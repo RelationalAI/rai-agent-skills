@@ -4,7 +4,6 @@
 - [Solve Pipeline](#solve-pipeline)
 - [Re-Solve Behavior](#re-solve-behavior-sdk--103)
 - [Warm Starting](#warm-starting)
-- [Scenario Analysis](#scenario-analysis-what-if)
 
 ---
 
@@ -47,13 +46,34 @@ problem.solve("ipopt", time_limit_sec=60, max_iter=1000, tol=1e-8, mu_strategy="
 - Large LP is slow -> try `presolve="on"`, increase `threads`
 - NLP converges to poor local optimum -> try different `start=` values, adjust `mu_strategy`
 
+### Complexity and time estimates
+
+Rough heuristics for estimating solve time based on problem size and type:
+
+| Problem class | Variable count | Estimated time | Confidence |
+|---|---|---|---|
+| LP (no integers) | < 1,000 | ~1s | High |
+| LP | 1,000–10,000 | ~5s | Medium |
+| LP | 10,000+ | ~30s | Low |
+| MIP/IP | < 100 | ~2s | Medium |
+| MIP/IP | 100–1,000 | ~30s | Medium |
+| MIP/IP | 1,000–10,000 | ~5 min | Low |
+| MIP/IP | 10,000+ | ~30 min | Very low |
+
+**Key insight:** MIP solve time depends heavily on problem structure (LP relaxation tightness, symmetry, constraint topology), not just size. A 500-variable TSP can take longer than a 5,000-variable LP. These are rough lower bounds — actual times can vary 10x or more.
+
+**When to recommend time limit increases:**
+- Default 60s is appropriate for most problems under 5,000 variables
+- For 5,000+ variable MIPs, suggest 300–600s
+- If solver hits time limit with gap > 5%, suggest increasing limit or simplifying the formulation
+
 ## Solve Pipeline
 
 Solving requires network connectivity — `problem.solve()` dispatches to the RAI solver service, which runs the selected backend (HiGHS, Gurobi, Ipopt, MiniZinc) and returns results. There is no local solver.
 
 ## Re-Solve Behavior (SDK >= 1.0.3)
 
-Re-solving the same `Problem` instance is safe. Result import uses replace semantics — if a second solve's result import fails, previous results remain intact. No degraded state.
+Re-solving the same `Problem` instance is safe. After adding more constraints / variables / objective terms, calling `problem.solve()` again re-runs the solver and updates variable values. If the second solve fails, previous results remain intact — no degraded state.
 
 ## Warm Starting
 
@@ -72,13 +92,4 @@ problem.solve("ipopt", log_to_console=True)
 
 **Standalone (concept-free) variables** use `model.Relationship(f"{Float:name}")` instead of `model.Property`. This pattern is for scalar optimization variables not attached to any concept (e.g., Rosenbrock, single-variable NLP). For concept-attached variables, use `model.Property` as usual.
 
-## Scenario Analysis (What-If)
-
-Two patterns for exploring how solutions change under different assumptions:
-
-- **Scenario Concept** — parameter variations (budget, demand, thresholds) solved in a single solve. Results live in the ontology.
-- **Loop + where= filter** — entity exclusion or partitioned sub-problems. Each iteration is independent. Use `populate=False` + `Variable.values()`.
-
-**Decision rule:** Only parameter values change -> Scenario Concept. Entities or constraint structure change -> Loop + where=.
-
-For full patterns, code examples, and a decision matrix, see [scenario-analysis.md](../../rai-prescriptive-problem-formulation/references/scenario-analysis.md).
+For scenario analysis patterns (Scenario Concept, Loop + where=, Epsilon constraint loop), see [scenario-analysis.md](../../rai-prescriptive-problem-formulation/references/scenario-analysis.md).

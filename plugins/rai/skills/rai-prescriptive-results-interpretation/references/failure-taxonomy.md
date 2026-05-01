@@ -17,11 +17,11 @@ When a formulation fails at a level, the root cause falls into specific categori
 | **generates** | `syntax_error` | Invalid Python / PyRel syntax | Fix indentation, missing imports, malformed expressions |
 | **generates** | `undefined_reference` | References concept/property that doesn't exist | Check model introspection; use `enrich_ontology` if property is missing |
 | **compiles** | `type_mismatch` | Wrong types in `solve_for`, `satisfy`, or `minimize`/`maximize` | Check that variable types match constraint operands (Float vs Integer) |
-| **compiles** | `unresolved_overload` | `name=[]` traverses relationships or has multi-hop paths | Use primitive identity fields in `name=[]`; single-hop only |
+| **compiles** | `unresolved_overload` | `name=[]` part resolves to an entity instead of a scalar (e.g. a bare Concept-typed Relationship) | Each `name=[]` part must resolve to a scalar — a primitive Property, an Integer/String ref, or a multi-hop chain ending in a primitive |
 | **compiles** | `missing_registration` | Variables/constraints defined but not registered with Problem | Ensure all `solve_for`, `satisfy`, `minimize`/`maximize` calls reference the Problem instance |
 | **solves** | `solver_crash` | Solver errors out (license, memory, malformed problem) | Check solver logs; simplify problem size; verify solver availability |
 | **solves** | `solve_error` | Solver returned error (license, timeout, numerical) | Check solver logs; re-solve is safe on same Problem instance (SDK >= 1.0.3) |
-| **optimal** | `infeasible` | No solution satisfies all constraints | Over-constrained — relax bounds, remove conflicting constraints, add slack |
+| **optimal** | `infeasible` | No solution satisfies all constraints | Over-constrained — relax bounds, drop a conflicting `satisfy(...)` (rebuild the Problem omitting it — Problem is append-only), or add slack/penalty variables |
 | **optimal** | `dual_infeasible` | Objective can improve infinitely (unbounded) | Missing bounds or capacity constraints; check objective direction |
 | **optimal** | `time_limit_large_gap` | Solver timed out with >5% gap | Increase time, tighten Big-M, add symmetry breaking, reduce problem size |
 | **non-trivial** | `missing_forcing_constraint` | "Do nothing" satisfies all constraints — trivial zero solution | Add demand satisfaction, coverage, or assignment completeness constraints |

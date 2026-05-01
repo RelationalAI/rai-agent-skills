@@ -14,6 +14,13 @@
   - [MIP Self-Check](#mip-self-check)
 - [Operator and Construct Compatibility by Solver](#operator-and-construct-compatibility-by-solver)
 - [Reformulation Techniques for Solver Compatibility](#reformulation-techniques-for-solver-compatibility)
+  - [Product of binary x continuous → McCormick / Big-M linearization](#product-of-binary-x-continuous--mccormick--big-m-linearization)
+  - [Absolute value → auxiliary variable + two constraints](#absolute-value--auxiliary-variable--two-constraints)
+  - [Min / max → epigraph reformulation](#min--max--epigraph-reformulation)
+  - [Logical implication in MIP → Big-M](#logical-implication-in-mip--big-m)
+  - [Piecewise linear → SOS2](#piecewise-linear--sos2)
+  - [Floor / ceil on decision variables → integer variable](#floor--ceil-on-decision-variables--integer-variable)
+  - [Nonlinear + integer → decomposition](#nonlinear--integer--decomposition)
 <!-- /TOC -->
 
 ## Numerical Stability
@@ -171,25 +178,26 @@ Integer variables are stored as floating-point. A variable is "integer" if withi
 
 Before building a formulation, verify that the operators and constructs you plan to use are supported by the target solver. Using an unsupported construct causes a solve-time error that requires reformulation.
 
+Operators are imported from `relationalai.semantics.std.math` (`math.abs`, `math.exp`, etc.) or are Python operators (`**`, `*`, `+`). Constructs shown as `name(...)` (e.g., `implies(...)`, `all_different(...)`) are special-form helpers from the prescriptive library.
+
 | Operator / Construct | HiGHS | Gurobi | Ipopt | MiniZinc |
 |----------------------|-------|--------|-------|----------|
-| Linear constraints (`<=`, `>=`, `==`) | Yes | Yes | Yes | Yes |
-| Integer / binary variables | Yes | Yes | No (continuous only) | Yes |
-| Quadratic constraints | No | Yes (convex) | Yes | No |
-| Product of 2 decision vars | No (linearize) | Yes (bilinear) | Yes | Yes |
-| `abs(x)` | No (reformulate) | Yes (via `abs_()`) | Yes | Yes |
-| `min` / `max` | No (reformulate) | Yes (general constraints) | No (reformulate) | Yes |
-| `exp`, `log` | No | No | Yes | No |
-| `sqrt` | No | No | Yes | No |
-| `sin`, `cos`, trig | No | No | Yes | No |
-| `x ** n` (power) | No | Yes (n=2 only) | Yes | No |
-| Quadratic objective | Yes (convex) | Yes | Yes | No |
-| `implies` / indicator | No (Big-M) | Yes (indicator constraints) | N/A | Yes |
-| `all_different` | No | No | No | Yes |
-| SOS1 / SOS2 | No | Yes | No | No |
-| Piecewise linear | Via binary vars | Native PWL / SOS2 | No | Via element |
+| Linear arithmetic (`+`, `-`, `*` by const, `/` by const) | Yes | Yes | Yes | Yes |
+| Integer / binary variables (`type="int"`, `type="bin"`) | Yes | Yes | No (continuous only) | Yes |
+| Quadratic objective (`var * var` in `minimize`/`maximize`) | Yes (convex) | Yes | Yes | No |
+| Bilinear / quadratic constraints (`var * var` in `satisfy`) | No (linearize) | Yes (convex) | Yes | Yes (discrete vars only) |
+| `math.abs(x)` | No (reformulate) | Yes | Yes | Yes |
+| Aggregate `min(...)` / `max(...)` over a collection (`from relationalai.semantics import min, max`) | No (reformulate) | Yes (general constraints) | No (reformulate) | Yes |
+| `math.exp(x)`, `math.log(x)` (and `math.log2`, `math.log10`, `math.natural_log`) | No | Yes | Yes | No |
+| `math.sqrt(x)`, `math.cbrt(x)` | No | Yes | Yes | No |
+| `x ** n` / `math.pow(x, n)` | No (n=2: linearize) | Yes | Yes | Yes (integer n) |
+| `implies(...)` | No (Big-M) | Yes (indicator constraints) | N/A | Yes |
+| `all_different(...)` | No | No | No | Yes |
+| `special_ordered_set_type_1(...)` / `_type_2(...)` | No | Yes | No | No |
 
-**Decision rule:** If the problem needs nonlinear functions (`exp`, `log`, `sqrt`, trig) → Ipopt. If it needs `all_different` or complex logical constraints → MiniZinc. If it needs integer variables with quadratic terms → Gurobi. For pure linear/MIP → HiGHS (default) or Gurobi.
+**Not supported in solver expressions** (compile-time error if used inside `solve_for`/`satisfy`/`minimize`/`maximize`): `%` (modulo), `//` (floor division), `math.floor`, `math.ceil`, `math.round`, `math.sign`, `math.clip`, `math.minimum(x, y)` / `math.maximum(x, y)` (pairwise — use the aggregate `min`/`max` row above instead), trig (`math.sin`/`cos`/`tan` and their hyperbolic/inverse variants — including `math.degrees`/`math.radians`/`math.haversine`), `math.factorial`, `math.erf`/`math.erfinv`, division between two decision variables. (These are common examples; the prescriptive wire format's authoritative list of supported operators is `_OP_CODES` in `relationalai.semantics.reasoners.prescriptive.wire_format` — anything not in that list does not lower to the solver.) Use piecewise-linear approximations or reformulations for unsupported operators.
+
+**Decision rule:** If the problem needs nonlinear functions (`math.exp`, `math.log`, `math.sqrt`, `x**n`) → Gurobi (preferred when licensed) or Ipopt. If it needs `all_different(...)` or complex logical constraints → MiniZinc. If it needs integer variables with quadratic terms → Gurobi. For pure linear/MIP → HiGHS (default) or Gurobi.
 
 **Before solving:** Check that every expression in the formulation uses only operators supported by the selected solver. If not, either switch solvers or apply a reformulation technique (see below).
 
@@ -251,56 +259,9 @@ Replace `y = floor(x)` with integer variable `y` and constraints:
 
 ### Nonlinear + integer → decomposition
 
-If the problem mixes nonlinear functions with integer variables (no single solver handles both well):
-1. **Gurobi** handles quadratic + integer natively — use if only quadratic nonlinearity
-2. For general nonlinear + integer: decompose into an outer integer master problem (HiGHS/Gurobi) and inner NLP subproblem (Ipopt), solved iteratively
-3. Alternative: linearize the nonlinear part (piecewise linear approximation) and solve as MIP
-
----
-
-## Solution Count Guidance
-
-When generating multiple alternative solutions, the appropriate count depends on problem type and solver capabilities:
-
-| Problem type | Recommended count | Rationale |
-|---|---|---|
-| Binary assignment (scheduling, shift) | 5–10 | Each solution is a distinct assignment; users can compare alternatives |
-| Resource allocation (continuous) | 5–15 | Different trade-off frontiers show budget/return variety |
-| Routing (TSP, VRP) | 3–5 | Solutions differ subtly (permutations); diminishing returns above 5 |
-| Multi-period/inventory | 3–5 | Large variable counts make diverse solutions expensive |
-
-**Solver-specific limits:**
-- **HiGHS:** Limited multi-solution support — typically returns 1–2 solutions. Cap at 5.
-- **MiniZinc:** Native support for solution enumeration. Can handle 10–20+.
-- **Gurobi:** Pool search mode supports 10–20+ solutions efficiently.
-
-**Rules of thumb:**
-- Simple problems (few binary variables): 5–10 solutions
-- Complex problems (many variables, tight constraints): 3–5 solutions
-- If solver is HiGHS: max 5 (often only gets 1–2)
-- Balance variety vs overwhelming the user — 5–10 is typical for most problems
-
----
-
-## Complexity and Time Estimates
-
-Rough heuristics for estimating solve time based on problem size and type:
-
-| Problem class | Variable count | Estimated time | Confidence |
-|---|---|---|---|
-| LP (no integers) | < 1,000 | ~1s | High |
-| LP | 1,000–10,000 | ~5s | Medium |
-| LP | 10,000+ | ~30s | Low |
-| MIP/IP | < 100 | ~2s | Medium |
-| MIP/IP | 100–1,000 | ~30s | Medium |
-| MIP/IP | 1,000–10,000 | ~5 min | Low |
-| MIP/IP | 10,000+ | ~30 min | Very low |
-
-**Key insight:** MIP solve time depends heavily on problem structure (LP relaxation tightness, symmetry, constraint topology), not just size. A 500-variable TSP can take longer than a 5,000-variable LP. These are rough lower bounds — actual times can vary 10x or more.
-
-**When to recommend time limit increases:**
-- Default 60s is appropriate for most problems under 5,000 variables
-- For 5,000+ variable MIPs, suggest 300–600s
-- If solver hits time limit with gap > 5%, suggest increasing limit or simplifying the formulation
+If the problem mixes nonlinear functions with integer variables:
+1. **Gurobi** handles quadratic, `exp`, `log`, `sqrt`, and general `x**n` nonlinearity natively alongside integer/binary variables — preferred when licensed.
+2. For nonlinear shapes Gurobi doesn't handle: decompose into an outer integer master problem (HiGHS/Gurobi) and inner NLP subproblem (Ipopt), solved iteratively. Ipopt itself does NOT handle integer variables.
+3. Alternative: linearize the nonlinear part (piecewise linear approximation) and solve as MIP.
 
 ---

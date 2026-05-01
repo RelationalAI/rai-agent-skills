@@ -27,7 +27,7 @@ description: Formulates optimization problems from ontology models covering deci
 - Aggregation syntax (count/sum/per patterns) — see `rai-querying`
 
 **Overview:**
-1. Ground in the base ontology via `inspect.schema(model)` — concepts, properties, types, relationships you're about to reference
+1. Ground in the base ontology via `relationalai.semantics.inspect.schema(model)` — concepts, properties, types, relationships you're about to reference
 2. Define decision variables (type, bounds, scope, naming)
 3. Define constraints (forcing, capacity, balance, linking; validate interactions)
 4. Define objective (direction, coefficients, multi-component handling)
@@ -138,10 +138,10 @@ Is the formulation complete and correct?
 - Every constraint references at least one decision variable
 - Join paths in `.where()` clauses connect to actual data
 - Bounds are consistent (lower <= upper)
-- **Trivial-solution gate (run before presenting or solving):** substitute every decision variable with its objective-preferred bound (typically zero for minimize) and evaluate against the actual input data, not abstractly. If every constraint still holds and the objective is at its preferred end, the solver will return that trivial point as optimal — the formulation is wrong, not merely under-specified. The non-obvious failure is a forcing constraint that exists in the formulation but is vacuous against the current data (its `where=` predicate matches no rows); see the *Missing forcing requirement* and `.per(Concept.property)` rows in Common Pitfalls for related modes. Do not present a formulation that fails this gate — a non-OR user will accept it, run it, and conclude optimization "doesn't work." If the gate's outcome depends on the input data, state that dependence with row-count evidence.
+- **Trivial-solution gate (run before presenting or solving):** substitute every decision variable with its objective-preferred bound (typically zero for minimize) and evaluate against the actual input data, not abstractly. If every constraint still holds and the objective is at its preferred end, the solver will return that trivial point as optimal — the formulation is wrong, not merely under-specified. The non-obvious failure is a forcing constraint that exists in the formulation but is vacuous against the current data (its `where=` predicate matches no rows); see the *Missing forcing requirement* and *Wrong aggregation scope* rows in Common Pitfalls for related modes. Do not present a formulation that fails this gate — a non-OR user will accept it, run it, and conclude optimization "doesn't work." If the gate's outcome depends on the input data, state that dependence with row-count evidence.
 - **Data-driven feasibility precheck:** when constraint bounds derive from input data, verify the constraint system admits at least one feasible point given that data. Aggregate at the **constraint's natural disaggregation level** — per-entity for per-entity constraints, per-group for grouped ones; a single global total can mask per-slice infeasibility (`Σ supply ≥ Σ demand` may hold while every per-entity slice fails). Run the check as PyRel aggregation queries (see `rai-querying`) so it pushes down to the warehouse (e.g., Snowflake) without pulling rows. If lower-bound exceeds upper-bound at any slice, the formulation is infeasible by construction; surface to the user before solve. See [examples/presolve_feasibility_gate.py](examples/presolve_feasibility_gate.py).
 
-**Pre-solver audit:** before calling `problem.solve(...)`, run a two-step check.
+**Pre-solver audit:** before calling `problem.solve(...)`, run a three-part check (a–c below).
 
 **(a) Registration.** `solve_for` / `satisfy` / `minimize` / `maximize` register concepts named `Variable`, `Constraint`, `Objective` (plus a per-solve `Variable_<id>` subconcept for each decision variable). They appear in `inspect.schema(model).concepts`:
 
@@ -371,17 +371,15 @@ For detailed heuristics, examples, and the over-specification recognition table,
 | Wrong aggregation scope | `.per(Y)` but Y not joined to the summed concept | Add explicit relationship join in `.where()` |
 | Big-M too loose -> slow solve | Using arbitrary `999999` instead of data-driven bound | Use `M = capacity` or `M = max_demand` from entity properties |
 | Missing forcing requirement | MINIMIZE objective with no forcing constraint yields zero | Always identify what real-world requirement forces positive activity |
-| Constraint references unwired relationship | Relationship declared but no `define()` data binding | Verify all relationships in `.where()` joins have `define()` rules. Unwired relationships cause TyperError or silently match zero entities. |
+| Constraint references unwired relationship | Relationship declared but no `define()` data binding | Verify all relationships in `.where()` joins have `define()` rules. Unwired relationships silently match zero entities — the constraint is dropped and the solver returns OPTIMAL with a vacuous objective. |
 | `problem.satisfy()` or `model.define()` in a Python loop | Defining constraints per entity in a for loop instead of declaratively | Use vectorized `.where().define()` or `problem.satisfy()` with `.per()`. See `rai-pyrel-coding` Common Pitfalls for before/after examples |
 | `Duplicate relationship` / `FDError` on re-solve | Solving multiple scenarios with `populate=True` (default) writes conflicting results to the graph | Use `populate=False` + `Variable.values()` to extract results. Create a fresh `Problem` per loop iteration. See [known-limitations.md](references/known-limitations.md) > Re-Solve Behavior. |
-| `TyperError` at solve time with concept-type `identify_by` | Cross-product concept using `identify_by={"a": ConceptA, "b": ConceptB}` passes queries but fails during `problem.solve()` type inference | Use flat identity keys (String or Integer). Encode composite keys as strings (e.g., `f"{a_id}_{b_id}"`) or use separate primitive properties for each dimension |
-| `.per(Concept.property)` silently ignored in solver constraints | Property-value grouping (e.g., `.per(Slot.group_name)`) doesn't translate to solver constraints — produces all-zero "optimal" solution | Use entity-level `.per(ParentConcept)` with a relationship join: create a parent concept for the grouping dimension and link via Relationship, then group with `.per(Parent).where(Child.parent(Parent))` |
 | Forcing constraint added when objective already penalizes inaction | Adding `>= 1` forcing alongside a cost-penalty objective over-constrains the problem — turns an OPTIMAL-with-cost-tradeoff into INFEASIBLE. Distinct from rows above where forcing IS needed (no penalty mechanism) | Check: does the objective already penalize zero activity? If yes, forcing is redundant. Only add forcing constraints explicitly required by the problem statement |
 | Infeasible but not caught before solve | Feasibility arithmetic not validated — e.g., 50 entities need service, 4 periods, max 5/period = 20 slots < 50 needed | Before formulating, verify: `entity_count / periods / capacity_per_period` fits. If not, adjust parameters or confirm the problem allows partial coverage |
 | Linear objective over continuous decision variables collapses to one entity | LP pushes to the boundary — without a per-entity upper cap the max-coefficient entity absorbs all budget/weight. Symptom: "+X% lift" headlines masking a single-winner solution. | Add a per-entity upper cap (e.g., `w_i <= 3 * current_i`), switch to a concave objective (`sqrt`, `log`), or piecewise-linear saturation curves. |
-| `solve_for(where=expr)` raises `[Invalid operator] Cannot use python's 'bool check'` | `where` argument is iterated as a tuple; passing a bare expression triggers PyRel's `__bool__` guard | Wrap in a list: `where=[Concept.prop >= threshold, ...]` |
-| `problem.satisfy(<expr>)` raises `TypeError: satisfy() expects a Fragment from model.require(...)` | Bare comparison expression passed to `problem.satisfy()` instead of a Fragment | Wrap with `model.require(<expr>)` or use `model.where(<scope>).require(<expr>)`. See [constraint-formulation.md](references/constraint-formulation.md) > Style 1/Style 2 |
-| `solve_for(concept_ref.property)` raises `TypeError: Chain must have Concept start and Relationship next` | First arg requires bare `Concept.property` — refs are valid only inside `where=[...]`. Symmetric instinct from using refs in scope clauses doesn't extend to the variable declaration itself | Pass bare `Concept.property` to `solve_for(...)`; reserve refs for `where=[...]` joins |
+| `solve_for(where=expr)` errors on PyRel's `__bool__` guard | `where` argument is iterated as a tuple; passing a bare expression triggers Python truthiness, which PyRel rejects | Wrap in a list: `where=[Concept.prop >= threshold, ...]` |
+| `problem.satisfy(<expr>)` raises `TypeError` complaining it expects a `Fragment` | Bare comparison expression passed to `problem.satisfy()` instead of the result of `model.require(...)` | Wrap with `model.require(<expr>)` or use `model.where(<scope>).require(<expr>)`. See [constraint-formulation.md](references/constraint-formulation.md) > Style 1/Style 2 |
+| `solve_for(concept_ref.property)` raises `TypeError` about Chain start | First arg requires bare `Concept.property` — refs are valid only inside `where=[...]`. Symmetric instinct from using refs in scope clauses doesn't extend to the variable declaration itself | Pass bare `Concept.property` to `solve_for(...)`; reserve refs for `where=[...]` joins |
 
 For detailed unwired relationship symptoms, checks, and code examples, see [constraint-formulation.md](references/constraint-formulation.md) > Unwired Relationships (Detailed).
 
@@ -401,22 +399,13 @@ When reviewing an existing formulation, see [formulation-analysis-context.md](re
 
 ### Multi-component objectives with `model.union()`
 
-Do not use `+` to combine cost terms from independent concept groups — this causes `AssertionError: Union outputs must be Vars`. Use `model.union()` instead.
-
-**Critical:** Each branch of `model.union()` must be a **per-entity expression** (bound to a concept), NOT a fully-aggregated scalar. Keep costs at concept level and let the outer `sum()` aggregate:
+The cleanest pattern for combining cost terms across independent concept groups is `model.union()` with one per-entity expression per branch and an outer `sum()`:
 
 ```python
-# CORRECT: per-entity cost expressions inside model.union()
 problem.minimize(sum(model.union(
     ResourceGroup.holding_cost * sum(x_inv).per(ResourceGroup).where(...),  # per-ResourceGroup
     Arc.transport_cost * Arc.x_flow,                                        # per-Arc
     Factory.unit_cost * Factory.x_production,                               # per-Factory
-)))
-
-# WRONG: scalar sums inside model.union()
-problem.minimize(sum(model.union(
-    sum(x * ResourceGroup.cost),   # scalar — causes AssertionError
-    sum(Arc.x_flow * Arc.cost),    # scalar — causes AssertionError
 )))
 ```
 
@@ -429,28 +418,26 @@ prod_cost = ProdCapacity.production_cost * sum(x_prod).per(ProdCapacity).where(
 `model.union()` collects ALL matching values from each branch (set union semantics). This is distinct from `|` (pipe), which picks the first successful branch (ordered fallback).
 
 **Additional v1 pitfalls with parametric variables:**
-- **`name=[]` must NOT traverse relationships** — use identity fields (e.g., `ProdCapacity.site_id`) not `ProdCapacity.site.name` (causes FD violation)
+- **`name=[]` parts must resolve to scalars** — see [variable-formulation.md](references/variable-formulation.md) > Variable naming (`name=[]`).
 - **Cross-concept joins need distinct attribute names** — if two concepts both have `site_id` as `identify_by`, rename one (e.g., `wk_site_id`) to avoid ambiguity
 - **Only one objective supported** — HiGHS rejects multiple `minimize()`/`maximize()` calls
 - **Bi-objective via epsilon constraint**: To optimize two competing objectives, use the epsilon constraint loop — convert the secondary objective to a parameterized constraint and sweep it across the feasible range. Each iteration is a standard single-objective Problem. See [multi-objective-formulation.md](references/multi-objective-formulation.md).
 
 For constraint naming with lists, re-solve behavior (multi-scenario patterns), `| 0` fallback limitation, and numpy type casting, see [known-limitations.md](references/known-limitations.md).
 
-### PyRel is additive — nothing can be removed or modified in-place
+### Problem is additive — solve_for / satisfy / minimize accumulate
 
-PyRel's model and problem APIs are **append-only**. Every call to `model.define()`, `model.Property()`, `model.Concept()`, `problem.solve_for()`, `problem.satisfy()`, `problem.minimize()`/`problem.maximize()` **adds** to the model or problem. There is no API to remove, replace, or modify any existing element.
+`Problem` inherits PyRel's append-only behavior (see `rai-pyrel-coding` > Definitions). Every `problem.solve_for()`, `problem.satisfy()`, `problem.minimize()`/`maximize()` **adds** to the Problem — there is no remove/replace API.
 
-**This applies to the entire stack:**
-- **Attributes/properties:** Adding a new `model.Property()` or `model.Relationship()` grows the model. You cannot delete or rename an existing property.
-- **Concepts:** New `model.Concept()` calls add concepts. Existing concepts cannot be removed.
-- **Variables:** Each `problem.solve_for()` registers an additional decision variable. You cannot unregister one.
-- **Constraints:** Each `problem.satisfy()` accumulates. Adding a "corrected" version does not replace the original — both remain active, and the tighter one binds.
-- **Objectives:** Only one `problem.minimize()` or `problem.maximize()` per Problem.
+- **Variables:** Each `solve_for()` registers an additional decision variable.
+- **Constraints:** Each `satisfy()` accumulates. Adding a "corrected" version does not replace the original — both remain active, and the tighter one binds.
+- **Objectives:** Only one `minimize()` or `maximize()` per Problem.
 
 **Practical impact:**
-- To change constraints or variables, you must create a **new Problem** and re-register all elements from scratch.
-- Multi-scenario optimization must use a new `Problem` per scenario.
-- Model-level changes (new properties, concepts) persist across all subsequent Problems on that model — plan the model schema before building formulations.
+- To remove or weaken an existing constraint or variable, create a **new Problem** and re-register only the elements you want.
+- Re-calling `problem.solve()` on the same Problem is safe: it re-runs the solver against the current (accumulated) formulation and updates variable values. Use this when you want to add more constraints/variables and re-solve. Use a new Problem only when you want to *remove* something.
+- Multi-scenario optimization where the constraint set differs per scenario should use a new Problem per scenario. If only parameter values change, the Scenario Concept pattern (one Problem, one solve, scenario as a data dimension) is preferred — see [scenario-analysis.md](references/scenario-analysis.md).
+- Model-level additions (new properties, concepts) persist across all subsequent Problems on that model — plan the model schema before building formulations.
 
 ---
 
@@ -466,6 +453,7 @@ PyRel's model and problem APIs are **append-only**. Every call to `model.define(
 | Scenario analysis | Scenario Concept vs Loop + where= patterns, decision matrix, code examples | [scenario-analysis.md](references/scenario-analysis.md) |
 | Formulation simplification | Static vs dynamic parameters, goals vs constraints, grouped constraints, over-specification | [formulation-simplification.md](references/formulation-simplification.md) |
 | Multi-objective formulation | Approach selection, epsilon constraint method, tension heuristics, pitfalls | [multi-objective-formulation.md](references/multi-objective-formulation.md) |
+| Fix generation guidelines | Root cause taxonomy, grounding rules, join path fixes, trivial/infeasible fix strategies | [fix-generation-guidelines.md](references/fix-generation-guidelines.md) |
 | Examples index | All example problems with patterns demonstrated | [examples-index.md](references/examples-index.md) |
 | Formulation analysis context | Naming conventions, alias handling, expression parsing, aggregation patterns for review | [formulation-analysis-context.md](references/formulation-analysis-context.md) |
-| Known limitations (secondary) | Constraint naming, re-solve behavior, `\| 0` fallback limitation, numpy type casting | [known-limitations.md](references/known-limitations.md) |
+| Known limitations (secondary) | Constraint naming, re-solve behavior, `\| <literal>` fallback limitation, numpy type casting | [known-limitations.md](references/known-limitations.md) |

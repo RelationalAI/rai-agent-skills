@@ -5,10 +5,8 @@
   - [Constraint type classification](#constraint-type-classification)
   - [Two constraint styles](#two-constraint-styles)
   - [Tightness and contradictions](#tightness-and-contradictions)
-  - [Forcing constraints for minimize objectives](#forcing-constraints-for-minimize-objectives)
-  - [Forcing constraints for maximize objectives](#forcing-constraints-for-maximize-objectives)
+  - [Forcing constraints](#forcing-constraints)
   - [Demand modeling: context determines direction](#demand-modeling-context-determines-direction)
-  - [Forcing constraints (demand satisfaction, assignment completeness)](#forcing-constraints-demand-satisfaction-assignment-completeness)
   - [Self-defeating constraints](#self-defeating-constraints)
 - [Constraint Modeling Patterns](#constraint-modeling-patterns)
   - [Balance constraints](#balance-constraints)
@@ -105,18 +103,9 @@ After identifying variables, use these prompts to systematically discover missin
 
 ## Constraint Principles
 
-### RAI Expression Restrictions (Quick Reference)
+### RAI Expression Restrictions
 
-Python boolean keywords (`and`, `or`, `not`, `if/else`) are **invalid** in RAI constraint expressions. Use operator overloads instead:
-
-| Invalid | Correct |
-|---------|---------|
-| `x >= 1 and y >= 1` | `(x >= 1) & (y >= 1)` |
-| `x >= 1 or y >= 1` | `(x >= 1) \| (y >= 1)` |
-| `not x_active` | `model.not_(x_active)` or `not_(x_active)` (from `relationalai.semantics`) |
-| `value if cond else fallback` | `value \| fallback`, or `.where(cond)` scoping |
-
-For full expression rules, see `rai-pyrel-coding` > Boolean Logic in Expressions.
+Python boolean keywords (`and`, `or`, `not`, `if/else`) are invalid inside RAI expressions — use the operator overloads (`&`, `|`, `model.not_()`) and `.where()` scoping. This rule applies to all PyRel expressions, not just constraints. For the full table and `|` vs `model.union()` semantics, see `rai-pyrel-coding` > Boolean Logic in Expressions.
 
 ### Constraint categories
 
@@ -188,7 +177,9 @@ model.require(x_weight <= fast_cap * y_bin_fast).where(
 
 **Too loose:** Solver returns degenerate or extreme solutions. Variables at bounds that shouldn't be. Add missing business rules, tighten bounds, verify coefficients are correct.
 
-### Forcing constraints for minimize objectives
+### Forcing constraints
+
+#### For minimize objectives
 
 When the objective is to MINIMIZE with non-negative cost coefficients and no forcing constraints, the solver may achieve cost=0 by setting all decision variables to zero. This is the most common trivial-solution trap.
 
@@ -214,26 +205,13 @@ Common mistake: applying a per-cross-product forcing constraint (every item in e
 
 **Ask:** "Does the requirement apply once per [base entity], or once per [base entity × period/resource]?" The answer determines the `.per()` scope.
 
-### Forcing constraints for maximize objectives
+#### For maximize objectives
 
 When the objective is to MAXIMIZE (profit, revenue, value) with positive coefficients, the optimizer naturally drives variables up — trivial all-zero solutions are not a risk. However, maximize problems still need:
 - **Capacity/resource constraints** to bound the solution
 - **Demand satisfaction constraints** to ensure balanced fulfillment — without these, the optimizer concentrates all resources on the highest-margin items, starving lower-margin ones even when shared resources connect them
 
-### Demand modeling: context determines direction
-
-Demand is NOT simply "upper bound for maximize, lower bound for minimize." The correct modeling depends on the business relationship and real-world consequences:
-
-| Business Context | Constraint | User-facing description | Rationale |
-|-----------------|------------|------------------------|-----------|
-| **Market opportunity** (can sell up to demand) | `qty <= demand` | Don't produce more than customers will buy | Can't sell more than the market wants |
-| **Contractual obligation** (must fulfill orders) | `qty >= demand` | Fulfill every customer order in full | Penalties or contract breach for shortfall |
-| **Forced acceptance** (must take delivery) | `qty >= demand` | Accept all incoming deliveries from suppliers | Supplier pushes product; you must absorb it |
-| **Flexible fulfillment** (partial OK) | Soft constraint with penalty | Meet as much demand as possible, penalizing shortfalls | Penalize shortfall in objective rather than hard constraint |
-
-**Rule:** Ask "What happens in the real world if we go above/below this quantity?" The answer determines the constraint direction, not the objective direction.
-
-### Forcing constraints (demand satisfaction, assignment completeness)
+#### Code patterns (demand satisfaction, assignment completeness)
 
 ```python
 # Each shift must have minimum coverage
@@ -253,6 +231,19 @@ problem.satisfy(model.require(
     node_flow.where(Edge.i == Node.v) == 1
 ))
 ```
+
+### Demand modeling: context determines direction
+
+Demand is NOT simply "upper bound for maximize, lower bound for minimize." The correct modeling depends on the business relationship and real-world consequences:
+
+| Business Context | Constraint | User-facing description | Rationale |
+|-----------------|------------|------------------------|-----------|
+| **Market opportunity** (can sell up to demand) | `qty <= demand` | Don't produce more than customers will buy | Can't sell more than the market wants |
+| **Contractual obligation** (must fulfill orders) | `qty >= demand` | Fulfill every customer order in full | Penalties or contract breach for shortfall |
+| **Forced acceptance** (must take delivery) | `qty >= demand` | Accept all incoming deliveries from suppliers | Supplier pushes product; you must absorb it |
+| **Flexible fulfillment** (partial OK) | Soft constraint with penalty | Meet as much demand as possible, penalizing shortfalls | Penalize shortfall in objective rather than hard constraint |
+
+**Rule:** Ask "What happens in the real world if we go above/below this quantity?" The answer determines the constraint direction, not the objective direction.
 
 ### One-hot selection (exactly-one-of-N)
 
@@ -406,9 +397,9 @@ x_weight <= fast_cap * y_bin_fast      # x_weight <= 999999 * y_bin_fast
 A declared `model.Relationship()` without a corresponding `model.define()` rule has NO DATA at solve time. The relationship exists in the schema but has zero bindings.
 
 **Symptoms:**
-- `TyperError` during solve ("type inference" or "type could not be determined")
-- Constraints silently match zero entities (empty joins)
-- `.per(Concept)` aggregations return nothing
+- The constraint is silently dropped — joins on the unwired relationship match zero entities, so no constraint rows are generated.
+- `.per(Concept)` aggregations return nothing.
+- The solver returns OPTIMAL with a vacuous objective (typically zero on minimize), masking the missing constraint.
 
 **Check:** For every relationship in a constraint `.where()` clause, verify a `model.define()` rule populates it. If no define rule exists, the relationship is unwired — do not use it in constraints.
 
@@ -418,9 +409,7 @@ A declared `model.Relationship()` without a corresponding `model.define()` rule 
 sum(Operation.x_flow).where(Operation.transformation == Site).per(Site) >= Site.demand
 
 # CORRECT: use a relationship with define() data binding, or join via shared identity properties
-Op = Operation.ref()
-UD = UnmetDemand.ref()
-sum(Op.x_flow).where(Op.output_sku == UD.sku).per(UD.sku)
+sum(Operation.x_flow).where(Operation.output_sku == UnmetDemand.sku).per(UnmetDemand.sku)
 ```
 
 ### Historical comparison / tolerance band constraints
@@ -486,41 +475,13 @@ problem.satisfy(model.require(supply + AggConcept.x_slack >= demand))
 
 **LINKING TWO CROSS-PRODUCT CONCEPTS through shared dimensions:**
 
-When two cross-product concepts share dimensions (e.g., TechnicianMachinePeriod and MachinePeriod both have machine and period), use `.ref()` aliases for all concepts in the expression.
+When two cross-product concepts share dimensions (e.g., `TechnicianMachinePeriod` and `MachinePeriod` both have machine and period), join them on the shared dimensions inside the aggregate's `.where()` and group with `.per(GroupingConcept)`:
 
 ```python
-# WRONG — bare concepts without .ref() cause TyperError in cross-concept joins:
-sum(TechnicianMachinePeriod.x_assigned).where(
-    TechnicianMachinePeriod.machine == MachinePeriod.machine,
-    TechnicianMachinePeriod.period == MachinePeriod.period
-).per(MachinePeriod)
-
-# CORRECT — use .ref() aliases for cross-concept joins:
-TMP_ref = TechnicianMachinePeriod.ref()
-MP_ref = MachinePeriod.ref()
-
-assign_per_mp = sum(TMP_ref.x_assigned).where(
-    TMP_ref.machine == MP_ref.machine,
-    TMP_ref.period == MP_ref.period
-).per(MP_ref)
-
-problem.satisfy(model.require(assign_per_mp == MP_ref.x_machine_maintained))
+sum(TMP.x_assigned).where(TMP.machine == MP.machine, TMP.period == MP.period).per(MP) <= MP.cap
 ```
 
-**Why:** `.ref()` creates a reference alias that the type inferencer can disambiguate. Without `.ref()`, when multiple concepts appear in the same expression, the inferencer can't resolve which entity maps to which. Always use `.ref()` when a constraint involves 2+ concepts.
-
-**Single-dimension linking** (simpler — one shared dimension):
-```python
-# relationship == bare concept works for single-dimension joins:
-AssignmentRef = Assignment.ref()
-trip_coverage = sum(AssignmentRef.x_assigned).where(AssignmentRef.trip == Trip).per(Trip)
-problem.satisfy(model.require(trip_coverage >= 1))
-```
-
-**Rule: When to use `.ref()`:**
-- **Always** when 2+ concepts appear in the same `sum().where().per()` expression
-- **Always** when joining cross-product concepts (e.g., linking TechnicianMachinePeriod to MachinePeriod)
-- **Optional** for single-concept constraints (e.g., `Concept.x_var <= Concept.capacity`)
+Bare references unify within the require chain — no `.ref()` aliasing is needed for this pattern. For when `.ref()` is and isn't required, see `rai-pyrel-coding` § Free-Variable Scoping.
 
 **COMPLETE EXAMPLE: Demand satisfaction with slack via shared dimension**
 
@@ -539,12 +500,9 @@ model.define(UnmetDemand.new(sku=Demand.sku))  # One per unique demanded SKU
 problem.solve_for(UnmetDemand.x_slack, lower=0, name=["unmet", UnmetDemand.sku.id])
 
 # 2. Constraint: supply + slack >= demand, per shared dimension
-Op = Operation.ref()
-D = Demand.ref()
-UD = UnmetDemand.ref()
-inflow_per_sku = sum(Op.x_flow).where(Op.output_sku == UD.sku).per(UD.sku)
-demand_per_sku = sum(D.quantity).where(D.sku == UD.sku).per(UD.sku)
-problem.satisfy(model.require(inflow_per_sku + UD.x_slack >= demand_per_sku).where(UD))
+inflow_per_sku = sum(Operation.x_flow).where(Operation.output_sku == UnmetDemand.sku).per(UnmetDemand.sku)
+demand_per_sku = sum(Demand.quantity).where(Demand.sku == UnmetDemand.sku).per(UnmetDemand.sku)
+problem.satisfy(model.require(inflow_per_sku + UnmetDemand.x_slack >= demand_per_sku))
 
 # 3. Objective: minimize cost + penalty for unmet demand
 PENALTY = 1000.0
@@ -557,35 +515,34 @@ See templates for complete working examples.
 
 ### Cross-Concept Join Rules
 
-These rules prevent the most common code generation failures. Violating them produces RAI engine errors like "Type could not be determined" or silently returns 0 matches.
+These rules cover patterns that frequently cause code generation issues — engine errors, empty results, or unintended cross products.
 
-**Rule 1: Never compare two relationships in `.where()`**
+**Rule 1: Prefer the shared dimension Concept on the RHS in `.where()` joins**
 ```python
-# WRONG: Both sides are relationship traversals, not concept types
+# Common pattern: Group flow by the shared dimension concept directly
 sum(Operation.x_flow).where(
-    Operation.destination_site(SiteProduction.site),  # BAD: comparing two relationships
-    Operation.output_sku(SiteProduction.sku)           # BAD: same issue
-).per(SiteProduction)
-# Result: "Type could not be determined" — RAI can't resolve two relationship refs
-
-# CORRECT: RHS is a Concept type, not a relationship
-sum(Operation.x_flow).where(
-    Operation.destination_site(Site),                   # GOOD: RHS is concept Site
-    Operation.output_sku(SKU)                            # GOOD: RHS is concept SKU
+    Operation.destination_site(Site),                   # RHS is concept Site
+    Operation.output_sku(SKU)                            # RHS is concept SKU
 ).per(Site)
-# Group by the shared dimension concept directly
+
+# Alternative: traversing through an extended concept (SiteProduction has .site, .sku)
+# also resolves, but routes the join through SiteProduction's cross-product —
+# easy to introduce unintended row blow-up. Prefer the dimension concepts when
+# they carry enough identity for the grouping you want.
+sum(Operation.x_flow).where(
+    Operation.destination_site(SiteProduction.site),
+    Operation.output_sku(SiteProduction.sku)
+).per(SiteProduction)
 ```
 
-**Rule 2: No multi-hop on RHS of `.where()` equality**
+**Rule 2: Multi-hop chains in `.where()` are valid**
 ```python
-# WRONG: 2-hop chain on RHS — silently returns 0 matches or type error
-sum(X.x_var).where(X.rel(Y.other_rel.nested_prop))  # BAD: Y.other_rel.nested_prop is 2 hops
-
-# CORRECT: Pre-materialize the multi-hop as an enrichment property
-# First: add enrichment Y.nested_value (derived from Y.other_rel.nested_prop)
-# Then: use the flat property
-sum(X.x_var).where(X.rel(Y.nested_value))  # GOOD: single-hop property
+# Both forms resolve correctly when the chain is populated:
+sum(X.x_var).where(X.rel(Y.other_rel.nested_prop))  # OK: relation arg with 2-hop chain
+sum(X.x_var).where(X.rel == Y.other_rel.nested_prop)  # OK: equality with 2-hop chain
 ```
+
+If a chained `.where()` returns empty results, the cause is usually the chain itself being unpopulated (an FK Property declared but never filled by `model.define(...)`), not the chaining mechanic. Pre-materializing as an enrichment property is an ergonomic/reuse choice, not a correctness requirement.
 
 **Rule 3: Avoid cross-product entity concepts in `.where()` joins**
 When using extended concepts (e.g., SiteProduction with `.site` and `.sku` relationships):
@@ -600,42 +557,36 @@ Before using `Concept.some_relationship` in a constraint:
 - Common mistake: guessing names like `reviewer_githubpullrequest` when the actual name is `pull_request`
 
 **Rule 5: Valid RHS types in `.where()` equality**
-The RHS of a `.where()` equality must be ONE of:
+The RHS of a `.where()` equality may be:
 - A **Concept type**: `.where(A.rel(ConceptName))` — groups by that concept
-- A **single-hop property**: `.where(A.prop(B.prop))` — matches on shared values
+- A **property reference**: `.where(A.prop(B.prop))` — matches on shared values; multi-hop chains (`B.rel.nested_prop`) are also valid when populated
 - A **literal value**: `.where(A.prop("value"))` or `.where(A.prop(42))`
 
-Never use: chained properties (2+ hops), relationship-to-relationship comparisons, or nested `.where()` calls.
+Avoid: nested `.where()` calls.
 
-**Rule 6: No multi-hop property traversals in solver expressions**
+**Rule 6: `.per()` on extended concepts — group via the extended concept's relationship, not the base concept**
 
-`Concept.relationship.property` patterns in `problem.satisfy()`, `problem.minimize()`, `problem.maximize()`, or `problem.solve_for()` cause `UnresolvedOverload` TyperErrors. The solver type inferencer cannot resolve chained property access through relationships.
+When grouping a sum on an extended (cross-product) concept by one of its base concepts, use `.per(AB.a)` (the relationship through the extended concept), not `.per(A)` (the bare base concept):
 
-```python
-# WRONG — multi-hop traversal (TyperError):
-problem.satisfy(model.require(sum(AB_ref.x_active * AB_ref.a.cost)))
-
-# CORRECT — use an enriched flat property:
-problem.satisfy(model.require(sum(AB_ref.x_active * AB_ref.a_cost)))
-```
-
-Multi-hop traversals work in `model.define()`, `model.select()`, and `model.where()` — the restriction applies only to solver expressions. If a property from a related concept is needed in a solver expression, it must first be denormalized onto the decision concept via enrichment. Report as a `model_gap` so enrichment can create it.
-
-**Rule 7: `.per()` with extended concepts**
-When using `.per()` on an extended (cross-product) concept, you CANNOT use `.per(BaseConcept)` — you must traverse through the extended concept's relationship:
 ```python
 # Setup: AB is a cross-product of A x B
 # defined as: model.define(AB.new(a=A, b=B))
 
-# WRONG: .per(A) — solver error, A is not in scope
+# WRONG: .per(A) — solver returns OPTIMAL but constraints are silently mis-scoped.
+# The inner sum does NOT filter to AB rows where AB.a == A; it sums all AB
+# globally and replicates that constraint once per A entity.
 model.require(sum(AB.x_active).per(A) == 1)
+# Generates: sum(all_AB) == 1, sum(all_AB) == 1   (one per A — wrong)
 
-# CORRECT: .per(AB.a) — traverse through the extended concept's relationship
+# CORRECT: .per(AB.a) — generates one constraint per A with the correctly
+# filtered sum.
 model.require(sum(AB.x_active).per(AB.a) == 1)
+# Generates: sum(AB where a==A1) == 1, sum(AB where a==A2) == 1   (right)
 ```
-**Why:** The solver scope is on `AB` entities. `.per(A)` tries to group by a concept that isn't in scope. `.per(AB.a)` navigates from the extended concept to the base concept, which the solver can resolve.
 
-**Rule 8: Access data properties on extended concepts via relationship traversal**
+The failure is silent — solver returns OPTIMAL with the wrong feasibility region. Verify with `problem.display()` that per-group constraints have the expected disaggregated sums.
+
+**Rule 7: Access data properties on extended concepts via relationship traversal**
 Extended/cross-product concepts only have their own declared properties (relationships + decision variables). To access data properties from the base concept they reference, traverse the relationship.
 ```python
 # Setup: AB is an extended concept with relationship to B

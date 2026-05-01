@@ -134,25 +134,16 @@ problem.minimize(total_cost)
 
 **Why `model.union()`:** Each term may involve different concepts and scopes. `model.union()` collects them into a single summable set.
 
-**ANTI-PATTERN WARNING: Scalar sums inside `model.union()`**
-
-Each branch of `model.union()` must be a **per-entity expression** (bound to a concept), NOT a fully-aggregated scalar. Wrapping `sum()` around a branch collapses it to a scalar, which causes `AssertionError: Union outputs must be Vars`.
+The cleanest pattern is per-entity expressions in each branch with an outer `sum()`:
 
 ```python
-# CORRECT: per-entity expressions inside union, outer sum() aggregates
 total_cost = sum(model.union(
     Entity1.cost * Entity1.x_var,            # per-Entity1
     Entity2.cost * Entity2.x_var,            # per-Entity2
 ))
-
-# WRONG: scalar sums inside union -- causes AssertionError: Union outputs must be Vars
-total_cost = sum(model.union(
-    sum(Entity1.cost * Entity1.x_var),       # scalar -- BREAKS
-    sum(Entity2.cost * Entity2.x_var),       # scalar -- BREAKS
-))
 ```
 
-Keep costs at concept level inside `model.union()` and let the outer `sum()` handle aggregation. For time-indexed or grouped variables, use `sum(var).per(Concept).where(...)` to aggregate over one dimension while keeping the per-entity binding.
+For time-indexed or grouped variables, use `sum(var).per(Concept).where(...)` to aggregate over one dimension while keeping the per-entity binding.
 
 ### Penalty terms for soft constraints
 

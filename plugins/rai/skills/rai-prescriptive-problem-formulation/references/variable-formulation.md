@@ -74,8 +74,6 @@ WHICH PATTERN TO USE:
 
 **Key heuristic:** If the model has Operation/Pipeline/Route/Edge concepts connecting entities, put flow/quantity variables directly on those concepts. Do NOT create a new FlowDecision concept — the existing concept already has the right entity granularity.
 
-**v1 constraint — table-backed concepts:** Variables CANNOT be added directly to table-backed (`identify_by`) concepts in v1. `Problem.solve()` raises `TyperError (UnresolvedOverload)` when solving for properties on these concepts. The code generator automatically wraps such variables in decision concepts (e.g., `Operation` → `OperationDecision` with a Relationship back to `Operation`). Prefer the `extended_concept` pattern explicitly for table-backed concepts when writing templates or formulations by hand.
-
 **5. Entity Creation Strategy (Problem-Type Dependent):**
 
 The entity creation strategy for cross-product concepts depends on the **problem type**:
@@ -183,16 +181,6 @@ problem.solve_for(
     where=[t == std.common.range(ResourceGroup.inv_start_t, ResourceGroup.inv_end_t + 1)],
 )
 ```
-
----
-
-## Concept Name Exactness
-
-When defining extended_concept variables, reference base model concepts using their
-EXACT names as listed in the "Entity Types" line of the model context. Extended concept
-Relationship definitions and `.new()` entity creation args must use these precise
-PascalCase names. Do not abbreviate or paraphrase — the validation will reject
-suggestions that reference concepts not in the model.
 
 ---
 
@@ -313,22 +301,24 @@ Use the ATTRIBUTES & STATISTICS section to set meaningful bounds:
 
 ### Variable naming (`name=[]`)
 
-The `name=[]` parameter labels variables in solver output. Use **primitive identity fields** (String, Integer) only — relationship refs cause TyperError. With `Variable.values()` (see below), structured access via back-pointers is preferred for result extraction; `name=[]` remains useful for solver-output labeling and debugging.
+The `name=[]` parameter labels variables in solver output. Each part must resolve to a **scalar** — a primitive Property, an Integer/String ref, or a multi-hop chain ending in a primitive (e.g. `Concept.rel.id`). A bare Concept-typed Relationship ref errors because it resolves to an entity. List elements are joined with underscores.
 
 ```python
-# CORRECT — primitive identity fields:
+# CORRECT — primitive identity fields and multi-hop chains:
 problem.solve_for(Food.x_amount, lower=0, name=["x_amount", Food.name])
 problem.solve_for(Edge.x_edge, type="bin", name=["x", Edge.i, Edge.j])
+problem.solve_for(PlacementSegment.x_alloc, lower=0,
+            name=["seg", PlacementSegment.placement.pid, PlacementSegment.seg_idx])
 
-# WRONG — relationship refs (cause TyperError):
+# WRONG — Concept-typed Relationship refs (cause TyperError):
 problem.solve_for(MachinePeriod.x_maintain, type="bin",
-            name=["x_maintain", MachinePeriod.machine])  # machine is a relationship!
+            name=["x_maintain", MachinePeriod.machine])  # machine is a Concept ref!
 
 # SAFE for cross-product concepts — use just the variable name:
 problem.solve_for(MachinePeriod.x_maintain, type="bin", name=["x_maintain"])
 ```
 
-With `populate=True` (default), results are accessible via `model.select()` which provides entity-aware output regardless of `name=[]`. The preferred approach for result extraction is `Variable.values(sol_index, value_ref)` on the `ProblemVariable` returned by `solve_for()`, which provides structured access via back-pointers to the original entity. Use `name=[]` primarily for solver-output labeling and when `populate=False` (scenario/loop workflows).
+With `populate=True` (default), values write back to the Property and are queryable via `model.select(Concept.name, Concept.x_var)`. With `populate=False` (parametric/loop workflows), read results via `var.values(sol_index, val_ref)` paired with the back-pointer attribute on the returned `ProblemVariable` — see `rai-prescriptive-results-interpretation` > Solution Extraction for the back-pointer naming rule.
 
 ### Variable bounds from data vs literals
 
@@ -405,33 +395,14 @@ problem.solve_for(
 
 ### Decision variable `x_` prefix convention
 
-Decision variable attributes use `x_` prefix on the concept attribute (`Concept.x_prop`) to distinguish solver-controlled quantities from fixed data.
+Decision variable attributes use `x_` prefix on the concept attribute (`Concept.x_prop`) to distinguish solver-controlled quantities from fixed data:
 
-**V1 Madlib syntax — TYPE FIRST, then colon, then field name:**
 ```python
-# CORRECT v1 syntax — Type object first, field name as format spec:
 Food.x_amount = model.Property(f"{Food} has {Float:amount}")
 Edge.x_flow = model.Property(f"{Edge} has {Float:flow}")
-
-# WRONG — reversed order causes "Invalid format specifier" compile error:
-Food.x_amount = model.Property(f"{Food} has {amount:Float}")  # ERROR!
 ```
 
-The same pattern applies to Relationships (concept type first):
-```python
-# CORRECT:
-Assignment.worker = model.Relationship(f"{Assignment} assigns {Worker:worker}")
-# WRONG:
-Assignment.worker = model.Relationship(f"{Assignment} assigns {worker:Worker}")  # ERROR!
-```
-
-**Property names must be valid Python identifiers** — no spaces, no special characters:
-```python
-# CORRECT:
-Asset.min_budget = model.Property(f"{Asset} has {Float:min_budget}")
-# WRONG — spaces in names cause syntax errors:
-Asset.min budget = model.Property(...)  # ERROR!
-```
+For the underlying Property f-string rules (TYPE FIRST, then field name; valid Python identifiers; same pattern for Relationships), see `rai-pyrel-coding` > Property Definition F-Strings. Those rules are general PyRel grammar, not prescriptive-specific.
 
 When accessing decision variables through `.ref()` aliases, use the Python attribute name (with `x_` prefix), not the semantic slot name. The solver resolves variables by attribute name:
 
@@ -443,9 +414,7 @@ sum(OpRef.flow)        # Wrong -- semantic slot name, solver can't resolve
 
 ### Naming conventions
 
-Variable names are lists of components that produce readable solver output. Use a descriptive prefix (`"qty_"`, `"sel_"`, `"x_"`, `"inv_"`) so post-solve DataFrames can be filtered by `name.str.startswith("prefix")`.
-
-`name=[]` parts must be single-hop only (`Concept.property`). Multi-hop chains (`Concept.rel.property`) fail at solve time because `Column._compile_lookup` cannot resolve relationship traversals. Use the concept's own identifier property or the relationship directly (e.g., `PlacementSegment.placement` not `PlacementSegment.placement.pid`).
+Use a descriptive prefix (`"qty_"`, `"sel_"`, `"x_"`, `"inv_"`) so post-solve DataFrames can be filtered by `name.str.startswith("prefix")`. For the scalar-resolution rule on `name=[]` parts, see [Variable naming (`name=[]`)](#variable-naming-name) above.
 
 ```python
 # Single-index: property name as identifier
@@ -511,7 +480,7 @@ problem.minimize(chromatic_number, name="chromatic_number")
 }
 ```
 
-Note: In `concept_definition` and `property_definition`, use v1 madlib syntax — TYPE FIRST: `f"{Concept} has {Float:field}"`. Reversed `{field:Float}` causes "Invalid format specifier" errors.
+Note: In `concept_definition` and `property_definition`, use v1 f-string syntax — TYPE FIRST: `f"{Concept} has {Float:field}"`. Reversed `{field:Float}` causes "Invalid format specifier" errors.
 
 ---
 
@@ -548,7 +517,7 @@ problem.solve_for(
 
 ### Pairwise constraints with `.ref()` and walrus `:=`
 
-`.ref()` creates an alias so you can reference two distinct instances of the same concept. Walrus `:=` binds a ref inline.
+For pairwise / quadratic constraints over the same concept, `.ref()` creates a second independent instance and walrus `:=` binds it inline. (For when refs are and aren't needed in general, see `rai-pyrel-coding` § Free-Variable Scoping — pairwise is the canonical correct case.)
 
 ```python
 # Two players: limit shared groups across weeks
@@ -685,7 +654,7 @@ problem.solve_for(Route.x_flow(Scenario, x_flow), name=[Scenario.name, Route.ori
 
 **Why prefer Scenario Concept when possible:** Results are incorporated into the ontology — queryable via `model.select()` like any other property, composable with other model queries, and available for downstream derived properties. Loop results live outside the model in Python DataFrames. Use Loop only when the problem *structure* changes between scenarios (entities added/removed, constraint graph differs).
 
-See `rai-prescriptive-solver-management/examples/scenario_concept_parameter_sweep.py`, `scenario_concept_bound_scaling.py`, `scenario_concept_milp.py`.
+See `rai-prescriptive-solver-management/examples/scenario_concept_parameter_sweep.py` and `scenario_concept_milp.py`.
 
 ### Loop + where= filter — entity exclusion and partitioned sub-problems
 

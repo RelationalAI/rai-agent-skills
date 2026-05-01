@@ -1,40 +1,35 @@
 # Table of Contents
 
-- [Entity Reference Error — Detailed Diagnostics](#entity-reference-error--detailed-diagnostics)
-- [Type Mismatch](#type-mismatch)
+- [Entity Reference Passed as Scalar (in entity_creation)](#entity-reference-passed-as-scalar-in-entity_creation)
+- [Type Mismatch (Property vs DataFrame column)](#type-mismatch-property-vs-dataframe-column)
 - [Undefined Concept/Property](#undefined-conceptproperty)
 - [Zero Entities — Detailed Diagnostics](#zero-entities--detailed-diagnostics)
-- [Simplest Fix Principle](#simplest-fix-principle)
 
 ---
 
 # Compilation Errors — Detailed Diagnostics
 
-## Entity Reference Error — Detailed Diagnostics
+> **General PyRel compile errors** (`[TyperError]` with empty body, type mismatches between Property and DataFrame dtype, `KeyError` from `model.concept_index["Foo"]`, `AttributeError` from `model.Foo` on a name never declared) live in `rai-pyrel-coding/references/common-pitfalls.md` — see § `TyperError` with empty diagnostic body and surrounding rows. The notes below cover the same errors as they appear specifically in optimization formulations.
 
-**Error:** "Source X.y is an entity reference to Z, not a scalar value"
+## Entity Reference Passed as Scalar (in entity_creation)
 
-The entity_creation is copying an entity reference where a scalar is expected. You must update BOTH concept_definition AND entity_creation together.
+`entity_creation` copies an entity-typed Property (FK) into a slot declared with a scalar type (Integer, Float, String). Surfaces later as a `[TyperError]` at query/solve time.
 
 **Option A (simpler — remove the problematic property):** Remove the property from concept_definition and entity_creation entirely. Only keep properties needed for optimization.
 
-**Option B (if you need the ID for constraints):** In concept_definition, keep Property with string type. In entity_creation, use `.id` to extract scalar: `sku_id=Demand.sku.id`.
+**Option B (if you need the ID for constraints):** In concept_definition, keep the Property with the scalar type. In entity_creation, use `.id` to extract the scalar: `sku_id=Demand.sku.id`.
 
-## Type Mismatch
+## Type Mismatch (Property vs DataFrame column)
 
-**Error:** "declared as 'int' but source is DATE"
-
-Property type doesn't match source column type. Fix: change the property type to match (DATE columns should use `:str` or `:date`).
+Same root cause as the general PyRel case (declared `:int` but source is a date string, etc.) — see `rai-pyrel-coding/references/common-pitfalls.md`. In a prescriptive formulation, the symptom typically appears at the first `problem.solve()` rather than at an earlier query, because optimization workflows often defer materialization until solve time.
 
 ## Undefined Concept/Property
 
-**Error:** "Concept X not found"
-
-Referenced concept doesn't exist in base model. Fix: use correct concept name from available concepts, or create via concept_definition.
+Standard Python lookup errors (`KeyError` from `model.concept_index["Foo"]`, `AttributeError` from `model.Foo`) when the concept name was never declared via `model.Concept(...)`. Same pattern as in any PyRel code — fix by typo-checking or declaring the concept before referencing it.
 
 ## Zero Entities — Detailed Diagnostics
 
-**Symptom:** "Variables (0)" in formulation display
+**Symptom:** `problem.display()` reports the problem as empty / shows zero registered variables; equivalently `problem.num_variables() == 0`. Use `problem.display(part)` to inspect a specific variable group.
 
 The entity_creation expression produced no entities — likely a join mismatch. Fix: verify join conditions match actual data relationships.
 

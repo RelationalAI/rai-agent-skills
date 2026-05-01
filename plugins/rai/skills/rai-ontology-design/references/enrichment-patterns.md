@@ -192,7 +192,7 @@ Without the `define()`, the relationship exists in the schema but has zero data 
 
 ### Multi-hop relationship enrichment
 
-RAI doesn't support multi-hop traversals directly (e.g., `Demand.customer.site`). When you need a property accessible only through an intermediate concept, create a derived property or relationship on the source concept.
+Multi-hop traversals (e.g., `Demand.customer.site`) work in queries and `.where()` clauses when each link is populated. Materializing a derived property is still useful when the chain is referenced repeatedly or when downstream code wants a single flat attribute on the source concept.
 
 **When needed:** An expression references `FromConcept.link.property` where `link` is a relationship to an intermediate concept.
 

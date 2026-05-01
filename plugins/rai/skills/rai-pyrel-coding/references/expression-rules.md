@@ -72,32 +72,26 @@ Use `.where()` to define the join condition and `.per()` to define the grouping 
 
 ```python
 # Sum of operation flows per SKU (join via shared SKU relationship)
-Op = Operation.ref()
-UD = UnmetDemand.ref()
-D = Demand.ref()
-
-inflow_per_sku = sum(Op.x_flow).where(Op.output_sku == UD.sku).per(UD.sku)
-demand_per_sku = sum(D.quantity).where(D.sku == UD.sku).per(UD.sku)
+inflow_per_sku = sum(Operation.x_flow).where(Operation.output_sku == UnmetDemand.sku).per(UnmetDemand.sku)
+demand_per_sku = sum(Demand.quantity).where(Demand.sku == UnmetDemand.sku).per(UnmetDemand.sku)
 ```
 
 **Key rules:**
 - `.where(X.relationship == Y)` defines the join (which entities contribute to the sum)
 - `.per(Y)` defines the grouping (one aggregated value per Y entity)
-- Use `.ref()` aliases for the concept being summed over
+- Bare `Concept` references unify across the chain — repeated mentions of the same Concept refer to one shared free variable. Reach for `.ref()` only when you need two independent variables of the same Concept (pairwise / self-join). See SKILL.md > Free-Variable Scoping.
 
 ### Property Chains in `.where()` Clauses
 
-Multi-hop property chains fail silently in `.where()` clauses — the join produces zero matches, giving empty aggregation results.
+Multi-hop chains (`Concept.fk.prop`) are valid inside `.where()` clauses and resolve to the chained value — the join is materialized in-engine. Both literal-eq (`Customer.site.name == "s1"`) and entity-eq (`Op.dest_site == Demand.customer.site`) forms work.
 
 ```python
-# WRONG — 2-hop chain silently returns 0 matches
-sum(Op.x_flow).where(Op.destination_site == D.customer.site).per(D)
-
-# RIGHT — use a direct property match at a shared dimension
-sum(Op.x_flow).where(Op.output_sku == UD.sku).per(UD.sku)
+# Both compile and produce the expected join:
+sum(Op.x_flow).where(Op.dest_site == Demand.customer.site).per(Demand)
+model.where(Customer.site.name == "s1").select(Customer.cid)
 ```
 
-**Workaround:** Aggregate at a dimension where concepts share a direct property (e.g., SKU, Site). If no direct match exists, denormalize the needed property onto the concept.
+If a chained `.where()` returns empty results, the cause is usually the chain itself being unpopulated (an FK Property declared but never filled by `model.define(...)`), not the chaining mechanic. Aggregating at a shared dimension is sometimes simpler to reason about, but it is not required.
 
 ### Operators: `.in_()`, `model.not_()`, `|`, `&`
 
