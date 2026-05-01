@@ -180,7 +180,7 @@ Operators are imported from `relationalai.semantics.std.math` (`math.abs`, `math
 | Quadratic objective (`var * var` in `minimize`/`maximize`) | Yes (convex) | Yes | Yes | No |
 | Bilinear / quadratic constraints (`var * var` in `satisfy`) | No (linearize) | Yes (convex) | Yes | Yes (discrete vars only) |
 | `math.abs(x)` | No (reformulate) | Yes | Yes | Yes |
-| `math.minimum(x, y)` / `math.maximum(x, y)` | No (reformulate) | Yes (general constraints) | No (reformulate) | Yes |
+| Aggregate `min(...)` / `max(...)` over a collection (`from relationalai.semantics import min, max`) | No (reformulate) | Yes (general constraints) | No (reformulate) | Yes |
 | `math.exp(x)`, `math.log(x)` (and `log2`, `log10`, `natural_log`) | No | Yes | Yes | No |
 | `math.sqrt(x)`, `math.cbrt(x)` | No | Yes | Yes | No |
 | `x ** n` / `math.pow(x, n)` | No (n=2: linearize) | Yes | Yes | Yes (integer n) |
@@ -188,7 +188,7 @@ Operators are imported from `relationalai.semantics.std.math` (`math.abs`, `math
 | `all_different(...)` | No | No | No | Yes |
 | `special_ordered_set_type_1(...)` / `_type_2(...)` | No | Yes | No | No |
 
-**Not supported in solver expressions** (compile-time error if used inside `solve_for`/`satisfy`/`minimize`/`maximize`): `%` (modulo), `//` (floor division), `math.floor`, `math.ceil`, `math.round`, `math.sign`, `math.clip`, trig (`math.sin`/`cos`/`tan` and their hyperbolic/inverse variants — including `math.degrees`/`math.radians`/`math.haversine`), `math.factorial`, `math.erf`/`math.erfinv`, division between two decision variables. (These are common examples; the underlying rule is that anything `relationalai.semantics.std.math` exposes for queries is not automatically lowered to the solver.) Use piecewise-linear approximations or reformulations for unsupported operators.
+**Not supported in solver expressions** (compile-time error if used inside `solve_for`/`satisfy`/`minimize`/`maximize`): `%` (modulo), `//` (floor division), `math.floor`, `math.ceil`, `math.round`, `math.sign`, `math.clip`, `math.minimum(x, y)` / `math.maximum(x, y)` (pairwise — use the aggregate `min`/`max` row above instead), trig (`math.sin`/`cos`/`tan` and their hyperbolic/inverse variants — including `math.degrees`/`math.radians`/`math.haversine`), `math.factorial`, `math.erf`/`math.erfinv`, division between two decision variables. (These are common examples; the prescriptive wire format's authoritative list of supported operators is `_OP_CODES` in `relationalai.semantics.reasoners.prescriptive.wire_format` — anything not in that list does not lower to the solver.) Use piecewise-linear approximations or reformulations for unsupported operators.
 
 **Decision rule:** If the problem needs nonlinear functions (`math.exp`, `math.log`, `math.sqrt`, `x**n`) → Gurobi (preferred when licensed) or Ipopt. If it needs `all_different(...)` or complex logical constraints → MiniZinc. If it needs integer variables with quadratic terms → Gurobi. For pure linear/MIP → HiGHS (default) or Gurobi.
 
