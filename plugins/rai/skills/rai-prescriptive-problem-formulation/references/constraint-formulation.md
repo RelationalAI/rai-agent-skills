@@ -179,7 +179,9 @@ model.require(x_weight <= fast_cap * y_bin_fast).where(
 
 **Too loose:** Solver returns degenerate or extreme solutions. Variables at bounds that shouldn't be. Add missing business rules, tighten bounds, verify coefficients are correct.
 
-### Forcing constraints for minimize objectives
+### Forcing constraints
+
+#### For minimize objectives
 
 When the objective is to MINIMIZE with non-negative cost coefficients and no forcing constraints, the solver may achieve cost=0 by setting all decision variables to zero. This is the most common trivial-solution trap.
 
@@ -205,7 +207,7 @@ Common mistake: applying a per-cross-product forcing constraint (every item in e
 
 **Ask:** "Does the requirement apply once per [base entity], or once per [base entity × period/resource]?" The answer determines the `.per()` scope.
 
-### Forcing constraints for maximize objectives
+#### For maximize objectives
 
 When the objective is to MAXIMIZE (profit, revenue, value) with positive coefficients, the optimizer naturally drives variables up — trivial all-zero solutions are not a risk. However, maximize problems still need:
 - **Capacity/resource constraints** to bound the solution
@@ -224,7 +226,7 @@ Demand is NOT simply "upper bound for maximize, lower bound for minimize." The c
 
 **Rule:** Ask "What happens in the real world if we go above/below this quantity?" The answer determines the constraint direction, not the objective direction.
 
-### Forcing constraints (demand satisfaction, assignment completeness)
+#### Code patterns (demand satisfaction, assignment completeness)
 
 ```python
 # Each shift must have minimum coverage

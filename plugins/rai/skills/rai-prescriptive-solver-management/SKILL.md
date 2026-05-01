@@ -20,7 +20,7 @@ description: Covers solver lifecycle including problem type classification, solv
 - Running parametric/scenario solves
 
 **When NOT to use:**
-- Post-solve result interpretation and communication — presenting OPTIMAL/INFEASIBLE/DUAL_INFEASIBLE/TIME_LIMIT status to users, solution quality assessment, trivial solution detection, sensitivity analysis — see `rai-prescriptive-results-interpretation`. (Formulation-level diagnosis of infeasibility and unboundedness root causes is covered here.)
+- Post-solve result interpretation and communication — presenting OPTIMAL/INFEASIBLE/DUAL_INFEASIBLE/TIME_LIMIT status to users, solution quality assessment, trivial solution detection, sensitivity analysis, and root-cause diagnosis of infeasibility/unboundedness — see `rai-prescriptive-results-interpretation`.
 - Variable/constraint/objective formulation patterns — see `rai-prescriptive-problem-formulation`
 - PyRel syntax (imports, types, properties) — see `rai-pyrel-coding`
 
@@ -252,41 +252,15 @@ See [pre-solve-validation.md](references/pre-solve-validation.md) for full check
 
 ## Common Compilation Errors
 
-**Entity reference passed as scalar:** `model.define(...)` accepts the schema, but the next query/solve raises a generic `[TyperError]`. Cause: an entity-typed Property (FK) was copied into a slot declared with a scalar type. Fix by removing the property or using `.id` to extract scalar. Must update BOTH concept_definition AND entity_creation together.
-
-**Zero entities** (`problem.display()` prints `Problem (...): empty`, `problem.num_variables() == 0`): The entity_creation produced no entities — likely a join mismatch, non-existent concept reference, or over-filtering. Verify join conditions match actual data.
-
-For full diagnostic patterns (type mismatch, undefined concept, entity creation taxonomy, simplest fix principle), see [compilation-errors.md](references/compilation-errors.md). For numerical stability categories and MIP formulation techniques (big-M, indicator constraints), see [numerical-and-mip.md](references/numerical-and-mip.md).
+For prescriptive-context compile errors (entity reference passed as scalar, zero entities, type mismatch, undefined concept), see [compilation-errors.md](references/compilation-errors.md). General PyRel compile errors live in `rai-pyrel-coding/references/common-pitfalls.md`. For numerical stability categories and MIP formulation techniques (big-M, indicator constraints), see [numerical-and-mip.md](references/numerical-and-mip.md).
 
 ---
 
 ## Diagnosing Infeasibility and Unboundedness
 
-### Infeasibility (INFEASIBLE status)
+INFEASIBLE / DUAL_INFEASIBLE root-cause taxonomies and fix strategies live in `rai-prescriptive-results-interpretation` > Status Interpretation (the natural reading order is status → diagnose → fix). For root cause codes (`unbounded_variable`, `missing_upper_bound`, `penalty_structure`, `constraint_conflict`, `capacity_mismatch`), fix action types, and status-specific fix direction, see [diagnostic-taxonomy.md](references/diagnostic-taxonomy.md).
 
-No solution exists that satisfies all constraints simultaneously.
-
-**Common root causes:**
-1. **Minimum-per-entity vs total capacity**: N entities each requiring minimum M units, but total available is less than N*M
-2. **Conflicting equality constraints**: Two constraints that cannot be satisfied simultaneously
-3. **Conflicting bounds**: Variable bounds or constraints that create an empty feasible region
-4. **Recently added constraints**: Focus on recently added constraints as the likely cause
-
-**Fix strategies:** Remove or relax constraints — change `>=` to `<=`, relax bounds, convert hard constraints to soft (penalty-based).
-
-### Unboundedness (DUAL_INFEASIBLE status)
-
-The objective can go to +/-infinity. This is NOT about conflicting constraints — it's about missing bounds.
-
-**Common root causes:**
-1. **Missing variable upper bounds**: A variable can grow without limit, driving objective to infinity
-2. **Penalty term structure**: Penalty terms like `100 * (demand - fulfilled)` can go negative if `fulfilled` exceeds `demand`. Fix: add `fulfilled <= demand`
-3. **Missing capacity constraints**: Flow or production variables without upper bounds
-4. **Removed constraints left gaps**: If a demand satisfaction constraint was removed, variables may now be unbounded
-
-**Fix strategies:** Add bounds or constraints — add upper bounds to variables, add capacity limits, fix penalty term structure.
-
-For root cause codes (`unbounded_variable`, `missing_upper_bound`, `penalty_structure`, `constraint_conflict`, `capacity_mismatch`), fix action types, and status-specific fix direction, see [diagnostic-taxonomy.md](references/diagnostic-taxonomy.md).
+For solver-error-message-driven debugging (`si.error`, `print_format=`, log patterns), see [numerical-and-mip.md](references/numerical-and-mip.md).
 
 ---
 
@@ -314,16 +288,7 @@ if si.termination_status != "OPTIMAL":
 
 **Checking solver version:** Use `problem.solve_info().solver_version` after any solve to see the exact version that ran. Do not hardcode version numbers — they change with solver service updates.
 
-**Post-solve constraint verification:** `problem.verify(*fragments)` temporarily installs constraint ICs, triggers a query to evaluate them, and removes them. Useful for checking that the solver's solution satisfies constraints — particularly for exact solvers (HiGHS MIP, MiniZinc):
-
-```python
-coverage_ic = model.where(...).require(...)
-problem.satisfy(coverage_ic)
-problem.solve("minizinc", time_limit_sec=60)
-problem.verify(coverage_ic)  # Warns if any constraint is violated
-```
-
-`verify()` checks `termination_status` first — warns and returns early for non-successful solves. ICs are cleaned up in a `finally` block even on exceptions.
+**Post-solve constraint verification:** `problem.verify(*fragments)` checks that the solver's solution satisfies constraints — see `rai-prescriptive-results-interpretation` > Post-solve constraint verification.
 
 For verifying what the solver actually sees before solving, see [formulation-display.md](references/formulation-display.md).
 
@@ -386,11 +351,9 @@ Post-solve diagnosis (trivial all-zero solutions, infeasibility root causes, qua
 | Pattern | Description | File |
 |---|---|---|
 | Scenario Concept (parameter sweep) | Scenario as data concept, single solve, multi-arg variables, `model.select()` results | [examples/scenario_concept_parameter_sweep.py](examples/scenario_concept_parameter_sweep.py) |
-| Scenario Concept (bound scaling) | Scaling constraint bounds by scenario parameter (`Concept.bound * Scenario.scaling_factor`) | [examples/scenario_concept_bound_scaling.py](examples/scenario_concept_bound_scaling.py) |
 | Scenario Concept (multi-binary MILP) | Two binary variable types indexed by Scenario, `.per(Entity, Scenario)` grouping, cross-variable budget | [examples/scenario_concept_milp.py](examples/scenario_concept_milp.py) |
 | Entity exclusion (disruption) | Loop + `where=[]` with `!=` filter to exclude entities, `populate=False`, `Variable.values()` results | [examples/entity_exclusion_disruption.py](examples/entity_exclusion_disruption.py) |
 | Partitioned sub-problems (loop) | Loop + `where=[]` filter per partition, `populate=False`, `Variable.values()` results | [examples/partitioned_iteration_scenarios.py](examples/partitioned_iteration_scenarios.py) |
-| Scenario Concept (demand multiplier) | Demand parameter sweep via Scenario Concept, multiplier-based bound scaling | [examples/scenario_concept_demand_scaling.py](examples/scenario_concept_demand_scaling.py) |
 
 ---
 

@@ -163,6 +163,20 @@ Keep `solution_limit` small (typically 3-10). The primary use case for multiple 
 
 Requesting very large solution counts (e.g., 100,000) is almost never appropriate. The few specialized cases where large solution sets make sense include running downstream simulations over candidate solutions or feeding alternatives into a separate evaluation pipeline. For standard decision-support problems, a handful of near-optimal alternatives is far more useful than an exhaustive enumeration.
 
+**By problem type:**
+
+| Problem type | Recommended count | Rationale |
+|---|---|---|
+| Binary assignment (scheduling, shift) | 5–10 | Each solution is a distinct assignment; users can compare alternatives |
+| Resource allocation (continuous) | 5–15 | Different trade-off frontiers show budget/return variety |
+| Routing (TSP, VRP) | 3–5 | Solutions differ subtly (permutations); diminishing returns above 5 |
+| Multi-period/inventory | 3–5 | Large variable counts make diverse solutions expensive |
+
+**Solver-specific limits:**
+- **HiGHS:** Limited multi-solution support — typically returns 1–2 solutions. Cap at 5.
+- **MiniZinc:** Native support for solution enumeration. Can handle 10–20+.
+- **Gurobi:** Pool search mode supports 10–20+ solutions efficiently.
+
 ## Iterative Solving
 
 Constraints defined over concepts automatically apply to new data added between solves. Pattern:

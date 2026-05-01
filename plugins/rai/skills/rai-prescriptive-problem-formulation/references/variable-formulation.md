@@ -184,16 +184,6 @@ problem.solve_for(
 
 ---
 
-## Concept Name Exactness
-
-When defining extended_concept variables, reference base model concepts using their
-EXACT names as listed in the "Entity Types" line of the model context. Extended concept
-Relationship definitions and `.new()` entity creation args must use these precise
-PascalCase names. Do not abbreviate or paraphrase — the validation will reject
-suggestions that reference concepts not in the model.
-
----
-
 ## Variable Principles
 
 ### Choosing variable type
@@ -424,9 +414,7 @@ sum(OpRef.flow)        # Wrong -- semantic slot name, solver can't resolve
 
 ### Naming conventions
 
-Variable names are lists of components that produce readable solver output. Use a descriptive prefix (`"qty_"`, `"sel_"`, `"x_"`, `"inv_"`) so post-solve DataFrames can be filtered by `name.str.startswith("prefix")`.
-
-`name=[]` parts must resolve to scalar values — a primitive Property, an Integer/String ref, or a multi-hop chain ending in a primitive (e.g. `PlacementSegment.placement.pid`). A bare Concept-typed Relationship (`PlacementSegment.placement`) errors because the name component is an entity, not a label.
+Use a descriptive prefix (`"qty_"`, `"sel_"`, `"x_"`, `"inv_"`) so post-solve DataFrames can be filtered by `name.str.startswith("prefix")`. For the scalar-resolution rule on `name=[]` parts, see [Variable naming (`name=[]`)](#variable-naming-name) above.
 
 ```python
 # Single-index: property name as identifier
@@ -666,7 +654,7 @@ problem.solve_for(Route.x_flow(Scenario, x_flow), name=[Scenario.name, Route.ori
 
 **Why prefer Scenario Concept when possible:** Results are incorporated into the ontology — queryable via `model.select()` like any other property, composable with other model queries, and available for downstream derived properties. Loop results live outside the model in Python DataFrames. Use Loop only when the problem *structure* changes between scenarios (entities added/removed, constraint graph differs).
 
-See `rai-prescriptive-solver-management/examples/scenario_concept_parameter_sweep.py`, `scenario_concept_bound_scaling.py`, `scenario_concept_milp.py`.
+See `rai-prescriptive-solver-management/examples/scenario_concept_parameter_sweep.py` and `scenario_concept_milp.py`.
 
 ### Loop + where= filter — entity exclusion and partitioned sub-problems
 

@@ -21,5 +21,5 @@
 | Missing constraint scope | Per-entity constraint applies globally | Add `.per()` grouping or iterate over entities |
 | Incorrect relationship direction | `<=` when should be `==` or `>=` | Review business requirement — is this a limit, balance, or minimum? |
 | Double counting in objective | Same quantity in both fixed and variable cost terms | Check for overlapping aggregation scope in objective terms |
-| Missing/null data silently dropped | Null/NaN values cause variables or constraints to vanish | Verify all referenced properties have populated values |
+| Missing/null data silently dropped | Null/NaN values cause variables or constraints to vanish | Run completeness checks before solve — see `rai-prescriptive-solver-management/references/pre-solve-validation.md` § Data integrity for the `model.select(...).to_df().notna().all()` pattern |
 | Wrong data type | String or boolean where number expected | Check that cost, capacity, demand columns are numeric |

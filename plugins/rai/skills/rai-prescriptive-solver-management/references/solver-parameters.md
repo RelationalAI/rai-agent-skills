@@ -47,6 +47,27 @@ problem.solve("ipopt", time_limit_sec=60, max_iter=1000, tol=1e-8, mu_strategy="
 - Large LP is slow -> try `presolve="on"`, increase `threads`
 - NLP converges to poor local optimum -> try different `start=` values, adjust `mu_strategy`
 
+### Complexity and time estimates
+
+Rough heuristics for estimating solve time based on problem size and type:
+
+| Problem class | Variable count | Estimated time | Confidence |
+|---|---|---|---|
+| LP (no integers) | < 1,000 | ~1s | High |
+| LP | 1,000–10,000 | ~5s | Medium |
+| LP | 10,000+ | ~30s | Low |
+| MIP/IP | < 100 | ~2s | Medium |
+| MIP/IP | 100–1,000 | ~30s | Medium |
+| MIP/IP | 1,000–10,000 | ~5 min | Low |
+| MIP/IP | 10,000+ | ~30 min | Very low |
+
+**Key insight:** MIP solve time depends heavily on problem structure (LP relaxation tightness, symmetry, constraint topology), not just size. A 500-variable TSP can take longer than a 5,000-variable LP. These are rough lower bounds — actual times can vary 10x or more.
+
+**When to recommend time limit increases:**
+- Default 60s is appropriate for most problems under 5,000 variables
+- For 5,000+ variable MIPs, suggest 300–600s
+- If solver hits time limit with gap > 5%, suggest increasing limit or simplifying the formulation
+
 ## Solve Pipeline
 
 Solving requires network connectivity — `problem.solve()` dispatches to the RAI solver service, which runs the selected backend (HiGHS, Gurobi, Ipopt, MiniZinc) and returns results. There is no local solver.

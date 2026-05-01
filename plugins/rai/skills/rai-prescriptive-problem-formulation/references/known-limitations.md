@@ -1,6 +1,6 @@
 # Known Limitations (Secondary)
 
-Additional known limitations for the prescriptive problem formulation skill. For critical limitations (`model.union()` and PyRel additive semantics), see the main skill.md.
+Additional known limitations for the prescriptive problem formulation skill. For critical limitations (`model.union()` multi-component objectives and PyRel additive semantics), see the parent [SKILL.md](../SKILL.md) > Known Limitations.
 
 ---
 
@@ -46,7 +46,7 @@ for scenario in scenarios:
 all_results = pd.concat(results)
 ```
 
-See [examples/partitioned_subproblem.py](../examples/partitioned_subproblem.py) for a complete working example of this pattern.
+See `rai-prescriptive-solver-management/examples/partitioned_iteration_scenarios.py` for a complete working example of this pattern.
 
 ## `| <literal>` Fallback in Solver Constraints (RAI-49989)
 

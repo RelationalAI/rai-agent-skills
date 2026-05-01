@@ -1,10 +1,9 @@
 # Table of Contents
 
-- [Entity Reference Error — Detailed Diagnostics](#entity-reference-error--detailed-diagnostics)
-- [Type Mismatch](#type-mismatch)
+- [Entity Reference Passed as Scalar (in entity_creation)](#entity-reference-passed-as-scalar-in-entity_creation)
+- [Type Mismatch (Property vs DataFrame column)](#type-mismatch-property-vs-dataframe-column)
 - [Undefined Concept/Property](#undefined-conceptproperty)
 - [Zero Entities — Detailed Diagnostics](#zero-entities--detailed-diagnostics)
-- [Simplest Fix Principle](#simplest-fix-principle)
 
 ---
 

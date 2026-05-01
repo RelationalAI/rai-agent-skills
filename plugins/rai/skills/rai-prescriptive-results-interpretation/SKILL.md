@@ -18,12 +18,13 @@ description: Interprets optimization solver output including solution extraction
 - Explaining results to stakeholders in business language
 - Running sensitivity / what-if analysis
 
-For formulation-level root-cause diagnosis of INFEASIBLE/DUAL_INFEASIBLE (demand vs capacity, contradictory constraints, missing bounds), see `rai-prescriptive-solver-management`.
+Root-cause diagnosis of INFEASIBLE/DUAL_INFEASIBLE (demand vs capacity, contradictory constraints, missing bounds) lives in this skill — see Status Interpretation below. For solver-level error messages and engine-driven debugging (`si.error`, `print_format=`), see `rai-prescriptive-solver-management`.
 
 **When NOT to use:**
 - Designing or fixing the formulation itself (adding constraints, changing variables) — see `rai-prescriptive-problem-formulation`. In particular, if the result is OPTIMAL and technically valid but the user rejects it on preference grounds ("that's too much X", "I don't like this allocation"), this indicates latent constraints, not a solver or formulation bug — route to `rai-prescriptive-problem-formulation` > Constraint Elicitation > Post-Solve: Iterative Refinement.
 - Solver configuration, parameter tuning, or solver-level failures — see `rai-prescriptive-solver-management`
 - Query syntax (select, aggregation, joins) — see `rai-querying`
+- PyRel syntax (imports, types, properties) — see `rai-pyrel-coding`
 
 **Overview:**
 1. Recall the optimization goal captured in the problem's variables and objective — what decisions were being made, and what should success look like?
@@ -167,7 +168,16 @@ For per-pattern variations (multiple solutions, iterative solving, scenario/para
 
 ### Post-solve constraint verification
 
-`problem.verify(*fragments)` checks that the solver's solution satisfies constraints post-solve. Particularly useful for exact solvers (HiGHS MIP, MiniZinc). See `rai-prescriptive-solver-management` for full `verify()` documentation and examples.
+`problem.verify(*fragments)` temporarily installs constraint ICs, triggers a query to evaluate them, and removes them. Useful for checking that the solver's solution satisfies constraints — particularly for exact solvers (HiGHS MIP, MiniZinc):
+
+```python
+coverage_ic = model.where(...).require(...)
+problem.satisfy(coverage_ic)
+problem.solve("minizinc", time_limit_sec=60)
+problem.verify(coverage_ic)  # Warns if any constraint is violated
+```
+
+`verify()` checks `termination_status` first — warns and returns early for non-successful solves. ICs are cleaned up in a `finally` block even on exceptions.
 
 ---
 
@@ -439,7 +449,7 @@ For parameter sweep patterns, scenario comparison tables, and Pareto frontier co
 | Silent: `problem.termination_status == "OPTIMAL"` (no parens) — always False | `termination_status` on the `Problem` object is a bound method, not a property; comparing a method to a string is never equal and the bug is silent | Read status Python-side: `problem.solve_info().termination_status == "OPTIMAL"` (no parens — `solve_info()` returns a dataclass-like value with a string field). Engine-side inside `model.require(...)`: `problem.termination_status() == "OPTIMAL"` (with parens — that's the engine-side Relationship) |
 | Silent: non-OPTIMAL result extraction returns empty DataFrame / None objective | Loop / scenario workflows extract `Variable.values()` or read `si.objective_value` without checking status first. Infeasible / time-limited solves produce an empty query and `None` objective, silently propagated into downstream code | Always guard: `if si.termination_status not in ("OPTIMAL", "LOCALLY_SOLVED"): continue` (or raise) before touching `si.objective_value` or the extraction query |
 
-For the full pitfalls table (14 entries covering numerical instability, degenerate solutions, wrong aggregation scope, and more), see [references/common-pitfalls.md](references/common-pitfalls.md).
+For additional pitfalls (numerical instability, degenerate solutions, wrong aggregation scope, missing/null data) — distinct from the silent-bug rows above — see [references/common-pitfalls.md](references/common-pitfalls.md).
 
 ## Diagnosis Checklist
 
