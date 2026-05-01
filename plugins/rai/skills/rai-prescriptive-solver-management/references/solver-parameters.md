@@ -74,7 +74,7 @@ Solving requires network connectivity — `problem.solve()` dispatches to the RA
 
 ## Re-Solve Behavior (SDK >= 1.0.3)
 
-Re-solving the same `Problem` instance is safe. Result import uses replace semantics — if a second solve's result import fails, previous results remain intact. No degraded state.
+Re-solving the same `Problem` instance is safe. After adding more constraints / variables / objective terms, calling `problem.solve()` again re-runs the solver and updates variable values. If the second solve fails, previous results remain intact — no degraded state.
 
 ## Warm Starting
 

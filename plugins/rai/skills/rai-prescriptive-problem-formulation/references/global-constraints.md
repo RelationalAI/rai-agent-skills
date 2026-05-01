@@ -74,8 +74,7 @@ Arguments: `(index_expression, variable_expression)` where `index` defines the o
 
 **When to prefer HiGHS/Gurobi (MIP):**
 - Mix of continuous and integer variables (allocation, flow, portfolio)
-- LP relaxation provides useful quality metrics (gap, dual values, sensitivity)
-- Need dual values or reduced costs for sensitivity analysis
+- LP relaxation provides useful quality signal (gap reporting on TIME_LIMIT)
 - Large-scale problems where LP relaxation tightness drives performance
 - Quadratic objectives (convex QP) — HiGHS supports convex QP objectives; MiniZinc does not
 

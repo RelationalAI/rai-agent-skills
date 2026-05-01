@@ -437,8 +437,9 @@ PyRel's model and problem APIs are **append-only**. Every call to `model.define(
 - **Objectives:** Only one `problem.minimize()` or `problem.maximize()` per Problem.
 
 **Practical impact:**
-- To change constraints or variables, you must create a **new Problem** and re-register all elements from scratch.
-- Multi-scenario optimization must use a new `Problem` per scenario.
+- To remove or weaken an existing constraint or variable, you must create a **new Problem** and re-register only the elements you want — there is no remove/replace API.
+- Re-calling `problem.solve()` on the same `Problem` is safe: it re-runs the solver against the current (accumulated) formulation and updates variable values. Use this when you want to add more constraints/variables and re-solve. Use a new `Problem` only when you want to *remove* something.
+- Multi-scenario optimization where the constraint set differs per scenario should use a new `Problem` per scenario. If only parameter values change, the Scenario Concept pattern (one Problem, one solve, scenario as a data dimension) is preferred — see [scenario-analysis.md](references/scenario-analysis.md).
 - Model-level changes (new properties, concepts) persist across all subsequent Problems on that model — plan the model schema before building formulations.
 
 ---

@@ -19,7 +19,7 @@ List elements are joined with underscores. Use entity identifiers (IDs, names) i
 
 ## Re-Solve Behavior (SDK >= 1.0.3)
 
-Re-solving the same `Problem` instance is safe. Result import uses replace semantics — previous results remain intact if a subsequent solve fails. The inline formulation pattern (fresh `Problem` per scenario loop iteration) is still useful for clean separation of scenarios, but is no longer required for error recovery.
+Re-solving the same `Problem` instance is safe. Calling `problem.solve()` again re-runs the solver and updates variable values; if the second solve fails, previous results remain intact. The inline formulation pattern (fresh `Problem` per scenario loop iteration) is still useful for clean separation of scenarios, but is no longer required for error recovery.
 
 **Multi-scenario re-solve pattern:**
 
