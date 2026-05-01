@@ -48,12 +48,12 @@ all_results = pd.concat(results)
 
 See `rai-prescriptive-solver-management/examples/partitioned_iteration_scenarios.py` for a complete working example of this pattern.
 
-## `| <literal>` Fallback in Solver Constraints
+## Mixed-Arm `|` Fallback in Solver Constraints (literal `|` symbolic)
 
-A `| <literal>` (default-value) fallback on a decision-variable-bearing aggregate inside `problem.satisfy(model.require(...))` raises a `NotImplementedError`. The compiler can't unify the two branches when one branch carries a decision variable (symbolic) and the other is a plain literal — they end up at incompatible internal types.
+The `|` (default-value) fallback inside `problem.satisfy(model.require(...))` raises a `NotImplementedError` whenever its two branches have different shapes — typically one branch is a plain literal and the other is a symbolic expression that resolves to an AST-node reference (the form a decision-variable-bearing aggregate compiles into). The compiler can't unify the two branches when one is a literal and the other is an AST-node hash. Same-shape fallbacks (literal `|` literal, or symbolic `|` symbolic) are fine.
 
 ```python
-# BROKEN — | 0 fallback on a decision-variable aggregate
+# BROKEN — literal arm | symbolic arm (the symbolic side compiles to an AST-node hash)
 problem.satisfy(model.require(
     Entity.supply >= sum(Flow.x_qty).per(Entity).where(Flow.dest(Entity)) | 0
 ))
@@ -61,7 +61,7 @@ problem.satisfy(model.require(
 
 **Two workarounds:**
 
-1. **Aggregate-default form** (keep the work in-engine): replace the literal arm with another aggregate over the same decision-variable Property — e.g. `sum(Flow.x_qty).where(Flow.dest(Entity)) | sum(Flow.x_qty)`. Both arms are now decision-variable expressions and the compiler can unify them.
+1. **Same-shape fallback** (keep the work in-engine): replace the literal arm with another symbolic expression so both branches have the same shape — e.g. `sum(Flow.x_qty).where(Flow.dest(Entity)) | sum(Flow.x_qty)`. Both arms are now symbolic and the compiler can unify them.
 2. **Pre-compute in pandas** (out-of-engine): aggregate in Python and load the result as a flat denormalized property on the decision concept.
 
 ```python
