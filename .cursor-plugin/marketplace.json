@@ -1,5 +1,5 @@
 {
-  "name": "RelationalAI",
+  "name": "relationalai",
   "metadata": {
     "description": "RelationalAI semantic models and advanced reasoners"
   },
@@ -9,7 +9,8 @@
   "plugins": [
     {
       "source": "./plugins/rai",
-      "name": "rai"
+      "name": "rai",
+      "category": "Coding"
     }
   ]
 }
