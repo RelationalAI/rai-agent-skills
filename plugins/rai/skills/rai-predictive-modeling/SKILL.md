@@ -1,6 +1,6 @@
 ---
 name: rai-predictive-modeling
-description: Build GNN data models -- concepts, Snowflake data loading, task relationships, graph edges, and PropertyTransformer features. Use when defining entity types, loading data, or configuring graph structure for a predictive GNN pipeline.
+description: Build GNN data models -- concepts, Snowflake data loading, task relationships, graph edges, and PropertyTransformer features. Use when defining entity types, loading data, or configuring graph structure for a predictive GNN pipeline. Not for training, predictions, evaluation, or model management (see `rai-predictive-training`).
 ---
 
 # Predictive Modeling
