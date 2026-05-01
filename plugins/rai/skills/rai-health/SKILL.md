@@ -315,6 +315,34 @@ for the full step-by-step recovery checklist, schema reference, and official doc
 
 ---
 
+## Predictive train jobs stuck QUEUED
+
+A predictive train job submitted via `gnn.fit()` can sit in `STATE='QUEUED'` in `RELATIONALAI.API.JOBS` indefinitely while `CALL RELATIONALAI.API.GET_REASONER('predictive', '<name>')` still reports `STATUS='READY'`. The pod-level status does not reflect in-pod worker state — the worker can be desynced and still report ready.
+
+**Recovery:** suspend then resume the predictive reasoner to force a worker recycle. Do **not** call `CREATE_GNN_SERVICE()`.
+
+```sql
+-- 1. Confirm a stuck train job
+SELECT ID, STATE, DATEDIFF('minute', CREATED_ON, CURRENT_TIMESTAMP()) AS AGE_MIN
+FROM RELATIONALAI.API.JOBS
+WHERE STATE IN ('QUEUED','RUNNING')
+  AND PAYLOAD LIKE '%"job_type": "train"%'
+ORDER BY CREATED_ON ASC;
+
+-- 2. Recycle the worker
+CALL RELATIONALAI.API.SUSPEND_REASONER('predictive', '<reasoner_name>');
+CALL RELATIONALAI.API.RESUME_REASONER_ASYNC('predictive', '<reasoner_name>');
+
+-- 3. Wait for STATUS=READY, kill the stuck client, then resubmit with a bumped Model name
+CALL RELATIONALAI.API.GET_REASONER('predictive', '<reasoner_name>');
+```
+
+> **Do not use `CALL RELATIONALAI.EXPERIMENTAL.CREATE_GNN_SERVICE();` to recover stuck predictive train jobs.** It targets a legacy GNN service path that is orthogonal to the predictive reasoner — in PyRel 1.0.x the predictive reasoner serves train jobs in-pod and does not depend on it. The call typically fails with an image-mismatch error (`Invalid image specified in service spec: image 'rai-gnn-app:<version>' does not exist in current application version`); that error does **not** mean GNN training is broken, just that this code path is retired. The right escalation is `SUSPEND_REASONER` + `RESUME_REASONER_ASYNC` on the predictive reasoner itself.
+
+See `rai-predictive-training` § Worker not ready to accept jobs for the matching client-side symptom and post-recycle resubmit pattern, and § Train-job ID disappears from `RELATIONALAI.API.JOBS` for stalled-job forensics.
+
+---
+
 ## Step 6 — CDC Engine Management
 
 > **CDC engine ≠ reasoner engine.** The CDC pipeline runs on a dedicated managed engine
