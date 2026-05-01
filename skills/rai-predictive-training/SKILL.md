@@ -219,29 +219,11 @@ For all hyperparameters and tuning guidance, see [references/hyperparameters.md]
 
 ### Worker not ready to accept jobs
 
-`gnn.fit()` submits successfully (Step 3/3 logs `Training job submitted`) but the train job sits in `STATE='QUEUED'` in `RELATIONALAI.API.JOBS` indefinitely, even though `CALL RELATIONALAI.API.GET_REASONER('predictive', '<name>')` returns `STATUS='READY'`. The SDK only checks reasoner-pod readiness via `api.get_reasoner` before submitting (`relationalai_gnns/core/connector.py::_check_engine_availability`); it has no notion of an in-pod worker queue, so a desynced worker on a READY pod is invisible to the client. The server-side error surfaces only when the SDK polls and the `CREATE_JOB` external function reports back:
+`gnn.fit()` submits successfully (Step 3/3 logs `Training job submitted`) but the train job sits in `STATE='QUEUED'` in `RELATIONALAI.API.JOBS` indefinitely, even though `GET_REASONER` returns `STATUS='READY'`. The SDK only checks reasoner-pod readiness via `api.get_reasoner` before submitting (`relationalai_gnns/core/connector.py::_check_engine_availability`); it has no notion of an in-pod worker queue, so a desynced worker on a READY pod is invisible to the client. The server-side error surfaces only when the SDK polls and the `CREATE_JOB` external function reports back:
 
 > Request failed for external function CREATE_JOB with remote service error: 400 `{"status":"Not Found","message":"worker is not ready to accept jobs - please retry the job later"}`
 
-**Recovery (empirical, not source-documented):** when train jobs are stuck QUEUED for >5 minutes despite the reasoner being READY, suspending and resuming the predictive reasoner has been observed to clear the desync.
-
-```sql
--- 1. Check non-terminal train jobs
-SELECT ID, STATE, DATEDIFF('minute', CREATED_ON, CURRENT_TIMESTAMP()) AS AGE_MIN
-FROM RELATIONALAI.API.JOBS
-WHERE STATE IN ('QUEUED','RUNNING')
-  AND PAYLOAD LIKE '%"job_type": "train"%'
-ORDER BY CREATED_ON ASC;
-
--- 2. Force the worker to recycle
-CALL RELATIONALAI.API.SUSPEND_REASONER('predictive', '<reasoner_name>');
-CALL RELATIONALAI.API.RESUME_REASONER_ASYNC('predictive', '<reasoner_name>');
-
--- 3. Wait for STATUS=READY again, then resubmit (kill the stuck client first)
-CALL RELATIONALAI.API.GET_REASONER('predictive', '<reasoner_name>');
-```
-
-After resume, jobs that were QUEUED on the old worker error out cleanly with the worker-not-ready message; resubmit (re-instantiate `GNN(...)` — see § `gnn.fit()` is idempotent below). `CREATE_GNN_SERVICE()` is **not** the right escalation: in PyRel 1.0.x the SDK submits training via `CALL <app>.api.exec_job_async('GNN', <reasoner_name>, ...)` against the predictive reasoner directly (`relationalai_gnns/core/connector.py::exec_job`), with no reference to `CREATE_GNN_SERVICE`. See `rai-health` § Predictive train jobs stuck QUEUED.
+For the SQL recovery runbook (suspend + resume + re-check), see `rai-health` § Predictive train jobs stuck QUEUED. After recovery, resubmit by re-instantiating `GNN(...)` — see § `gnn.fit()` is idempotent below for why bumping `Model("...")` name alone is not enough.
 
 ### `gnn.fit()` is idempotent — re-instantiate `GNN(...)` on retry
 
