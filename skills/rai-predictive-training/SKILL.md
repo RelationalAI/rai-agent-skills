@@ -188,9 +188,79 @@ For all hyperparameters and tuning guidance, see [references/hyperparameters.md]
 `has_time_column=True` has two known failure modes; both share the same workaround (turn temporal off — switch to non-temporal Relationships and `has_time_column=False`):
 
 1. **Edge-intermediary `time_col`.** When the concept carrying `time_col` is used only as an edge intermediary (no `identify_by`), validation fails with "no time column defined in data tables". `time_col` only propagates for node concepts.
-2. **Datetime column processing at scale.** On larger Snowflake-loaded datasets the trainer can fail server-side with `ValidationError: Error processing datetime column '<name>'` even with the time-bearing concept as a node, clean data, and the column properly listed in both `datetime=[...]` and `time_col=[...]`. The failure is loud at submit time, not silent. Confirm the timestamp column type matches what the GNN datetime pipeline accepts (see `rai-predictive-modeling` § Define and Populate Concepts) and fall back to non-temporal Relationships if the issue persists.
+2. **Datetime column processing at scale.** On larger Snowflake-loaded datasets the trainer can fail server-side with `ValidationError: Error processing datetime column '<name>'` even with the time-bearing concept as a node, clean data, and the column properly listed in both `datetime=[...]` and `time_col=[...]`. The failure is loud at submit time, not silent. Reproduced on a daily date column at ~27K-row scale, so the threshold for "scale" is low. Confirm the timestamp column type matches what the GNN datetime pipeline accepts (see `rai-predictive-modeling` § Define and Populate Concepts) and fall back to non-temporal Relationships if the issue persists. Concrete fallback shape:
+
+   ```python
+   # Before (fails)
+   pt = PropertyTransformer(
+       datetime=[Sale.date],
+       time_col=[Sale.date],   # <-- remove
+       ...
+   )
+   gnn = GNN(has_time_column=True, ..., temporal_strategy="last")  # <-- both go
+
+   # After (works) — keep date as a plain datetime feature; do the temporal split
+   # in pandas before building the task tables.
+   pt = PropertyTransformer(
+       datetime=[Sale.date],
+       # time_col disabled — see Known Limitation
+       ...
+   )
+   gnn = GNN(has_time_column=False, ...)
+   # Train relationship loses the date arg:
+   Train = Relationship(f"{Sale} has {Any:value}")
+   model.define(Train(Sale, TrainTable.unit_sales)).where(...)
+   ```
 
 **Engine-side compiled-relation cache footgun (not datetime-specific — surfaces after any column-type change on a bound table):** the engine caches the compiled relation type per RAI relation name and doesn't invalidate it on `ALTER TABLE`, even after stream delete + recreate. Symptom: `Encountered reference to a base relation with a mismatched signature` — but the client only shows the opaque `Failed to pull data into index: transaction was aborted (runtime error)` wrapper. Pull the real error via `RELATIONALAI.API.GET_TRANSACTION_ARTIFACTS('<txn_id>')` -> `problems.json` (presigned URL) and look at the `report` field. Workaround: rename `Model(...)` to force a fresh RAI relation namespace (downstream queries that depend on the old name need updating). Better: do schema changes before the first bind — see `rai-predictive-modeling` § Populate from Snowflake.
+
+### Worker not ready to accept jobs
+
+`gnn.fit()` submits successfully (Step 3/3 logs `Training job submitted`) but the train job sits in `STATE='QUEUED'` in `RELATIONALAI.API.JOBS` indefinitely, even though `CALL RELATIONALAI.API.GET_REASONER('predictive', '<name>')` returns `STATUS='READY'`. The reasoner status reflects pod state, not in-pod worker state — the worker can be desynced and still report READY. The real error surfaces only when the SDK polls and the worker reports back:
+
+> Request failed for external function CREATE_JOB with remote service error: 400 `{"status":"Not Found","message":"worker is not ready to accept jobs - please retry the job later"}`
+
+**Recovery:** when train jobs are stuck QUEUED for >5 minutes despite the reasoner being READY, force the worker to recycle by suspending and resuming the predictive reasoner.
+
+```sql
+-- 1. Check non-terminal train jobs
+SELECT ID, STATE, DATEDIFF('minute', CREATED_ON, CURRENT_TIMESTAMP()) AS AGE_MIN
+FROM RELATIONALAI.API.JOBS
+WHERE STATE IN ('QUEUED','RUNNING')
+  AND PAYLOAD LIKE '%"job_type": "train"%'
+ORDER BY CREATED_ON ASC;
+
+-- 2. Force the worker to recycle
+CALL RELATIONALAI.API.SUSPEND_REASONER('predictive', '<reasoner_name>');
+CALL RELATIONALAI.API.RESUME_REASONER_ASYNC('predictive', '<reasoner_name>');
+
+-- 3. Wait for STATUS=READY again, then resubmit (kill the stuck client first)
+CALL RELATIONALAI.API.GET_REASONER('predictive', '<reasoner_name>');
+```
+
+After resume, jobs that were QUEUED on the old worker error out cleanly with the worker-not-ready message. Submit a fresh run with a bumped `Model("...")` name (see § Stale-experiment matching) to start a new experiment. `CREATE_GNN_SERVICE()` is **not** the right escalation here — the predictive reasoner serves train jobs in-pod in PyRel 1.0.x and does not depend on the legacy GNN service. See `rai-health` § Predictive train jobs stuck QUEUED.
+
+### Stale-experiment matching: bump `Model("...")` name on retry
+
+`_wait_obtain_model_run_id` in `relationalai.semantics.reasoners.predictive.estimator` matches a just-submitted training job to the most recent experiment with the same `Model("...")` name + concept name. If a previous run with the same model name was killed mid-flight or failed at the prediction step, a new train submission can match the **stale** `model_run_id` and then hang at "Step 2/4: Preparing model for prediction" because the stale model artifacts don't fit the current dataset.
+
+**Symptom:** Step 1/3, 2/3, 3/3 (training submit) all succeed in seconds. Step 1/4 (test-table prep) succeeds. Step 2/4 ("Preparing model for prediction…") polls forever (>30 min) with no progress, no JOBS row, no traceback.
+
+**Workaround:** bump the `Model("...")` name on every re-run after a killed/failed run.
+
+```python
+model = Model("my_template_local_v2")  # bump on re-run
+```
+
+---
+
+## Troubleshooting
+
+### Train-job ID disappears from `RELATIONALAI.API.JOBS`
+
+`RELATIONALAI.API.JOBS` history rolls — train jobs that were `STATE='QUEUED'` for ~30 min can be canceled or roll out of retention and disappear from the table entirely. Client-side `_wait_obtain_model_run_id` polling does not time-bound itself and will keep going indefinitely against an ID that no longer exists.
+
+If a `gnn.fit()` client has been polling for >30 min with no progress and `SELECT * FROM RELATIONALAI.API.JOBS WHERE ID = '<id>'` returns no row, the client will not self-terminate — kill it manually. Do **not** rely on `RELATIONALAI.API.JOBS` for forensics on stalled jobs older than the retention window; capture state earlier (or rely on `GET_TRANSACTION_ARTIFACTS` / engine logs) when investigating.
 
 ---
 

@@ -26,6 +26,39 @@ description: Build GNN data models -- concepts, Snowflake data loading, task rel
 
 ---
 
+## Prerequisites
+
+### Experiment schema setup (one-time, ACCOUNTADMIN)
+
+GNN training writes experiment artifacts to a Snowflake schema. The RELATIONALAI native app must own write access on it. Without this, the very first `gnn.fit()` fails with a message like *"Schema does not exist or the GNN RelationalAI Native App lacks permissions"* (the wording rotates between "Schema does not exist" and "Database does not exist" depending on which grant is missing first — both grants below are required).
+
+```sql
+-- Use a database you own (NOT a Snowflake-shared/marketplace database).
+-- Shared DBs reject schema creation: "Creating schema on shared database
+-- '<X>' is not allowed."
+CREATE DATABASE IF NOT EXISTS <YOUR_DB>;
+CREATE SCHEMA IF NOT EXISTS <YOUR_DB>.EXPERIMENTS;
+
+GRANT USAGE ON DATABASE <YOUR_DB> TO APPLICATION RELATIONALAI;
+GRANT ALL PRIVILEGES ON SCHEMA <YOUR_DB>.EXPERIMENTS TO APPLICATION RELATIONALAI;
+```
+
+Then in the script:
+
+```python
+gnn = GNN(
+    exp_database="<YOUR_DB>",
+    exp_schema="EXPERIMENTS",
+    ...
+)
+```
+
+### `relationalai` package version
+
+The predictive submodule (`relationalai.semantics.reasoners.predictive`) is not in every published `relationalai` release — `from relationalai.semantics.reasoners.predictive import GNN` will raise `ModuleNotFoundError` on releases that pre-date it. Confirm the current minimum version with the RelationalAI team before pinning in `pyproject.toml`.
+
+---
+
 ## Quick Reference
 
 ```python
