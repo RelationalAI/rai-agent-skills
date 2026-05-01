@@ -198,7 +198,7 @@ No solution satisfies all constraints simultaneously. The problem as stated is i
 1. Check demand vs. capacity: does total demand exceed total supply/capacity?
 2. Look for contradictory constraints (e.g., x >= 10 AND x <= 5).
 3. Check bound consistency: any variable with lower_bound > upper_bound?
-4. Remove constraints one at a time to isolate the conflict.
+4. Bisect: rebuild the Problem with one `problem.satisfy(...)` call removed at a time and re-solve. The constraint whose removal makes the problem feasible is the binding conflict. (Problem accumulates `satisfy` calls — there's no in-place `remove_constraint` API; build a fresh Problem each iteration.)
 
 **What to tell users:** "The requirements as stated cannot all be satisfied simultaneously. The most likely conflict is [specific conflict]. Options: relax [constraint], increase [capacity], or allow unmet demand with a penalty."
 **Next steps:** Identify the binding conflict, present trade-off options, add slack/penalty variables. A common and valuable path is moving the conflicting hard constraint to the objective with a penalty — feasibility restoration through softening is often more useful than pure diagnosis.
@@ -235,7 +235,7 @@ A non-optimal termination status is information about the problem structure, not
 
 **INFEASIBLE as diagnostic tool:**
 - Intentionally solving with a proposed constraint set to test feasibility boundaries is a valid modeling technique. An infeasible result tells you the constraint set is too tight — which constraints to relax.
-- **Constraint relaxation debugging:** Remove constraints one at a time and re-solve. The constraint whose removal makes the problem feasible is the binding conflict. This is faster than manual inspection for large formulations.
+- **Constraint bisection debugging:** Rebuild the Problem omitting one `satisfy(...)` call at a time and re-solve. The omitted constraint whose absence makes the problem feasible is the binding conflict. This is faster than manual inspection for large formulations. (Problem accumulates `satisfy` calls — there's no in-place removal; build a fresh Problem each iteration.)
 
 **TIME_LIMIT with acceptable gap:**
 - A 2% gap after 60 seconds may be perfectly good for operational use. The "optimal" solution is at most 2% better — often indistinguishable in business terms.
@@ -457,7 +457,7 @@ Use this after every solve to ensure result quality:
 - [ ] Binding constraints align with known bottlenecks?
 - [ ] Results are stable to minor parameter perturbations?
 
-**If checks fail:** Trivial solution (all zeros) → add forcing constraints first. Infeasible → relax or remove constraints first. See `rai-prescriptive-problem-formulation/references/fix-generation-guidelines.md` for fix strategies.
+**If checks fail:** Trivial solution (all zeros) → add forcing constraints first. Infeasible → relax constraints (or rebuild the Problem omitting a conflicting `satisfy(...)` call). See `rai-prescriptive-problem-formulation/references/fix-generation-guidelines.md` for fix strategies.
 
 ---
 
@@ -477,5 +477,5 @@ Use this after every solve to ensure result quality:
 |-----------|-------------|------|
 | Solution extraction details | Query-pattern variations (`populate=True` vs `populate=False` — multiple solutions, iterative, scenario/parametric), `Variable.values()` back-pointer naming rules with examples table, silent-failure warnings, Snowflake export | [solution-extraction-details.md](references/solution-extraction-details.md) |
 | Failure taxonomy | Detailed root causes by solvability level and 5-step diagnosis protocol | [failure-taxonomy.md](references/failure-taxonomy.md) |
-| Common pitfalls | Full table of 14 common optimization result pitfalls with causes and fixes | [common-pitfalls.md](references/common-pitfalls.md) |
+| Common pitfalls | Additional result-interpretation pitfalls (numerical instability, degenerate solutions, aggregation scope, missing/null data, etc.) — distinct from the silent-bug rows in this SKILL | [common-pitfalls.md](references/common-pitfalls.md) |
 | Sensitivity analysis | Sensitivity analysis techniques and parameter sweeps | [sensitivity-analysis.md](references/sensitivity-analysis.md) |

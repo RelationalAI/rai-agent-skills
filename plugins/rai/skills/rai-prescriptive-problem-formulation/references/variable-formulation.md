@@ -402,7 +402,7 @@ Food.x_amount = model.Property(f"{Food} has {Float:amount}")
 Edge.x_flow = model.Property(f"{Edge} has {Float:flow}")
 ```
 
-For the underlying f-string Madlib rules (TYPE FIRST, then field name; valid Python identifiers; same pattern for Relationships), see `rai-pyrel-coding` > Property Definition F-Strings. Those rules are general PyRel grammar, not prescriptive-specific.
+For the underlying Property f-string rules (TYPE FIRST, then field name; valid Python identifiers; same pattern for Relationships), see `rai-pyrel-coding` > Property Definition F-Strings. Those rules are general PyRel grammar, not prescriptive-specific.
 
 When accessing decision variables through `.ref()` aliases, use the Python attribute name (with `x_` prefix), not the semantic slot name. The solver resolves variables by attribute name:
 
@@ -480,7 +480,7 @@ problem.minimize(chromatic_number, name="chromatic_number")
 }
 ```
 
-Note: In `concept_definition` and `property_definition`, use v1 madlib syntax — TYPE FIRST: `f"{Concept} has {Float:field}"`. Reversed `{field:Float}` causes "Invalid format specifier" errors.
+Note: In `concept_definition` and `property_definition`, use v1 f-string syntax — TYPE FIRST: `f"{Concept} has {Float:field}"`. Reversed `{field:Float}` causes "Invalid format specifier" errors.
 
 ---
 

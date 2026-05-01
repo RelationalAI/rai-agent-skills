@@ -34,7 +34,7 @@ When generating fixes for trivial or poor-quality solutions, follow these rules:
 - Base the new variable's scope on existing concepts from the model — variables referencing non-existent concepts cause compile errors
 - Use `.where()` filters based on actual property values from data samples
 - Reference actual relationship paths that exist in the model
-- For concept and variable creation syntax, see `rai-prescriptive-problem-formulation/variable-formulation.md`
+- For concept and variable creation syntax, see [variable-formulation.md](variable-formulation.md)
 
 **Constraint fix requirements** (constraints without decision variables cause `ValueError` at solve time):
 - Reference at least one decision variable (`x_` prefix)

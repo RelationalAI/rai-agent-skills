@@ -5,10 +5,8 @@
   - [Constraint type classification](#constraint-type-classification)
   - [Two constraint styles](#two-constraint-styles)
   - [Tightness and contradictions](#tightness-and-contradictions)
-  - [Forcing constraints for minimize objectives](#forcing-constraints-for-minimize-objectives)
-  - [Forcing constraints for maximize objectives](#forcing-constraints-for-maximize-objectives)
+  - [Forcing constraints](#forcing-constraints)
   - [Demand modeling: context determines direction](#demand-modeling-context-determines-direction)
-  - [Forcing constraints (demand satisfaction, assignment completeness)](#forcing-constraints-demand-satisfaction-assignment-completeness)
   - [Self-defeating constraints](#self-defeating-constraints)
 - [Constraint Modeling Patterns](#constraint-modeling-patterns)
   - [Balance constraints](#balance-constraints)
@@ -213,19 +211,6 @@ When the objective is to MAXIMIZE (profit, revenue, value) with positive coeffic
 - **Capacity/resource constraints** to bound the solution
 - **Demand satisfaction constraints** to ensure balanced fulfillment — without these, the optimizer concentrates all resources on the highest-margin items, starving lower-margin ones even when shared resources connect them
 
-### Demand modeling: context determines direction
-
-Demand is NOT simply "upper bound for maximize, lower bound for minimize." The correct modeling depends on the business relationship and real-world consequences:
-
-| Business Context | Constraint | User-facing description | Rationale |
-|-----------------|------------|------------------------|-----------|
-| **Market opportunity** (can sell up to demand) | `qty <= demand` | Don't produce more than customers will buy | Can't sell more than the market wants |
-| **Contractual obligation** (must fulfill orders) | `qty >= demand` | Fulfill every customer order in full | Penalties or contract breach for shortfall |
-| **Forced acceptance** (must take delivery) | `qty >= demand` | Accept all incoming deliveries from suppliers | Supplier pushes product; you must absorb it |
-| **Flexible fulfillment** (partial OK) | Soft constraint with penalty | Meet as much demand as possible, penalizing shortfalls | Penalize shortfall in objective rather than hard constraint |
-
-**Rule:** Ask "What happens in the real world if we go above/below this quantity?" The answer determines the constraint direction, not the objective direction.
-
 #### Code patterns (demand satisfaction, assignment completeness)
 
 ```python
@@ -246,6 +231,19 @@ problem.satisfy(model.require(
     node_flow.where(Edge.i == Node.v) == 1
 ))
 ```
+
+### Demand modeling: context determines direction
+
+Demand is NOT simply "upper bound for maximize, lower bound for minimize." The correct modeling depends on the business relationship and real-world consequences:
+
+| Business Context | Constraint | User-facing description | Rationale |
+|-----------------|------------|------------------------|-----------|
+| **Market opportunity** (can sell up to demand) | `qty <= demand` | Don't produce more than customers will buy | Can't sell more than the market wants |
+| **Contractual obligation** (must fulfill orders) | `qty >= demand` | Fulfill every customer order in full | Penalties or contract breach for shortfall |
+| **Forced acceptance** (must take delivery) | `qty >= demand` | Accept all incoming deliveries from suppliers | Supplier pushes product; you must absorb it |
+| **Flexible fulfillment** (partial OK) | Soft constraint with penalty | Meet as much demand as possible, penalizing shortfalls | Penalize shortfall in objective rather than hard constraint |
+
+**Rule:** Ask "What happens in the real world if we go above/below this quantity?" The answer determines the constraint direction, not the objective direction.
 
 ### One-hot selection (exactly-one-of-N)
 

@@ -1,6 +1,5 @@
 <!-- TOC -->
 - [Sensitivity Analysis](#sensitivity-analysis)
-  - [Implementation Patterns](#implementation-patterns)
   - [What-If Framing for Stakeholders](#what-if-framing-for-stakeholders)
   - [Which Parameters to Vary](#which-parameters-to-vary)
   - [Parameter Type Taxonomy](#parameter-type-taxonomy)

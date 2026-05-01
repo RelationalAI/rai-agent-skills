@@ -48,9 +48,9 @@ all_results = pd.concat(results)
 
 See `rai-prescriptive-solver-management/examples/partitioned_iteration_scenarios.py` for a complete working example of this pattern.
 
-## `| <literal>` Fallback in Solver Constraints (RAI-49989)
+## `| <literal>` Fallback in Solver Constraints
 
-A `| <literal>` (default-value) fallback on a decision-variable-bearing aggregate inside `problem.satisfy(model.require(...))` raises a `NotImplementedError` from the prescriptive rewriter — it requires homogeneous Match arm types, but the symbolic arm gets lifted to a node-Hash reference while the literal arm stays at its original numeric type, so the two arms can't be unified.
+A `| <literal>` (default-value) fallback on a decision-variable-bearing aggregate inside `problem.satisfy(model.require(...))` raises a `NotImplementedError`. The compiler can't unify the two branches when one branch carries a decision variable (symbolic) and the other is a plain literal — they end up at incompatible internal types.
 
 ```python
 # BROKEN — | 0 fallback on a decision-variable aggregate
@@ -61,7 +61,7 @@ problem.satisfy(model.require(
 
 **Two workarounds:**
 
-1. **Aggregate-default form** (in-engine, both arms symbolic): replace the literal arm with another aggregate over the same decision-variable Property — e.g. `sum(Flow.x_qty).where(Flow.dest(Entity)) | sum(Flow.x_qty)`. Both arms are then symbolic and the rewriter handles it.
+1. **Aggregate-default form** (keep the work in-engine): replace the literal arm with another aggregate over the same decision-variable Property — e.g. `sum(Flow.x_qty).where(Flow.dest(Entity)) | sum(Flow.x_qty)`. Both arms are now decision-variable expressions and the compiler can unify them.
 2. **Pre-compute in pandas** (out-of-engine): aggregate in Python and load the result as a flat denormalized property on the decision concept.
 
 ```python

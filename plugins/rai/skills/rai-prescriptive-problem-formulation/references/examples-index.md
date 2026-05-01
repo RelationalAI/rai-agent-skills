@@ -8,7 +8,7 @@
 | Quadratic pairwise ref | Pairwise quadratic term via `Concept.ref()` + `Float.ref()` binding | [examples/quadratic_pairwise_ref.py](../examples/quadratic_pairwise_ref.py) |
 | Multi-concept union objective | Multi-concept coordination: cross-concept conservation + binary selection + `model.union()` objective | [examples/multi_concept_union_objective.py](../examples/multi_concept_union_objective.py) |
 | One-hot temporal recurrence | One-hot selection, stepped-value constraint, cumulative tracking with temporal recurrence | [examples/one_hot_temporal_recurrence.py](../examples/one_hot_temporal_recurrence.py) |
-| Partitioned subproblem | Partitioned sub-problem solving with `populate=False` and `where=[filter]` | `rai-prescriptive-solver-management/examples/partitioned_iteration_scenarios.py` |
+| Partitioned subproblem | Partitioned sub-problem solving with `populate=False` and `where=[filter]` | [partitioned_iteration_scenarios.py](../../rai-prescriptive-solver-management/examples/partitioned_iteration_scenarios.py) |
 | Subtour elimination (MTZ) | Derived scalar bounds, MTZ subtour elimination, degree constraints, walrus aliasing | [examples/subtour_elimination_mtz.py](../examples/subtour_elimination_mtz.py) |
 | Conflict graph exclusion | Conflict-graph mutual exclusion via Conflict concept + dual `.ref()` | [examples/conflict_graph_exclusion.py](../examples/conflict_graph_exclusion.py) |
 | Fixed-charge facility | Fixed-charge facility location: tracking concept + binary linking constraint | [examples/fixed_charge_facility.py](../examples/fixed_charge_facility.py) |

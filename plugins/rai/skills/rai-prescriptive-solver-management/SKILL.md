@@ -261,7 +261,7 @@ For prescriptive-context compile errors (entity reference passed as scalar, zero
 
 INFEASIBLE / DUAL_INFEASIBLE root-cause taxonomies and fix strategies live in `rai-prescriptive-results-interpretation` > Status Interpretation (the natural reading order is status → diagnose → fix). For root cause codes (`unbounded_variable`, `missing_upper_bound`, `penalty_structure`, `constraint_conflict`, `capacity_mismatch`), fix action types, and status-specific fix direction, see [diagnostic-taxonomy.md](references/diagnostic-taxonomy.md).
 
-For solver-error-message-driven debugging (`si.error`, `print_format=`, log patterns), see [numerical-and-mip.md](references/numerical-and-mip.md).
+For `si.error` and `print_format=` semantics, see Solve Execution and the solve-info table below in this skill. For solver-log patterns and numerical-error categorization, see [numerical-and-mip.md](references/numerical-and-mip.md).
 
 ---
 
@@ -323,7 +323,7 @@ Solver-specific parameters (HiGHS, Gurobi, Ipopt kwargs), tuning guidance, cloud
 
 ### Unsupported operators
 
-The following operators are **not lowered to the solver** and will raise errors if used inside `solve_for`/`satisfy`/`minimize`/`maximize`: `%` (modulo), `//` (floor division), `math.floor`, `math.ceil`, `math.sign`, `math.clip`, `round`, `trunc`, trig (`math.sin`, `math.cos`, `math.tan` and their hyperbolic/inverse variants), `math.factorial`, `math.erf`. Note: `//` works on concrete data and property-constant combinations (e.g., `Player.p // group_size`), but fails when **both operands are decision variables**. There is no `if_then_else` operator in the prescriptive library — use `implies()` (Gurobi/MiniZinc) or Big-M reformulation (HiGHS) for conditional logic. Use piecewise-linear approximations or reformulations for unsupported operators.
+The following operators are **not lowered to the solver** and will raise errors if used inside `solve_for`/`satisfy`/`minimize`/`maximize`: `%` (modulo), `//` (floor division), `math.floor`, `math.ceil`, `math.round`, `math.sign`, `math.clip`, trig (`math.sin`, `math.cos`, `math.tan` and their hyperbolic/inverse variants), `math.factorial`, `math.erf`. Note: `//` works on concrete data and property-constant combinations (e.g., `Player.p // group_size`), but fails when **both operands are decision variables**. There is no `if_then_else` operator in the prescriptive library — use `implies()` (Gurobi/MiniZinc) or Big-M reformulation (HiGHS) for conditional logic. Use piecewise-linear approximations or reformulations for unsupported operators.
 
 > **See also:** Full operator/construct compatibility table by solver → `numerical-and-mip.md` > Operator and Construct Compatibility by Solver. Reformulation techniques (Big-M linearization, McCormick envelopes, epigraph, SOS2) → `numerical-and-mip.md` > Reformulation Techniques for Solver Compatibility.
 

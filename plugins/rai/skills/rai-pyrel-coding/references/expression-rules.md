@@ -72,18 +72,14 @@ Use `.where()` to define the join condition and `.per()` to define the grouping 
 
 ```python
 # Sum of operation flows per SKU (join via shared SKU relationship)
-Op = Operation.ref()
-UD = UnmetDemand.ref()
-D = Demand.ref()
-
-inflow_per_sku = sum(Op.x_flow).where(Op.output_sku == UD.sku).per(UD.sku)
-demand_per_sku = sum(D.quantity).where(D.sku == UD.sku).per(UD.sku)
+inflow_per_sku = sum(Operation.x_flow).where(Operation.output_sku == UnmetDemand.sku).per(UnmetDemand.sku)
+demand_per_sku = sum(Demand.quantity).where(Demand.sku == UnmetDemand.sku).per(UnmetDemand.sku)
 ```
 
 **Key rules:**
 - `.where(X.relationship == Y)` defines the join (which entities contribute to the sum)
 - `.per(Y)` defines the grouping (one aggregated value per Y entity)
-- Use `.ref()` aliases for the concept being summed over
+- Bare `Concept` references unify across the chain — repeated mentions of the same Concept refer to one shared free variable. Reach for `.ref()` only when you need two independent variables of the same Concept (pairwise / self-join). See SKILL.md > Free-Variable Scoping.
 
 ### Property Chains in `.where()` Clauses
 

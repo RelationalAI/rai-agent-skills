@@ -456,4 +456,4 @@ For constraint naming with lists, re-solve behavior (multi-scenario patterns), `
 | Fix generation guidelines | Root cause taxonomy, grounding rules, join path fixes, trivial/infeasible fix strategies | [fix-generation-guidelines.md](references/fix-generation-guidelines.md) |
 | Examples index | All example problems with patterns demonstrated | [examples-index.md](references/examples-index.md) |
 | Formulation analysis context | Naming conventions, alias handling, expression parsing, aggregation patterns for review | [formulation-analysis-context.md](references/formulation-analysis-context.md) |
-| Known limitations (secondary) | Constraint naming, re-solve behavior, `\| 0` fallback limitation, numpy type casting | [known-limitations.md](references/known-limitations.md) |
+| Known limitations (secondary) | Constraint naming, re-solve behavior, `\| <literal>` fallback limitation, numpy type casting | [known-limitations.md](references/known-limitations.md) |

@@ -21,7 +21,7 @@ When a formulation fails at a level, the root cause falls into specific categori
 | **compiles** | `missing_registration` | Variables/constraints defined but not registered with Problem | Ensure all `solve_for`, `satisfy`, `minimize`/`maximize` calls reference the Problem instance |
 | **solves** | `solver_crash` | Solver errors out (license, memory, malformed problem) | Check solver logs; simplify problem size; verify solver availability |
 | **solves** | `solve_error` | Solver returned error (license, timeout, numerical) | Check solver logs; re-solve is safe on same Problem instance (SDK >= 1.0.3) |
-| **optimal** | `infeasible` | No solution satisfies all constraints | Over-constrained — relax bounds, remove conflicting constraints, add slack |
+| **optimal** | `infeasible` | No solution satisfies all constraints | Over-constrained — relax bounds, drop a conflicting `satisfy(...)` (rebuild the Problem omitting it — Problem is append-only), or add slack/penalty variables |
 | **optimal** | `dual_infeasible` | Objective can improve infinitely (unbounded) | Missing bounds or capacity constraints; check objective direction |
 | **optimal** | `time_limit_large_gap` | Solver timed out with >5% gap | Increase time, tighten Big-M, add symmetry breaking, reduce problem size |
 | **non-trivial** | `missing_forcing_constraint` | "Do nothing" satisfies all constraints — trivial zero solution | Add demand satisfaction, coverage, or assignment completeness constraints |
