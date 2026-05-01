@@ -7,12 +7,11 @@
 
 ## Common Pitfalls Table
 
+> The most common rows (zero objective on minimize, all-zero from join mismatch, infeasible: demand > capacity) live in the parent SKILL.md > Common Pitfalls. The rows below cover *additional* result-interpretation pitfalls.
+
 | Mistake | Cause | Fix |
 |---------|-------|-----|
-| Zero objective on minimize | Missing forcing constraints — "do nothing" is cheapest | Add `sum(x).per(Entity) >= Entity.demand` or equivalent |
 | All-zero variables with non-zero objective | Decision variables not referenced in objective, or constant terms evaluate regardless | Verify decision variable properties appear in objective with meaningful coefficients |
-| All-zero from join mismatch | Forcing constraints exist but `.where()` joins match zero rows | Verify constraint joins match actual data relationships |
-| Infeasible: demand > capacity | Total demand exceeds total supply/capacity | Add slack/penalty variables, or relax demand constraints |
 | Infeasible: contradictory constraints | Conflicting equality/inequality constraints or bounds | Organize into essential/full tiers; add incrementally to isolate conflict |
 | Numerical instability | Coefficients differing by >1e9 | Scale data to similar magnitudes; tighten Big-M (<1e6); replace strict equalities with bounded slack |
 | Cross-product entities mostly zero | Entities created but not linked to meaningful constraints | Add `.where()` filters to entity creation; restrict to valid combinations |

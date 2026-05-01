@@ -338,7 +338,7 @@ When diagnosing solution quality issues, follow this sequence:
 
 ### Fix Generation Guidelines
 
-Prefer constraint fixes over variable fixes. All fixes must be grounded in actual model context (concept names, properties, relationships). See [references/fix-generation-guidelines.md](references/fix-generation-guidelines.md) for root cause taxonomy, grounding rules, and constraint fix requirements.
+Prefer constraint fixes over variable fixes. All fixes must be grounded in actual model context (concept names, properties, relationships). See `rai-prescriptive-problem-formulation/references/fix-generation-guidelines.md` for root cause taxonomy, grounding rules, and constraint fix requirements.
 
 ### Quality dimensions
 
@@ -351,7 +351,7 @@ Prefer constraint fixes over variable fixes. All fixes must be grounded in actua
 
 ### Join Path Fix Rules
 
-When fixing trivial solutions, fix broken join paths in constraints — not aggregate workarounds. Navigate from bound concepts (e.g., `Demand.customer.site` not `Customer.site`), and always navigate FROM the `.per()` entity. See [references/fix-generation-guidelines.md](references/fix-generation-guidelines.md) for full diagnosis steps, examples, and navigation path rules.
+When fixing trivial solutions, fix broken join paths in constraints — not aggregate workarounds. Navigate from bound concepts (e.g., `Demand.customer.site` not `Customer.site`), and always navigate FROM the `.per()` entity. See `rai-prescriptive-problem-formulation/references/fix-generation-guidelines.md` for full diagnosis steps, examples, and navigation path rules.
 
 ---
 
@@ -457,7 +457,7 @@ Use this after every solve to ensure result quality:
 - [ ] Binding constraints align with known bottlenecks?
 - [ ] Results are stable to minor parameter perturbations?
 
-**If checks fail:** Trivial solution (all zeros) → add forcing constraints first. Infeasible → relax or remove constraints first. See [references/fix-generation-guidelines.md](references/fix-generation-guidelines.md) for fix strategies.
+**If checks fail:** Trivial solution (all zeros) → add forcing constraints first. Infeasible → relax or remove constraints first. See `rai-prescriptive-problem-formulation/references/fix-generation-guidelines.md` for fix strategies.
 
 ---
 
@@ -477,6 +477,5 @@ Use this after every solve to ensure result quality:
 |-----------|-------------|------|
 | Solution extraction details | Query-pattern variations (`populate=True` vs `populate=False` — multiple solutions, iterative, scenario/parametric), `Variable.values()` back-pointer naming rules with examples table, silent-failure warnings, Snowflake export | [solution-extraction-details.md](references/solution-extraction-details.md) |
 | Failure taxonomy | Detailed root causes by solvability level and 5-step diagnosis protocol | [failure-taxonomy.md](references/failure-taxonomy.md) |
-| Fix generation guidelines | Root cause taxonomy, grounding rules, join path fixes, trivial/infeasible fix strategies | [fix-generation-guidelines.md](references/fix-generation-guidelines.md) |
 | Common pitfalls | Full table of 14 common optimization result pitfalls with causes and fixes | [common-pitfalls.md](references/common-pitfalls.md) |
 | Sensitivity analysis | Sensitivity analysis techniques and parameter sweeps | [sensitivity-analysis.md](references/sensitivity-analysis.md) |

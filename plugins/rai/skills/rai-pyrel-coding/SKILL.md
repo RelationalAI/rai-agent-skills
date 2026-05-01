@@ -269,6 +269,8 @@ model.where(
 
 **Key principle:** Most logic should live in definitions. Queries (`select().to_df()`) should be simple — selecting and aggregating values that definitions have already computed. If you find yourself writing complex logic inside a query, consider extracting it into a definition instead.
 
+**The model is append-only.** Every call to `model.define()`, `model.Property()`, `model.Concept()`, `model.Relationship()` **adds** to the model — there is no API to remove, replace, or modify an existing element. Adding a "corrected" rule does not replace the original; both remain active. To change an existing property/concept/rule, define a fresh model. Reasoner-specific stacks (e.g., `Problem` in the prescriptive reasoner) inherit this behavior — see the relevant reasoner skill.
+
 ---
 
 ## Enums

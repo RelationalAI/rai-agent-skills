@@ -171,25 +171,26 @@ Integer variables are stored as floating-point. A variable is "integer" if withi
 
 Before building a formulation, verify that the operators and constructs you plan to use are supported by the target solver. Using an unsupported construct causes a solve-time error that requires reformulation.
 
+Operators are imported from `relationalai.semantics.std.math` (`math.abs`, `math.exp`, etc.) or are Python operators (`**`, `*`, `+`). Constructs in `()` are special-form helpers from the prescriptive library.
+
 | Operator / Construct | HiGHS | Gurobi | Ipopt | MiniZinc |
 |----------------------|-------|--------|-------|----------|
-| Linear constraints (`<=`, `>=`, `==`) | Yes | Yes | Yes | Yes |
-| Integer / binary variables | Yes | Yes | No (continuous only) | Yes |
-| Quadratic constraints | No | Yes (convex) | Yes | No |
-| Product of 2 decision vars | No (linearize) | Yes (bilinear) | Yes | Yes |
-| `abs(x)` | No (reformulate) | Yes (via `abs_()`) | Yes | Yes |
-| `min` / `max` | No (reformulate) | Yes (general constraints) | No (reformulate) | Yes |
-| `exp`, `log` | No | No | Yes | No |
-| `sqrt` | No | No | Yes | No |
-| `sin`, `cos`, trig | No | No | Yes | No |
-| `x ** n` (power) | No | Yes (n=2 only) | Yes | No |
-| Quadratic objective | Yes (convex) | Yes | Yes | No |
-| `implies` / indicator | No (Big-M) | Yes (indicator constraints) | N/A | Yes |
-| `all_different` | No | No | No | Yes |
-| SOS1 / SOS2 | No | Yes | No | No |
-| Piecewise linear | Via binary vars | Native PWL / SOS2 | No | Via element |
+| Linear arithmetic (`+`, `-`, `*` by const, `/` by const) | Yes | Yes | Yes | Yes |
+| Integer / binary variables (`type="int"`, `type="bin"`) | Yes | Yes | No (continuous only) | Yes |
+| Quadratic objective (`var * var` in `minimize`/`maximize`) | Yes (convex) | Yes | Yes | No |
+| Bilinear / quadratic constraints (`var * var` in `satisfy`) | No (linearize) | Yes (convex) | Yes | Yes (discrete vars only) |
+| `math.abs(x)` | No (reformulate) | Yes | Yes | Yes |
+| `math.minimum(x, y)` / `math.maximum(x, y)` | No (reformulate) | Yes (general constraints) | No (reformulate) | Yes |
+| `math.exp(x)`, `math.log(x)` (and `log2`, `log10`, `natural_log`) | No | Yes | Yes | No |
+| `math.sqrt(x)`, `math.cbrt(x)` | No | Yes | Yes | No |
+| `x ** n` / `math.pow(x, n)` | No (n=2: linearize) | Yes | Yes | Yes (integer n) |
+| `implies(...)` | No (Big-M) | Yes (indicator constraints) | N/A | Yes |
+| `all_different(...)` | No | No | No | Yes |
+| `special_ordered_set_type_1(...)` / `_type_2(...)` | No | Yes | No | No |
 
-**Decision rule:** If the problem needs nonlinear functions (`exp`, `log`, `sqrt`, trig) → Ipopt. If it needs `all_different` or complex logical constraints → MiniZinc. If it needs integer variables with quadratic terms → Gurobi. For pure linear/MIP → HiGHS (default) or Gurobi.
+**Not supported in solver expressions** (compile-time error if used inside `solve_for`/`satisfy`/`minimize`/`maximize`): `%` (modulo), `//` (floor division), `math.floor`, `math.ceil`, `math.sign`, `math.clip`, trig (`math.sin`/`cos`/`tan` and their hyperbolic/inverse variants), `math.factorial`, `math.erf`, division between two decision variables. These are exposed by PyRel for queries but the prescriptive library does not lower them to the solver.
+
+**Decision rule:** If the problem needs nonlinear functions (`math.exp`, `math.log`, `math.sqrt`, `x**n`) → Gurobi (preferred when licensed) or Ipopt. If it needs `all_different(...)` or complex logical constraints → MiniZinc. If it needs integer variables with quadratic terms → Gurobi. For pure linear/MIP → HiGHS (default) or Gurobi.
 
 **Before solving:** Check that every expression in the formulation uses only operators supported by the selected solver. If not, either switch solvers or apply a reformulation technique (see below).
 
@@ -251,9 +252,9 @@ Replace `y = floor(x)` with integer variable `y` and constraints:
 
 ### Nonlinear + integer → decomposition
 
-If the problem mixes nonlinear functions with integer variables (no single solver handles both well):
-1. **Gurobi** handles quadratic + integer natively — use if only quadratic nonlinearity
-2. For general nonlinear + integer: decompose into an outer integer master problem (HiGHS/Gurobi) and inner NLP subproblem (Ipopt), solved iteratively
-3. Alternative: linearize the nonlinear part (piecewise linear approximation) and solve as MIP
+If the problem mixes nonlinear functions with integer variables:
+1. **Gurobi** handles quadratic, `exp`, `log`, `sqrt`, and general `x**n` nonlinearity natively alongside integer/binary variables — preferred when licensed.
+2. For nonlinear shapes Gurobi doesn't handle: decompose into an outer integer master problem (HiGHS/Gurobi) and inner NLP subproblem (Ipopt), solved iteratively. Ipopt itself does NOT handle integer variables.
+3. Alternative: linearize the nonlinear part (piecewise linear approximation) and solve as MIP.
 
 ---

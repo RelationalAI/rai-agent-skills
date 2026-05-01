@@ -425,22 +425,19 @@ prod_cost = ProdCapacity.production_cost * sum(x_prod).per(ProdCapacity).where(
 
 For constraint naming with lists, re-solve behavior (multi-scenario patterns), `| 0` fallback limitation, and numpy type casting, see [known-limitations.md](references/known-limitations.md).
 
-### PyRel is additive — nothing can be removed or modified in-place
+### Problem is additive — solve_for / satisfy / minimize accumulate
 
-PyRel's model and problem APIs are **append-only**. Every call to `model.define()`, `model.Property()`, `model.Concept()`, `problem.solve_for()`, `problem.satisfy()`, `problem.minimize()`/`problem.maximize()` **adds** to the model or problem. There is no API to remove, replace, or modify any existing element.
+`Problem` inherits PyRel's append-only behavior (see `rai-pyrel-coding` > Definitions). Every `problem.solve_for()`, `problem.satisfy()`, `problem.minimize()`/`maximize()` **adds** to the Problem — there is no remove/replace API.
 
-**This applies to the entire stack:**
-- **Attributes/properties:** Adding a new `model.Property()` or `model.Relationship()` grows the model. You cannot delete or rename an existing property.
-- **Concepts:** New `model.Concept()` calls add concepts. Existing concepts cannot be removed.
-- **Variables:** Each `problem.solve_for()` registers an additional decision variable. You cannot unregister one.
-- **Constraints:** Each `problem.satisfy()` accumulates. Adding a "corrected" version does not replace the original — both remain active, and the tighter one binds.
-- **Objectives:** Only one `problem.minimize()` or `problem.maximize()` per Problem.
+- **Variables:** Each `solve_for()` registers an additional decision variable.
+- **Constraints:** Each `satisfy()` accumulates. Adding a "corrected" version does not replace the original — both remain active, and the tighter one binds.
+- **Objectives:** Only one `minimize()` or `maximize()` per Problem.
 
 **Practical impact:**
-- To remove or weaken an existing constraint or variable, you must create a **new Problem** and re-register only the elements you want — there is no remove/replace API.
-- Re-calling `problem.solve()` on the same `Problem` is safe: it re-runs the solver against the current (accumulated) formulation and updates variable values. Use this when you want to add more constraints/variables and re-solve. Use a new `Problem` only when you want to *remove* something.
-- Multi-scenario optimization where the constraint set differs per scenario should use a new `Problem` per scenario. If only parameter values change, the Scenario Concept pattern (one Problem, one solve, scenario as a data dimension) is preferred — see [scenario-analysis.md](references/scenario-analysis.md).
-- Model-level changes (new properties, concepts) persist across all subsequent Problems on that model — plan the model schema before building formulations.
+- To remove or weaken an existing constraint or variable, create a **new Problem** and re-register only the elements you want.
+- Re-calling `problem.solve()` on the same Problem is safe: it re-runs the solver against the current (accumulated) formulation and updates variable values. Use this when you want to add more constraints/variables and re-solve. Use a new Problem only when you want to *remove* something.
+- Multi-scenario optimization where the constraint set differs per scenario should use a new Problem per scenario. If only parameter values change, the Scenario Concept pattern (one Problem, one solve, scenario as a data dimension) is preferred — see [scenario-analysis.md](references/scenario-analysis.md).
+- Model-level additions (new properties, concepts) persist across all subsequent Problems on that model — plan the model schema before building formulations.
 
 ---
 
@@ -456,6 +453,7 @@ PyRel's model and problem APIs are **append-only**. Every call to `model.define(
 | Scenario analysis | Scenario Concept vs Loop + where= patterns, decision matrix, code examples | [scenario-analysis.md](references/scenario-analysis.md) |
 | Formulation simplification | Static vs dynamic parameters, goals vs constraints, grouped constraints, over-specification | [formulation-simplification.md](references/formulation-simplification.md) |
 | Multi-objective formulation | Approach selection, epsilon constraint method, tension heuristics, pitfalls | [multi-objective-formulation.md](references/multi-objective-formulation.md) |
+| Fix generation guidelines | Root cause taxonomy, grounding rules, join path fixes, trivial/infeasible fix strategies | [fix-generation-guidelines.md](references/fix-generation-guidelines.md) |
 | Examples index | All example problems with patterns demonstrated | [examples-index.md](references/examples-index.md) |
 | Formulation analysis context | Naming conventions, alias handling, expression parsing, aggregation patterns for review | [formulation-analysis-context.md](references/formulation-analysis-context.md) |
 | Known limitations (secondary) | Constraint naming, re-solve behavior, `\| 0` fallback limitation, numpy type casting | [known-limitations.md](references/known-limitations.md) |

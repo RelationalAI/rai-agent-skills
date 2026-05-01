@@ -18,20 +18,7 @@
 
 ## Sensitivity Analysis
 
-### Implementation Patterns
-
-Sensitivity analysis uses one of two PyRel patterns, chosen based on what is being varied:
-
-- **Parameter variations** (budget, demand, service levels): Scenario Concept — single solve,
-  results contain scenario dimension, queryable via `model.select(Scenario.name, ...)`.
-  Variables are multi-argument Properties: `Property(f"{Entity} in {Scenario} is {Float:var}")`.
-  Constraints use `.per(Scenario)` for per-scenario aggregation and `Scenario.param` for
-  scenario-specific values. See `rai-prescriptive-solver-management/examples/scenario_concept_parameter_sweep.py`.
-- **Entity exclusion** (remove a supplier, disable a facility): Loop + `where=[]` filter —
-  multiple solves, results collected per iteration via `Variable.values()`.
-  See `rai-prescriptive-solver-management/examples/partitioned_iteration_scenarios.py`.
-
-Both produce the same output format for stakeholders: comparison tables with business language.
+For implementation patterns (Scenario Concept for parameter variations, Loop + `where=[]` for entity exclusion), see `rai-prescriptive-problem-formulation/references/scenario-analysis.md`. This reference focuses on **interpretation** of scenario results — comparison tables, critical-parameter identification, and Pareto frontier explanation.
 
 ### What-If Framing for Stakeholders
 

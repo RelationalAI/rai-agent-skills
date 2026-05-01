@@ -4,7 +4,6 @@
 - [Solve Pipeline](#solve-pipeline)
 - [Re-Solve Behavior](#re-solve-behavior-sdk--103)
 - [Warm Starting](#warm-starting)
-- [Scenario Analysis](#scenario-analysis-what-if)
 
 ---
 
@@ -93,13 +92,4 @@ problem.solve("ipopt", log_to_console=True)
 
 **Standalone (concept-free) variables** use `model.Relationship(f"{Float:name}")` instead of `model.Property`. This pattern is for scalar optimization variables not attached to any concept (e.g., Rosenbrock, single-variable NLP). For concept-attached variables, use `model.Property` as usual.
 
-## Scenario Analysis (What-If)
-
-Two patterns for exploring how solutions change under different assumptions:
-
-- **Scenario Concept** — parameter variations (budget, demand, thresholds) solved in a single solve. Results live in the ontology.
-- **Loop + where= filter** — entity exclusion or partitioned sub-problems. Each iteration is independent. Use `populate=False` + `Variable.values()`.
-
-**Decision rule:** Only parameter values change -> Scenario Concept. Entities or constraint structure change -> Loop + where=.
-
-For full patterns, code examples, and a decision matrix, see [scenario-analysis.md](../../rai-prescriptive-problem-formulation/references/scenario-analysis.md).
+For scenario analysis patterns (Scenario Concept, Loop + where=, Epsilon constraint loop), see [scenario-analysis.md](../../rai-prescriptive-problem-formulation/references/scenario-analysis.md).

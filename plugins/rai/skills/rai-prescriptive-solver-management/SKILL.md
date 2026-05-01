@@ -164,9 +164,9 @@ Choose the solver based on variable types and objective/constraint structure:
 - No indicator constraints — `implies()` will fail. Use Big-M reformulation instead.
 - No SOS constraints — `special_ordered_set_type_1()` / `special_ordered_set_type_2()` will fail. Use explicit binary variable formulations instead.
 - No quadratic constraints (QCP) — quadratic terms in constraints will fail. Only convex quadratic *objectives* (QP) are supported.
-- No nonlinear functions (`exp`, `log`, `sqrt`, trig) — use Ipopt or Gurobi.
+- No nonlinear functions (`math.exp`, `math.log`, `math.sqrt`, `x**n`) — use Gurobi (preferred when licensed) or Ipopt.
 
-**Gurobi** (`solver="gurobi"`): Commercial (available via RAI). Best for large-scale MILP, QP, QCP. Industry-leading MILP performance, discrete + continuous + quadratic + some NLP, excellent diagnostics, multi-objective support. Params: `TimeLimit`, `MIPGap`, `MIPFocus` (0=balanced, 1=feasibility, 2=optimality, 3=bound), `Presolve` (2 for aggressive), `Threads` (0 for auto). **License required:** Gurobi requires a named prescriptive engine with a Snowflake secret and external access integration configured in `raiconfig.yaml`. See [rai-setup](../rai-setup/SKILL.md) for setup. If unavailable, fall back to HiGHS (LP/MILP) or Ipopt (NLP). Large MIP problems may solve significantly faster with Gurobi than HiGHS.
+**Gurobi** (`solver="gurobi"`): Commercial (available via RAI). Best for large-scale MILP, QP, QCP, and nonlinear problems. Industry-leading MILP performance, discrete + continuous + quadratic + nonlinear (`math.exp`, `math.log`, `math.sqrt`, `x ** n`), excellent diagnostics, multi-objective support. Params: `TimeLimit`, `MIPGap`, `MIPFocus` (0=balanced, 1=feasibility, 2=optimality, 3=bound), `Presolve` (2 for aggressive), `Threads` (0 for auto). **License required:** Gurobi requires a named prescriptive engine with a Snowflake secret and external access integration configured in `raiconfig.yaml`. See [rai-setup](../rai-setup/SKILL.md) for setup. If unavailable, fall back to HiGHS (LP/MILP) or Ipopt (NLP). Large MIP problems may solve significantly faster with Gurobi than HiGHS.
 
 **MiniZinc** (`solver="minizinc"`): Open-source (Chuffed backend). Best for CP, combinatorial, constraint satisfaction. Powerful propagation, global constraints (`all_different`, `circuit`), multiple solutions. Params: `time_limit_sec`, `solution_limit`. Cannot handle continuous variables, LP, QP, NLP.
 
@@ -181,10 +181,11 @@ Use these rules in order to pick a solver. **Gurobi outperforms open-source solv
    - MiniZinc only if the problem is pure constraint satisfaction with discrete variables.
 
 2. **Check for nonlinearity.**
-   - `exp()`, `log()`, `sqrt()`, `sin()`, `cos()`, division by variables?
+   - `math.exp(x)`, `math.log(x)`, `math.sqrt(x)`, `x ** n`, or division by variables?
      HiGHS and MiniZinc are invalid.
-   - Continuous-only NLP: Ipopt (best for smooth NLP) or Gurobi.
+   - Continuous-only NLP: Gurobi (preferred when licensed) or Ipopt (best for smooth local NLP).
    - Discrete + nonlinear: Gurobi only.
+   - Trig (`math.sin`, `math.cos`, etc.) is not lowered to the solver by the prescriptive library — reformulate as piecewise-linear approximation or via auxiliary variables.
 
 3. **Check for quadratic constraints.**
    - Quadratic terms in constraints (not just objective): HiGHS is invalid.
@@ -203,7 +204,7 @@ Use these rules in order to pick a solver. **Gurobi outperforms open-source solv
 | Continuous + linear (LP) | **Gurobi** | HiGHS |
 | Continuous + quadratic objective (QP) | **Gurobi** | HiGHS |
 | Continuous + quadratic constraints (QCP) | **Gurobi** | Ipopt |
-| Continuous + nonlinear (NLP) | Ipopt | Ipopt |
+| Continuous + nonlinear (NLP) | **Gurobi** or Ipopt | Ipopt |
 | Discrete + constraint satisfaction (CSP) | MiniZinc | MiniZinc |
 | Need multiple solutions | MiniZinc (best) | MiniZinc |
 
@@ -322,7 +323,7 @@ Solver-specific parameters (HiGHS, Gurobi, Ipopt kwargs), tuning guidance, cloud
 
 ### Unsupported operators
 
-The following operators are **not supported by any solver backend** and will raise errors if used in solver expressions: `%` (modulo), `//` (floor division), `floor`, `ceil`, `trunc`, `round`. Note: `//` works on concrete data and property-constant combinations (e.g., `Player.p // group_size`), but fails when **both operands are decision variables**. There is no `if_then_else` operator in the prescriptive library — use `implies()` (Gurobi/MiniZinc) or Big-M reformulation (HiGHS) for conditional logic. Use piecewise-linear approximations or reformulations for unsupported operators.
+The following operators are **not lowered to the solver** and will raise errors if used inside `solve_for`/`satisfy`/`minimize`/`maximize`: `%` (modulo), `//` (floor division), `math.floor`, `math.ceil`, `math.sign`, `math.clip`, `round`, `trunc`, trig (`math.sin`, `math.cos`, `math.tan` and their hyperbolic/inverse variants), `math.factorial`, `math.erf`. Note: `//` works on concrete data and property-constant combinations (e.g., `Player.p // group_size`), but fails when **both operands are decision variables**. There is no `if_then_else` operator in the prescriptive library — use `implies()` (Gurobi/MiniZinc) or Big-M reformulation (HiGHS) for conditional logic. Use piecewise-linear approximations or reformulations for unsupported operators.
 
 > **See also:** Full operator/construct compatibility table by solver → `numerical-and-mip.md` > Operator and Construct Compatibility by Solver. Reformulation techniques (Big-M linearization, McCormick envelopes, epigraph, SOS2) → `numerical-and-mip.md` > Reformulation Techniques for Solver Compatibility.
 
@@ -336,11 +337,11 @@ The following operators are **not supported by any solver backend** and will rai
 | Cannot remove a constraint | Every `problem.satisfy()` call accumulates | Create a new `Problem` for different constraint sets |
 | Binary variable has no effect | Defined but not linked to quantities via big-M or capacity | Add `flow <= capacity * x_open` style linking constraints |
 | Disconnected objective | Objective references variables with no constraints | Solver sets variables to bound values; add meaningful constraints |
-| Wrong aggregation scope | `sum(X).per(Y)` where Y not joined to X | Add explicit relationship join in `.where()` |
-| Big-M too loose → slow solve | Using arbitrary `999999` | Use tightest data-driven bound (`M = capacity`) |
 | Numerical issues | Coefficients differing by >1e6 | Rescale data to similar magnitudes |
 | `problem.termination_status == "OPTIMAL"` is always False | Missing parens — `problem.termination_status` returns a bound method, not a string | Use `problem.termination_status()` (with parens) in `model.require()`, or `problem.solve_info().termination_status` for Python-side |
 | `AttributeError` on `problem.solve()` return value | Assigning `result = problem.solve()` and accessing `result.status` | `problem.solve()` returns `None`. Use `problem.solve_info()` for status. For solution values, use `model.select()` (populate=True) or `Variable.values()` (populate=False). |
+
+For formulation-time pitfalls (wrong aggregation scope, loose Big-M, missing forcing requirement, unwired relationships, etc.), see `rai-prescriptive-problem-formulation` > Common Pitfalls.
 
 Post-solve diagnosis (trivial all-zero solutions, infeasibility root causes, quality assessment) is covered in `rai-prescriptive-results-interpretation`. The unified lifecycle failure taxonomy (`generates` → `compiles` → `solves` → `optimal` → `non-trivial` → `meaningful`) lives at `rai-prescriptive-results-interpretation/references/failure-taxonomy.md` — consult it for the `solves` and `optimal` levels.
 
