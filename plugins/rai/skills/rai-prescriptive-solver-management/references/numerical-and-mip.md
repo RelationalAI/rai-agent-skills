@@ -14,6 +14,13 @@
   - [MIP Self-Check](#mip-self-check)
 - [Operator and Construct Compatibility by Solver](#operator-and-construct-compatibility-by-solver)
 - [Reformulation Techniques for Solver Compatibility](#reformulation-techniques-for-solver-compatibility)
+  - [Product of binary x continuous → McCormick / Big-M linearization](#product-of-binary-x-continuous--mccormick--big-m-linearization)
+  - [Absolute value → auxiliary variable + two constraints](#absolute-value--auxiliary-variable--two-constraints)
+  - [Min / max → epigraph reformulation](#min--max--epigraph-reformulation)
+  - [Logical implication in MIP → Big-M](#logical-implication-in-mip--big-m)
+  - [Piecewise linear → SOS2](#piecewise-linear--sos2)
+  - [Floor / ceil on decision variables → integer variable](#floor--ceil-on-decision-variables--integer-variable)
+  - [Nonlinear + integer → decomposition](#nonlinear--integer--decomposition)
 <!-- /TOC -->
 
 ## Numerical Stability
@@ -171,7 +178,7 @@ Integer variables are stored as floating-point. A variable is "integer" if withi
 
 Before building a formulation, verify that the operators and constructs you plan to use are supported by the target solver. Using an unsupported construct causes a solve-time error that requires reformulation.
 
-Operators are imported from `relationalai.semantics.std.math` (`math.abs`, `math.exp`, etc.) or are Python operators (`**`, `*`, `+`). Constructs in `()` are special-form helpers from the prescriptive library.
+Operators are imported from `relationalai.semantics.std.math` (`math.abs`, `math.exp`, etc.) or are Python operators (`**`, `*`, `+`). Constructs shown as `name(...)` (e.g., `implies(...)`, `all_different(...)`) are special-form helpers from the prescriptive library.
 
 | Operator / Construct | HiGHS | Gurobi | Ipopt | MiniZinc |
 |----------------------|-------|--------|-------|----------|
@@ -181,7 +188,7 @@ Operators are imported from `relationalai.semantics.std.math` (`math.abs`, `math
 | Bilinear / quadratic constraints (`var * var` in `satisfy`) | No (linearize) | Yes (convex) | Yes | Yes (discrete vars only) |
 | `math.abs(x)` | No (reformulate) | Yes | Yes | Yes |
 | Aggregate `min(...)` / `max(...)` over a collection (`from relationalai.semantics import min, max`) | No (reformulate) | Yes (general constraints) | No (reformulate) | Yes |
-| `math.exp(x)`, `math.log(x)` (and `log2`, `log10`, `natural_log`) | No | Yes | Yes | No |
+| `math.exp(x)`, `math.log(x)` (and `math.log2`, `math.log10`, `math.natural_log`) | No | Yes | Yes | No |
 | `math.sqrt(x)`, `math.cbrt(x)` | No | Yes | Yes | No |
 | `x ** n` / `math.pow(x, n)` | No (n=2: linearize) | Yes | Yes | Yes (integer n) |
 | `implies(...)` | No (Big-M) | Yes (indicator constraints) | N/A | Yes |

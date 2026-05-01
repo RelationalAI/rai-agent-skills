@@ -17,11 +17,11 @@ When diagnosing infeasibility or unboundedness, classify root causes using these
 | Action | When to Use |
 |--------|-------------|
 | `add_constraint` | Missing bounds or linking constraints; add capacity limits, conservation |
-| `remove_constraint` | Conflicting or over-specified constraint causing infeasibility |
+| `omit_constraint` | Conflicting or over-specified constraint causing infeasibility — Problem accumulates `satisfy(...)` calls, so "omit" means rebuild the Problem without that constraint |
 | `relax_constraint` | Constraint too tight — change `==` to `<=`/`>=`, widen bounds, add slack |
 | `modify_variable` | Variable needs bounds adjusted, type changed, or expression corrected |
 
 ## Status-Specific Fix Direction
 
 - **DUAL_INFEASIBLE (unbounded):** Add bounds and constraints to LIMIT unbounded variables
-- **INFEASIBLE:** Remove or relax constraints to WIDEN the feasible region
+- **INFEASIBLE:** Omit or relax constraints to WIDEN the feasible region (since Problem is append-only, "omit" means rebuild the Problem without the offending `satisfy(...)`)
