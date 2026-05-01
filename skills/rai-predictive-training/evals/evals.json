@@ -1,0 +1,18 @@
+{
+  "skill_name": "rai-predictive-training",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Build me a churn predictor for H&M. Source tables: HM_MINI.PUBLIC.CUSTOMERS, HM_MINI.PUBLIC.ARTICLES, HM_MINI.PUBLIC.TRANSACTIONS_DEDUP. Task tables: HM_MINI.TASK_CHURN.{TRAIN, VAL, TEST}. Experiment artifacts go to F1_DB.F1_DID_NOT_FINISH. Walk through the rai-predictive-modeling and rai-predictive-training skills end-to-end: ask me only for what you actually need.\n\nReply with two sections:\n\n1. Script -- paste the full script source in one ```python``` code block. I cannot read your filesystem; only what you paste into this reply is visible to me, so a file path is not enough. Single runnable file: Concepts, Table-backed populates, Train/Val/Test Relationships, Graph + Edges, PropertyTransformer, GNN, fit, predictions on Test, final inspect.\n\n2. Run output -- first run `cat <path-to-script>` and then `python <path-to-script>` in the same shell, and paste the full terminal output of both commands. The `cat` output must appear before the `python` output. Do not stop until both jobs show JOB_COMPLETED and the prediction rows are visible.",
+      "expected_output": "The agent follows the two skills in order (modeling -> training) and asks only for high-level information that cannot be auto-discovered: the source/target task type if ambiguous, hyperparameter preferences (epochs, device), and confirmation of the label column name on the task tables. It does NOT ask for column lists, primary keys, foreign keys, or feature types -- those come from Snowflake schema introspection. It then produces a single end-to-end script with all phases (Concepts, Table-backed populates, Train/Val/Test Relationships using 'at', Graph + Edges, PropertyTransformer, GNN(...) with has_time_column=True, gnn.fit(), Customer.predictions = gnn.predictions(domain=Test), and a final select(...).inspect()). When executed against a live reasoner, the script runs to completion: training reaches JOB_COMPLETED, prediction reaches JOB_COMPLETED, and the final select returns a non-empty DataFrame with columns (c_customer_id, probs, predicted_labels) where probs are in [0, 1] and predicted_labels are in {0, 1}.",
+      "expectations": [
+        "The produced script contains all phases in order: Concept declarations (Customer, Article, Transaction, task table concepts without identify_by), Table-backed define() calls, Train/Val/Test Relationships with 'at {Any:timestamp}' (Train/Val also 'has {Any:label}', Test omits the label), Graph with Edges, PropertyTransformer, GNN constructor, gnn.fit(), gnn.predictions(domain=Test) bound to Customer.predictions, and a final select(...).where(Customer.predictions).inspect()",
+        "Script executes without raising any Python exception or PyRel compile error end-to-end",
+        "Training job reaches JOB_COMPLETED status (visible in streamed logs); the agent does not declare success on JOB_START or partial logs",
+        "Prediction job reaches JOB_COMPLETED status and predictions are loaded back into the logic engine",
+        "Final select(...).inspect() (or .to_df()) returns a non-empty result with columns (c_customer_id, probs, predicted_labels), probs in [0, 1], predicted_labels in {0, 1}",
+        "The script does not introduce manual job polling, sleep loops, or status-check API calls around fit() or predictions() -- both are blocking and stream logs by default"
+      ]
+    }
+  ]
+}

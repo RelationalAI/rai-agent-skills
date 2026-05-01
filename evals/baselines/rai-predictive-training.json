@@ -1,0 +1,28 @@
+{
+  "1": [
+    {
+      "expectation": "The produced script contains all phases in order: Concept declarations (Customer, Article, Transaction, task table concepts without identify_by), Table-backed define() calls, Train/Val/Test Relationships with 'at {Any:timestamp}' (Train/Val also 'has {Any:label}', Test omits the label), Graph with Edges, PropertyTransformer, GNN constructor, gnn.fit(), gnn.predictions(domain=Test) bound to Customer.predictions, and a final select(...).where(Customer.predictions).inspect()",
+      "passed": true
+    },
+    {
+      "expectation": "Script executes without raising any Python exception or PyRel compile error end-to-end",
+      "passed": true
+    },
+    {
+      "expectation": "Training job reaches JOB_COMPLETED status (visible in streamed logs); the agent does not declare success on JOB_START or partial logs",
+      "passed": true
+    },
+    {
+      "expectation": "Prediction job reaches JOB_COMPLETED status and predictions are loaded back into the logic engine",
+      "passed": true
+    },
+    {
+      "expectation": "Final select(...).inspect() (or .to_df()) returns a non-empty result with columns (c_customer_id, probs, predicted_labels), probs in [0, 1], predicted_labels in {0, 1}",
+      "passed": true
+    },
+    {
+      "expectation": "The script does not introduce manual job polling, sleep loops, or status-check API calls around fit() or predictions() -- both are blocking and stream logs by default",
+      "passed": true
+    }
+  ]
+}
