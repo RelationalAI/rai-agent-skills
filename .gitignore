@@ -6,3 +6,20 @@ debug.jsonl
 metadata.json
 spans.jsonl
 designs/
+
+# Eval run artifacts (transcripts, per-eval results, summaries).
+# Keep evals/baselines/ tracked -- that's the canonical pass/fail reference.
+evals/results/
+
+# Python
+*.pyc
+.pytest_cache/
+*.egg-info/
+
+# Virtualenvs
+.venv/
+venv/
+
+# Local secrets / env overrides
+.env
+.envrc
