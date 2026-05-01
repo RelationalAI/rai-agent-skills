@@ -83,7 +83,7 @@ Concept, Table, Relationship = model.Concept, model.Table, model.Relationship
 |---------|------|
 | Single PK | `User = Concept("User", identify_by={"user_id": Integer})` |
 | Composite PK | `Class = Concept("Class", identify_by={"courseid": Integer, "year": Integer})` |
-| No PK (task table) | `TrainTable = Concept("TrainTable")` |
+| No PK (e.g. task table) | `TrainTable = Concept("TrainTable")` |
 
 ```python
 # Graph init
@@ -118,17 +118,18 @@ Additional type imports as needed: `Date`, `DateTime`, `Float`.
 
 ## Define and Populate Concepts
 
-> **User-input boundary:** the only things you need from the user are the 3 inputs in [`references/auto-discovery.md`](references/auto-discovery.md) -- source table FQNs, task table FQNs, and the experiment-artifact location. Auto-derive PKs, FKs, columns, types, edges, task type, and timestamp candidates from `INFORMATION_SCHEMA` / `DESCRIBE TABLE`. Don't ask the user for column-level details.
+> **User-input boundary:** the only things you need from the user are the 3 inputs in [`references/auto-discovery.md`](references/auto-discovery.md) -- source table FQNs, task table FQNs, and the experiment tracking database and schema. Auto-derive PKs, FKs, columns, types, edges, task type, and timestamp candidates from Snowflake schema introspection. Use the in-skill `get_table_schema(table_name, database, schema)` helper in `references/auto-discovery.md` as the default schema source before any manual SQL fallback. Don't ask the user for column-level details.
 
-Three concept categories show up in a GNN pipeline, distinguished by whether they declare a primary key and how they participate in the graph:
+Two concept categories show up in a GNN pipeline, distinguished by their role in the graph:
 
-| Category | `identify_by`? | Role | Constraints |
-|----------|---------------|------|-------------|
-| **Graph (node)** | yes | Source, target, or other node entities the GNN reasons over | Can carry features and `time_col` |
-| **Edge-intermediary** | no | Used only as `src=`/`dst=` in `Edge.new(...)` to express many-to-many or attributed relationships | **Cannot carry `time_col`** -- `time_col` only propagates for node concepts (with `identify_by`); see `rai-predictive-training` § Known Limitations |
-| **Task table** | no | Holds train/val/test split rows, joined to a graph concept by FK | Not used in edges; not a feature source |
+| Category | Role |
+|----------|------|
+| **Graph (node)** | Source, target, or other node entities the GNN reasons over -- can carry features and `time_col` |
+| **Task table** | Holds train/val/test split rows, joined to a graph concept by FK -- not used in edges; not a feature source |
 
-> If you have an existing ontology from `rai-build-starter-ontology`, create a new `Model` for the GNN pipeline -- concepts need `identify_by` for GNN to resolve primary keys.
+`identify_by` is not required by the GNN pipeline. Pass it when you want to declare an explicit primary key for a graph concept (matches a Snowflake column); omit it for task tables and for graph concepts where you don't need an explicit PK.
+
+> If you have an existing ontology from `rai-build-starter-ontology`, create a new `Model` for the GNN pipeline.
 
 ### Graph (node) Concepts
 
@@ -138,16 +139,6 @@ The `identify_by` key names must exist as columns in the Snowflake table. Column
 User = Concept("User", identify_by={"user_id": Integer})
 Event = Concept("Event", identify_by={"event_id": Integer})
 ```
-
-### Edge-intermediary Concepts
-
-When a many-to-many or attributed relationship is best modeled as its own concept (e.g. `Interaction` between `User` and `Item`), and that concept's row identity isn't needed downstream, you can omit `identify_by`:
-
-```python
-EventAttendee = Concept("EventAttendee")  # used only in Edge.new(src=..., dst=...)
-```
-
-If the intermediary needs to carry the temporal column for `has_time_column=True`, give it an `identify_by` (promoting it to a graph node concept). `time_col` does not propagate from edge-intermediary concepts.
 
 ### Task Table Concepts
 
@@ -169,8 +160,6 @@ define(train_table_concept.new(Table("DB.TASKS.TRAIN").to_schema()))
 The GNN pipeline expects pre-existing train/val/test split tables in Snowflake. Each split table must contain: a join key column matching a source concept PK, a label/target column (train/val only), and optionally a timestamp column.
 
 `PropertyTransformer` and the task-table pattern also work with concepts populated from local data via `model.data(df)` -- not just `Table(...).to_schema()`. Useful when some concept data lives in local CSVs (e.g. optimizer parameters) while the graph comes from Snowflake.
-
-**Timestamp column types for the GNN datetime pipeline.** Columns intended for `time_col` / `datetime` features should match a format the trainer accepts; if you're not sure what's currently supported, ask the RelationalAI team.
 
 > **Do schema changes (any column type, not just timestamps) before the first `Model(...)` bind**, not after — `ALTER`-ing a column type on an already-bound table can leave a stale compiled-relation signature on the engine that survives stream delete + recreate. See `rai-predictive-training` § Known Limitations for the symptom, the diagnostic path, and the workaround.
 
@@ -291,7 +280,7 @@ pt = PropertyTransformer(
 Centrality, community labels, and other graph-algorithm outputs from `rai-graph-analysis` can feed the GNN as features once they're materialized as concept properties. Compute the metric on a separate Graph instance (the algorithm graph -- often a different topology from the GNN graph), bind the result, then include in the PropertyTransformer:
 
 ```python
-# Algorithm graph (e.g. node-to-node, distinct from the GNN's bipartite/edge-intermediary graph)
+# Algorithm graph (often a different topology from the GNN graph)
 algo_graph = Graph(model, directed=False)
 define(algo_graph.Edge.new(src=Source, dst=SourceRef)).where(...)
 
