@@ -27,7 +27,7 @@ description: Formulates optimization problems from ontology models covering deci
 - Aggregation syntax (count/sum/per patterns) — see `rai-querying`
 
 **Overview:**
-1. Ground in the base ontology via `inspect.schema(model)` — concepts, properties, types, relationships you're about to reference
+1. Ground in the base ontology via `relationalai.semantics.inspect.schema(model)` — concepts, properties, types, relationships you're about to reference
 2. Define decision variables (type, bounds, scope, naming)
 3. Define constraints (forcing, capacity, balance, linking; validate interactions)
 4. Define objective (direction, coefficients, multi-component handling)

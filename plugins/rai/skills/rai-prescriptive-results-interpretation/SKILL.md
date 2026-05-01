@@ -58,7 +58,7 @@ After a solve completes, interpret results in this order:
 
 ---
 
-## Quick Reference
+## Status check snippet
 
 ```python
 si = problem.solve_info()
@@ -67,6 +67,8 @@ if si.termination_status == "OPTIMAL":
     # With populate=False: use Variable.values() — see Solution Extraction below
     print(f"Objective: {si.objective_value}")
 ```
+
+For the full extraction patterns and result-attribute tables, see Solution Extraction below.
 
 ---
 
@@ -257,10 +259,6 @@ Compilation or solver errors prevented a solution.
 **What to tell users:** "The model could not be solved due to a technical error: [error message]. This needs to be fixed before we can get results."
 **Next steps:** Check compilation output, fix expression syntax, verify all referenced properties exist.
 
-### Re-Solve Behavior (SDK >= 1.0.3)
-
-Re-solving the same `Problem` instance is safe (replace semantics). See `rai-prescriptive-solver-management` for details.
-
 ---
 
 ## Solvability Ladder
@@ -346,7 +344,7 @@ Prefer constraint fixes over variable fixes. All fixes must be grounded in actua
 ### Quality dimensions
 
 - **Actionability**: Can decision makers act on this solution? Does it provide useful granularity? (e.g., "produce 150 units at Site A" is actionable; "total cost = 0" is not)
-- **Interpretability**: Can the solution be explained in business terms? Decision variable attributes have an `x_` prefix (e.g., `x_quantity`, `x_assigned`) — always translate these to business language when presenting results:
+- **Interpretability**: Can the solution be explained in business terms? Decision variable attributes have an `x_` prefix (e.g., `x_quantity`, `x_assigned`). When generating user-facing prose (rationale, business_mapping, result tables shown to the user), translate the `x_` names to business language. Code samples, API references, and Python variable names stay technical.
   - `x_flow` → "shipment quantity" or "units shipped"
   - `x_assigned` → "assigned" or "selected"
   - `x_quantity` → "production quantity" or "units allocated"
