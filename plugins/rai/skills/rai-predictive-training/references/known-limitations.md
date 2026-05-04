@@ -57,3 +57,39 @@ model.define(Train(Sale, TrainTable.unit_sales)).where(...)
 | Symptom | Cause | Fix |
 |---|---|---|
 | `gnn.fit()` polling for an unreasonable amount of time | `JobMonitor._wait_for_completion` (`job_manager.py:332-340`) polls every 5s with no timeout/retry-cap | Kill the client manually. Recover via the QUEUED runbook, re-instantiate `GNN(...)`, resubmit |
+
+---
+
+## "Training appears stuck" — diagnostic ladder
+
+Long-running predictive jobs are usually fine, not stuck. Use this ladder before suspending or killing anything. Each step localizes the failure to one component before the next, so you don't suspend the wrong reasoner.
+
+1. **Reasoner status — is the Predictive engine even up?**
+   ```sql
+   CALL RELATIONALAI.API.GET_REASONER('predictive', '<reasoner_name>');
+   ```
+   `STATUS=READY` means the reasoner pod is alive. If `SUSPENDED` / `PROVISIONING` / `FAILED`, that's the problem — see `rai-health` § Predictive train jobs stuck QUEUED for recovery. `STATUS=READY` does **not** prove the in-pod worker queue is healthy — step 2 catches that case.
+
+2. **Job ledger — did the train job actually land on a worker?**
+   ```python
+   client.jobs.list("Predictive", name="<reasoner_name>", only_active=True, limit=10)
+   ```
+   ```sql
+   -- equivalent SQL
+   SELECT ID, STATE, JOB_TYPE, DATEDIFF('minute', CREATED_ON, CURRENT_TIMESTAMP()) AS AGE_MIN
+   FROM RELATIONALAI.API.JOBS
+   WHERE STATE IN ('QUEUED','RUNNING')
+     AND PAYLOAD LIKE '%"job_type": "train"%'
+   ORDER BY CREATED_ON ASC;
+   ```
+   - One `train` job in `RUNNING` with `AGE_MIN` rising → training is progressing. Wait.
+   - `QUEUED` and old (`AGE_MIN` > a few) while reasoner reports `READY` → in-pod worker desync. → `rai-health` § Predictive train jobs stuck QUEUED.
+   - No train job at all but recent COMPLETED short jobs → `fit()` never made it to job submission. Look for client-side errors above the "Training job submitted" line.
+
+3. **Experiment ledger — did training start writing artifacts?**
+   ```sql
+   SHOW EXPERIMENTS IN SCHEMA <exp_database>.<exp_schema>;
+   ```
+   A new experiment row appears within ~60 seconds of a `RUNNING` train job. If the job is `RUNNING` for several minutes and `SHOW EXPERIMENTS` shows no new run, the worker accepted the job but is failing silently before artifact creation — escalate via the QUEUED runbook (suspend + resume the predictive reasoner, then re-instantiate `GNN(...)`).
+
+If all three checks look healthy and the run is still long, it's a real long run — let it continue, or scale the engine up (see `rai-predictive-modeling` § Engine sizing) on the next attempt.

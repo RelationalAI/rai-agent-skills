@@ -167,6 +167,7 @@ What ontology patterns indicate prediction potential:
 - Check if the prediction table links to other ontology concepts via FK (e.g., entity_id linking predictions to Entity concept)
 
 ### For rai_predictive mode (GNN training)
+- **Predictive engine provisioned**: `rai_predictive` mode requires a Predictive reasoner — it is opt-in and most accounts default to Logic only. Before classifying a question as `rai_predictive`-feasible, confirm `CALL RELATIONALAI.API.GET_REASONER('predictive', '<name>')` returns `STATUS=READY`. If no Predictive reasoner exists yet, treat the question as feasible-after-provisioning and surface that as the next step (see `rai-predictive-modeling` § Two-engine model + Engine sizing). Pre-computed mode is unaffected — it runs on Logic.
 - **Graph topology**: At least one edge concept (FK-joined or via an interaction concept) connecting the predicted-on entity to other entities — the GNN's structural advantage comes from this. Without graph structure, node classification/regression still trains but loses most of the GNN signal.
 - **Feature availability**: Target property with sufficient non-null values; 3+ candidate features with variance
 - **Temporal span**: For temporal node classification/regression and `repeated_link_prediction`, at least 2 full cycles of the target period

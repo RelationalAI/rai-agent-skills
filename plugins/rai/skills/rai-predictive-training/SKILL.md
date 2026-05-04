@@ -185,6 +185,22 @@ For all hyperparameters and tuning guidance, see [references/hyperparameters.md]
 2. Model training over `n_epochs`
 3. Evaluation on the validation set
 
+### Timing expectations
+
+`gnn.fit()` and `gnn.predictions()` both submit Snowpark Container Services jobs that can run for many minutes — the long quiet between submission and completion is **expected**, not stuck.
+
+| Mode | Behavior |
+|------|----------|
+| `stream_logs=True` (default) | `fit()` blocks until training completes — log streaming runs synchronously inside `fit()` (`relationalai.semantics.reasoners.predictive.estimator._stream_logs_formatted`). The console silence after "Training job submitted" is the streamer waiting on log buffers, not a stalled client. |
+| `stream_logs=False` | `fit()` returns shortly after submission with "Job submitted and running in background." `predictions()` then waits — `_wait_obtain_model_run_id` blocks for training completion before submitting the prediction job. |
+| In both modes | `predictions()` always blocks until the prediction job completes (`_wait_for_completion`). |
+
+Treat the run as "long-running" until it crosses **~5× the dataset-prep time printed at Step 1** before suspecting it's stuck. At that point run the diagnostic ladder below before suspending or killing anything.
+
+### "Training appears stuck"
+
+Once the run crosses the ~5×-prep-time threshold above, run the three-step diagnostic ladder in [`references/known-limitations.md`](references/known-limitations.md) § "Training appears stuck" — diagnostic ladder before suspending or killing anything: (1) `GET_REASONER('predictive', …)` for pod status, (2) `client.jobs.list("Predictive", …)` for job state, (3) `SHOW EXPERIMENTS` for artifact creation. Each step localizes the failure before the next so you don't suspend the wrong reasoner.
+
 ### Known Limitations & Runtime Troubleshooting
 
 GNN training has runtime gotchas that surface as opaque or no-error symptoms in the client. Use this table to recognize each one; load `references/known-limitations.md` for full causes (with SDK source citations), the before/after fallback code for `has_time_column=True` at scale, and the `GET_TRANSACTION_ARTIFACTS` recipe.

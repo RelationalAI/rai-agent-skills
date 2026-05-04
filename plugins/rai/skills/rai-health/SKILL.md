@@ -319,7 +319,19 @@ for the full step-by-step recovery checklist, schema reference, and official doc
 
 A predictive train job submitted via `gnn.fit()` can sit in `STATE='QUEUED'` in `RELATIONALAI.API.JOBS` indefinitely while `CALL RELATIONALAI.API.GET_REASONER('predictive', '<name>')` still reports `STATUS='READY'`. The SDK only checks reasoner-pod status before submitting — the in-pod worker queue can be out of sync with that status, and the SDK has no way to detect it (`relationalai_gnns/core/connector.py::_check_engine_availability`).
 
-**Recovery (empirical):** suspend then resume the predictive reasoner to force a worker recycle, kill any stuck client, then re-instantiate `GNN(...)` and resubmit (`gnn.fit()` is idempotent — see `rai-predictive-training` § `gnn.fit()` is idempotent). Do **not** call `CREATE_GNN_SERVICE()`.
+### Diagnostic ladder
+
+Long-running predictive jobs are usually fine — distinguish stuck from slow before suspending anything. Use the same ladder as `rai-predictive-training` § "Training appears stuck":
+
+1. `CALL RELATIONALAI.API.GET_REASONER('predictive', '<name>')` → `STATUS=READY`?
+2. `client.jobs.list("Predictive", name="<name>")` → is there a `RUNNING` train job (with rising `AGE_MIN`), or a `QUEUED` one going stale?
+3. `SHOW EXPERIMENTS IN SCHEMA <exp_db>.<exp_schema>` → did a new experiment row append within ~60s of the `RUNNING` train job?
+
+A `QUEUED` train job that won't advance while the reasoner reports `READY` is the worker-queue desync this section addresses. Genuine long runs progress through (1) READY → (2) RUNNING → (3) new experiment row.
+
+### Recovery
+
+Suspend then resume the predictive reasoner to force a worker recycle, kill any stuck client, then re-instantiate `GNN(...)` and resubmit (`gnn.fit()` is idempotent — see `rai-predictive-training` § `gnn.fit()` is idempotent). Do **not** call `CREATE_GNN_SERVICE()`.
 
 ```sql
 -- 1. Confirm a stuck train job

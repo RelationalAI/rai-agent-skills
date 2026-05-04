@@ -65,6 +65,28 @@ The error is a `PermissionError`, not a generic `RuntimeError` — code that wra
 
 The predictive submodule (`relationalai.semantics.reasoners.predictive`) is not in every published `relationalai` release — `from relationalai.semantics.reasoners.predictive import GNN` raises `ModuleNotFoundError` on releases that pre-date it. Pin a release that ships the submodule (or install from the development branch when iterating against unreleased changes).
 
+### Two-engine model: Logic + Predictive
+
+A GNN workflow runs against **two distinct reasoner engines** that must both be `READY`:
+
+| Reasoner | Handles | Why it matters here |
+|----------|---------|---------------------|
+| **Logic** | `model.data()` / `Table().to_schema()` ingest, all PyRel queries (including `select(...)` over `Source.predictions`), data exports back to Snowflake | The data pipeline that feeds the GNN and reads predictions back is Logic-engine work |
+| **Predictive** | `gnn.fit()` training, `gnn.predictions()` inference, experiment + model-registry writes | Where the actual GNN training and inference happen |
+
+When training "hangs" or queries are slow, the first question is *which engine* — they have separate sizes, separate `STATUS`, separate auto-suspend timers. `rai-health` § Predictive train jobs stuck QUEUED covers the Predictive side; the Logic-engine ladder lives in `rai-health` Steps 1–3.
+
+### Engine sizing
+
+The Predictive reasoner accepts both CPU (`HIGHMEM_X64_S` / `_M` / `_L`) and GPU (`GPU_NV_S`, …) sizes. The CLI's allow-list trails the backend — `REASONER_SIZES_AWS` in `relationalai/services/reasoners/constants.py` currently lists CPU sizes only, while the backend's `AWSEngineSize` Literal in `config_reasoners_fields.py` accepts `GPU_NV_S`. If `rai reasoners:create` rejects a GPU size, fall through to `CALL RELATIONALAI.API.CREATE_REASONER_ASYNC('predictive', '<name>', 'GPU_NV_S', PARSE_JSON('{}'))` directly.
+
+Rough heuristics for choosing CPU vs GPU:
+
+- **CPU (HIGHMEM_X64_*)**: prototyping, single-task GNNs on graphs under ~100K nodes / ~1M edges, runs where you're iterating on features more than scaling out
+- **GPU (`GPU_NV_S`+)**: production-leaning runs at ~1M+ nodes or ~10M+ edges, multi-epoch training over rich feature sets, link-prediction with large negative sampling
+
+GPU is faster per epoch when the dataset fits in the GPU VM's CPU memory; if the dataset is borderline, CPU `HIGHMEM_X64_L`/`_SL` may finish sooner overall than GPU paging. Confirm current sizing tradeoffs with the RelationalAI team — pool capacity and price points evolve.
+
 ---
 
 ## Quick Reference
