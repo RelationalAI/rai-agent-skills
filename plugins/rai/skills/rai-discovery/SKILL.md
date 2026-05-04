@@ -1,6 +1,6 @@
 ---
 name: rai-discovery
-description: Discover questions to answer or problems to solve. Surfaces what the data can support, classifies by reasoner type, and routes to the right workflow. Use before choosing a reasoner workflow or when scoping what to build next.
+description: Translation, ideation, and routing layer between an ontology and the RAI reasoners. Surfaces questions the data can answer, classifies them by reasoner family (prescriptive, graph, predictive, rules), and translates user-facing problem framings into the technical implementation hints the downstream reasoner skills need. Use before choosing a reasoner workflow or when scoping what to build next.
 ---
 
 # Question Discovery
@@ -8,7 +8,7 @@ description: Discover questions to answer or problems to solve. Surfaces what th
 
 ## Summary
 
-**What:** Multi-reasoner question discovery from ontology models. Surfaces what the data can answer, classifies by reasoner type, and routes to the right workflow.
+**What:** Multi-reasoner question discovery from ontology models. Acts as the **translation, ideation, and routing layer between the ontology and the reasoners** — surfaces what the data can answer, classifies by reasoner family, and translates user-facing problem framings into the technical implementation hints the downstream coding skills consume.
 
 **When to use:**
 - Suggesting questions a given ontology can answer
@@ -427,12 +427,17 @@ Each suggestion includes a `reasoners` field — an ordered list specifying the 
 }
 ```
 
-**After discovery, load these skills before writing code:**
+**After discovery, load the per-reasoner execution skills:**
 
-1. **Formulation skill** for the chosen reasoner type (e.g., `rai-prescriptive-problem-formulation`, `rai-graph-analysis`)
-2. **`rai-querying`** + **`rai-pyrel-coding`** for v1 syntax, imports, and query patterns
+| Selected reasoner | Skills to load (in order) |
+|-------------------|---------------------------|
+| **prescriptive** | `rai-prescriptive-problem-formulation` → `rai-prescriptive-solver-management` → `rai-prescriptive-results-interpretation` |
+| **graph** | `rai-graph-analysis` |
+| **rules** | `rai-rules-authoring` |
 
-Discovery covers *what* to ask. Coding skills cover *how* to write it. Skipping step 2 leads to hallucinated APIs and wrong imports.
+For all reasoners, also load `rai-querying` + `rai-pyrel-coding` for v1 syntax, imports, and query patterns. If the selected question is **MODEL_GAP**, load `rai-ontology-design` first to enrich the ontology before the reasoner skill runs (see Enrichment Handoff above).
+
+Discovery covers *what* to ask. The reasoner-specific reference files in this skill (`prescriptive.md` / `graph.md` / `predictive.md` / `rules.md`) translate the user's framing into the technical fields each downstream skill consumes (problem_type / algorithm / rule_type). The downstream coding skills cover *how* to write the PyRel. Skipping the coding-skill load leads to hallucinated APIs and wrong imports.
 
 ---
 
@@ -454,10 +459,10 @@ Discovery covers *what* to ask. Coding skills cover *how* to write it. Skipping 
 
 | Reference | Description | File |
 |-----------|-------------|------|
-| Prescriptive | Optimization problems — minimize cost, maximize coverage, scheduling | [prescriptive.md](references/prescriptive.md) |
-| Graph | Graph analytics — centrality, community detection, shortest path | [graph.md](references/graph.md) |
+| Prescriptive | Optimization problem types (resource allocation, network flow, routing, scheduling, pricing) → translate into formulation parameters for `rai-prescriptive-problem-formulation` | [prescriptive.md](references/prescriptive.md) |
+| Graph | Graph question types (centrality, community, reachability, distance, similarity) → translate into RAI Graph algorithms for `rai-graph-analysis` | [graph.md](references/graph.md) |
 | Predictive | Predictive modeling — forecasting, classification, anomaly detection | [predictive.md](references/predictive.md) |
-| Rules | Business rules — compliance, validation, classification from known facts | [rules.md](references/rules.md) |
+| Rules | Rule question types (validation, classification, derivation, alerting, reconciliation) → translate into `rule_type` and PyRel patterns for `rai-rules-authoring` | [rules.md](references/rules.md) |
 
 ---
 
