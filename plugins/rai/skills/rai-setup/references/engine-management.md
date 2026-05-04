@@ -121,6 +121,41 @@ with connect_sync() as client:
     client.jobs.cancel("Logic", "<job_id>")
 ```
 
+### SQL stored procedures (canonical fallback)
+
+The CLI and Python clients are thin wrappers over `RELATIONALAI.API.*` stored procedures. These procedures are the canonical interface — useful directly from notebooks/SQL worksheets, and the right fallback when the CLI version trails the backend on a new flag or size. See [Manage compute resources](https://docs.relational.ai/manage/compute-resources/) for the full reference.
+
+| Procedure / view | Purpose |
+|---|---|
+| `RELATIONALAI.API.CREATE_REASONER(type, name, size, settings_json)` | Create a reasoner. The async variant `CREATE_REASONER_ASYNC` returns immediately and is the SDK's default code path — poll `GET_REASONER` for `STATUS=READY`. |
+| `RELATIONALAI.API.GET_REASONER(type, name)` | Read reasoner state — `STATUS`, `SIZE`, `RUNTIME`, `SETTINGS`, `AUTO_SUSPEND_MINS`, … |
+| `RELATIONALAI.API.SUSPEND_REASONER(type, name)` | Suspend (synchronous). |
+| `RELATIONALAI.API.RESUME_REASONER_ASYNC(type, name)` | Submit resume; returns immediately — poll `GET_REASONER`. |
+| `RELATIONALAI.API.DELETE_REASONER(type, name)` | Delete (synchronous). |
+| `RELATIONALAI.API.ALTER_REASONER_AUTO_SUSPEND_MINS(type, name, n)` | Change auto-suspend threshold. |
+| `RELATIONALAI.API.ALTER_REASONER_POOL_NODE_LIMITS(type, name, min, max)` | Configure compute-pool `MIN_NODES` / `MAX_NODES`. |
+| `RELATIONALAI.API.GET_JOB(type, id)` | Fetch metadata for one job. |
+| `RELATIONALAI.API.CANCEL_JOB(type, id)` | Cancel an active job. |
+| `RELATIONALAI.API.REASONERS` (view) | All reasoners — equivalent of `rai reasoners:list`. |
+| `RELATIONALAI.API.JOBS` (view) | Job ledger — `ID`, `STATE`, `JOB_TYPE`, `PAYLOAD`, `CREATED_ON`, … Filter by `STATE IN ('QUEUED','RUNNING')` for active jobs. |
+
+The `type` argument is the canonical reasoner family — `'logic'` or `'prescriptive'`. SDK code paths in `relationalai/services/reasoners/gateways.py` invoke exactly these procs.
+
+#### Async + poll pattern
+
+`CREATE_REASONER_ASYNC` and `RESUME_REASONER_ASYNC` return as soon as the operation is queued — the reasoner is not yet `READY`. Loop on `GET_REASONER` until `STATUS='READY'`:
+
+```sql
+-- 1. Submit creation
+CALL RELATIONALAI.API.CREATE_REASONER_ASYNC('logic', 'my_logic', 'HIGHMEM_X64_M', PARSE_JSON('{}'));
+
+-- 2. Poll until READY (every 5–10 s; PROVISIONING → READY typically takes 1–3 minutes)
+CALL RELATIONALAI.API.GET_REASONER('logic', 'my_logic');
+-- Repeat until STATUS=READY (or stop on FAILED / ERROR)
+```
+
+The `settings_json` argument carries the same dict accepted by the Python client — `{"auto_suspend_mins": 30, "await_storage_vacuum": true, "settings": {...}}`. Empty `PARSE_JSON('{}')` accepts all defaults.
+
 ### Warm Reasoners
 
 Warm reasoners are pre-provisioned reasoners kept running and ready to accept jobs immediately, eliminating cold-start latency. When a user creates or resumes a reasoner and a warm instance is available for the requested size, the system assigns the warm reasoner instead of provisioning a new one.
