@@ -104,7 +104,15 @@ The root cause is **over-constraining** — conflicting or too-tight constraints
 
 **RELAXATION-FIRST APPROACH:**
 This formulation was built with comprehensive constraint selection but the solver found NO feasible solution.
-The constraints are mutually contradictory or over-restrictive. Before adding anything, identify which constraint to relax or drop, then **rebuild the Problem** omitting or replacing the offending `satisfy(...)` call (Problem accumulates `satisfy` calls — there is no in-place removal API):
+The constraints are mutually contradictory or over-restrictive. Before adding anything, identify which constraint to relax or drop by walking each constraint's grounded form:
+
+```python
+for c in problem.constraints:
+    print(c)
+    problem.display(c)  # grounded sums and bounds — find the row that can't be satisfied
+```
+
+See [diagnostic-workflow.md](diagnostic-workflow.md) > INFEASIBLE for what to look for. Once you've identified the offender, **rebuild the Problem** omitting or replacing the offending `satisfy(...)` call (Problem accumulates `satisfy` calls — there is no in-place removal API):
 - Are existing constraints too tight (equality where inequality would suffice)?
 - Are there redundant constraints that conflict with each other?
 - Can a constraint be softened (e.g., `== demand` to `>= demand * 0.9`)?

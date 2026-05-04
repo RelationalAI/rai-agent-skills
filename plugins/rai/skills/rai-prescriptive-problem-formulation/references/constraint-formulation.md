@@ -584,7 +584,14 @@ model.require(sum(AB.x_active).per(AB.a) == 1)
 # Generates: sum(AB where a==A1) == 1, sum(AB where a==A2) == 1   (right)
 ```
 
-The failure is silent — solver returns OPTIMAL with the wrong feasibility region. Verify with `problem.display()` that per-group constraints have the expected disaggregated sums.
+The failure is silent — solver returns OPTIMAL with the wrong feasibility region. Verify by capturing the constraint's ref and inspecting just that constraint's grounded form:
+
+```python
+c = problem.satisfy(model.require(sum(AB.x_active).per(AB.a) == 1))
+problem.display(c)  # expanded sums per A; confirm each row filters to its AB slice
+```
+
+See [diagnostic-workflow.md](diagnostic-workflow.md) for the full capture-and-inspect pattern.
 
 **Rule 7: Access data properties on extended concepts via relationship traversal**
 Extended/cross-product concepts only have their own declared properties (relationships + decision variables). To access data properties from the base concept they reference, traverse the relationship.
