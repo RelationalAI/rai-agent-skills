@@ -30,36 +30,27 @@ description: Build GNN data models -- concepts, Snowflake data loading, task rel
 
 ### Experiment schema setup (one-time, ACCOUNTADMIN)
 
-GNN training writes experiment artifacts to a Snowflake schema. The RELATIONALAI native app must have write access on it. Without this the first `gnn.fit()` raises `PermissionError` (from `relationalai_gnns.core.diagnostics.PermissionDiagnostic`) whose message names the missing grant — typically *"Database does not exist or the GNN RelationalAI Native App lacks permissions"* or *"Schema does not exist or ..."*.
-
-The diagnostic prescribes exactly four grants on top of the database+schema:
+GNN training writes experiment artifacts to a Snowflake schema. Create a database and schema you own, then grant the RELATIONALAI native app the four required privileges:
 
 ```sql
--- Use a database you own (NOT a Snowflake-shared/marketplace database).
--- Shared DBs reject schema creation: "Creating schema on shared database
--- '<X>' is not allowed."
 CREATE DATABASE IF NOT EXISTS <YOUR_DB>;
-CREATE SCHEMA IF NOT EXISTS <YOUR_DB>.EXPERIMENTS;
+CREATE SCHEMA   IF NOT EXISTS <YOUR_DB>.<YOUR_SCHEMA>;
 
-GRANT USAGE ON DATABASE <YOUR_DB>                       TO APPLICATION RELATIONALAI;
-GRANT USAGE ON SCHEMA <YOUR_DB>.EXPERIMENTS             TO APPLICATION RELATIONALAI;
-GRANT CREATE EXPERIMENT ON SCHEMA <YOUR_DB>.EXPERIMENTS TO APPLICATION RELATIONALAI;
-GRANT CREATE MODEL ON SCHEMA <YOUR_DB>.EXPERIMENTS      TO APPLICATION RELATIONALAI;
+GRANT USAGE             ON DATABASE <YOUR_DB>                         TO APPLICATION RELATIONALAI;
+GRANT USAGE             ON SCHEMA   <YOUR_DB>.<YOUR_SCHEMA>           TO APPLICATION RELATIONALAI;
+GRANT CREATE EXPERIMENT ON SCHEMA   <YOUR_DB>.<YOUR_SCHEMA>           TO APPLICATION RELATIONALAI;
+GRANT CREATE MODEL      ON SCHEMA   <YOUR_DB>.<YOUR_SCHEMA>           TO APPLICATION RELATIONALAI;
 ```
 
-`GRANT ALL PRIVILEGES ON SCHEMA <YOUR_DB>.EXPERIMENTS` is a working superset if you don't need least-privilege.
-
-Then in the script:
+All four grants are required. Then pass the same database and schema to the GNN constructor:
 
 ```python
 gnn = GNN(
     exp_database="<YOUR_DB>",
-    exp_schema="EXPERIMENTS",
+    exp_schema="<YOUR_SCHEMA>",
     ...
 )
 ```
-
-The error is a `PermissionError`, not a generic `RuntimeError` — code that wraps `gnn.fit()` can catch it specifically.
 
 ### `relationalai` package version
 
