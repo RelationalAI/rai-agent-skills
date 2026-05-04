@@ -214,7 +214,7 @@ GNN training has runtime gotchas that surface as opaque or no-error symptoms in 
 | Client polls forever with no progress | `JobMonitor._wait_for_completion` has no timeout — kill the client manually + recover via the QUEUED runbook |
 | `Failed to pull data into index: transaction was aborted (runtime error)` | Opaque wrapper — pull `RELATIONALAI.API.GET_TRANSACTION_ARTIFACTS('<txn_id>')` -> `problems.json` for the real error. For the schema-drift / compiled-relation-cache cause: rename `Model(...)` |
 
-`CREATE_GNN_SERVICE()` is **not** the right escalation for any predictive train issue — the SDK submits training in-pod against the predictive reasoner, not via that legacy path (`relationalai_gnns/core/connector.py::exec_job`). See `rai-health` § Predictive train jobs stuck QUEUED.
+For predictive train issues, stay on the supported `RELATIONALAI.API.*` surface — `SUSPEND_REASONER` / `RESUME_REASONER_ASYNC` for recovery, `DELETE_REASONER` + `CREATE_REASONER_ASYNC('predictive', '<name>', 'GPU_NV_S', OBJECT_CONSTRUCT())` for a fresh rebuild. See `rai-health` § Predictive train jobs stuck QUEUED.
 
 ---
 

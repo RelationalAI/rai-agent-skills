@@ -331,7 +331,7 @@ A `QUEUED` train job that won't advance while the reasoner reports `READY` is th
 
 ### Recovery
 
-Suspend then resume the predictive reasoner to force a worker recycle, kill any stuck client, then re-instantiate `GNN(...)` and resubmit (`gnn.fit()` is idempotent — see `rai-predictive-training` § `gnn.fit()` is idempotent). Do **not** call `CREATE_GNN_SERVICE()`.
+Suspend then resume the predictive reasoner to force a worker recycle, kill any stuck client, then re-instantiate `GNN(...)` and resubmit (`gnn.fit()` is idempotent — see `rai-predictive-training` § `gnn.fit()` is idempotent). Use only the supported `RELATIONALAI.API.*` surface — do not invoke `RELATIONALAI.EXPERIMENTAL.*` procedures as a workaround.
 
 ```sql
 -- 1. Confirm a stuck train job
@@ -349,7 +349,14 @@ CALL RELATIONALAI.API.RESUME_REASONER_ASYNC('predictive', '<reasoner_name>');
 CALL RELATIONALAI.API.GET_REASONER('predictive', '<reasoner_name>');
 ```
 
-> **Do not use `CALL RELATIONALAI.EXPERIMENTAL.CREATE_GNN_SERVICE();` to recover stuck predictive train jobs.** The SDK never invokes it — train submission goes through `<app>.api.exec_job_async('GNN', <reasoner_name>, ...)` against the predictive reasoner directly (`relationalai_gnns/core/connector.py::exec_job`). `CREATE_GNN_SERVICE` targets a separate code path; if it fails with an image-mismatch error like `Invalid image specified in service spec: image 'rai-gnn-app:<version>' does not exist in current application version`, that does **not** mean GNN training is broken — it just means that orthogonal path can't be brought up. The right escalation is `SUSPEND_REASONER` + `RESUME_REASONER_ASYNC` on the predictive reasoner itself.
+If recycling doesn't unstick the worker, **rebuild on a fresh GPU predictive reasoner** — the documented path:
+
+```sql
+CALL RELATIONALAI.API.DELETE_REASONER('predictive', '<reasoner_name>');
+CALL RELATIONALAI.API.CREATE_REASONER_ASYNC('predictive', '<reasoner_name>', 'GPU_NV_S', OBJECT_CONSTRUCT());
+-- Poll until STATUS=READY:
+CALL RELATIONALAI.API.GET_REASONER('predictive', '<reasoner_name>');
+```
 
 See `rai-predictive-training` § Worker not ready to accept jobs for the matching client-side symptom and § Stalled train job: SDK polls without a timeout for stalled-job forensics.
 

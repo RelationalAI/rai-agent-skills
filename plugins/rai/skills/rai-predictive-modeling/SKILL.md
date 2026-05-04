@@ -76,16 +76,27 @@ A GNN workflow runs against **two distinct reasoner engines** that must both be 
 
 When training "hangs" or queries are slow, the first question is *which engine* — they have separate sizes, separate `STATUS`, separate auto-suspend timers. `rai-health` § Predictive train jobs stuck QUEUED covers the Predictive side; the Logic-engine ladder lives in `rai-health` Steps 1–3.
 
-### Engine sizing
+### Provisioning the Predictive reasoner
 
-The Predictive reasoner accepts both CPU (`HIGHMEM_X64_S` / `_M` / `_L`) and GPU (`GPU_NV_S`, …) sizes. The CLI's allow-list trails the backend — `REASONER_SIZES_AWS` in `relationalai/services/reasoners/constants.py` currently lists CPU sizes only, while the backend's `AWSEngineSize` Literal in `config_reasoners_fields.py` accepts `GPU_NV_S`. If `rai reasoners:create` rejects a GPU size, fall through to `CALL RELATIONALAI.API.CREATE_REASONER_ASYNC('predictive', '<name>', 'GPU_NV_S', PARSE_JSON('{}'))` directly.
+**Use a GPU compute type for the Predictive reasoner.** The canonical provisioning shape:
 
-Rough heuristics for choosing CPU vs GPU:
+```sql
+CALL RELATIONALAI.API.CREATE_REASONER_ASYNC(
+    'predictive',
+    '<reasoner_name>',
+    'GPU_NV_S',
+    OBJECT_CONSTRUCT()        -- {} — accept all defaults; or pass auto_suspend_mins, settings, …
+);
 
-- **CPU (HIGHMEM_X64_*)**: prototyping, single-task GNNs on graphs under ~100K nodes / ~1M edges, runs where you're iterating on features more than scaling out
-- **GPU (`GPU_NV_S`+)**: production-leaning runs at ~1M+ nodes or ~10M+ edges, multi-epoch training over rich feature sets, link-prediction with large negative sampling
+-- Poll until STATUS=READY (1–3 minutes typical):
+CALL RELATIONALAI.API.GET_REASONER('predictive', '<reasoner_name>');
+```
 
-GPU is faster per epoch when the dataset fits in the GPU VM's CPU memory; if the dataset is borderline, CPU `HIGHMEM_X64_L`/`_SL` may finish sooner overall than GPU paging. Confirm current sizing tradeoffs with the RelationalAI team — pool capacity and price points evolve.
+`GPU_NV_S` is faster per epoch on the GNN training job and is the recommended default for predictive workloads. `HIGHMEM_X64_S` / `_M` / `_L` are also valid sizes for the predictive reasoner, but GPU is the path the platform team recommends; pick it unless you have a specific reason not to.
+
+The `rai reasoners:create --type Predictive --size GPU_NV_S` CLI form may report an allow-list error (`Allowed sizes: HIGHMEM_X64_S, HIGHMEM_X64_M, HIGHMEM_X64_L`) on older client versions — the validation list (`relationalai/services/reasoners/constants.py::REASONER_SIZES_AWS`) trails the backend's `AWSEngineSize` Literal in `config_reasoners_fields.py`. The SQL `CREATE_REASONER_ASYNC` call above is the canonical fall-through; both reach the same backend.
+
+Confirm current sizing options with the RelationalAI team — pool capacity and recommendations evolve.
 
 ---
 
