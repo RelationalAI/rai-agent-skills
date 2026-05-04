@@ -586,6 +586,8 @@ model.require(sum(AB.x_active).per(AB.a) == 1)
 
 The failure is silent — solver returns OPTIMAL with the wrong feasibility region. Verify with `problem.display()` that per-group constraints have the expected disaggregated sums.
 
+Per-group constraints can also drop silently when the bound property is unpopulated for some entities (a related but distinct mode — the `.per()` scope is correct, the *data* is sparse). Capture the constraint ref and check `len(model.select(constr_ref).to_df()) == count(Entity)` before solving; pass `name=[Entity.id]` at `satisfy()` time so `problem.display(constr_ref)` rows are identifiable. For very-large constraints, sample with `display(constr_ref, limit=10)` or filter directly: `display(model.select(constr_ref).where(constr_ref.name == "cap_42"))`. See `rai-prescriptive-solver-management/references/formulation-display.md` for the counts-first workflow.
+
 **Rule 7: Access data properties on extended concepts via relationship traversal**
 Extended/cross-product concepts only have their own declared properties (relationships + decision variables). To access data properties from the base concept they reference, traverse the relationship.
 ```python
