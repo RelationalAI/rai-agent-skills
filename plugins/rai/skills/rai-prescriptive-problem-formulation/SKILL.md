@@ -194,12 +194,12 @@ cap_constr = problem.satisfy(
 
 n_grounded = len(model.select(cap_constr).to_df())
 n_expected = len(model.select(Entity).to_df())
-assert n_grounded == n_expected, (
-    f"{n_grounded}/{n_expected} groupings fired — Entity.cap unpopulated for some entities"
-)
-
-# If short, drill in with the human-readable view (limit caps very-large output):
-problem.display(cap_constr, limit=10)
+if n_grounded != n_expected:
+    # Drill in: human-readable view of the survivors (limit caps very-large output).
+    problem.display(cap_constr, limit=10)
+    raise AssertionError(
+        f"{n_grounded}/{n_expected} groupings fired — Entity.cap unpopulated for some entities"
+    )
 ```
 
 Together, (a)–(d) are the downstream complement to Step 1's base-ontology grounding: Step 1 verifies the *inputs* to formulation exist; Step 5 verifies the *outputs* registered correctly, bound to data, weighted by populated coefficients, and grounded on the right number of groupings.

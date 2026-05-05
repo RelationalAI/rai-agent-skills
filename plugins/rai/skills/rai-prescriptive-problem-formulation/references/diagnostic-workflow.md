@@ -81,7 +81,7 @@ sample = model.select(cap.name).where(cap).where(cap.name == "cap_Site_42").to_d
 
 ```python
 model.require(problem.num_variables() == aggs.count(Lane).where(Lane.active))
-model.require(problem.num_constraints() == 2 * aggs.count(Source))  # cap + demand per Source
+model.require(problem.num_constraints() == aggs.count(Source) + aggs.count(Sink))  # cap per Source + demand per Sink
 ```
 
 Available counts: `num_variables()`, `num_constraints()`, `num_min_objectives()`, `num_max_objectives()`. Each returns a Relationship usable in `model.require(...)` or `model.select(...)`.

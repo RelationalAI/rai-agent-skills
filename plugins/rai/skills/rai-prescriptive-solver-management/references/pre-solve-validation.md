@@ -44,13 +44,12 @@ cap_constr = problem.satisfy(
 )
 n_grounded = len(model.select(cap_constr).to_df())
 n_entities = len(model.select(Entity).to_df())
-assert n_grounded == n_entities, (
-    f"cap_constr fired {n_grounded}/{n_entities}: bound data missing for some entities"
-)
-
-# When short, drill in. limit caps very-large constraints; the summary header
-# shows true totals, only the rendered table is capped.
-problem.display(cap_constr, limit=10)
+if n_grounded != n_entities:
+    # Drill in. limit caps very-large constraints; summary header shows true totals.
+    problem.display(cap_constr, limit=10)
+    raise AssertionError(
+        f"cap_constr fired {n_grounded}/{n_entities}: bound data missing for some entities"
+    )
 ```
 
 ### 3. Objective population — is the objective meaningful?
