@@ -45,33 +45,9 @@ Prefer targeted display when the failure is localized — it cuts noise and make
 
 ### Sampling large constraints
 
-For very-large per-grouping constraints where the full rendered table is too long to read:
+For very-large per-grouping constraints where the full rendered table is too long to read, use `problem.display(ref, limit=N)`, the whole-problem `display(limit=N)`, or the Fragment-filter form `display(model.select(ref).where(ref.name == "..."))`. The `name=[Entity.id]` you passed at `satisfy()` time is what makes the filter strings predictable (separator `_`, e.g. `"cap_Site_42"`).
 
-```python
-# Top 10 rows of one constraint, ordered by .name ascending. The summary
-# header still shows true totals; only the rendered table is capped.
-problem.display(cap, limit=10)
-
-# Top 5 of every kind in the whole-problem view (counts in header stay true)
-problem.display(limit=5)
-
-# Pick a specific row by name (or any other property) — Fragment form.
-# The "cap_Site_42" string is constructed by name=["cap", Site.id] above
-# (sep="_"); your filter string depends on what you passed at satisfy() time.
-problem.display(model.select(cap).where(cap.name == "cap_Site_42"))
-```
-
-Each `display(part)` call adds anonymous reachability rules to the model and bumps the model version (cheap per call but avoid in tight loops). The `limit` kwarg is stratification-safe for both variable and constraint paths; direct `aggregates.limit` in a Fragment's `where` only works for variables (the constraint path uses recursive AST expansion — see `display()` docstring) — use the `limit=N` kwarg instead.
-
-To list grounded groupings without rendering the formula text — useful when even `limit` is more than you need:
-
-```python
-# All grounded names (DataFrame)
-grounded = model.select(cap.name).where(cap).to_df()
-
-# Sample
-sample = model.select(cap.name).where(cap).where(cap.name == "cap_Site_42").to_df()
-```
+For the sampling API, stratification caveats, and when to drop into `model.select(ref.name)` instead, see [rai-prescriptive-solver-management/references/formulation-display.md](../../rai-prescriptive-solver-management/references/formulation-display.md) > Targeted Inspection.
 
 ---
 

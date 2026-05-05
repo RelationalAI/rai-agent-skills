@@ -183,24 +183,15 @@ for coef_prop in objective_coefficient_properties:
         raise ValueError(f"Coefficient {coef_prop} is unbound — objective term silently zero")
 ```
 
-**(d) Constraint binding cardinality.** Capture each `satisfy()` return value at declaration time, then verify the constraint grounded on the expected number of groupings before solving. Distinct from (b)/(c): (b) catches empty variable scope from a `where=` predicate, (c) catches unbound coefficients, (d) catches per-grouping bodies that PyRel relational semantics dropped because a referenced bound was empty for some entities — the *exact* mode that returns OPTIMAL with the missing entities silently unconstrained.
+**(d) Constraint binding cardinality.** Capture each `satisfy()` return value at declaration time, then verify the constraint grounded on the expected number of groupings before solving. Distinct from (b)/(c): (b) catches empty variable scope from a `where=` predicate, (c) catches unbound coefficients, (d) catches per-grouping bodies that PyRel dropped (per the `satisfy()` docstring; empty-body groupings are dropped) because a referenced bound was empty for some entities — the *exact* mode that returns OPTIMAL with the missing entities silently unconstrained.
 
 ```python
-# Capture at satisfy time; pass name=[Entity.id] so display rows are identifiable.
-cap_constr = problem.satisfy(
-    model.require(usage <= Entity.cap),
-    name=["cap", Entity.id],
-)
-
-n_grounded = len(model.select(cap_constr).to_df())
-n_expected = len(model.select(Entity).to_df())
-if n_grounded != n_expected:
-    # Drill in: human-readable view of the survivors (limit caps very-large output).
-    problem.display(cap_constr, limit=10)
-    raise AssertionError(
-        f"{n_grounded}/{n_expected} groupings fired — Entity.cap unpopulated for some entities"
-    )
+cap_constr = problem.satisfy(model.require(usage <= Entity.cap), name=["cap", Entity.id])
+if len(model.select(cap_constr).to_df()) != len(model.select(Entity).to_df()):
+    raise AssertionError("cap_constr short — Entity.cap unpopulated for some entities")
 ```
+
+For the full pattern (drill-in with `display(cap_constr, limit=10)` before raising, multi-Concept counts, and the per-failure-mode lookup) see [diagnostic-workflow.md](references/diagnostic-workflow.md) and [rai-prescriptive-solver-management/references/pre-solve-validation.md](../rai-prescriptive-solver-management/references/pre-solve-validation.md).
 
 Together, (a)–(d) are the downstream complement to Step 1's base-ontology grounding: Step 1 verifies the *inputs* to formulation exist; Step 5 verifies the *outputs* registered correctly, bound to data, weighted by populated coefficients, and grounded on the right number of groupings.
 
@@ -218,11 +209,10 @@ The agent's debugging loop. Each `solve_for` / `satisfy` / `minimize` / `maximiz
 
 **Diagnose with targeted display:**
 - `problem.display(var_ref)` — bounds and entity tuples per instance; catches `where=` over- or under-scoping
-- `problem.display(constr_ref)` — grounded sums per row; catches `.per()` mis-scoping (the silent OPTIMAL trap), redundant or contradictory constraints, and per-grouping bodies that PyRel relational semantics dropped because a referenced bound was empty for some entities (Step 5 (d) catches this statically; targeted display localizes which rows survived)
+- `problem.display(constr_ref)` — grounded sums per row; catches `.per()` mis-scoping (the silent OPTIMAL trap), redundant or contradictory constraints, and per-grouping bodies dropped per the `satisfy()` docstring when a referenced bound was empty for some entities (Step 5 (d) catches this statically; targeted display localizes which rows survived)
 - `problem.display(obj_ref)` — expanded objective; catches unbound coefficients (silent zero terms)
-- `problem.display(constr_ref, limit=10)` — for very-large per-grouping constraints; caps the rendered table at top-N by `.name` while summary counts stay true. Same `limit` works on `display()` for the whole formulation.
-- `problem.display(model.select(constr_ref).where(constr_ref.name == "cap_42"))` — pick a specific row by name (or any other property) when you already know which one to look at.
 - `for c in problem.constraints: problem.display(c)` — when one of many constraints is the offender (typical for INFEASIBLE)
+- For sampling very-large constraints (`display(ref, limit=N)`, `display(limit=N)`, Fragment-filter form), see [rai-prescriptive-solver-management/references/formulation-display.md](../rai-prescriptive-solver-management/references/formulation-display.md) > Targeted Inspection.
 
 **Simplify once correct:**
 - Static parameters over dynamic calculations
