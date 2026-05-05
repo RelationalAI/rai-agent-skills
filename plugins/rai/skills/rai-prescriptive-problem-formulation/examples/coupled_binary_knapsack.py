@@ -69,11 +69,12 @@ budget_constr = problem.satisfy(model.require(total_invest <= budget), name="bud
 problem.maximize(sum(Project.x_approved * (Project.revenue - Project.connection_cost)))
 
 # Pre-solve validation: per-constraint cardinality first (cheap), then targeted
-# display only when a count is off. n_grounded < count(Site) means
+# display only when a count is off. n_grounded < n_sites means
 # Site.current_capacity is unpopulated for some sites and those rows dropped.
 n_grounded = len(model.select(cap_constr).to_df())
 n_sites = len(model.select(Site).to_df())
-assert n_grounded == n_sites, f"cap_constr fired {n_grounded}/{n_sites}"
-problem.display(cap_constr, limit=10)  # human-readable view; limit caps long output
+if n_grounded != n_sites:
+    problem.display(cap_constr, limit=10)  # human-readable view of survivors
+    raise AssertionError(f"cap_constr fired {n_grounded}/{n_sites}")
 
 problem.solve("highs", time_limit_sec=60)

@@ -55,11 +55,13 @@ problem.display(cap, limit=10)
 # Top 5 of every kind in the whole-problem view (counts in header stay true)
 problem.display(limit=5)
 
-# Pick a specific row by name (or any other property) — Fragment form
+# Pick a specific row by name (or any other property) — Fragment form.
+# The "cap_Site_42" string is constructed by name=["cap", Site.id] above
+# (sep="_"); your filter string depends on what you passed at satisfy() time.
 problem.display(model.select(cap).where(cap.name == "cap_Site_42"))
 ```
 
-Each `display(part)` call adds anonymous reachability rules to the model and bumps the model version (cheap per call but avoid in tight loops). The `limit` kwarg is stratification-safe for both variable and constraint paths; direct `aggregates.limit` in a Fragment's `where` only works for variables (the constraint path uses recursive AST expansion — see `display()` docstring).
+Each `display(part)` call adds anonymous reachability rules to the model and bumps the model version (cheap per call but avoid in tight loops). The `limit` kwarg is stratification-safe for both variable and constraint paths; direct `aggregates.limit` in a Fragment's `where` only works for variables (the constraint path uses recursive AST expansion — see `display()` docstring) — use the `limit=N` kwarg instead.
 
 To list grounded groupings without rendering the formula text — useful when even `limit` is more than you need:
 
@@ -108,13 +110,13 @@ Branch by status:
 | `OPTIMAL` / `LOCALLY_SOLVED` | Solver claims a solution | If values look right, run `verify`. If suspicious (all-zero, concentrated, dominated), suspect a missing forcing constraint, an unbound coefficient, or a per-entity constraint that dropped silently — display each constraint and objective ref |
 | `INFEASIBLE` | No feasible point | Walk `problem.constraints` with targeted display; identify the binding conflict; rebuild Problem omitting or relaxing the offender (see [fix-generation-guidelines.md](fix-generation-guidelines.md) > Infeasible Solution) |
 | `TIME_LIMIT` / `ITERATION_LIMIT` | Solver gave up | Distinct from formulation bug — see `rai-prescriptive-solver-management` |
-| Status unset / `error` non-empty | Solver rejected the model | Read `si.error`; common causes are unsupported expression types, type mismatches, solver-specific syntax limits |
+| Status unset / `error` non-empty | Solver rejected the model | Read `si.error`; common causes are unsupported expression types, type mismatches, solver-specific syntax limits. If `si.error` is also empty, the model likely failed to compile before reaching the solver — re-run with the `model.require(...)` calls active and check stderr for `ModelWarning`. |
 
 ---
 
 ## `problem.verify(*fragments)` — post-solve constraint check
 
-`verify` re-evaluates one or more `Fragment` (the result of `model.require(...)` or `model.where(...).require(...)`) against the returned solution. Raises `ModelWarning` if any fragment is violated; emits `UserWarning` and returns early if `termination_status` isn't in `{"OPTIMAL", "LOCALLY_SOLVED", "SOLUTION_LIMIT"}`.
+`verify` re-evaluates one or more `Fragment` (the result of `model.require(...)` or `model.where(...).require(...)`) against the returned solution. Raises `ModelWarning` (`from v0.relationalai.errors import ModelWarning`) if any fragment is violated; emits `UserWarning` and returns early if `termination_status` isn't in `{"OPTIMAL", "LOCALLY_SOLVED", "SOLUTION_LIMIT"}`.
 
 ```python
 demand_frag = model.require(sum(Lane.flow).per(Sink) >= Sink.demand)
@@ -159,7 +161,7 @@ When status is OPTIMAL but values are all-zero or otherwise vacuous, the suspect
 
 1. `problem.display(obj_ref)` — confirm the objective expanded with non-zero coefficients on the variables you expect. All-zero coefficients = `model.define(...)` populating data is missing.
 2. For each forcing constraint (`>= demand`, `>= min_coverage`, etc.) call `problem.display(c)` — confirm the constraint generated rows. A `where=` predicate that matches no entities produces zero rows; the constraint exists in the formulation but is vacuous against the data.
-3. For per-entity constraints, check cardinality (`len(model.select(c).to_df()) == count(Entity)`) — a sparse bound property silently drops the per-grouping body for entities missing data (Step 5 (d)).
+3. For per-entity constraints, check cardinality (`len(model.select(c).to_df()) == len(model.select(Entity).to_df())`) — a sparse bound property silently drops the per-grouping body for entities missing data (Step 5 (d)).
 4. Cross-check with [examples/presolve_feasibility_gate.py](../examples/presolve_feasibility_gate.py) — the same aggregation-query checks that gate solve also localize which forcing requirement is empty.
 
 See [fix-generation-guidelines.md](fix-generation-guidelines.md) > Trivial Solution for fix priority.
@@ -176,9 +178,9 @@ See [fix-generation-guidelines.md](fix-generation-guidelines.md) > Trivial Solut
 | Sampled component | `problem.display(ref, limit=N)` | Very-large per-grouping constraint where even one component is too long to read in full |
 | Filtered component | `problem.display(model.select(ref).where(<filter>))` | Pick a specific row by name (or any other property) when you know which one to look at |
 | Cardinality assertion | `model.require(problem.num_constraints() == ...)` | Catch "constraint loop never ran" before solving |
-| Per-constraint cardinality | `len(model.select(constr_ref).to_df()) == count(Entity)` | Localize a per-entity constraint that dropped silently for missing-bound entities |
+| Per-constraint cardinality | `len(model.select(constr_ref).to_df()) == len(model.select(Entity).to_df())` | Localize a per-entity constraint that dropped silently for missing-bound entities |
 | Post-solve summary | `problem.solve_info().display()` | Always — first thing after `solve()` returns |
 | Solver error inspection | `si.error` | Status looks fine but result is wrong; status is unset |
 | Constraint re-evaluation | `problem.verify(*fragments)` | Tolerance-sensitive constraints; before committing solution downstream |
 | Constraint walk | `for c in problem.constraints: problem.display(c)` | INFEASIBLE; surprising OPTIMAL where one constraint is suspect |
-| Solver-format dump | `solve(..., print_format="lp"\|"mps"\|"moi")` then `si.printed_model` | Solver-level debugging beyond formulation |
+| Solver-format dump | `solve(..., print_format="moi"\|"latex"\|"mof"\|"lp"\|"mps"\|"nl")` then `si.printed_model` | Solver-level debugging beyond formulation |
