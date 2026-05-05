@@ -115,19 +115,80 @@ After inspecting `problem.display()`, compare the formulation against expected s
 
 ---
 
+## Counts before display, especially for large problems
+
+For large problems, full `problem.display()` may print thousands of lines and obscure the issue. Engine-side counts are cheap scalar reads against the populated formulation Concepts and prove (or disprove) that the formulation grounded the expected number of variables and constraints. Display only what's worth reading.
+
+```python
+# Cheap pre-solve gate (Relationships — read as scalars or use in model.require)
+n_v   = model.select(problem.num_variables()).to_df().iloc[0, 0]
+n_c   = model.select(problem.num_constraints()).to_df().iloc[0, 0]
+n_min = model.select(problem.num_min_objectives()).to_df().iloc[0, 0]
+n_max = model.select(problem.num_max_objectives()).to_df().iloc[0, 0]
+assert n_v == len(model.select(Project).to_df()), "variable count off"
+assert n_min + n_max == 1, f"expected exactly one objective, got {n_min + n_max}"
+```
+
+`num_constraints()` is the global count; it won't tell you *which* constraint vanished. To localize, capture each `satisfy()` return value and check **per-constraint cardinality**:
+
+```python
+cap_constr = problem.satisfy(
+    model.require(usage <= Entity.cap),
+    name=["cap", Entity.id],   # name=[Entity.id] makes display rows identifiable
+)
+n_grounded = len(model.select(cap_constr).to_df())
+n_expected = len(model.select(Entity).to_df())
+if n_grounded != n_expected:
+    # Drill in: human-readable view of the survivors before raising.
+    problem.display(cap_constr, limit=10)
+    raise AssertionError(
+        f"cap_constr fired {n_grounded}/{n_expected}: bound data missing for some entities"
+    )
+```
+
+If a count is off, drill in with the targeted display patterns below.
+
+---
+
 ## Targeted Inspection with `problem.display(part)`
 
 Pass the return value of `solve_for()`, `minimize()`, `maximize()`, or `satisfy()` to inspect just that part of the formulation:
 
 ```python
 x_vars = problem.solve_for(Route.x_flow, name=["flow", Route.origin, Route.dest], lower=0)
-cap = problem.satisfy(model.require(Route.x_flow <= Route.capacity), name="cap")
+cap = problem.satisfy(
+    model.require(Route.x_flow <= Route.capacity),
+    name=["cap", Route.origin, Route.dest],
+)
 
 problem.display(x_vars)  # just the flow variables
 problem.display(cap)     # just the capacity constraints
 ```
 
-Useful for debugging specific parts of a large formulation without printing everything.
+For very-large constraints, cap the rendered rows with the `limit` kwarg or filter directly via a Fragment:
+
+```python
+# Top 10 rows of one constraint, by .name ascending
+problem.display(cap, limit=10)
+
+# Top 5 of every kind in the full summary; counts in the header stay accurate
+problem.display(limit=5)
+
+# Filter to a specific row by name (or any other property)
+problem.display(model.select(cap).where(cap.name == "cap_NYC_LAX"))
+```
+
+When `limit` truncates a table the output appends `(showing N of M)` so you know there's more. When a Fragment filter matches zero rows, the output shows `(no rows matched the filter)` — distinguishes a typo'd filter string or absent data from a component that legitimately has zero rows. Each `display(part)` call adds anonymous reachability rules to the model and bumps the model version (cheap per call but avoid in tight loops). The `limit` kwarg is stratification-safe for both variable and constraint paths; direct `aggregates.limit` in a Fragment's `where` only works for variables (the constraint path uses recursive AST expansion — see `display()` docstring).
+
+To list grounded groupings without rendering the formula text — useful for very-large constraints where even `limit` is more than you need:
+
+```python
+# All grounded names (DataFrame)
+grounded = model.select(cap.name).where(cap).to_df()
+
+# Sample (filter by name)
+sample = model.select(cap.name).where(cap).where(cap.name == "cap_NYC_LAX").to_df()
+```
 
 ---
 

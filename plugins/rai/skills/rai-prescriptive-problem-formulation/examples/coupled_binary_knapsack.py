@@ -39,24 +39,45 @@ problem.solve_for(Project.x_approved, type="bin", name=Project.name)
 problem.solve_for(Investment.x_selected, type="bin", name=["inv", Investment.site.name])
 
 # --- Capacity expansion constraint ---
-# Approved project demand at each site <= existing capacity + investment capacity
+# Approved project demand at each site <= existing capacity + investment capacity.
+# Capture the constraint ref + name=[Site.id] so display rows are identifiable
+# and we can check per-site cardinality before solving — any RHS aggregate or
+# property that's empty for a site (Site.current_capacity unpopulated, or no
+# Investment rows at the site) would silently drop that site's constraint.
 project_demand = (
     sum(ProjectRef.x_approved * ProjectRef.capacity_needed).where(ProjectRef.site == Site).per(Site)
 )
 investment_cap = (
     sum(InvestmentRef.x_selected * InvestmentRef.capacity_added).where(InvestmentRef.site == Site).per(Site)
 )
-problem.satisfy(model.require(project_demand <= Site.current_capacity + investment_cap))
+cap_constr = problem.satisfy(
+    model.require(project_demand <= Site.current_capacity + investment_cap),
+    name=["cap", Site.id],
+)
 
 # At most one investment per site
 investments_per_site = sum(InvestmentRef.x_selected).where(InvestmentRef.site == Site).per(Site)
-problem.satisfy(model.require(investments_per_site <= 1))
+one_inv_constr = problem.satisfy(
+    model.require(investments_per_site <= 1),
+    name=["one_inv", Site.id],
+)
 
 # Budget knapsack: total investment across both decision sets
 total_invest = sum(Project.x_approved * Project.connection_cost) + sum(Investment.x_selected * Investment.investment_cost)
-problem.satisfy(model.require(total_invest <= budget))
+budget_constr = problem.satisfy(model.require(total_invest <= budget), name="budget")
 
 # Objective: maximize net revenue from approved projects
 problem.maximize(sum(Project.x_approved * (Project.revenue - Project.connection_cost)))
+
+# Pre-solve validation: per-constraint cardinality first (cheap), then targeted
+# display only when a count is off. n_grounded < n_sites means at least one
+# RHS aggregate or property was empty for that site (Site.current_capacity
+# unpopulated, or no Investment rows at the site so investment_cap is empty)
+# and PyRel relational semantics dropped the constraint body for that site.
+n_grounded = len(model.select(cap_constr).to_df())
+n_sites = len(model.select(Site).to_df())
+if n_grounded != n_sites:
+    problem.display(cap_constr, limit=10)  # human-readable view of survivors
+    raise AssertionError(f"cap_constr fired {n_grounded}/{n_sites}")
 
 problem.solve("highs", time_limit_sec=60)
