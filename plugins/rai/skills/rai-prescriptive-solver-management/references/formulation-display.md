@@ -175,7 +175,7 @@ problem.display(cap, limit=10)
 problem.display(limit=5)
 
 # Filter to a specific row by name (or any other property)
-problem.display(model.select(cap).where(cap.name == "cap_Site_42"))
+problem.display(model.select(cap).where(cap.name == "cap_NYC_LAX"))
 ```
 
 When `limit` truncates a table the output appends `(showing N of M)` so you know there's more. When a Fragment filter matches zero rows, the output shows `(no rows matched the filter)` — distinguishes a typo'd filter string or absent data from a component that legitimately has zero rows. Each `display(part)` call adds anonymous reachability rules to the model and bumps the model version (cheap per call but avoid in tight loops). The `limit` kwarg is stratification-safe for both variable and constraint paths; direct `aggregates.limit` in a Fragment's `where` only works for variables (the constraint path uses recursive AST expansion — see `display()` docstring).
@@ -187,7 +187,7 @@ To list grounded groupings without rendering the formula text — useful for ver
 grounded = model.select(cap.name).where(cap).to_df()
 
 # Sample (filter by name)
-sample = model.select(cap.name).where(cap).where(cap.name == "cap_Site_42").to_df()
+sample = model.select(cap.name).where(cap).where(cap.name == "cap_NYC_LAX").to_df()
 ```
 
 ---

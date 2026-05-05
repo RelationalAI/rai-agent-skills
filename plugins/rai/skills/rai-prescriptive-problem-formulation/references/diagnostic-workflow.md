@@ -45,7 +45,7 @@ Prefer targeted display when the failure is localized — it cuts noise and make
 
 ### Sampling large constraints
 
-For very-large per-grouping constraints where the full rendered table is too long to read, use `problem.display(ref, limit=N)`, the whole-problem `display(limit=N)`, or the Fragment-filter form `display(model.select(ref).where(ref.name == "..."))`. The `name=[Entity.id]` you passed at `satisfy()` time is what makes the filter strings predictable (separator `_`, e.g. `"cap_Site_42"`).
+For very-large per-grouping constraints where the full rendered table is too long to read, use `problem.display(ref, limit=N)`, the whole-problem `display(limit=N)`, or the Fragment-filter form `display(model.select(ref).where(ref.name == "..."))`. The `name=["cap", Entity.id]` you passed at `satisfy()` time is what makes the filter strings predictable (joined with `_`, e.g. `name=["cap", Site.id]` → `"cap_42"` for the Site whose `id` is 42).
 
 For the sampling API, stratification caveats, and when to drop into `model.select(ref.name)` instead, see [rai-prescriptive-solver-management/references/formulation-display.md](../../rai-prescriptive-solver-management/references/formulation-display.md) > Targeted Inspection.
 
