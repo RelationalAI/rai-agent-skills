@@ -41,8 +41,9 @@ problem.solve_for(Investment.x_selected, type="bin", name=["inv", Investment.sit
 # --- Capacity expansion constraint ---
 # Approved project demand at each site <= existing capacity + investment capacity.
 # Capture the constraint ref + name=[Site.id] so display rows are identifiable
-# and we can check per-site cardinality before solving (Site.current_capacity
-# unpopulated for any site would silently drop that site's constraint).
+# and we can check per-site cardinality before solving — any RHS aggregate or
+# property that's empty for a site (Site.current_capacity unpopulated, or no
+# Investment rows at the site) would silently drop that site's constraint.
 project_demand = (
     sum(ProjectRef.x_approved * ProjectRef.capacity_needed).where(ProjectRef.site == Site).per(Site)
 )
@@ -69,8 +70,10 @@ budget_constr = problem.satisfy(model.require(total_invest <= budget), name="bud
 problem.maximize(sum(Project.x_approved * (Project.revenue - Project.connection_cost)))
 
 # Pre-solve validation: per-constraint cardinality first (cheap), then targeted
-# display only when a count is off. n_grounded < n_sites means
-# Site.current_capacity is unpopulated for some sites and those rows dropped.
+# display only when a count is off. n_grounded < n_sites means at least one
+# RHS aggregate or property was empty for that site (Site.current_capacity
+# unpopulated, or no Investment rows at the site so investment_cap is empty)
+# and PyRel relational semantics dropped the constraint body for that site.
 n_grounded = len(model.select(cap_constr).to_df())
 n_sites = len(model.select(Site).to_df())
 if n_grounded != n_sites:

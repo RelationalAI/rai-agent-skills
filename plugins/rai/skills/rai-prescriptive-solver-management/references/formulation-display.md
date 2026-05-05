@@ -117,7 +117,7 @@ After inspecting `problem.display()`, compare the formulation against expected s
 
 ## Counts before display, especially for large problems
 
-For large problems, full `problem.display()` may print thousands of lines and obscure the issue. Counts are O(1) Relationship lookups that prove (or disprove) that the formulation grounded the expected number of variables and constraints. Display only what's worth reading.
+For large problems, full `problem.display()` may print thousands of lines and obscure the issue. Engine-side counts are cheap scalar reads against the populated formulation Concepts and prove (or disprove) that the formulation grounded the expected number of variables and constraints. Display only what's worth reading.
 
 ```python
 # Cheap pre-solve gate (Relationships — read as scalars or use in model.require)
@@ -138,9 +138,12 @@ cap_constr = problem.satisfy(
 )
 n_grounded = len(model.select(cap_constr).to_df())
 n_expected = len(model.select(Entity).to_df())
-assert n_grounded == n_expected, (
-    f"cap_constr fired {n_grounded}/{n_expected}: bound data missing for some entities"
-)
+if n_grounded != n_expected:
+    # Drill in: human-readable view of the survivors before raising.
+    problem.display(cap_constr, limit=10)
+    raise AssertionError(
+        f"cap_constr fired {n_grounded}/{n_expected}: bound data missing for some entities"
+    )
 ```
 
 If a count is off, drill in with the targeted display patterns below.

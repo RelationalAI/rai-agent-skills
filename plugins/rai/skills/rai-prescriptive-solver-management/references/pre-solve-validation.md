@@ -109,8 +109,11 @@ model.require(problem.num_min_objectives() + problem.num_max_objectives() == 1)
 # Per-constraint cardinality (for per-entity constraints — catches PyRel
 # relational-semantics drops when a bound is empty for some entities):
 # cap_constr = problem.satisfy(model.require(...), name=["cap", Entity.id])
-# assert len(model.select(cap_constr).to_df()) == len(model.select(Entity).to_df())
-# problem.display(cap_constr)  # human-readable view of survivors (limit=N for large)
+# n_g = len(model.select(cap_constr).to_df())
+# n_e = len(model.select(Entity).to_df())
+# if n_g != n_e:
+#     problem.display(cap_constr, limit=10)  # survivors, before raising
+#     raise AssertionError(f"cap_constr fired {n_g}/{n_e}")
 ```
 
 ### 6. Multi-arg Properties (Scenario Concept pattern)
