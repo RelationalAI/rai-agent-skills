@@ -41,7 +41,7 @@ description: Translation, ideation, and routing layer between an ontology and th
 |--------------------|----------|-----------------|
 | Constrained resources, costs, capacities | **Prescriptive** | "What should we do?" — allocate, schedule, route |
 | Network topology, graph structure | **Graph** | "What patterns exist?" — centrality, clusters, paths |
-| Temporal data, features, historical outcomes | **Predictive** | "What will happen?" — forecast, classify |
+| Labels/values per entity, historical pair data, graph topology | **Predictive** | "What will happen?" / "Which Y for each X?" — node classification, node regression, link prediction |
 | Threshold/status fields, business rules | **Rules** | "Is this valid?" — compliance, classification |
 
 | Feasibility | Meaning | Next Step |
@@ -113,7 +113,7 @@ Each suggestion must be tagged with one or more reasoner types. Use these signal
 |--------|-----------------|------------------|
 | Optimizing decisions over constrained resources | **Prescriptive** | "What should we do?" — allocate, schedule, route, price |
 | Understanding structure, connectivity, influence | **Graph** | "What patterns exist?" — who is central, what clusters exist, shortest path |
-| Predicting outcomes from features | **Predictive** | "What will happen?" — forecast, classify, detect anomalies |
+| Predicting node labels/values or future links from features and graph topology | **Predictive** | "What will happen?" / "Which Y for each X?" — node classification, node regression, link prediction |
 | Enforcing business rules and logical constraints | **Rules** | "Is this valid?" — compliance, classification, derivation |
 
 **Disambiguation rules:**
@@ -185,8 +185,9 @@ Each reasoner adds new concepts and properties to the ontology. Discovery should
 | Graph centrality | `node.centrality_score` | Predictive: centrality as feature. Prescriptive: weight allocation by node importance. |
 | Graph reachability | impact_count, affected flags | Prescriptive: minimize disruption to high-impact nodes. Rules: alert on critical dependencies. |
 | Graph WCC / community | WCC: `(node, component_id_node)` membership (access `.id` to get its identifying value; cast to `int` only for integer-identified nodes); community: `node.community_label` (int) | Prescriptive: optimize within-cluster vs cross-cluster. Rules: flag isolated components. |
-| Predictive forecasting | `Forecast.predicted_value` | Prescriptive: optimize against predicted demand/delays. |
-| Predictive classification | `Entity.risk_probability` | Rules: flag above threshold. Prescriptive: incorporate risk as constraint. |
+| Predictive node classification | `Entity.predictions` with `.probs`, `.predicted_labels` | Rules: flag above threshold. Prescriptive: incorporate risk/class as constraint. |
+| Predictive node regression | `Entity.predictions.predicted_value` (incl. per-period forecasts) | Prescriptive: optimize against predicted values, often via aggregation/bridge concept. |
+| Predictive link prediction | `User.predictions` with `.rank`, `.scores`, `.predicted_<target>` | Prescriptive: top-K predicted pairs as candidate edges in assignment/matching. Rules: flag pairs above score threshold. |
 
 ### How to suggest cumulative questions
 
@@ -400,7 +401,7 @@ Each suggestion includes a `reasoners` field — an ordered list specifying the 
 | **prescriptive** | `decision_scope`, `forcing_requirement`, `objective_property`, `decision_variable`, `scenario_parameter`, `competing_objectives` |
 | **graph** | `algorithm`, `graph_construction` (`node_concept`, `directed`, `weighted`, `edge_definition`), `target_filter`, `output_binding` |
 | **rules** | `rule_type`, `source_concept`, `condition_properties`, `join_path`, `threshold`, `output_type`, `output_property`, `downstream_use` |
-| **predictive** | `type`, `mode` (`pre_computed` or `rai_predictive`), `target_concept`, `target_property`, `feature_properties`, `output_concept`, `pre_computed_table` |
+| **predictive** | User-facing: `type` (`node_classification` \| `node_regression` \| `link_prediction`), `mode` (`pre_computed` \| `rai_predictive`). Concept routing: `target_concept`, `target_property` (classification/regression), `link_target_concept` (link prediction only), `feature_properties`, `output_concept`, `pre_computed_table`. GNN task routing (for `rai_predictive` mode): `task_type` (`binary_classification` \| `multiclass_classification` \| `multilabel_classification` \| `regression` \| `link_prediction` \| `repeated_link_prediction`), `eval_metric`, `has_time_column`, `temporal_column` (when `has_time_column=True`). See `predictive.md` for the user-type → task_type translation rules. |
 
 **For chained questions**, use a `stages` array in `implementation_hint`:
 
@@ -433,11 +434,12 @@ Each suggestion includes a `reasoners` field — an ordered list specifying the 
 |-------------------|---------------------------|
 | **prescriptive** | `rai-prescriptive-problem-formulation` → `rai-prescriptive-solver-management` → `rai-prescriptive-results-interpretation` |
 | **graph** | `rai-graph-analysis` |
+| **predictive** | `rai-predictive-modeling` → `rai-predictive-training` |
 | **rules** | `rai-rules-authoring` |
 
 For all reasoners, also load `rai-querying` + `rai-pyrel-coding` for v1 syntax, imports, and query patterns. If the selected question is **MODEL_GAP**, load `rai-ontology-design` first to enrich the ontology before the reasoner skill runs (see Enrichment Handoff above).
 
-Discovery covers *what* to ask. The reasoner-specific reference files in this skill (`prescriptive.md` / `graph.md` / `predictive.md` / `rules.md`) translate the user's framing into the technical fields each downstream skill consumes (problem_type / algorithm / rule_type). The downstream coding skills cover *how* to write the PyRel. Skipping the coding-skill load leads to hallucinated APIs and wrong imports.
+Discovery covers *what* to ask. The reasoner-specific reference files in this skill (`prescriptive.md` / `graph.md` / `predictive.md` / `rules.md`) translate the user's framing into the technical fields each downstream skill consumes (problem_type / algorithm / task_type / rule_type). The downstream coding skills cover *how* to write the PyRel. Skipping the coding-skill load leads to hallucinated APIs and wrong imports.
 
 ---
 
@@ -461,7 +463,7 @@ Discovery covers *what* to ask. The reasoner-specific reference files in this sk
 |-----------|-------------|------|
 | Prescriptive | Optimization problem types (resource allocation, network flow, routing, scheduling, pricing) → translate into formulation parameters for `rai-prescriptive-problem-formulation` | [prescriptive.md](references/prescriptive.md) |
 | Graph | Graph question types (centrality, community, reachability, distance, similarity) → translate into RAI Graph algorithms for `rai-graph-analysis` | [graph.md](references/graph.md) |
-| Predictive | Predictive modeling — forecasting, classification, anomaly detection | [predictive.md](references/predictive.md) |
+| Predictive | User-facing predictive types (node classification, node regression, link prediction) → translate into GNN `task_type` / `eval_metric` / `has_time_column` for `rai-predictive-modeling` and `rai-predictive-training` | [predictive.md](references/predictive.md) |
 | Rules | Rule question types (validation, classification, derivation, alerting, reconciliation) → translate into `rule_type` and PyRel patterns for `rai-rules-authoring` | [rules.md](references/rules.md) |
 
 ---
@@ -473,5 +475,5 @@ Discovery covers *what* to ask. The reasoner-specific reference files in this sk
 | Prescriptive routing | Discovery scenario walkthrough for optimization problems | [prescriptive_routing.md](examples/prescriptive_routing.md) |
 | Graph routing | Discovery scenario walkthrough for graph analytics | [graph_routing.md](examples/graph_routing.md) |
 | Rules routing | Discovery scenario walkthrough for classification, validation, and derivation rules | [rules_routing.md](examples/rules_routing.md) |
-| Predictive routing | Discovery scenario walkthrough for predictive modeling | [predictive_routing.md](examples/predictive_routing.md) |
+| Predictive routing | Discovery walkthroughs for node classification, node regression, link prediction (GNN mode) and pre-computed predictions | [predictive_routing.md](examples/predictive_routing.md) |
 | Chained routing | Discovery scenario walkthrough for multi-reasoner pipelines | [chained_routing.md](examples/chained_routing.md) |
