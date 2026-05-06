@@ -315,6 +315,84 @@ for the full step-by-step recovery checklist, schema reference, and official doc
 
 ---
 
+## Predictive reasoner stuck in data-index init
+
+A freshly created or freshly resumed Predictive reasoner can sit in `STATUS=PROVISIONING` for many minutes while the in-pod data index hydrates from CDC streams — and `gnn.fit()` running against it appears to hang in Step 1 (dataset prep) before reaching "Training job submitted." This is the same per-table CDC stream-sync compounding that affects unwarmed Logic reasoners on first model query, surfacing on the Predictive side as a silent prep-step stall.
+
+### Diagnose (in order)
+
+1. **Reasoner status** — is the pod still hydrating or actually ready?
+   ```sql
+   CALL RELATIONALAI.API.GET_REASONER('predictive', '<reasoner_name>');
+   ```
+   `STATUS=PROVISIONING` → wait (1–3 min typical for warm pools; longer on first-time Snowflake-stream attach). `STATUS=READY` plus a hang → continue to (2) and (3).
+
+2. **CDC stream health** — is a stream the predictive reasoner depends on suspended or quarantined?
+   ```sql
+   SELECT * FROM relationalai.api.cdc_status;
+   ```
+   `engine_status != READY` or `stream_status` not `RUNNING` → see § Step 5 — Diagnose CDC / Data Stream Health for the quarantine-recovery / `resume_cdc` runbook. Predictive jobs cannot proceed until the upstream streams are healthy.
+
+3. **Transaction problems** — if a specific transaction id appeared in client logs (often the `Failed to pull data into index: transaction was aborted` wrapper), pull its problems:
+   ```sql
+   CALL RELATIONALAI.API.GET_OWN_TRANSACTION_PROBLEMS('<transaction_id>');
+   -- or with admin role: GET_TRANSACTION_PROBLEMS('<id>')
+   ```
+   See § Step 4 — Diagnose a Failed Transaction for the schema reference and owner-restriction pitfall.
+
+### Recovery
+
+If CDC is healthy and the reasoner has been `PROVISIONING` for more than ~5 minutes with no client-side progress, treat it the same as a stuck worker — `SUSPEND_REASONER` + `RESUME_REASONER_ASYNC` (see § Predictive train jobs stuck QUEUED below). Persistent failure: rebuild on a fresh GPU reasoner via `DELETE_REASONER` + `CREATE_REASONER_ASYNC('predictive', ..., 'GPU_NV_S', OBJECT_CONSTRUCT())`.
+
+---
+
+## Predictive train jobs stuck QUEUED
+
+A predictive train job submitted via `gnn.fit()` can sit in `STATE='QUEUED'` in `RELATIONALAI.API.JOBS` indefinitely while `CALL RELATIONALAI.API.GET_REASONER('predictive', '<name>')` still reports `STATUS='READY'`. The SDK only checks reasoner-pod status before submitting — the in-pod worker queue can be out of sync with that status, and the SDK has no way to detect it (`relationalai_gnns/core/connector.py::_check_engine_availability`).
+
+### Diagnostic ladder
+
+Long-running predictive jobs are usually fine — distinguish stuck from slow before suspending anything. Use the same ladder as `rai-predictive-training` § "Training appears stuck":
+
+1. `CALL RELATIONALAI.API.GET_REASONER('predictive', '<name>')` → `STATUS=READY`?
+2. `client.jobs.list("Predictive", name="<name>")` → is there a `RUNNING` train job (with rising `AGE_MIN`), or a `QUEUED` one going stale?
+3. `SHOW EXPERIMENTS IN SCHEMA <exp_db>.<exp_schema>` → did a new experiment row append within ~60s of the `RUNNING` train job?
+
+A `QUEUED` train job that won't advance while the reasoner reports `READY` is the worker-queue desync this section addresses. Genuine long runs progress through (1) READY → (2) RUNNING → (3) new experiment row.
+
+### Recovery
+
+Suspend then resume the predictive reasoner to force a worker recycle, kill any stuck client, then re-instantiate `GNN(...)` and resubmit (`gnn.fit()` is idempotent — see `rai-predictive-training` § `gnn.fit()` is idempotent). Use only the supported `RELATIONALAI.API.*` surface — do not invoke `RELATIONALAI.EXPERIMENTAL.*` procedures as a workaround.
+
+```sql
+-- 1. Confirm a stuck train job
+SELECT ID, STATE, DATEDIFF('minute', CREATED_ON, CURRENT_TIMESTAMP()) AS AGE_MIN
+FROM RELATIONALAI.API.JOBS
+WHERE STATE IN ('QUEUED','RUNNING')
+  AND PAYLOAD LIKE '%"job_type": "train"%'
+ORDER BY CREATED_ON ASC;
+
+-- 2. Recycle the worker
+CALL RELATIONALAI.API.SUSPEND_REASONER('predictive', '<reasoner_name>');
+CALL RELATIONALAI.API.RESUME_REASONER_ASYNC('predictive', '<reasoner_name>');
+
+-- 3. Wait for STATUS=READY, kill the stuck client, then resubmit (re-instantiate GNN(...))
+CALL RELATIONALAI.API.GET_REASONER('predictive', '<reasoner_name>');
+```
+
+If recycling doesn't unstick the worker, **rebuild on a fresh GPU predictive reasoner** — the documented path:
+
+```sql
+CALL RELATIONALAI.API.DELETE_REASONER('predictive', '<reasoner_name>');
+CALL RELATIONALAI.API.CREATE_REASONER_ASYNC('predictive', '<reasoner_name>', 'GPU_NV_S', OBJECT_CONSTRUCT());
+-- Poll until STATUS=READY:
+CALL RELATIONALAI.API.GET_REASONER('predictive', '<reasoner_name>');
+```
+
+See `rai-predictive-training` § Worker not ready to accept jobs for the matching client-side symptom and § Stalled train job: SDK polls without a timeout for stalled-job forensics.
+
+---
+
 ## Step 6 — CDC Engine Management
 
 > **CDC engine ≠ reasoner engine.** The CDC pipeline runs on a dedicated managed engine

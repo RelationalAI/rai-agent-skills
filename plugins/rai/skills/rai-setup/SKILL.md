@@ -37,6 +37,8 @@ The RelationalAI Native App for Snowflake must be installed in your account by a
 
 The `rai_developer` role is the standard role for running PyRel programs. Custom Snowflake roles also work if granted the `rai_user` application role — see [User Access](https://docs.relational.ai/manage/user-access).
 
+**Predictive (GNN) workflows need additional schema setup beyond the base install** — a customer-owned database + schema with `USAGE` and `CREATE EXPERIMENT`/`CREATE MODEL` granted to `APPLICATION RELATIONALAI`. Without it the very first `gnn.fit()` fails. See `rai-predictive-modeling` § Prerequisites for the DDL. The predictive submodule (`relationalai.semantics.reasoners.predictive`) also requires a `relationalai` version that ships it — confirm the minimum with the RelationalAI team before pinning.
+
 Support / docs: support@relational.ai · sales@relational.ai · [docs.relational.ai](https://docs.relational.ai/)
 
 ---
