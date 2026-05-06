@@ -2,7 +2,7 @@
 
 Iterative debugging surface for the formulate → solve → inspect → fix → re-solve loop. Use when a solve returns something surprising (INFEASIBLE, trivial-zero OPTIMAL, OPTIMAL with values that don't match intent) or when you want to confirm a specific component grounded as expected before committing to a long solve.
 
-The Step 5 audit (`SKILL.md`) catches static issues before solve. This reference covers the runtime diagnostic surface — what to inspect once the solve has run, plus the targeted `display(ref)` patterns that localize a problem to a specific component.
+The Step 5 audit (`SKILL.md`) catches static issues before solve. This reference covers the diagnostic surface around solve: pre-solve handles (capture-ref pattern, cardinality assertions) and post-solve triage (status branching, targeted `display(ref)`, `verify`).
 
 ---
 

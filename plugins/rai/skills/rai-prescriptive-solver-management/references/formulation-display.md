@@ -5,6 +5,10 @@
 - [Diagnostics](#diagnostics)
   - [Formulation Verification Checklist](#formulation-verification-checklist)
 - [Problem-Type Verification](#problem-type-verification)
+- [Counts before display, especially for large problems](#counts-before-display-especially-for-large-problems)
+- [Targeted Inspection with `problem.display(part)`](#targeted-inspection-with-problemdisplaypart)
+- [`problem.printed_model()` — Solver Model Text Representation](#problemprinted_model--solver-model-text-representation)
+- [Re-solving the Same Problem](#re-solving-the-same-problem)
 <!-- /TOC -->
 
 ## Formulation Display

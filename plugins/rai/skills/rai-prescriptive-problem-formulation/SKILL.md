@@ -149,7 +149,7 @@ Is the formulation complete and correct?
 - **Trivial-solution gate (run before presenting or solving):** substitute every decision variable with its objective-preferred bound (typically zero for minimize) and evaluate against the actual input data, not abstractly. If every constraint still holds and the objective is at its preferred end, the solver will return that trivial point as optimal — the formulation is wrong, not merely under-specified. The non-obvious failure is a forcing constraint that exists in the formulation but is vacuous against the current data (its `where=` predicate matches no rows); see the *Missing forcing requirement* and *Wrong aggregation scope* rows in Common Pitfalls for related modes. Do not present a formulation that fails this gate — a non-OR user will accept it, run it, and conclude optimization "doesn't work." If the gate's outcome depends on the input data, state that dependence with row-count evidence.
 - **Data-driven feasibility precheck:** when constraint bounds derive from input data, verify the constraint system admits at least one feasible point given that data. Aggregate at the **constraint's natural disaggregation level** — per-entity for per-entity constraints, per-group for grouped ones; a single global total can mask per-slice infeasibility (`Σ supply ≥ Σ demand` may hold while every per-entity slice fails). Run the check as PyRel aggregation queries (see `rai-querying`) so it pushes down to the warehouse (e.g., Snowflake) without pulling rows. If lower-bound exceeds upper-bound at any slice, the formulation is infeasible by construction; surface to the user before solve. See [examples/presolve_feasibility_gate.py](examples/presolve_feasibility_gate.py).
 
-**Pre-solver audit:** before calling `problem.solve(...)`, run a three-part check (a–c below).
+**Pre-solver audit:** before calling `problem.solve(...)`, run a four-part check (a–d below).
 
 **(a) Registration.** `solve_for` / `satisfy` / `minimize` / `maximize` register concepts named `Variable`, `Constraint`, `Objective` (plus a per-solve `Variable_<id>` subconcept for each decision variable). They appear in `inspect.schema(model).concepts`:
 
@@ -204,7 +204,7 @@ When the formulation fails to generate or compile (before a solve is even attemp
 
 ### Step 6: Solve and refine (iterate)
 
-The agent's debugging loop. Each `solve_for` / `satisfy` / `minimize` / `maximize` returns a ref (`ProblemVariable` / `ProblemConstraint` / `ProblemObjective`); capturing it at write time enables targeted inspection.
+Debugging loop. Each `solve_for` / `satisfy` / `minimize` / `maximize` returns a ref (`ProblemVariable` / `ProblemConstraint` / `ProblemObjective`); capturing it at write time enables targeted inspection.
 
 **Solve and triage:**
 - `si = problem.solve_info(); si.display()` — always run first. Inspect `termination_status`, `objective_value`, `error`.
