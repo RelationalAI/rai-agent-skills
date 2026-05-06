@@ -11,10 +11,16 @@ reasoners:
 
 ### Engine sizes
 
-| Platform | Valid sizes |
-|---|---|
-| AWS | `HIGHMEM_X64_S`, `HIGHMEM_X64_M`, `HIGHMEM_X64_L` |
-| Azure | `HIGHMEM_X64_S`, `HIGHMEM_X64_M`, `HIGHMEM_X64_SL` |
+| Size | Logic | Prescriptive | AWS | Azure |
+|---|---|---|---|---|
+| `HIGHMEM_X64_S` | ✓ | ✓ | ✓ | ✓ |
+| `HIGHMEM_X64_M` | ✓ | ✓ | ✓ | ✓ |
+| `HIGHMEM_X64_L` | ✓ | – | ✓ | – |
+| `HIGHMEM_X64_SL` | ✓ | – | – | ✓ |
+
+`HIGHMEM_X64_S` is the default. `HIGHMEM_X64_L` (AWS) and `HIGHMEM_X64_SL` (Azure) are Logic-only — Prescriptive does not currently accept the largest tier on either cloud. See [Manage compute resources](https://docs.relational.ai/manage/compute-resources/) for current size compatibility.
+
+> **At runtime**, reasoners land on Snowflake compute pools named `RELATIONAL_AI_<INSTANCE_FAMILY>` (e.g. `RELATIONAL_AI_HIGHMEM_X64_S`) — visible in the `RUNTIME` field of `CALL RELATIONALAI.API.GET_REASONER(...)`. Useful when reading account-level compute-pool listings.
 
 ### Per-reasoner settings
 
