@@ -45,7 +45,7 @@ Prefer targeted display when the failure is localized — it cuts noise and make
 
 ### Sampling large constraints
 
-For very-large per-grouping constraints where the full rendered table is too long to read, use `problem.display(ref, limit=N)`, the whole-problem `display(limit=N)`, or the Fragment-filter form `display(model.select(ref).where(ref.name == "..."))`. The `name=["cap", Entity.id]` you passed at `satisfy()` time is what makes the filter strings predictable (joined with `_`, e.g. `name=["cap", Site.id]` → `"cap_42"` for the Site whose `id` is 42).
+For very-large per-grouping constraints where the full rendered table is too long to read, use `problem.display(ref, limit=N)`, the whole-problem `display(limit=N)`, or the `where=` filter form `display(ref, where=ref.name == "...")`. The `name=["cap", Entity.id]` you passed at `satisfy()` time is what makes the filter strings predictable (joined with `_`, e.g. `name=["cap", Site.id]` → `"cap_42"` for the Site whose `id` is 42).
 
 For the sampling API, stratification caveats, and when to drop into `model.select(ref.name)` instead, see [rai-prescriptive-solver-management/references/formulation-display.md](../../rai-prescriptive-solver-management/references/formulation-display.md) > Targeted Inspection.
 
@@ -152,7 +152,7 @@ See [fix-generation-guidelines.md](fix-generation-guidelines.md) > Trivial Solut
 | Whole-problem sample | `problem.display(limit=N)` | Large model — caps each table at top-N rows by name; counts in header stay true |
 | Component grounding | `problem.display(ref)` | Localized failure; verifying `.per()` scope; confirming bounds substitution |
 | Sampled component | `problem.display(ref, limit=N)` | Very-large per-grouping constraint where even one component is too long to read in full |
-| Filtered component | `problem.display(model.select(ref).where(<filter>))` | Pick a specific row by name (or any other property) when you know which one to look at |
+| Filtered component | `problem.display(ref, where=<predicate>)` | Pick a specific row by name (or any other property) when you know which one to look at — `where=` requires `part`. |
 | Cardinality assertion | `model.require(problem.num_constraints() == ...)` | Catch "constraint loop never ran" before solving |
 | Per-constraint cardinality | `len(model.select(constr_ref).to_df()) == len(model.select(Entity).to_df())` | Localize a per-entity constraint that didn't ground for missing-bound entities |
 | Post-solve summary | `problem.solve_info().display()` | Always — first thing after `solve()` returns |

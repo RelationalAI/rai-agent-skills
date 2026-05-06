@@ -112,7 +112,7 @@ for c in problem.constraints:
     problem.display(c)  # grounded sums and bounds — find the row that can't be satisfied
 ```
 
-For very-large per-grouping constraints, cap the rendered table with `problem.display(c, limit=10)` or pick a specific row with `problem.display(model.select(c).where(c.name == "..."))`. See [diagnostic-workflow.md](diagnostic-workflow.md) > INFEASIBLE for what to look for. Once you've identified the offender, **rebuild the Problem** omitting or replacing the offending `satisfy(...)` call (Problem accumulates `satisfy` calls — there is no in-place removal API):
+For very-large per-grouping constraints, cap the rendered table with `problem.display(c, limit=10)` or pick a specific row with `problem.display(c, where=c.name == "...")`. See [diagnostic-workflow.md](diagnostic-workflow.md) > INFEASIBLE for what to look for. Once you've identified the offender, **rebuild the Problem** omitting or replacing the offending `satisfy(...)` call (Problem accumulates `satisfy` calls — there is no in-place removal API):
 - Are existing constraints too tight (equality where inequality would suffice)?
 - Are there redundant constraints that conflict with each other?
 - Can a constraint be softened (e.g., `== demand` to `>= demand * 0.9`)?

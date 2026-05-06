@@ -174,7 +174,7 @@ print(model.select(x_vars.name, x_vars.lower, x_vars.upper).to_df())
 print(model.select(x_vars.name, x_vars.lower, x_vars.upper).where(x_vars.name == "flow_NYC_LAX").to_df())
 ```
 
-For very-large constraints, cap the rendered rows with the `limit` kwarg or filter directly via a Fragment:
+For very-large constraints, cap the rendered rows with the `limit` kwarg or filter directly with `where=`:
 
 ```python
 # Top 10 rows of one constraint, by .name ascending
@@ -183,11 +183,11 @@ problem.display(cap, limit=10)
 # Top 5 of every kind in the full summary; counts in the header stay accurate
 problem.display(limit=5)
 
-# Filter to a specific row by name (or any other property)
-problem.display(model.select(cap).where(cap.name == "cap_NYC_LAX"))
+# Filter to a specific row by name (or any other property) — where= requires part
+problem.display(cap, where=cap.name == "cap_NYC_LAX")
 ```
 
-`display(part, limit=N)` appends `(showing N of M)` when truncated. The whole-problem `display(limit=N)` omits that note because the summary header at the top already shows the true totals. A Fragment filter that matches zero rows renders empty; if you want to distinguish "filter matched nothing" from "component is empty", check `model.select(cap.name).where(cap).where(cap.name == "...").to_df()` shape against the unfiltered `model.select(cap.name).where(cap).to_df()`.
+`display(part, limit=N)` appends `(showing N of M)` when truncated. The whole-problem `display(limit=N)` omits that note because the summary header at the top already shows the true totals. A `where=` predicate that matches zero rows renders empty; if you want to distinguish "filter matched nothing" from "component is empty", check `model.select(cap.name).where(cap).where(cap.name == "...").to_df()` shape against the unfiltered `model.select(cap.name).where(cap).to_df()`.
 
 To list grounded groupings without rendering the formula text — useful for very-large constraints where even `limit` is more than you need:
 
