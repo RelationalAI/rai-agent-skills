@@ -39,7 +39,7 @@ Prefer targeted display when the failure is localized — it cuts noise and make
 |---|---|---|
 | `where=` excluded too much (or too little) | `model.select(var_ref.name, var_ref.lower, var_ref.upper).to_df()` | Per-instance bounds and entity tuples — does the variable exist for every entity it should? Variable rows are queried via the DSL; `display(part)` itself is for constraints and objectives. |
 | `.per()` mis-scoped (silent OPTIMAL trap) | `problem.display(constr_ref)` | Each generated row's sum should disaggregate by the intended group; `sum(all_AB) == 1` repeated per row signals wrong scope |
-| Per-entity bound silently dropped (Step 5 (d)) | `problem.display(constr_ref)` | The dropped grouping has no row; surviving rows show the expected name. Use `name=[Entity.id]` at `satisfy()` time so identifiers appear |
+| Per-entity bound missing for some entities (Step 5 (d)) | `problem.display(constr_ref)` | A grouping whose body has no tuples grounds no row; rows that did ground show the expected name. Use `name=[Entity.id]` at `satisfy()` time so identifiers appear |
 | Objective coefficient unbound (silent zero terms) | `problem.display(obj_ref)` | Expanded objective shows actual coefficient values per entity — zeros where data should populate indicate `model.define(...)` missing |
 | Constraint redundant or contradictory | `problem.display(c)` for each suspect `c` | Same constraint twice, or two constraints whose grounded forms are mutually unsatisfiable |
 
@@ -137,7 +137,7 @@ When status is OPTIMAL but values are all-zero or otherwise vacuous, the suspect
 
 1. `problem.display(obj_ref)` — confirm the objective expanded with non-zero coefficients on the variables you expect. All-zero coefficients = `model.define(...)` populating data is missing.
 2. For each forcing constraint (`>= demand`, `>= min_coverage`, etc.) call `problem.display(c)` — confirm the constraint generated rows. A `where=` predicate that matches no entities produces zero rows; the constraint exists in the formulation but is vacuous against the data.
-3. For per-entity constraints, check cardinality (`len(model.select(c).to_df()) == len(model.select(Entity).to_df())`) — a sparse bound property silently drops the per-grouping body for entities missing data (Step 5 (d)).
+3. For per-entity constraints, check cardinality (`len(model.select(c).to_df()) == len(model.select(Entity).to_df())`) — a sparse bound property leaves the per-grouping body empty for entities missing data, so under PyRel relational semantics no row grounds for them (Step 5 (d)).
 4. Cross-check with [examples/presolve_feasibility_gate.py](../examples/presolve_feasibility_gate.py) — the same aggregation-query checks that gate solve also localize which forcing requirement is empty.
 
 See [fix-generation-guidelines.md](fix-generation-guidelines.md) > Trivial Solution for fix priority.

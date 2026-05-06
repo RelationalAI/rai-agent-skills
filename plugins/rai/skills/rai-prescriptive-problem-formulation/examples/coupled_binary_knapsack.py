@@ -43,7 +43,8 @@ problem.solve_for(Investment.x_selected, type="bin", name=["inv", Investment.sit
 # Capture the constraint ref + name=[Site.id] so display rows are identifiable
 # and we can check per-site cardinality before solving — any RHS aggregate or
 # property that's empty for a site (Site.current_capacity unpopulated, or no
-# Investment rows at the site) would silently drop that site's constraint.
+# Investment rows at the site) leaves the body empty for that site, and under
+# PyRel relational semantics no constraint row grounds.
 project_demand = (
     sum(ProjectRef.x_approved * ProjectRef.capacity_needed).where(ProjectRef.site == Site).per(Site)
 )
