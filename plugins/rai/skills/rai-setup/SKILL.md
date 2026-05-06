@@ -60,7 +60,7 @@ connections:
     account: my_account
     warehouse: my_warehouse
     user: my_user
-    password: ${SNOWFLAKE_PASSWORD}
+    password: {{ env_var('SNOWFLAKE_PASSWORD') }}
 ```
 
 ```python
