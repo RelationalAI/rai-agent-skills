@@ -46,7 +46,7 @@ from relationalai.semantics.std import aggregates as aggs
 problem = Problem(model, Float)
 
 # Decision variable — prefer scoped form (where=[...]) over unscoped.
-# Capture the returned ref for targeted diagnostics later (problem.display(x_flow), etc).
+# Capture the returned ref for targeted diagnostics later (model.select(x_flow.name, x_flow.lower, x_flow.upper).to_df(), etc).
 x_flow = problem.solve_for(
     Lane.flow,
     where=[Lane.active],
@@ -69,14 +69,14 @@ cost = problem.minimize(aggs.sum(Lane.flow * Lane.unit_cost))
 
 | Method | Signature | Purpose |
 |--------|-----------|---------|
-| `solve_for` | `(expr, where=, populate=True, name=, type=, lower=, upper=, start=)` | Declare decision variable. Returns `ProblemVariable` (a Concept usable in `model.define()`, `model.select()`, `.ref()`, and as `display(part=)` argument). `type`: `"cont"`, `"int"`, `"bin"` |
+| `solve_for` | `(expr, where=, populate=True, name=, type=, lower=, upper=, start=)` | Declare decision variable. Returns `ProblemVariable` (a Concept usable in `model.define()`, `model.select()`, `.ref()`). For row inspection use the DSL: `model.select(var.name, var.lower, var.upper).to_df()`. `type`: `"cont"`, `"int"`, `"bin"` |
 | `satisfy` | `(expr, name=)` | Add constraint. Returns `ProblemConstraint` — capture this ref to inspect the constraint's grounded form via `problem.display(ref)`. |
 | `minimize` | `(expr, name=)` | Set minimization objective. Returns `ProblemObjective` — capture for targeted `display(ref)`. |
 | `maximize` | `(expr, name=)` | Set maximization objective. Returns `ProblemObjective` — capture for targeted `display(ref)`. |
 | `solve` | `(solver, time_limit_sec=, print_format=, ...)` | Execute solve. Solvers: `"highs"`, `"minizinc"`, `"ipopt"`, `"gurobi"`. `print_format` (`"moi"`, `"latex"`, `"mof"`, `"lp"`, `"mps"`, `"nl"`) populates `solve_info().printed_model` |
 | `solve_info` | `()` | Post-solve summary (`termination_status`, `objective_value`, `solve_time_sec`, `num_points`, `error`, `printed_model`). Has `.display()` method. |
 | `verify` | `(*fragments)` | Post-solve check that the returned solution satisfies the original `Fragment`s at IC strictness (tighter than solver tolerance). Pass the original `model.require(...)` values, not `ProblemConstraint` refs. |
-| `display` | `(part=None, *, limit=None, print_output=True)` | Print materialized formulation. `display()` shows everything. `display(ref)` (the ref returned by `solve_for`/`satisfy`/`minimize`/`maximize`) shows just that component. `display(model.select(ref).where(<filter>))` shows the filtered subset. `display(ref, limit=N)` or `display(limit=N)` caps each table at top-N rows by `.name` ascending — summary counts stay true. |
+| `display` | `(part=None, *, limit=None, print_output=True)` | Print materialized formulation. `display()` shows everything. `display(ref)` (the ref returned by `satisfy`/`minimize`/`maximize`) shows just that constraint or objective; variable subconcepts raise — query rows via `model.select(var.name, var.lower, var.upper).to_df()` instead. `display(model.select(ref).where(<filter>))` shows the filtered subset. `display(ref, limit=N)` or `display(limit=N)` caps each table at top-N rows by `.name` ascending — summary counts stay true. |
 | `num_variables` / `num_constraints` / `num_min_objectives` / `num_max_objectives` | `()` | Engine-queryable counts; usable inside `model.require(...)` to assert formulation cardinality before solve |
 | `Variable.values` | `(sol_index, value_ref)` | Property on `ProblemVariable`. Extracts solution values at `sol_index` (0-based), binding each value to `value_ref` (a `Float.ref()` or `Integer.ref()`). Use inside `model.select(...).where(var.values(sol_index, value_ref))`. Primary pattern for `populate=False` workflows. |
 | `problem.variables` / `problem.constraints` / `problem.objectives` | (attributes) | Lists of registered refs in declaration order — iterate to walk an unfamiliar Problem |
@@ -208,7 +208,7 @@ The agent's debugging loop. Each `solve_for` / `satisfy` / `minimize` / `maximiz
 - Branch by status: `INFEASIBLE` → walk constraints (below); `OPTIMAL` with suspicious values → check for unbound coefficients or vacuous forcing constraints; `OPTIMAL` with right shape → `problem.verify(*original_fragments)` if tolerance-sensitive.
 
 **Diagnose with targeted display:**
-- `problem.display(var_ref)` — bounds and entity tuples per instance; catches `where=` over- or under-scoping
+- `model.select(var_ref.name, var_ref.lower, var_ref.upper).to_df()` — bounds and entity tuples per instance; catches `where=` over- or under-scoping (variable inspection lives in the DSL, not `display(part)`)
 - `problem.display(constr_ref)` — grounded sums per row; catches `.per()` mis-scoping (the silent OPTIMAL trap), redundant or contradictory constraints, and per-grouping bodies dropped per the `satisfy()` docstring when a referenced bound was empty for some entities (Step 5 (d) catches this statically; targeted display localizes which rows survived)
 - `problem.display(obj_ref)` — expanded objective; catches unbound coefficients (silent zero terms)
 - `for c in problem.constraints: problem.display(c)` — when one of many constraints is the offender (typical for INFEASIBLE)

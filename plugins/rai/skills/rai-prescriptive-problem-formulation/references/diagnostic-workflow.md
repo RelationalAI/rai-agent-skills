@@ -31,13 +31,13 @@ The Python attributes `problem.variables`, `problem.constraints`, `problem.objec
 
 ## Targeted display
 
-`problem.display(part=ref)` prints just the named component's grounded form (variables expanded with bounds, constraints expanded with substituted sums, objective expanded with coefficients). `problem.display()` with no argument prints the whole formulation.
+`problem.display(ref)` prints just the named component's grounded form for a constraint (substituted sums) or objective (expanded coefficients). `problem.display()` with no argument prints the whole formulation, including the variable table. For per-variable inspection, query rows via the DSL — `model.select(var_ref.name, var_ref.lower, var_ref.upper).to_df()` — since `display(part)` is reserved for constraints and objectives.
 
 Prefer targeted display when the failure is localized — it cuts noise and makes the relevant grounding readable.
 
 | Suspicion | Targeted call | What to check in the output |
 |---|---|---|
-| `where=` excluded too much (or too little) | `problem.display(var_ref)` | Per-instance bounds and entity tuples — does the variable exist for every entity it should? |
+| `where=` excluded too much (or too little) | `model.select(var_ref.name, var_ref.lower, var_ref.upper).to_df()` | Per-instance bounds and entity tuples — does the variable exist for every entity it should? Variable rows are queried via the DSL; `display(part)` itself is for constraints and objectives. |
 | `.per()` mis-scoped (silent OPTIMAL trap) | `problem.display(constr_ref)` | Each generated row's sum should disaggregate by the intended group; `sum(all_AB) == 1` repeated per row signals wrong scope |
 | Per-entity bound silently dropped (Step 5 (d)) | `problem.display(constr_ref)` | The dropped grouping has no row; surviving rows show the expected name. Use `name=[Entity.id]` at `satisfy()` time so identifiers appear |
 | Objective coefficient unbound (silent zero terms) | `problem.display(obj_ref)` | Expanded objective shows actual coefficient values per entity — zeros where data should populate indicate `model.define(...)` missing |

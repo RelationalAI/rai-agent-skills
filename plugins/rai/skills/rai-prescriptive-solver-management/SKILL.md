@@ -229,7 +229,7 @@ For syntax, code examples, and a CP vs MIP decision guide, see [global-constrain
 
 ## Formulation Display
 
-Use `problem.display()` to inspect variables, objectives, and constraints before solving. Check `problem.num_variables()`, `problem.num_constraints()`, and `problem.num_min_objectives()` / `problem.num_max_objectives()` against expectations (these are Relationships — use in `model.require()` or `model.select()`). Use `problem.display(part)` for targeted inspection of a single variable group or constraint. Use `problem.printed_model()` (Relationship, with `print_format=` on `problem.solve()`) to get LP/MPS/LaTeX text representations. The same `Problem` can be re-solved multiple times — constraints accumulate across calls.
+Use `problem.display()` to inspect variables, objectives, and constraints before solving. Check `problem.num_variables()`, `problem.num_constraints()`, and `problem.num_min_objectives()` / `problem.num_max_objectives()` against expectations (these are Relationships — use in `model.require()` or `model.select()`). Use `problem.display(part)` for targeted inspection of a single constraint or objective; for variables, query rows via `model.select(var_ref.name, var_ref.lower, var_ref.upper).to_df()`. Use `problem.printed_model()` (Relationship, with `print_format=` on `problem.solve()`) to get LP/MPS/LaTeX text representations. The same `Problem` can be re-solved multiple times — constraints accumulate across calls.
 
 See [formulation-display.md](references/formulation-display.md) for display output structure, diagnostic tables, and targeted inspection patterns.
 

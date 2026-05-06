@@ -152,7 +152,7 @@ If a count is off, drill in with the targeted display patterns below.
 
 ## Targeted Inspection with `problem.display(part)`
 
-Pass the return value of `solve_for()`, `minimize()`, `maximize()`, or `satisfy()` to inspect just that part of the formulation:
+Pass the return value of `minimize()`, `maximize()`, or `satisfy()` to inspect just that part of the formulation:
 
 ```python
 x_vars = problem.solve_for(Route.x_flow, name=["flow", Route.origin, Route.dest], lower=0)
@@ -161,8 +161,17 @@ cap = problem.satisfy(
     name=["cap", Route.origin, Route.dest],
 )
 
-problem.display(x_vars)  # just the flow variables
-problem.display(cap)     # just the capacity constraints
+problem.display(cap)  # just the capacity constraints
+```
+
+`display(part)` is for objectives and constraints. For variables, query rows directly via the DSL:
+
+```python
+# All variables of one subconcept
+print(model.select(x_vars.name, x_vars.lower, x_vars.upper).to_df())
+
+# Or sample by name
+print(model.select(x_vars.name, x_vars.lower, x_vars.upper).where(x_vars.name == "flow_NYC_LAX").to_df())
 ```
 
 For very-large constraints, cap the rendered rows with the `limit` kwarg or filter directly via a Fragment:
@@ -178,7 +187,7 @@ problem.display(limit=5)
 problem.display(model.select(cap).where(cap.name == "cap_NYC_LAX"))
 ```
 
-When `limit` truncates a table the output appends `(showing N of M)` so you know there's more. When a Fragment filter matches zero rows, the output shows `(no rows matched the filter)` — distinguishes a typo'd filter string or absent data from a component that legitimately has zero rows. Each `display(part)` call adds anonymous reachability rules to the model and bumps the model version (cheap per call but avoid in tight loops). The `limit` kwarg is stratification-safe for both variable and constraint paths; direct `aggregates.limit` in a Fragment's `where` only works for variables (the constraint path uses recursive AST expansion — see `display()` docstring).
+`display(part, limit=N)` appends `(showing N of M)` when truncated. The whole-problem `display(limit=N)` omits that note because the summary header at the top already shows the true totals. A Fragment filter that matches zero rows renders empty; if you want to distinguish "filter matched nothing" from "component is empty", check `model.select(cap.name).where(cap).where(cap.name == "...").to_df()` shape against the unfiltered `model.select(cap.name).where(cap).to_df()`.
 
 To list grounded groupings without rendering the formula text — useful for very-large constraints where even `limit` is more than you need:
 

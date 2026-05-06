@@ -29,7 +29,7 @@ Standard Python lookup errors (`KeyError` from `model.concept_index["Foo"]`, `At
 
 ## Zero Entities — Detailed Diagnostics
 
-**Symptom:** `problem.display()` reports the problem as empty / shows zero registered variables; equivalently `problem.num_variables() == 0`. Use `problem.display(part)` to inspect a specific variable group.
+**Symptom:** `problem.display()` reports the problem as empty / shows zero registered variables; equivalently `problem.num_variables() == 0`. Inspect a specific variable subconcept with `model.select(var_ref.name, var_ref.lower, var_ref.upper).to_df()` (variable rows are queried via the DSL; `display(part)` itself is for constraints and objectives).
 
 The entity_creation expression produced no entities — likely a join mismatch. Fix: verify join conditions match actual data relationships.
 
