@@ -8,24 +8,7 @@ The Step 5 audit (`SKILL.md`) catches static issues before solve. This reference
 
 ## The capture-ref pattern
 
-`solve_for`, `satisfy`, `minimize`, `maximize` each return a Concept (`ProblemVariable`, `ProblemConstraint`, `ProblemObjective`). These returns are the diagnostic handles — assign them at write time so you can target them later.
-
-```python
-x_flow   = problem.solve_for(Lane.flow, where=[Lane.active], lower=0)
-cap      = problem.satisfy(
-    model.require(sum(Lane.flow).per(Source) <= Source.capacity),
-    name=["cap", Source.id],   # name=[Entity.id] makes display rows identifiable
-)
-demand   = problem.satisfy(
-    model.require(sum(Lane.flow).per(Sink) >= Sink.demand),
-    name=["demand", Sink.id],
-)
-cost_obj = problem.minimize(sum(Lane.flow * Lane.unit_cost))
-```
-
-Pass `name=[Entity.id]` (or any expression that yields a unique identifier per row) at `satisfy()` time so `display(ref)` rows carry meaningful labels — without it, rows are formula text only and you can't tell *which* entity didn't ground a row when fewer rows materialized than expected.
-
-The Python attributes `problem.variables`, `problem.constraints`, `problem.objectives` also hold these refs as lists in declaration order — useful when iterating over an unfamiliar Problem.
+`solve_for`, `satisfy`, `minimize`, `maximize` each return a Concept (`ProblemVariable`, `ProblemConstraint`, `ProblemObjective`) — the diagnostic handle. Pass `name=[Entity.id]` at `satisfy()` time so `display(ref)` rows carry identifiable labels; without it, rows are formula text only and you can't tell *which* entity didn't ground. The Python attributes `problem.variables`, `problem.constraints`, `problem.objectives` hold these refs as lists in declaration order — useful when iterating over an unfamiliar Problem. See [SKILL.md](../SKILL.md) for the full setup pattern.
 
 ---
 
@@ -64,6 +47,8 @@ Available counts: `num_variables()`, `num_constraints()`, `num_min_objectives()`
 
 `num_constraints()` is a global check; per-constraint cardinality (Step 5 (d) in `SKILL.md`) localizes *which* constraint is short.
 
+These ICs persist for the lifetime of the model — use them in single-shot validation, not in iterative solve loops where constraint counts change between solves. For iterative workflows, use `len(model.select(ref).to_df())` instead.
+
 ---
 
 ## Post-solve triage
@@ -86,7 +71,7 @@ Branch by status:
 | `OPTIMAL` / `LOCALLY_SOLVED` | Solver claims a solution | If values look right, run `verify`. If suspicious (all-zero, concentrated, dominated), suspect a missing forcing constraint, an unbound coefficient, or a per-entity constraint that grounded for fewer entities than expected — display each constraint and objective ref |
 | `INFEASIBLE` | No feasible point | Walk `problem.constraints` with targeted display; identify the binding conflict; rebuild Problem omitting or relaxing the offender (see [fix-generation-guidelines.md](fix-generation-guidelines.md) > Infeasible Solution) |
 | `TIME_LIMIT` / `ITERATION_LIMIT` | Solver gave up | Distinct from formulation bug — see `rai-prescriptive-solver-management` |
-| Status unset / `error` non-empty | Solver rejected the model | Read `si.error`; common causes are unsupported expression types, type mismatches, solver-specific syntax limits. If `si.error` is also empty, the model likely failed to compile before reaching the solver — re-run with the `model.require(...)` calls active and check stderr for `ModelWarning`. |
+| Status unset / `error` non-empty | Solver rejected the model | Read `si.error`; common causes are unsupported expression types, type mismatches, solver-specific syntax limits. If `si.error` is also empty, the formulation failed before the solver received it — check stderr for `ModelWarning` or `RAIException`. |
 
 ---
 
@@ -148,7 +133,7 @@ See [fix-generation-guidelines.md](fix-generation-guidelines.md) > Trivial Solut
 
 | Diagnostic | Call | Use when |
 |---|---|---|
-| Whole-problem snapshot | `problem.display()` | First glance at an unfamiliar Problem; sanity check after major rewrite |
+| Whole-problem snapshot | `problem.display()` | First glance at an unfamiliar Problem; verify formulation shape after major rewrite |
 | Whole-problem sample | `problem.display(limit=N)` | Large model — caps each table at top-N rows by name; counts in header stay true |
 | Component grounding | `problem.display(ref)` | Localized failure; verifying `.per()` scope; confirming bounds substitution |
 | Sampled component | `problem.display(ref, limit=N)` | Very-large per-grouping constraint where even one component is too long to read in full |
