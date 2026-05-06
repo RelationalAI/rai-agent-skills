@@ -23,7 +23,7 @@ demand   = problem.satisfy(
 cost_obj = problem.minimize(sum(Lane.flow * Lane.unit_cost))
 ```
 
-Pass `name=[Entity.id]` (or any expression that yields a unique identifier per row) at `satisfy()` time so `display(ref)` rows carry meaningful labels — without it, rows are formula text only and you can't tell *which* grouping vanished if PyRel dropped one.
+Pass `name=[Entity.id]` (or any expression that yields a unique identifier per row) at `satisfy()` time so `display(ref)` rows carry meaningful labels — without it, rows are formula text only and you can't tell *which* entity didn't ground a row when fewer rows materialized than expected.
 
 The Python attributes `problem.variables`, `problem.constraints`, `problem.objectives` also hold these refs as lists in declaration order — useful when iterating over an unfamiliar Problem.
 
@@ -83,7 +83,7 @@ Branch by status:
 
 | Status | What it means | Diagnostic move |
 |---|---|---|
-| `OPTIMAL` / `LOCALLY_SOLVED` | Solver claims a solution | If values look right, run `verify`. If suspicious (all-zero, concentrated, dominated), suspect a missing forcing constraint, an unbound coefficient, or a per-entity constraint that dropped silently — display each constraint and objective ref |
+| `OPTIMAL` / `LOCALLY_SOLVED` | Solver claims a solution | If values look right, run `verify`. If suspicious (all-zero, concentrated, dominated), suspect a missing forcing constraint, an unbound coefficient, or a per-entity constraint that grounded for fewer entities than expected — display each constraint and objective ref |
 | `INFEASIBLE` | No feasible point | Walk `problem.constraints` with targeted display; identify the binding conflict; rebuild Problem omitting or relaxing the offender (see [fix-generation-guidelines.md](fix-generation-guidelines.md) > Infeasible Solution) |
 | `TIME_LIMIT` / `ITERATION_LIMIT` | Solver gave up | Distinct from formulation bug — see `rai-prescriptive-solver-management` |
 | Status unset / `error` non-empty | Solver rejected the model | Read `si.error`; common causes are unsupported expression types, type mismatches, solver-specific syntax limits. If `si.error` is also empty, the model likely failed to compile before reaching the solver — re-run with the `model.require(...)` calls active and check stderr for `ModelWarning`. |
@@ -133,7 +133,7 @@ After identifying the offender, rebuild the `Problem` omitting or relaxing the c
 
 ## Trivial-OPTIMAL: localizing the missing forcing constraint
 
-When status is OPTIMAL but values are all-zero or otherwise vacuous, the suspect is a missing forcing constraint, an unbound coefficient, or a per-entity constraint that dropped silently for the entities that mattered.
+When status is OPTIMAL but values are all-zero or otherwise vacuous, the suspect is a missing forcing constraint, an unbound coefficient, or a per-entity constraint whose body didn't ground for the entities that mattered.
 
 1. `problem.display(obj_ref)` — confirm the objective expanded with non-zero coefficients on the variables you expect. All-zero coefficients = `model.define(...)` populating data is missing.
 2. For each forcing constraint (`>= demand`, `>= min_coverage`, etc.) call `problem.display(c)` — confirm the constraint generated rows. A `where=` predicate that matches no entities produces zero rows; the constraint exists in the formulation but is vacuous against the data.
@@ -154,7 +154,7 @@ See [fix-generation-guidelines.md](fix-generation-guidelines.md) > Trivial Solut
 | Sampled component | `problem.display(ref, limit=N)` | Very-large per-grouping constraint where even one component is too long to read in full |
 | Filtered component | `problem.display(model.select(ref).where(<filter>))` | Pick a specific row by name (or any other property) when you know which one to look at |
 | Cardinality assertion | `model.require(problem.num_constraints() == ...)` | Catch "constraint loop never ran" before solving |
-| Per-constraint cardinality | `len(model.select(constr_ref).to_df()) == len(model.select(Entity).to_df())` | Localize a per-entity constraint that dropped silently for missing-bound entities |
+| Per-constraint cardinality | `len(model.select(constr_ref).to_df()) == len(model.select(Entity).to_df())` | Localize a per-entity constraint that didn't ground for missing-bound entities |
 | Post-solve summary | `problem.solve_info().display()` | Always — first thing after `solve()` returns |
 | Solver error inspection | `si.error` | Status looks fine but result is wrong; status is unset |
 | Constraint re-evaluation | `problem.verify(*fragments)` | Tolerance-sensitive constraints; before committing solution downstream |

@@ -100,7 +100,7 @@ The display output is the primary diagnostic tool — it shows the **materialize
 Before solving, verify the formulation looks correct:
 
 1. **Variable count** -- does `problem.num_variables()` match expected? Missing variables often indicate `where=` conditions that filter too aggressively.
-2. **Constraint count** -- does `problem.num_constraints()` match expected? Fewer constraints may mean `model.require()` or `problem.satisfy()` calls are silently producing empty constraint sets.
+2. **Constraint count** -- does `problem.num_constraints()` match expected? Fewer constraints may mean `model.require()` or `problem.satisfy()` calls produced empty constraint sets — typically a `.where()` that matches nothing.
 3. **Objective count** -- exactly one `problem.minimize()` or `problem.maximize()` call per Problem.
 4. **Display inspection** -- `problem.display()` shows the mathematical formulation. Look for variables that appear disconnected from the objective.
 
@@ -129,7 +129,7 @@ assert n_v == len(model.select(Project).to_df()), "variable count off"
 assert n_min + n_max == 1, f"expected exactly one objective, got {n_min + n_max}"
 ```
 
-`num_constraints()` is the global count; it won't tell you *which* constraint vanished. To localize, capture each `satisfy()` return value and check **per-constraint cardinality**:
+`num_constraints()` is the global count; it won't tell you *which* constraint is short. To localize, capture each `satisfy()` return value and check **per-constraint cardinality**:
 
 ```python
 cap_constr = problem.satisfy(

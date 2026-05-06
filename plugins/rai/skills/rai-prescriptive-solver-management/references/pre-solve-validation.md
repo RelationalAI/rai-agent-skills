@@ -28,7 +28,7 @@ model.require(problem.num_variables() > 0)  # No variables created — check ent
 
 ### 2. Constraint population — are constraints active?
 
-Zero constraints is almost as bad as zero variables. `model.require()` produces empty constraint sets when `.where()` filters match nothing. A subtler mode: a per-entity constraint that should fire on every entity drops the bodies for entities whose bound property is empty (PyRel relational semantics) — `num_constraints()` is short of expected, but it doesn't tell you *which* one vanished.
+Zero constraints is almost as bad as zero variables. `model.require()` produces empty constraint sets when `.where()` filters match nothing. A subtler mode: a per-entity constraint that should apply to every entity grounds no row for entities whose bound property is empty (PyRel relational semantics: empty body produces no row) — `num_constraints()` is short of expected, but it doesn't tell you *which* entity didn't ground.
 
 **What to check:**
 - `problem.num_constraints() > 0`
@@ -66,7 +66,7 @@ Check domain-specific properties for validity before the solver trusts them as c
 | Check | What to query | Why it matters |
 |-------|--------------|----------------|
 | **Non-negativity** | Costs, capacities, demands >= 0 | Negative costs flip optimization direction; negative capacity is meaningless |
-| **Completeness** | No nulls in properties used as coefficients or bounds | Null coefficients silently drop terms from the formulation |
+| **Completeness** | No nulls in properties used as coefficients or bounds | Null coefficient rows produce no tuple in the join, so the term doesn't appear in the formulation (PyRel relational semantics) |
 | **Monotonicity** | PWL breakpoints non-decreasing; time period indices ordered | SOS2 and inventory balance constraints assume ordered sequences |
 | **Bound consistency** | Variable lower bound <= upper bound | Contradictory bounds guarantee infeasibility for that variable |
 | **Capacity vs demand** | `sum(demand)` vs `sum(capacity)` | If total demand > total capacity without slack variables, the problem is infeasible by construction |
@@ -106,8 +106,9 @@ model.require(problem.num_min_objectives() + problem.num_max_objectives() == 1)
 # model.require(problem.num_variables() == expected_var_count)
 # model.require(problem.num_constraints() >= expected_constraint_count)
 
-# Per-constraint cardinality (for per-entity constraints — catches PyRel
-# relational-semantics drops when a bound is empty for some entities):
+# Per-constraint cardinality (for per-entity constraints — catches the
+# case where a body grounds no row for entities whose bound is empty,
+# under PyRel relational semantics):
 # cap_constr = problem.satisfy(model.require(...), name=["cap", Entity.id])
 # n_g = len(model.select(cap_constr).to_df())
 # n_e = len(model.select(Entity).to_df())

@@ -22,7 +22,7 @@ When generating fixes for trivial or poor-quality solutions, follow these rules:
 
 **Fix priority rule:** Prefer constraint fixes (`add_constraint`, `modify_constraint`) over variable fixes (`add_variable`). Adding variables increases problem complexity; adding constraints focuses the existing formulation.
 
-**Grounding rules — all fixes must use actual model context** (ungrounded fixes produce compile errors or silently match zero entities):
+**Grounding rules — all fixes must use actual model context** (ungrounded fixes produce compile errors or match zero entities, which under PyRel relational semantics produces no rows in the result):
 - Use actual concept and property names from the model — invented names cause compile errors
 - Only reference relationships and properties that EXIST in the model
 - Check data samples to understand what values are actually available
