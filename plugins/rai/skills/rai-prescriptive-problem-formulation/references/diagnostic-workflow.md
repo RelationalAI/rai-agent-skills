@@ -40,7 +40,7 @@ Prefer targeted display when the failure is localized — it cuts noise and make
 | `where=` excluded too much (or too little) | `model.select(var_ref.name, var_ref.lower, var_ref.upper).to_df()` | Per-instance bounds and entity tuples — does the variable exist for every entity it should? Variable rows are queried via the DSL; `display(part)` itself is for constraints and objectives. |
 | `.per()` mis-scoped (silent OPTIMAL trap) | `problem.display(constr_ref)` | Each generated row's sum should disaggregate by the intended group; `sum(all_AB) == 1` repeated per row signals wrong scope |
 | Per-entity bound missing for some entities (Step 5 (d)) | `problem.display(constr_ref)` | A grouping whose body has no tuples grounds no row; rows that did ground show the expected name. Use `name=[Entity.id]` at `satisfy()` time so identifiers appear |
-| Objective coefficient unbound (silent zero terms) | `problem.display(obj_ref)` | Expanded objective shows actual coefficient values per entity — zeros where data should populate indicate `model.define(...)` missing |
+| Objective coefficient property has no tuples for some entities | `problem.display(obj_ref)` | Expanded objective shows the terms that ground; entities missing from the rendered sum have no tuple for the coefficient property (under PyRel relational semantics, no tuple = no row in the join) — typically `model.define(...)` missing |
 | Constraint redundant or contradictory | `problem.display(c)` for each suspect `c` | Same constraint twice, or two constraints whose grounded forms are mutually unsatisfiable |
 
 ### Sampling large constraints
