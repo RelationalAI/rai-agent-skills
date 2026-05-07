@@ -38,7 +38,7 @@ define(train_table_concept.new(Table("DB.SCHEMA.TRAIN_LINK").to_schema()))
 define(val_table_concept.new(Table("DB.SCHEMA.VAL_LINK").to_schema()))
 define(test_table_concept.new(Table("DB.SCHEMA.TEST_LINK").to_schema()))
 
-# -- Phase 4: Setup Task Relationships -- repeated_link_prediction (with time)
+# -- Phase 4: Setup Task Relationships -- repeated_link_prediction
 # Train/Val carry the Target concept in the "has" clause (no {Any:label}).
 # Test omits the target: the GNN predicts which Item each User links to.
 Train = Relationship(f"{User} at {Any:timestamp} has {Item}")

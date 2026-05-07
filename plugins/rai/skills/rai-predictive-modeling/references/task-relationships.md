@@ -2,19 +2,17 @@
 
 Relationships encode the task structure using a template string with three parts:
 - **Head** = source concept (the concept being predicted on)
-- **"at" clause** = optional timestamp field
+- **"at" clause** = timestamp field (required if the task table contains a time column, otherwise omit)
 - **"has" clause** = label (classification/regression) or target concept (link prediction)
 
 ## Relationship Arity Rules
 
 | Task Type | Train/Val template | Test template |
 |-----------|-------------------|---------------|
-| classification (no time) | `f"{Source} has {Any:label}"` | `f"{Source}"` |
-| classification (with time) | `f"{Source} at {Any:ts} has {Any:label}"` | `f"{Source} at {Any:ts}"` |
-| regression (no time) | `f"{Source} has {Any:value}"` | `f"{Source}"` |
-| regression (with time) | `f"{Source} at {Any:ts} has {Any:value}"` | `f"{Source} at {Any:ts}"` |
-| link_prediction | `f"{Source} has {Target}"` | `f"{Source}"` |
-| repeated_link_prediction | `f"{Source} at {Any:ts} has {Target}"` | `f"{Source} at {Any:ts}"` |
+| classification | `f"{Source} has {Any:label}"` (add `at {Any:ts}` if task table has time column) | `f"{Source}"` (add `at {Any:ts}` if task table has time column) |
+| regression | `f"{Source} has {Any:value}"` (add `at {Any:ts}` if task table has time column) | `f"{Source}"` (add `at {Any:ts}` if task table has time column) |
+| link_prediction | `f"{Source} has {Target}"` (add `at {Any:ts}` if task table has time column) | `f"{Source}"` (add `at {Any:ts}` if task table has time column) |
+| repeated_link_prediction | `f"{Source} has {Target}"` (add `at {Any:ts}` if task table has time column) | `f"{Source}"` (add `at {Any:ts}` if task table has time column) |
 
 ## Node Classification (with time)
 
@@ -96,7 +94,7 @@ The GNN framework requires link prediction task tables in **flat format**: one r
 >
 > **If the `VARIANT` column is not used in any relationship join** (e.g. an extra column in the test table), it produces a non-blocking warning — no action needed, keep the original table as-is.
 
-## Link Prediction (with time / repeated_link_prediction)
+## Link Prediction
 
 ```python
 Train = Relationship(f"{User} at {Any:timestamp} has {Item}")
@@ -117,7 +115,7 @@ define(Test(User, test_table_concept.timestamp)).where(
 )
 ```
 
-## Link Prediction (no time)
+If the task table has no time column, drop the `at` clause:
 
 ```python
 Train = Relationship(f"{User} has {Item}")

@@ -185,31 +185,23 @@ The GNN pipeline expects pre-existing train/val/test split tables in Snowflake. 
 
 `PropertyTransformer` and the task-table pattern also work with concepts populated from local data via `model.data(df)` -- not just `Table(...).to_schema()`. Useful when some concept data lives in local CSVs (e.g. optimizer parameters) while the graph comes from Snowflake.
 
-**Timestamp column types for the GNN datetime pipeline.** Columns intended for `time_col` / `datetime` features should match a format the trainer accepts; if you're not sure what's currently supported, ask the RelationalAI team.
-
-> **Do schema changes (any column type, not just timestamps) before the first `Model(...)` bind**, not after — `ALTER`-ing a column type on an already-bound table can leave a stale compiled-relation signature on the engine that survives stream delete + recreate. See `rai-predictive-training` § Known Limitations for the symptom, the diagnostic path, and the workaround.
-
-**Avoid `timestamp[ns]` parquet payloads when bulk-loading via `COPY INTO TIMESTAMP_NTZ`.** Snowflake interprets the integer payload as `timestamp[us]`, multiplying every value by 1000 — pandas' default `datetime64[ns]` -> parquet round-trip silently lands timestamps tens of millions of years in the future. Two safe options: write the timestamp column as ISO-8601 strings into parquet, or load the underlying integer time index (e.g. an hour offset) and rebuild server-side via `DATEADD(HOUR, <offset_col>, '<epoch>'::TIMESTAMP_NTZ)` after `COPY INTO`.
-
 ---
 
 ## Task Relationships
 
 Relationships encode the task structure using a template string with three parts:
 - **Head** = source concept (the concept being predicted on)
-- **"at" clause** = optional timestamp field
+- **"at" clause** = timestamp field (required if the task table contains a time column, otherwise omit)
 - **"has" clause** = label (classification/regression) or target concept (link prediction)
 
 ### Relationship Arity Rules
 
 | Task Type | Train/Val template | Test template |
 |-----------|-------------------|---------------|
-| classification (no time) | `f"{Source} has {Any:label}"` | `f"{Source}"` |
-| classification (with time) | `f"{Source} at {Any:ts} has {Any:label}"` | `f"{Source} at {Any:ts}"` |
-| regression (no time) | `f"{Source} has {Any:value}"` | `f"{Source}"` |
-| regression (with time) | `f"{Source} at {Any:ts} has {Any:value}"` | `f"{Source} at {Any:ts}"` |
-| link_prediction | `f"{Source} has {Target}"` | `f"{Source}"` |
-| repeated_link_prediction | `f"{Source} at {Any:ts} has {Target}"` | `f"{Source} at {Any:ts}"` |
+| classification | `f"{Source} has {Any:label}"` (add `at {Any:ts}` if task table has time column) | `f"{Source}"` (add `at {Any:ts}` if task table has time column) |
+| regression | `f"{Source} has {Any:value}"` (add `at {Any:ts}` if task table has time column) | `f"{Source}"` (add `at {Any:ts}` if task table has time column) |
+| link_prediction | `f"{Source} has {Target}"` (add `at {Any:ts}` if task table has time column) | `f"{Source}"` (add `at {Any:ts}` if task table has time column) |
+| repeated_link_prediction | `f"{Source} has {Target}"` (add `at {Any:ts}` if task table has time column) | `f"{Source}"` (add `at {Any:ts}` if task table has time column) |
 
 For full code examples of all task type patterns, see [references/task-relationships.md](references/task-relationships.md).
 

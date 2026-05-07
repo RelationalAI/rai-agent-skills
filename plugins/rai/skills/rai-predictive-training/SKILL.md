@@ -83,7 +83,7 @@ User.predictions = gnn.predictions(domain=Test)
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `property_transformer` | None | PropertyTransformer instance (omit for auto-inference) |
-| `has_time_column` | False | Set `True` when Relationships use the "at" keyword |
+| `has_time_column` | False | Set `True` if the task table contains a time column. **Three things must move together:** (1) `Train`/`Val`/`Test` `Relationship(...)` signatures use the `at {Type:<slot>}` clause, (2) `PropertyTransformer(...)` is constructed with `time_col=[<Concept>.<datetime_property>]` for at least one source concept (and the same property must also appear in `datetime=`), (3) `GNN(has_time_column=True, ...)`. Setting only `has_time_column=True` without (2) raises `ValueError: has_time_column=True is set but time_col is not defined in the PropertyTransformer` from `validate_time_col` (`relationalai.semantics.reasoners.predictive.preparation`). |
 | `dataset_alias` | None | Custom alias for the dataset |
 | `stream_logs` | True | Stream training logs to console. Set `False` if log streaming is slow or unreliable — training continues server-side regardless |
 | `parallel_reasoners_init` | True | Initialize reasoners in parallel at construction time |
@@ -207,8 +207,7 @@ GNN training has runtime gotchas that surface as opaque or no-error symptoms in 
 
 | Symptom | Recover via |
 |---|---|
-| `has_time_column=True` fails with `no time column defined in data tables` | `time_col` only propagates for node concepts — switch to non-temporal Relationships + `has_time_column=False` |
-| `has_time_column=True` fails with `ValidationError: Error processing datetime column` at scale (~27K rows is enough) | Same fallback; full code shape in `references/known-limitations.md` |
+| `has_time_column=True` fails with `no time column defined in data tables` | Temporal setup is incomplete. Verify (1) the relationship signature includes `at {Type:<slot>}`, (2) the time column is bound in `define(Train(Source, train.<time_col>, ...))`, (3) the column is a true `DATE`/`TIMESTAMP*` per `rai-predictive-modeling` § Auto-Discovery step 8. If all three are correct and the error persists, fall back to `has_time_column=False` + non-temporal Relationships. |
 | Train job stays `QUEUED` indefinitely while reasoner reports `READY` | `rai-health` § Predictive train jobs stuck QUEUED (`SUSPEND_REASONER` + `RESUME_REASONER_ASYNC`) |
 | `gnn.fit()` returns a `model_run_id` from an earlier job after a partial failure or notebook re-run | `gnn.fit()` is idempotent if `self.train_job` exists and isn't FAILED — re-instantiate `GNN(...)` on every retry, not bump `Model("...")` |
 | Client polls forever with no progress | `JobMonitor._wait_for_completion` has no timeout — kill the client manually + recover via the QUEUED runbook |
@@ -503,8 +502,7 @@ User.predictions = gnn.predictions(domain=Test)
 | Omitting `has_time_column` when loading a temporal model | Not persisted in the registry | Re-supply `has_time_column=True` at load time |
 | Calling `fit()` on a GNN instance created in load mode | Load-mode GNN instances do not support training | Create a separate fit-mode GNN instance (with `train=`, `validation=`) and call `fit()` on that |
 | Calling `load()` on a GNN instance created in fit mode (with `train=`, `validation=`) | Fit-mode GNN instances do not support `load()` | Create a separate load-mode GNN instance (with `source_concept=`, `model_name=`, `version_name=`) and call `load()` on that |
-| `has_time_column=True` fails with "no time column defined in data tables" | The concept carrying `time_col` is an edge, not a node — `time_col` only propagates for node concepts | Use `has_time_column=False` with non-temporal Relationships as workaround |
-| `has_time_column=True` fails with `ValidationError: Error processing datetime column '<name>'` at scale | Server-side datetime processing rejects the column despite clean data, node-level concept, and correct `datetime`/`time_col` config — second known limitation | Verify the timestamp column type matches the GNN datetime pipeline's expected format (see `rai-predictive-modeling`); fall back to non-temporal Relationships if it persists |
+| `has_time_column=True` fails with "no time column defined in data tables" | Temporal setup is incomplete. The relationship signature must use `at {Type:<slot>}`, the time column must be bound in the corresponding `define(Train(...))` call, and the column must be a true `DATE`/`TIMESTAMP*` type | Confirm all three conditions above. If correct and the error persists, fall back to `has_time_column=False` with non-temporal Relationships as a workaround |
 | `SnowflakeTableObjectsException: Failed to pull data into index: transaction was aborted (runtime error)` | Opaque client wrapper that hides the actual server-side error (commonly a stale compiled-relation signature after schema drift, but other causes possible) | Pull `problems.json` via `RELATIONALAI.API.GET_TRANSACTION_ARTIFACTS('<txn_id>')` (presigned URL) and read the `report` field for the real error. For the schema-drift case specifically, see § Known Limitations |
 | `gnn.fit()` raises `PermissionError` with *"Database does not exist or the GNN RelationalAI Native App lacks permissions"* (or *"Schema does not exist or ..."*) — from `relationalai_gnns.core.diagnostics.PermissionDiagnostic` | RAI app missing one or more of the four required grants on the experiment database/schema | Apply all four grants per `rai-predictive-modeling` § Prerequisites: `USAGE` on the database, `USAGE` on the schema, `CREATE EXPERIMENT` on the schema, `CREATE MODEL` on the schema |
 

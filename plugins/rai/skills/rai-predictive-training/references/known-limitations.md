@@ -8,8 +8,7 @@ Quick symptom→fix lookup. Load when SKILL.md § Known Limitations & Runtime Tr
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `no time column defined in data tables` | `time_col` propagates only for node concepts (with `identify_by`); your time-bearing concept is an edge intermediary | Below — full fallback |
-| `ValidationError: Error processing datetime column '<name>'` (often at scale, ~27K rows is enough) | Server-side datetime processor rejects the column despite clean data + correct `datetime`/`time_col` config | Below — full fallback |
+| `no time column defined in data tables` | Temporal setup is incomplete. Typical causes: missing `at {Type:<slot>}` in the `Train`/`Val`/`Test` relationship signature, time column not bound in `define(Train(Source, train.<time_col>, ...))`, or the column is not a true `DATE`/`TIMESTAMP*` type (`rai-predictive-modeling` § Auto-Discovery step 8 has the full type list and probes) | Below — full fallback |
 
 **Fallback (works for both):** drop `time_col=`, set `has_time_column=False`, drop `temporal_strategy=`, drop the date arg from `Train`/`Val`/`Test` Relationships. Keep the temporal split in pandas:
 
