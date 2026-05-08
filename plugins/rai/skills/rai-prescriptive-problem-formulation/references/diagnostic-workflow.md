@@ -121,7 +121,7 @@ After identifying the offender, rebuild the `Problem` omitting or relaxing the c
 When status is OPTIMAL but values are all-zero or otherwise vacuous, the suspect is a missing forcing constraint, an unbound coefficient, or a per-entity constraint whose body didn't ground for the entities that mattered.
 
 1. `problem.display(obj_ref)` — confirm the objective expanded with non-zero coefficients on the variables you expect. All-zero coefficients = `model.define(...)` populating data is missing.
-2. For each forcing constraint (`>= demand`, `>= min_coverage`, etc.) call `problem.display(c)` — confirm the constraint generated rows. A `where=` predicate that matches no entities produces zero rows; the constraint exists in the formulation but is vacuous against the data.
+2. For each forcing constraint (`>= demand`, `>= min_coverage`, etc.) call `problem.display(c)` — confirm the constraint generated rows. If the constraint body's own `.where(...)` filter matches no entities, the constraint grounds zero rows; it exists in the formulation but is vacuous against the data.
 3. For per-entity constraints, check cardinality (`len(model.select(c).to_df()) == len(model.select(Entity).to_df())`) — a sparse bound property leaves the per-grouping body empty for entities missing data, so under PyRel relational semantics no row grounds for them (Step 5 (d)).
 4. Cross-check with [examples/presolve_feasibility_gate.py](../examples/presolve_feasibility_gate.py) — the same aggregation-query checks that gate solve also localize which forcing requirement is empty.
 
