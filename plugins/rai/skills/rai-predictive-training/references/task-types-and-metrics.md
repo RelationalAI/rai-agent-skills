@@ -60,9 +60,9 @@ Valid `(task_type, eval_metric)` combinations for the GNN constructor.
 
 | Task Type | has_time_column | Train Relationship template | Test Relationship template |
 |-----------|-----------------|---------------------------|--------------------------|
-| binary_classification | True if task table has time column | `f"{Source} has {Any:label}"` (add `at {Any:ts}` if time column present) | `f"{Source}"` (add `at {Any:ts}` if time column present) |
-| multiclass_classification | True if task table has time column | `f"{Source} has {Any:label}"` (add `at {Any:ts}` if time column present) | `f"{Source}"` (add `at {Any:ts}` if time column present) |
-| multilabel_classification | True if task table has time column | `f"{Source} has {Any:label}"` (add `at {Any:ts}` if time column present) | `f"{Source}"` (add `at {Any:ts}` if time column present) |
-| regression | True if task table has time column | `f"{Source} has {Any:value}"` (add `at {Any:ts}` if time column present) | `f"{Source}"` (add `at {Any:ts}` if time column present) |
-| link_prediction | True if task table has time column | `f"{Source} has {Target}"` (add `at {Any:ts}` if time column present) | `f"{Source}"` (add `at {Any:ts}` if time column present) |
-| repeated_link_prediction | True if task table has time column | `f"{Source} has {Target}"` (add `at {Any:ts}` if time column present) | `f"{Source}"` (add `at {Any:ts}` if time column present) |
+| binary_classification | optional | `f"{Source} has {Any:label}"` (add `at {Any:ts}` if temporal) | `f"{Source}"` (add `at {Any:ts}` if temporal) |
+| multiclass_classification | optional | `f"{Source} has {Any:label}"` (add `at {Any:ts}` if temporal) | `f"{Source}"` (add `at {Any:ts}` if temporal) |
+| multilabel_classification | optional | `f"{Source} has {Any:label}"` (add `at {Any:ts}` if temporal) | `f"{Source}"` (add `at {Any:ts}` if temporal) |
+| regression | optional | `f"{Source} has {Any:value}"` (add `at {Any:ts}` if temporal) | `f"{Source}"` (add `at {Any:ts}` if temporal) |
+| link_prediction | False (non-temporal) | `f"{Source} has {Target}"` | `f"{Source}"` |
+| repeated_link_prediction | True (temporal — `at` required) | `f"{Source} at {Any:ts} has {Target}"` | `f"{Source} at {Any:ts}"` |

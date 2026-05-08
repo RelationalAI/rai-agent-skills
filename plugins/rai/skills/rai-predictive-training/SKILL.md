@@ -83,10 +83,20 @@ User.predictions = gnn.predictions(domain=Test)
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `property_transformer` | None | PropertyTransformer instance (omit for auto-inference) |
-| `has_time_column` | False | Set `True` if the task table contains a time column. **Three things must move together:** (1) `Train`/`Val`/`Test` `Relationship(...)` signatures use the `at {Type:<slot>}` clause, (2) `PropertyTransformer(...)` is constructed with `time_col=[<Concept>.<datetime_property>]` for at least one source concept (and the same property must also appear in `datetime=`), (3) `GNN(has_time_column=True, ...)`. Setting only `has_time_column=True` without (2) raises `ValueError: has_time_column=True is set but time_col is not defined in the PropertyTransformer` from `validate_time_col` (`relationalai.semantics.reasoners.predictive.preparation`). |
+| `has_time_column` | False | Set `True` if the task table contains a time column. See § Triple-coupling rule below. |
 | `dataset_alias` | None | Custom alias for the dataset |
 | `stream_logs` | True | Stream training logs to console. Set `False` if log streaming is slow or unreliable — training continues server-side regardless |
 | `parallel_reasoners_init` | True | Initialize reasoners in parallel at construction time |
+
+### Triple-coupling rule for `has_time_column`
+
+When `has_time_column=True`, three things must move together:
+
+1. `Train`/`Val`/`Test` `Relationship(...)` signatures use the `at {Type:<slot>}` clause.
+2. `PropertyTransformer(...)` is constructed with `time_col=[<Concept>.<datetime_property>]` for at least one source concept — the same property must also appear in `datetime=`.
+3. `GNN(has_time_column=True, ...)`.
+
+Setting only `has_time_column=True` without (2) raises `ValueError: has_time_column=True is set but time_col is not defined in the PropertyTransformer` from `validate_time_col` (`relationalai.semantics.reasoners.predictive.preparation`).
 
 ### Node Classification Example
 

@@ -27,6 +27,14 @@ model.define(Train(Sale, TrainTable.unit_sales)).where(...)
 
 ---
 
+## Parquet `timestamp[ns]` interpreted as `timestamp[us]` on `COPY INTO TIMESTAMP_NTZ`
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Timestamps land tens of millions of years in the future after bulk-loading via `COPY INTO TIMESTAMP_NTZ` | Snowflake interprets the integer payload as `timestamp[us]`, multiplying every value by 1000. Pandas' default `datetime64[ns]` -> parquet round-trip silently produces `timestamp[ns]`, which trips this | Either write the timestamp column as ISO-8601 strings into parquet, or load the underlying integer time index (e.g. an hour offset) and rebuild server-side via `DATEADD(HOUR, <offset_col>, '<epoch>'::TIMESTAMP_NTZ)` after `COPY INTO`. Also: do schema/type changes **before** the first `Model(...)` bind — `ALTER`-ing a column type after binding can leave a stale compiled-relation signature on the engine that survives stream delete + recreate (see § "transaction was aborted" below for the surface symptom) |
+
+---
+
 ## `transaction was aborted (runtime error)` (opaque wrapper)
 
 | Symptom | Cause | Fix |

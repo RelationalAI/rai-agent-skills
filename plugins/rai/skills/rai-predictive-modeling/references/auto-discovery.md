@@ -107,7 +107,7 @@ The user-input boundary is the 3 prompts above (source FQNs, task FQNs, experime
    Decision rules (combine with the column's `DATA_TYPE` from `get_table_schema`):
    - `distinct_count == 2` (any type, e.g. `{0,1}`, `{TRUE,FALSE}`, `{"yes","no"}`) -> `binary_classification`
    - `distinct_count` more than 2 on a non-float type (`NUMBER` with scale 0, `VARCHAR`, `BOOLEAN`) -> `multiclass_classification`
-   - Float type (`FLOAT`, `DOUBLE`, `NUMBER` with scale > 0) **and** `distinct_count` is high relative to `n_rows` -> `regression`
+   - Float type (`FLOAT`, `DOUBLE`, `NUMBER` with scale > 0) **and** `distinct_count / n_rows > ~0.1` -> `regression` (use judgment — a regression target with many ties may sit lower)
    - Label column matches another concept's PK -> `link_prediction` (ask user to confirm)
 
    **Step 7b — multilabel probe.** Multilabel shows up in three shapes. Check them in this order -- cheapest schema-only signal first, then the schema-shape signal, then the data-pattern signal that the first two cannot see:
@@ -182,7 +182,18 @@ The user-input boundary is the 3 prompts above (source FQNs, task FQNs, experime
    - Otherwise the long-form duplication is benign (same row repeated, or temporal entries with one label each), and step 7a's result stands.
 
    If the result is ambiguous (e.g., integer column with ~10 distinct values could be either multiclass or a discretized regression target, or a small number of multilabeled entities that could be data-quality issues rather than true multilabel), surface the counts in the summary table and let the user confirm.
-   
+
+   **Step 7c — link prediction confirmation.** If the candidate task type is `link_prediction` (label column matches another concept's PK), confirm new-vs-repeated with the user before settling on `link_prediction` vs `repeated_link_prediction`. Use this prompt verbatim after the discovery summary:
+
+   ```
+   I detected a **link prediction** task. One more question:
+
+   Are you predicting **new** links (connections that don't exist yet) or **repeated** interactions (e.g., a customer re-purchasing an item they've bought before)?
+
+   - **New links** -> `link_prediction`
+   - **Repeated interactions** -> `repeated_link_prediction`
+   ```
+
 8. **Has time column** -- detect a time column on the task table. Set `has_time_column=True` when one is found; otherwise `False`. This is **independent of task type** -- any task type can be temporal. When `True`, task relationships must include the `at {Any:ts}` clause (see `task-relationships.md`) and `GNN(...)` must be constructed with `has_time_column=True`.
 
    Detect in this order:
@@ -232,19 +243,6 @@ The user-input boundary is the 3 prompts above (source FQNs, task FQNs, experime
    **d. Disambiguating multiple time columns.** If the task table has more than one time-typed column (e.g., a row `created_at` plus an `event_time`), pick the one that represents the **as-of** time for the prediction (the `WHERE` clause in `WHERE event_time <= ...`), not row-creation metadata. When unclear, surface both in the summary table and let the user confirm.
 
    If no column matches **a**, **b**, or **c**, set `has_time_column=False` and **omit** the `at {Type:<slot>}` clause from the task relationships.
-
-**Note: Link Prediction Detection**
-
-If link prediction is detected, after presenting the discovery summary, ask the user:
-
-```
-I detected a **link prediction** task. One more question:
-
-Are you predicting **new** links (connections that don't exist yet) or **repeated** interactions (e.g., a customer re-purchasing an item they've bought before)?
-
-- **New links** -> `link_prediction`
-- **Repeated interactions** -> `repeated_link_prediction`
-```
 
 ### Required execution pattern (Snowpark first, then helper)
 
