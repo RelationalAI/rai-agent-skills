@@ -21,7 +21,7 @@ connections:
     account: my_account
     warehouse: my_warehouse
     user: my_user
-    password: ${SNOWFLAKE_PASSWORD}    # env var substitution
+    password: {{ env_var('SNOWFLAKE_PASSWORD') }}    # env var substitution
     role: my_role                      # optional
     database: my_database              # optional
     schema: my_schema                  # optional
