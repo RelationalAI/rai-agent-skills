@@ -58,20 +58,6 @@ The user-input boundary is the 3 prompts above (source FQNs, task FQNs, experime
    SHOW PRIMARY KEYS IN TABLE <db>.<schema>.<table>
    ```
 
-   Or via `INFORMATION_SCHEMA`:
-
-   ```sql
-   SELECT kcu.COLUMN_NAME, kcu.ORDINAL_POSITION
-   FROM <db>.INFORMATION_SCHEMA.TABLE_CONSTRAINTS tc
-   JOIN <db>.INFORMATION_SCHEMA.KEY_COLUMN_USAGE kcu
-     ON  tc.CONSTRAINT_NAME   = kcu.CONSTRAINT_NAME
-     AND tc.CONSTRAINT_SCHEMA = kcu.CONSTRAINT_SCHEMA
-   WHERE tc.CONSTRAINT_TYPE = 'PRIMARY KEY'
-     AND tc.TABLE_SCHEMA    = '<schema>'
-     AND tc.TABLE_NAME      = '<table>'
-   ORDER BY kcu.ORDINAL_POSITION
-   ```
-
    If a result is returned, use those columns as the PK (composite PKs return multiple rows -- preserve `ORDINAL_POSITION` order).
 
    **b. Uniqueness probe (fallback when no declared PK).** Many Snowflake tables omit `PRIMARY KEY` declarations. For each candidate column, probe:
