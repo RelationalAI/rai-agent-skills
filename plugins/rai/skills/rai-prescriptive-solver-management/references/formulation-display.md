@@ -191,7 +191,7 @@ problem.display(limit=5)
 problem.display(cap, where=cap.name == "cap_NYC_LAX")
 ```
 
-`display(part, limit=N)` appends `(showing N of M)` when truncated. The whole-problem `display(limit=N)` omits that note because the summary header at the top already shows the true totals. A `where=` predicate that matches zero rows renders empty; if you want to distinguish "filter matched nothing" from "component is empty", check `model.select(cap.name).where(cap).where(cap.name == "...").to_df()` shape against the unfiltered `model.select(cap.name).where(cap).to_df()`.
+`display(part, limit=N)` appends `(showing N of M)` when truncated. The whole-problem `display(limit=N)` omits that note because the summary header at the top already shows the true totals. A `where=` predicate that matches zero rows renders empty and emits a `UserWarning` (`display(part, where=...) matched no rows`), so the empty render is never silent.
 
 To list grounded groupings without rendering the formula text — useful for very-large constraints where even `limit` is more than you need:
 

@@ -75,6 +75,8 @@ problem.maximize(sum(Project.x_approved * (Project.revenue - Project.connection_
 # RHS aggregate or property was empty for that site (Site.current_capacity
 # unpopulated, or no Investment rows at the site so investment_cap is empty)
 # and PyRel relational semantics dropped the constraint body for that site.
+# This file declares the schema only; the gate fires once Site/Project/Investment
+# data is loaded — with the data-less ontology above, n_grounded == n_sites == 0.
 n_grounded = len(model.select(cap_constr).to_df())
 n_sites = len(model.select(Site).to_df())
 if n_grounded != n_sites:
