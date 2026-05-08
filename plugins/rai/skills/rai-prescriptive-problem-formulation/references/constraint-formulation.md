@@ -397,9 +397,9 @@ x_weight <= fast_cap * y_bin_fast      # x_weight <= 999999 * y_bin_fast
 A declared `model.Relationship()` without a corresponding `model.define()` rule has NO DATA at solve time. The relationship exists in the schema but has zero bindings.
 
 **Symptoms:**
-- The constraint is silently dropped — joins on the unwired relationship match zero entities, so no constraint rows are generated.
+- No constraint rows are generated — joins on the unwired relationship match zero entities, and under PyRel relational semantics a body with no tuples produces no row.
 - `.per(Concept)` aggregations return nothing.
-- The solver returns OPTIMAL with a vacuous objective (typically zero on minimize), masking the missing constraint.
+- The solver returns OPTIMAL with a vacuous objective (typically zero on minimize), masking the absent constraint.
 
 **Check:** For every relationship in a constraint `.where()` clause, verify a `model.define()` rule populates it. If no define rule exists, the relationship is unwired — do not use it in constraints.
 
@@ -585,6 +585,8 @@ model.require(sum(AB.x_active).per(AB.a) == 1)
 ```
 
 The failure is silent — solver returns OPTIMAL with the wrong feasibility region. Verify with `problem.display()` that per-group constraints have the expected disaggregated sums.
+
+Per-group constraints also produce no row for entities whose bound property is unpopulated (a related but distinct mode — the `.per()` scope is correct, the *data* is sparse, so under PyRel relational semantics the body grounds only where the bound has tuples). Capture the constraint ref and check `len(model.select(constr_ref).to_df()) == len(model.select(Entity).to_df())` before solving; pass `name=["cap", Entity.id]` at `satisfy()` time so `problem.display(constr_ref)` rows are identifiable. For very-large constraints, sample with `problem.display(constr_ref, limit=10)` or filter directly: `problem.display(constr_ref, where=constr_ref.name == "cap_42")`. See `rai-prescriptive-solver-management/references/formulation-display.md` § Counts before display.
 
 **Rule 7: Access data properties on extended concepts via relationship traversal**
 Extended/cross-product concepts only have their own declared properties (relationships + decision variables). To access data properties from the base concept they reference, traverse the relationship.

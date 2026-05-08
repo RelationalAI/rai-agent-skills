@@ -22,7 +22,7 @@ When generating fixes for trivial or poor-quality solutions, follow these rules:
 
 **Fix priority rule:** Prefer constraint fixes (`add_constraint`, `modify_constraint`) over variable fixes (`add_variable`). Adding variables increases problem complexity; adding constraints focuses the existing formulation.
 
-**Grounding rules — all fixes must use actual model context** (ungrounded fixes produce compile errors or silently match zero entities):
+**Grounding rules — all fixes must use actual model context** (ungrounded fixes produce compile errors or match zero entities, which under PyRel relational semantics produces no rows in the result):
 - Use actual concept and property names from the model — invented names cause compile errors
 - Only reference relationships and properties that EXIST in the model
 - Check data samples to understand what values are actually available
@@ -104,7 +104,15 @@ The root cause is **over-constraining** — conflicting or too-tight constraints
 
 **RELAXATION-FIRST APPROACH:**
 This formulation was built with comprehensive constraint selection but the solver found NO feasible solution.
-The constraints are mutually contradictory or over-restrictive. Before adding anything, identify which constraint to relax or drop, then **rebuild the Problem** omitting or replacing the offending `satisfy(...)` call (Problem accumulates `satisfy` calls — there is no in-place removal API):
+The constraints are mutually contradictory or over-restrictive. Before adding anything, identify which constraint to relax or drop by walking each constraint's grounded form:
+
+```python
+for c in problem.constraints:
+    print(c)
+    problem.display(c)  # grounded sums and bounds — find the row that can't be satisfied
+```
+
+For very-large per-grouping constraints, cap the rendered table with `problem.display(c, limit=10)` or pick a specific row with `problem.display(c, where=c.name == "...")`. See [diagnostic-workflow.md](diagnostic-workflow.md) > INFEASIBLE for what to look for. Once you've identified the offender, **rebuild the Problem** omitting or replacing the offending `satisfy(...)` call (Problem accumulates `satisfy` calls — there is no in-place removal API):
 - Are existing constraints too tight (equality where inequality would suffice)?
 - Are there redundant constraints that conflict with each other?
 - Can a constraint be softened (e.g., `== demand` to `>= demand * 0.9`)?

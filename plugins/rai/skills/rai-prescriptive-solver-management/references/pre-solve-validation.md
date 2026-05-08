@@ -28,12 +28,29 @@ model.require(problem.num_variables() > 0)  # No variables created — check ent
 
 ### 2. Constraint population — are constraints active?
 
-Zero constraints is almost as bad as zero variables. `model.require()` produces empty constraint sets when `.where()` filters match nothing.
+Zero constraints is almost as bad as zero variables. `model.require()` produces empty constraint sets when `.where()` filters match nothing. A subtler mode: a per-entity constraint that should apply to every entity grounds no row for entities whose bound property is empty (PyRel relational semantics: empty body produces no row) — `num_constraints()` is short of expected, but it doesn't tell you *which* entity didn't ground.
 
 **What to check:**
 - `problem.num_constraints() > 0`
 - Constraint count is proportional to the entities they constrain — e.g., one capacity constraint per facility
 - At least one forcing constraint exists for minimize objectives (a constraint that requires positive variable values, e.g., `sum(x) >= demand`)
+- **Per-constraint cardinality** for any per-entity constraint: capture the `satisfy()` return value and assert it grounded on the expected number of entities. `num_constraints()` is a global check; per-constraint cardinality + `display(constr_ref)` localize *which* one is short.
+
+```python
+# Capture at satisfy time; pass name=[Entity.id] so display rows are identifiable.
+cap_constr = problem.satisfy(
+    model.require(usage <= Entity.cap),
+    name=["cap", Entity.id],
+)
+n_grounded = len(model.select(cap_constr).to_df())
+n_entities = len(model.select(Entity).to_df())
+if n_grounded != n_entities:
+    # Drill in. limit caps very-large constraints; summary header shows true totals.
+    problem.display(cap_constr, limit=10)
+    raise AssertionError(
+        f"cap_constr fired {n_grounded}/{n_entities}: bound data missing for some entities"
+    )
+```
 
 ### 3. Objective population — is the objective meaningful?
 
@@ -49,7 +66,7 @@ Check domain-specific properties for validity before the solver trusts them as c
 | Check | What to query | Why it matters |
 |-------|--------------|----------------|
 | **Non-negativity** | Costs, capacities, demands >= 0 | Negative costs flip optimization direction; negative capacity is meaningless |
-| **Completeness** | No nulls in properties used as coefficients or bounds | Null coefficients silently drop terms from the formulation |
+| **Completeness** | No nulls in properties used as coefficients or bounds | Null coefficient rows produce no tuple in the join, so the term doesn't appear in the formulation (PyRel relational semantics) |
 | **Monotonicity** | PWL breakpoints non-decreasing; time period indices ordered | SOS2 and inventory balance constraints assume ordered sequences |
 | **Bound consistency** | Variable lower bound <= upper bound | Contradictory bounds guarantee infeasibility for that variable |
 | **Capacity vs demand** | `sum(demand)` vs `sum(capacity)` | If total demand > total capacity without slack variables, the problem is infeasible by construction |
@@ -88,6 +105,16 @@ model.require(problem.num_min_objectives() + problem.num_max_objectives() == 1)
 # Problem-specific: adjust counts to match your formulation
 # model.require(problem.num_variables() == expected_var_count)
 # model.require(problem.num_constraints() >= expected_constraint_count)
+
+# Per-constraint cardinality (for per-entity constraints — catches the
+# case where a body grounds no row for entities whose bound is empty,
+# under PyRel relational semantics):
+# cap_constr = problem.satisfy(model.require(...), name=["cap", Entity.id])
+# n_g = len(model.select(cap_constr).to_df())
+# n_e = len(model.select(Entity).to_df())
+# if n_g != n_e:
+#     problem.display(cap_constr, limit=10)  # survivors, before raising
+#     raise AssertionError(f"cap_constr fired {n_g}/{n_e}")
 ```
 
 ### 6. Multi-arg Properties (Scenario Concept pattern)

@@ -5,6 +5,10 @@
 - [Diagnostics](#diagnostics)
   - [Formulation Verification Checklist](#formulation-verification-checklist)
 - [Problem-Type Verification](#problem-type-verification)
+- [Counts before display, especially for large problems](#counts-before-display-especially-for-large-problems)
+- [Targeted Inspection with `problem.display(part)`](#targeted-inspection-with-problemdisplaypart)
+- [`problem.printed_model()` — Solver Model Text Representation](#problemprinted_model--solver-model-text-representation)
+- [Re-solving the Same Problem](#re-solving-the-same-problem)
 <!-- /TOC -->
 
 ## Formulation Display
@@ -100,7 +104,7 @@ The display output is the primary diagnostic tool — it shows the **materialize
 Before solving, verify the formulation looks correct:
 
 1. **Variable count** -- does `problem.num_variables()` match expected? Missing variables often indicate `where=` conditions that filter too aggressively.
-2. **Constraint count** -- does `problem.num_constraints()` match expected? Fewer constraints may mean `model.require()` or `problem.satisfy()` calls are silently producing empty constraint sets.
+2. **Constraint count** -- does `problem.num_constraints()` match expected? Fewer constraints may mean `model.require()` or `problem.satisfy()` calls produced empty constraint sets — typically a `.where()` that matches nothing.
 3. **Objective count** -- exactly one `problem.minimize()` or `problem.maximize()` call per Problem.
 4. **Display inspection** -- `problem.display()` shows the mathematical formulation. Look for variables that appear disconnected from the objective.
 
@@ -115,19 +119,89 @@ After inspecting `problem.display()`, compare the formulation against expected s
 
 ---
 
+## Counts before display, especially for large problems
+
+For large problems, full `problem.display()` may print thousands of lines and obscure the issue. Engine-side counts are cheap scalar reads against the populated formulation Concepts and prove (or disprove) that the formulation grounded the expected number of variables and constraints. Display only what's worth reading.
+
+```python
+# Cheap pre-solve gate (Relationships — read as scalars or use in model.require)
+n_v   = model.select(problem.num_variables()).to_df().iloc[0, 0]
+n_c   = model.select(problem.num_constraints()).to_df().iloc[0, 0]
+n_min = model.select(problem.num_min_objectives()).to_df().iloc[0, 0]
+n_max = model.select(problem.num_max_objectives()).to_df().iloc[0, 0]
+assert n_v == len(model.select(Project).to_df()), "variable count off"
+assert n_min + n_max == 1, f"expected exactly one objective, got {n_min + n_max}"
+```
+
+`num_constraints()` is the global count; it won't tell you *which* constraint is short. To localize, capture each `satisfy()` return value and check **per-constraint cardinality**:
+
+```python
+cap_constr = problem.satisfy(
+    model.require(usage <= Entity.cap),
+    name=["cap", Entity.id],   # name=[Entity.id] makes display rows identifiable
+)
+n_grounded = len(model.select(cap_constr).to_df())
+n_expected = len(model.select(Entity).to_df())
+if n_grounded != n_expected:
+    # Drill in: human-readable view of the survivors before raising.
+    problem.display(cap_constr, limit=10)
+    raise AssertionError(
+        f"cap_constr fired {n_grounded}/{n_expected}: bound data missing for some entities"
+    )
+```
+
+If a count is off, drill in with the targeted display patterns below.
+
+---
+
 ## Targeted Inspection with `problem.display(part)`
 
-Pass the return value of `solve_for()`, `minimize()`, `maximize()`, or `satisfy()` to inspect just that part of the formulation:
+Pass the return value of `minimize()`, `maximize()`, or `satisfy()` to inspect just that part of the formulation:
 
 ```python
 x_vars = problem.solve_for(Route.x_flow, name=["flow", Route.origin, Route.dest], lower=0)
-cap = problem.satisfy(model.require(Route.x_flow <= Route.capacity), name="cap")
+cap = problem.satisfy(
+    model.require(Route.x_flow <= Route.capacity),
+    name=["cap", Route.origin, Route.dest],
+)
 
-problem.display(x_vars)  # just the flow variables
-problem.display(cap)     # just the capacity constraints
+problem.display(cap)  # just the capacity constraints
 ```
 
-Useful for debugging specific parts of a large formulation without printing everything.
+`display(part)` is for objectives and constraints. For variables, query rows directly via the DSL:
+
+```python
+# All variables of one subconcept
+print(model.select(x_vars.name, x_vars.lower, x_vars.upper).to_df())
+
+# Or sample by name
+print(model.select(x_vars.name, x_vars.lower, x_vars.upper).where(x_vars.name == "flow_NYC_LAX").to_df())
+```
+
+For very-large constraints, cap the rendered rows with the `limit` kwarg or filter directly with `where=`:
+
+```python
+# Top 10 rows of one constraint, by .name ascending
+problem.display(cap, limit=10)
+
+# Top 5 of every kind in the full summary; counts in the header stay accurate
+problem.display(limit=5)
+
+# Filter to a specific row by name (or any other property) — where= requires part
+problem.display(cap, where=cap.name == "cap_NYC_LAX")
+```
+
+`display(part, limit=N)` appends `(showing N of M)` when truncated. The whole-problem `display(limit=N)` omits that note because the summary header at the top already shows the true totals. A `where=` predicate that matches zero rows renders empty and emits a `UserWarning` (`display(part, where=...) matched no rows`), so the empty render is never silent.
+
+To list grounded groupings without rendering the formula text — useful for very-large constraints where even `limit` is more than you need:
+
+```python
+# All grounded names (DataFrame)
+grounded = model.select(cap.name).where(cap).to_df()
+
+# Sample (filter by name)
+sample = model.select(cap.name).where(cap).where(cap.name == "cap_NYC_LAX").to_df()
+```
 
 ---
 

@@ -32,7 +32,7 @@ description: Formulates optimization problems from ontology models covering deci
 3. Define constraints (forcing, capacity, balance, linking; validate interactions)
 4. Define objective (direction, coefficients, multi-component handling)
 5. Validate the complete formulation (structure, completeness, feasibility, data) — includes pre-solver audit that decision variables / constraints / objectives registered correctly
-6. Simplify (static parameters, goals vs constraints, grouped constraints)
+6. Solve and refine — diagnose surprising results via targeted `display(ref)` / `verify` / `solve_info`, simplify once correct, re-solve
 7. Post-solve refinement — present results, surface user reactions, iterate on the formulation (see Workflow Step 7)
 
 ---
@@ -45,8 +45,9 @@ from relationalai.semantics.std import aggregates as aggs
 
 problem = Problem(model, Float)
 
-# Decision variable — prefer scoped form (where=[...]) over unscoped
-problem.solve_for(
+# Decision variable — prefer scoped form (where=[...]) over unscoped.
+# Capture the returned ref for targeted diagnostics later (model.select(x_flow.name, x_flow.lower, x_flow.upper).to_df(), etc).
+x_flow = problem.solve_for(
     Lane.flow,
     where=[Lane.active],
     name=["item_id", "src_id"],
@@ -54,27 +55,31 @@ problem.solve_for(
     type="cont",
 )
 
-# Constraint
-problem.satisfy(
+# Constraint — capture the ref to inspect just this constraint's grounded form
+cap = problem.satisfy(
     model.require(
         aggs.sum(Lane.flow).per(Source).where(Lane.from_source(Source)) <= Source.capacity
-    )
+    ),
+    name=["cap", Source.id],   # name=[Entity.id] makes display rows identifiable
 )
 
 # Objective
-problem.minimize(aggs.sum(Lane.flow * Lane.unit_cost))
+cost = problem.minimize(aggs.sum(Lane.flow * Lane.unit_cost))
 ```
 
 | Method | Signature | Purpose |
 |--------|-----------|---------|
-| `solve_for` | `(expr, where=, populate=True, name=, type=, lower=, upper=, start=)` | Declare decision variable. Returns `ProblemVariable` (a Concept usable in `model.define()`, `model.select()`, `.ref()`). `type`: `"cont"`, `"int"`, `"bin"` |
-| `satisfy` | `(expr, name=)` | Add constraint. Returns `ProblemConstraint` (a Concept). |
-| `minimize` | `(expr, name=)` | Set minimization objective. Returns `ProblemObjective` (a Concept). |
-| `maximize` | `(expr, name=)` | Set maximization objective. Returns `ProblemObjective` (a Concept). |
-| `solve` | `(solver, time_limit_sec=, ...)` | Execute solve. Solvers: `"highs"`, `"minizinc"`, `"ipopt"`, `"gurobi"` |
-| `verify` | `(*fragments)` | Post-solve constraint verification |
+| `solve_for` | `(expr, where=, populate=True, name=, type=, lower=, upper=, start=)` | Declare decision variable. Returns `ProblemVariable` (a Concept usable in `model.define()`, `model.select()`, `.ref()`). For row inspection use the DSL: `model.select(var.name, var.lower, var.upper).to_df()`. `type`: `"cont"`, `"int"`, `"bin"` |
+| `satisfy` | `(expr, name=)` | Add constraint. Returns `ProblemConstraint` — capture this ref to inspect the constraint's grounded form via `problem.display(ref)`. |
+| `minimize` | `(expr, name=)` | Set minimization objective. Returns `ProblemObjective` — capture for targeted `display(ref)`. |
+| `maximize` | `(expr, name=)` | Set maximization objective. Returns `ProblemObjective` — capture for targeted `display(ref)`. |
+| `solve` | `(solver, time_limit_sec=, print_format=, ...)` | Execute solve. Solvers: `"highs"`, `"minizinc"`, `"ipopt"`, `"gurobi"`. `print_format` (`"moi"`, `"latex"`, `"mof"`, `"lp"`, `"mps"`, `"nl"`) populates `solve_info().printed_model` |
+| `solve_info` | `()` | Post-solve summary (`termination_status`, `objective_value`, `solve_time_sec`, `num_points`, `solver_version`, `error`, `printed_model`). Has `.display()` method. |
+| `verify` | `(*fragments)` | Post-solve check that the returned solution satisfies the original `Fragment`s at IC strictness (tighter than solver tolerance). Pass the original `model.require(...)` values, not `ProblemConstraint` refs. |
+| `display` | `(part=None, *, where=None, limit=None, print_output=True)` | Print materialized formulation. `display()` for everything; `display(ref)` for one constraint or objective; `display(ref, where=<predicate>)` scopes to filter-matching rows (`where=` requires `part`); `display(..., limit=N)` caps each table at top-N rows by `.name`. Variable subconcepts raise — query rows via `model.select(var.name, var.lower, var.upper).to_df()`. |
+| `num_variables` / `num_constraints` / `num_min_objectives` / `num_max_objectives` | `()` | Engine-queryable counts; usable inside `model.require(...)` to assert formulation cardinality before solve |
 | `Variable.values` | `(sol_index, value_ref)` | Property on `ProblemVariable`. Extracts solution values at `sol_index` (0-based), binding each value to `value_ref` (a `Float.ref()` or `Integer.ref()`). Use inside `model.select(...).where(var.values(sol_index, value_ref))`. Primary pattern for `populate=False` workflows. |
-| `display` | `(part=)` | Print formulation summary |
+| `problem.variables` / `problem.constraints` / `problem.objectives` | (attributes) | Lists of registered refs in declaration order — iterate to walk an unfamiliar Problem |
 
 ---
 
@@ -144,7 +149,7 @@ Is the formulation complete and correct?
 - **Trivial-solution gate (run before presenting or solving):** substitute every decision variable with its objective-preferred bound (typically zero for minimize) and evaluate against the actual input data, not abstractly. If every constraint still holds and the objective is at its preferred end, the solver will return that trivial point as optimal — the formulation is wrong, not merely under-specified. The non-obvious failure is a forcing constraint that exists in the formulation but is vacuous against the current data (its `where=` predicate matches no rows); see the *Missing forcing requirement* and *Wrong aggregation scope* rows in Common Pitfalls for related modes. Do not present a formulation that fails this gate — a non-OR user will accept it, run it, and conclude optimization "doesn't work." If the gate's outcome depends on the input data, state that dependence with row-count evidence.
 - **Data-driven feasibility precheck:** when constraint bounds derive from input data, verify the constraint system admits at least one feasible point given that data. Aggregate at the **constraint's natural disaggregation level** — per-entity for per-entity constraints, per-group for grouped ones; a single global total can mask per-slice infeasibility (`Σ supply ≥ Σ demand` may hold while every per-entity slice fails). Run the check as PyRel aggregation queries (see `rai-querying`) so it pushes down to the warehouse (e.g., Snowflake) without pulling rows. If lower-bound exceeds upper-bound at any slice, the formulation is infeasible by construction; surface to the user before solve. See [examples/presolve_feasibility_gate.py](examples/presolve_feasibility_gate.py).
 
-**Pre-solver audit:** before calling `problem.solve(...)`, run a three-part check (a–c below).
+**Pre-solver audit:** before calling `problem.solve(...)`, run a four-part check (a–d below).
 
 **(a) Registration.** `solve_for` / `satisfy` / `minimize` / `maximize` register concepts named `Variable`, `Constraint`, `Objective` (plus a per-solve `Variable_<id>` subconcept for each decision variable). They appear in `inspect.schema(model).concepts`:
 
@@ -172,24 +177,52 @@ for var_concept in variables:
         raise ValueError(f"{var_concept.name} has 0 bindings")
 ```
 
-**(c) Coefficient presence.** Properties referenced as objective or constraint coefficients must be populated by `model.define(...)` — declared-but-unbound coefficient Properties yield silent zero-coefficient terms; the solver returns OPTIMAL with a vacuous objective. Distinct from (b): (b) catches empty *decision-variable scope*, (c) catches unbound *coefficient data*. Both surface as OPTIMAL with `obj=0`.
+**(c) Coefficient presence.** Properties referenced as objective or constraint coefficients must be populated by `model.define(...)` — an unbound coefficient Property has no tuples, so the join produces no row and the term doesn't appear in the formulation (PyRel relational semantics). The solver returns OPTIMAL with a vacuous objective. Distinct from (b): (b) catches empty *decision-variable scope*, (c) catches unbound *coefficient data*. Both surface as OPTIMAL with `obj=0`.
 
 ```python
 for coef_prop in objective_coefficient_properties:
     n = len(model.select(coef_prop).to_df())
     if n == 0:
-        raise ValueError(f"Coefficient {coef_prop} is unbound — objective term silently zero")
+        raise ValueError(f"Coefficient {coef_prop} has no tuples — objective term won't ground")
 ```
 
-Together, (a), (b), and (c) are the downstream complement to Step 1's base-ontology grounding: Step 1 verifies the *inputs* to formulation exist; Step 5 verifies the *outputs* registered correctly, bound to data, and weighted by populated coefficients.
+**(d) Constraint binding cardinality.** Capture each `satisfy()` return value at declaration time, then verify the constraint grounded on the expected number of groupings before solving. Distinct from (b)/(c): (b) catches empty variable scope from a `where=` predicate, (c) catches unbound coefficients, (d) catches per-grouping bodies that didn't ground because a referenced bound was empty for some entities — under PyRel relational semantics an empty body produces no row, so the constraint applies to fewer entities than the `.per(Entity)` syntax suggests, and `OPTIMAL` returns with the entities that got no row effectively unconstrained.
+
+```python
+cap_constr = problem.satisfy(model.require(usage <= Entity.cap), name=["cap", Entity.id])
+if len(model.select(cap_constr).to_df()) != len(model.select(Entity).to_df()):
+    raise AssertionError("cap_constr short — Entity.cap unpopulated for some entities")
+```
+
+For the full pattern (drill-in with `display(cap_constr, limit=10)` before raising, multi-Concept counts, and the per-failure-mode lookup) see [diagnostic-workflow.md](references/diagnostic-workflow.md) and [rai-prescriptive-solver-management/references/pre-solve-validation.md](../rai-prescriptive-solver-management/references/pre-solve-validation.md).
+
+Together, (a)–(d) are the downstream complement to Step 1's base-ontology grounding: Step 1 verifies the *inputs* to formulation exist; Step 5 verifies the *outputs* registered correctly, bound to data, weighted by populated coefficients, and grounded on the right number of groupings.
+
+For runtime grounding inspection (does each constraint disaggregate as intended? does the objective expand with non-zero coefficients?) use targeted `problem.display(ref)` — see Step 6.
 
 When the formulation fails to generate or compile (before a solve is even attempted), look up the root cause in the unified failure taxonomy at `rai-prescriptive-results-interpretation/references/failure-taxonomy.md` (`generates` and `compiles` levels).
 
-### Step 6: Simplify (iterate)
-Can we reduce complexity without losing correctness?
+### Step 6: Solve and refine (iterate)
+
+Debugging loop. Each `solve_for` / `satisfy` / `minimize` / `maximize` returns a ref (`ProblemVariable` / `ProblemConstraint` / `ProblemObjective`); capturing it at write time enables targeted inspection.
+
+**Solve and triage:**
+- `si = problem.solve_info(); si.display()` — always run first. Inspect `termination_status`, `objective_value`, `error`.
+- Branch by status: `INFEASIBLE` → walk constraints (below); `OPTIMAL` with suspicious values → check for unbound coefficients or vacuous forcing constraints; `OPTIMAL` with right shape → `problem.verify(*original_fragments)` if tolerance-sensitive.
+
+**Diagnose with targeted display:**
+- `model.select(var_ref.name, var_ref.lower, var_ref.upper).to_df()` — bounds and entity tuples per instance; catches `where=` over- or under-scoping (variable inspection lives in the DSL, not `display(part)`)
+- `problem.display(constr_ref)` — grounded sums per row; catches `.per()` mis-scoping (the silent OPTIMAL trap), redundant or contradictory constraints, and per-grouping bodies that didn't ground when a referenced bound was empty for some entities (Step 5 (d) catches this statically; targeted display localizes which rows did ground)
+- `problem.display(obj_ref)` — expanded objective; catches unbound coefficients (terms that don't ground because the coefficient has no tuples)
+- `for c in problem.constraints: problem.display(c)` — when one of many constraints is the offender (typical for INFEASIBLE)
+- For sampling very-large constraints (`display(ref, limit=N)`, `display(limit=N)`, `where=` filter form), see [rai-prescriptive-solver-management/references/formulation-display.md](../rai-prescriptive-solver-management/references/formulation-display.md) > Targeted Inspection.
+
+**Simplify once correct:**
 - Static parameters over dynamic calculations
 - Objective terms for goals; constraints for hard requirements
 - Group-level constraints over pairwise/granular combinations
+
+Loop until the result is correct, fast enough, and defensible enough to take to Step 7. See [diagnostic-workflow.md](references/diagnostic-workflow.md) for failure-mode-by-failure-mode guidance and [formulation-simplification.md](references/formulation-simplification.md) for the simplification patterns in depth.
 
 ### Step 7: Present, React, Refine
 Is the formulation complete — including constraints the user couldn't articulate upfront?
@@ -374,7 +407,8 @@ For detailed heuristics, examples, and the over-specification recognition table,
 | Wrong aggregation scope | `.per(Y)` but Y not joined to the summed concept | Add explicit relationship join in `.where()` |
 | Big-M too loose -> slow solve | Using arbitrary `999999` instead of data-driven bound | Use `M = capacity` or `M = max_demand` from entity properties |
 | Missing forcing requirement | MINIMIZE objective with no forcing constraint yields zero | Always identify what real-world requirement forces positive activity |
-| Constraint references unwired relationship | Relationship declared but no `define()` data binding | Verify all relationships in `.where()` joins have `define()` rules. Unwired relationships silently match zero entities — the constraint is dropped and the solver returns OPTIMAL with a vacuous objective. |
+| Constraint references unwired relationship | Relationship declared but no `define()` data binding | Verify all relationships in `.where()` joins have `define()` rules. Unwired relationships join to zero rows — under PyRel relational semantics the constraint produces no rows, and the solver returns OPTIMAL with a vacuous objective. |
+| Per-entity constraint applies to fewer entities than the `.per(Entity)` syntax suggests | `.per(Entity)` body references a property that's empty for some entities — under PyRel relational semantics, the constraint produces a row only where the body grounds, so a sparse bound (`Entity.bound` undefined for some entities) yields no row for those entities. Solver returns OPTIMAL with the entities-without-a-row effectively unconstrained. | Capture the constraint ref: `cap_constr = problem.satisfy(model.require(...), name=["cap", Entity.id])`. After `solve_for`/`satisfy` (before solving), check cardinality: `len(model.select(cap_constr).to_df()) == len(model.select(Entity).to_df())`. If short, populate the missing values, coalesce to a default (`Entity.bound \| 0.0`), or join via a fully-populated relationship. Use `problem.display(cap_constr)` (or `problem.display(cap_constr, limit=10)` for large constraints) to see which rows grounded. |
 | `problem.satisfy()` / `model.define()` in a Python loop, or hardcoded per-period / per-scenario constraints | Iterating over a modeled dimension (entity, period, scenario) in Python, OR writing N nearly-identical `satisfy()` calls by hand for `t=1, t=2, …`. Both bypass the engine's declarative quantification — agents that read "no loops" as entity-only sometimes dodge into hardcoding, which is also wrong. | Model the dimension, then write a single constraint that quantifies over it: a Concept (`Week`, `Period`, `Scenario`) with `Concept.ref()` adjacency joins (`w_prev.num == w.num - 1`), or `Integer` ref via `where=[t == std.common.range(start, stop)]`, or `.per(Entity)` grouping. See [examples/multi_period_flow_conservation.py](examples/multi_period_flow_conservation.py), [examples/one_hot_temporal_recurrence.py](examples/one_hot_temporal_recurrence.py), [scenario-analysis.md](references/scenario-analysis.md), and `rai-pyrel-coding` Common Pitfalls for before/after examples. |
 | `Duplicate relationship` / `FDError` on re-solve | Solving multiple scenarios with `populate=True` (default) writes conflicting results to the graph | Use `populate=False` + `Variable.values()` to extract results. Create a fresh `Problem` per loop iteration. See [known-limitations.md](references/known-limitations.md) > Re-Solve Behavior. |
 | Forcing constraint added when objective already penalizes inaction | Adding `>= 1` forcing alongside a cost-penalty objective over-constrains the problem — turns an OPTIMAL-with-cost-tradeoff into INFEASIBLE. Distinct from rows above where forcing IS needed (no penalty mechanism) | Check: does the objective already penalize zero activity? If yes, forcing is redundant. Only add forcing constraints explicitly required by the problem statement |
@@ -456,6 +490,7 @@ For constraint naming with lists, re-solve behavior (multi-scenario patterns), `
 | Scenario analysis | Scenario Concept vs Loop + where= patterns, decision matrix, code examples | [scenario-analysis.md](references/scenario-analysis.md) |
 | Formulation simplification | Static vs dynamic parameters, goals vs constraints, grouped constraints, over-specification | [formulation-simplification.md](references/formulation-simplification.md) |
 | Multi-objective formulation | Approach selection, epsilon constraint method, tension heuristics, pitfalls | [multi-objective-formulation.md](references/multi-objective-formulation.md) |
+| Diagnostic workflow | Capture-ref pattern, targeted `display(ref)`, sampling large constraints (`limit=N` / `where=` filter), `solve_info` triage, `verify`, INFEASIBLE walk, trivial-OPTIMAL localization | [diagnostic-workflow.md](references/diagnostic-workflow.md) |
 | Fix generation guidelines | Root cause taxonomy, grounding rules, join path fixes, trivial/infeasible fix strategies | [fix-generation-guidelines.md](references/fix-generation-guidelines.md) |
 | Examples index | All example problems with patterns demonstrated | [examples-index.md](references/examples-index.md) |
 | Formulation analysis context | Naming conventions, alias handling, expression parsing, aggregation patterns for review | [formulation-analysis-context.md](references/formulation-analysis-context.md) |

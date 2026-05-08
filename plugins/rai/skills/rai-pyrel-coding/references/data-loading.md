@@ -332,10 +332,10 @@ for nu in nutrient_csv.name:
 
 These produce **silent failures** — no error is raised, but data is missing or queries return empty.
 
-**Extra CSV columns with NaN silently drop entities.** Any NaN in a column passed to `.new()` prevents that row's entity from being created. Pass only the columns you need:
+**Extra CSV columns with NaN prevent entity creation.** Any NaN in a column passed to `.new()` means that row has an undefined value for that property — under PyRel relational semantics, no entity is created for the row. Pass only the columns you need:
 
 ```python
-# BROKEN — VALUE_TIER and CONTACT_EMAIL columns have NaN, silently break loading
+# BROKEN — VALUE_TIER and CONTACT_EMAIL columns have NaN, no entities created
 d = model.data(read_csv("business.csv"))
 
 # CORRECT
