@@ -8,8 +8,7 @@ Quick symptom→fix lookup. Load when SKILL.md § Known Limitations & Runtime Tr
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `no time column defined in data tables` | `time_col` propagates only for node concepts (with `identify_by`); your time-bearing concept is an edge intermediary | Below — full fallback |
-| `ValidationError: Error processing datetime column '<name>'` (often at scale, ~27K rows is enough) | Server-side datetime processor rejects the column despite clean data + correct `datetime`/`time_col` config | Below — full fallback |
+| `no time column defined in data tables` | Temporal setup is incomplete. Typical causes: missing `at {Type:<slot>}` in the `Train`/`Val`/`Test` relationship signature, time column not bound in `define(Train(Source, train.<time_col>, ...))`, or the column is not a true `DATE`/`TIMESTAMP*` type (`rai-predictive-modeling` § Auto-Discovery step 8 has the full type list and probes) | Below — full fallback |
 
 **Fallback (works for both):** drop `time_col=`, set `has_time_column=False`, drop `temporal_strategy=`, drop the date arg from `Train`/`Val`/`Test` Relationships. Keep the temporal split in pandas:
 
@@ -25,6 +24,14 @@ gnn = GNN(has_time_column=False, ...)
 Train = Relationship(f"{Sale} has {Any:value}")
 model.define(Train(Sale, TrainTable.unit_sales)).where(...)
 ```
+
+---
+
+## Parquet `timestamp[ns]` interpreted as `timestamp[us]` on `COPY INTO TIMESTAMP_NTZ`
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Timestamps land tens of millions of years in the future after bulk-loading via `COPY INTO TIMESTAMP_NTZ` | Snowflake interprets the integer payload as `timestamp[us]`, multiplying every value by 1000. Pandas' default `datetime64[ns]` -> parquet round-trip silently produces `timestamp[ns]`, which trips this | Either write the timestamp column as ISO-8601 strings into parquet, or load the underlying integer time index (e.g. an hour offset) and rebuild server-side via `DATEADD(HOUR, <offset_col>, '<epoch>'::TIMESTAMP_NTZ)` after `COPY INTO`. Also: do schema/type changes **before** the first `Model(...)` bind — `ALTER`-ing a column type after binding can leave a stale compiled-relation signature on the engine that survives stream delete + recreate (see § "transaction was aborted" below for the surface symptom) |
 
 ---
 

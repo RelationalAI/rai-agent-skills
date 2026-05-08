@@ -60,9 +60,9 @@ Valid `(task_type, eval_metric)` combinations for the GNN constructor.
 
 | Task Type | has_time_column | Train Relationship template | Test Relationship template |
 |-----------|-----------------|---------------------------|--------------------------|
-| binary_classification | optional | `f"{Source} has {Any:label}"` | `f"{Source}"` |
-| multiclass_classification | optional | `f"{Source} has {Any:label}"` | `f"{Source}"` |
-| multilabel_classification | optional | `f"{Source} has {Any:label}"` | `f"{Source}"` |
-| regression | optional | `f"{Source} has {Any:value}"` | `f"{Source}"` |
-| link_prediction | False | `f"{Source} has {Target}"` | `f"{Source}"` |
-| repeated_link_prediction | True | `f"{Source} at {Any:ts} has {Target}"` | `f"{Source} at {Any:ts}"` |
+| binary_classification | optional | `f"{Source} has {Any:label}"` (add `at {Any:ts}` if temporal) | `f"{Source}"` (add `at {Any:ts}` if temporal) |
+| multiclass_classification | optional | `f"{Source} has {Any:label}"` (add `at {Any:ts}` if temporal) | `f"{Source}"` (add `at {Any:ts}` if temporal) |
+| multilabel_classification | optional | `f"{Source} has {Any:label}"` (add `at {Any:ts}` if temporal) | `f"{Source}"` (add `at {Any:ts}` if temporal) |
+| regression | optional | `f"{Source} has {Any:value}"` (add `at {Any:ts}` if temporal) | `f"{Source}"` (add `at {Any:ts}` if temporal) |
+| link_prediction | False (non-temporal) | `f"{Source} has {Target}"` | `f"{Source}"` |
+| repeated_link_prediction | True (temporal — `at` required) | `f"{Source} at {Any:ts} has {Target}"` | `f"{Source} at {Any:ts}"` |
