@@ -107,7 +107,7 @@ The user-input boundary is the 3 prompts above (source FQNs, task FQNs, experime
    Decision rules (combine with the column's `DATA_TYPE` from `get_table_schema`):
    - `distinct_count == 2` (any type, e.g. `{0,1}`, `{TRUE,FALSE}`, `{"yes","no"}`) -> `binary_classification`
    - `distinct_count` more than 2 on a non-float type (`NUMBER` with scale 0, `VARCHAR`, `BOOLEAN`) -> `multiclass_classification`
-   - Float type (`FLOAT`, `DOUBLE`, `NUMBER` with scale > 0) **and** `distinct_count / n_rows > ~0.1` -> `regression` (use judgment — a regression target with many ties may sit lower)
+   - Float type (`FLOAT`, `DOUBLE`, `NUMBER` with scale > 0) **and** `distinct_count` is high relative to `n_rows` -> `regression`
    - Label column matches another concept's PK -> `link_prediction` (ask user to confirm)
 
    **Step 7b — multilabel probe.** Multilabel shows up in three shapes. Check them in this order -- cheapest schema-only signal first, then the schema-shape signal, then the data-pattern signal that the first two cannot see:
