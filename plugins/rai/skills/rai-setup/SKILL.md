@@ -31,7 +31,7 @@ Covers the [relationalai Python package](https://pypi.org/project/relationalai) 
 
 ## Prerequisites
 
-Requires Python 3.10+ and `relationalai>=1.0.14`.
+Requires Python 3.10+ and `relationalai>=1.2.0`.
 
 The RelationalAI Native App for Snowflake must be installed in your account by an administrator — request access [here](https://app.snowflake.com/marketplace/listing/GZTYZOOIX8H/relationalai-relationalai); see the [Native App docs](https://docs.relational.ai/manage/install).
 
@@ -96,9 +96,9 @@ Users are expected to be Snowflake users with existing credentials. Walk the use
 
 ### Step 1. Install the package
 ```bash
-pip install relationalai>=1.0.14
+pip install relationalai>=1.2.0
 # or
-uv add relationalai>=1.0.14
+uv add relationalai>=1.2.0
 ```
 
 ### Step 2. Establish the connection
