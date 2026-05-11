@@ -22,6 +22,8 @@ The RAI predictive reasoner supports three task families. Anything outside these
 | **Node Regression** | "How much / what value will X be?" / "Forecast X's value next period" (per-node regression, with or without time) | Numeric target on a graph node concept + numeric/categorical features, historical actuals. Temporal flavor adds a time column on the node. |
 | **Link Prediction / Recommendation** | "Will X be linked to Y?" / "Which Ys should we recommend for each X?" / "Which pairs will interact next period?" | Two node concepts joined by an interaction/edge concept; historical pair data; optionally a timestamp on the edge |
 
+**What makes a strong GNN use case?** Feature richness and relational context drawn from the ontology. The more heterogeneous features (categorical, continuous, datetime, text) the GNN can pull from the predicted-on entity *and from its neighbors across different concept types*, the larger its lift over a flat model. This is why **node classification and link prediction on heterogeneous graphs outperform continuous time-series forecasts** — in a time-series problem the only signal the GNN can pass is the entity's own prior values, which lag features in a tabular model already capture. When ranking candidate predictive questions, prefer the ones where the predicted-on entity sits in a rich neighborhood of other concept types you can feed in as features.
+
 **Disambiguation rules:**
 - "What will happen?" with historical labeled data → predictive
 - "What should we do about it?" → predictive → prescriptive chain
@@ -30,6 +32,7 @@ The RAI predictive reasoner supports three task families. Anything outside these
 - "Will edges form / which pairs are likely to interact / recommend Y for X" → predictive (link prediction), not graph; graph reasons over the **current** topology, link prediction predicts **future or missing** edges
 - Per-period numeric prediction ("forecast next month's demand for each unit") → node regression with a time column (`has_time_column=True` on the GNN), not a separate forecasting task type
 - Node classification or node regression with rich graph topology around the predicted entity → strong fit for `rai_predictive` (GNN) mode; flat-table classification/regression with no meaningful graph structure can still use `rai_predictive` but loses the GNN's structural advantage
+- Graph topology is only same-entity temporal-lag edges (each row linked to its own prior periods, no edges across different concept types) → **not a GNN problem**. Redirect to a time-series or tabular regressor outside RAI, optionally loaded as `pre_computed` predictions. The GNN's value is message-passing across heterogeneous entity types; lag-only chains carry no signal beyond shifted features.
 
 ---
 
@@ -105,6 +108,7 @@ Which schema table contains the predictions. E.g., `RISK_PREDICTION`.
 - "Will edges form / which pairs interact next / recommend Y for X" → **predictive link prediction** (`rai_predictive` mode, `task_type=link_prediction` or `repeated_link_prediction`)
 - Node-level label/value prediction on entities embedded in a graph → **predictive `rai_predictive` mode** (node classification / node regression)
 - Per-period numeric prediction → **node regression with `has_time_column=True`**, not a separate forecasting task
+- Per-period prediction whose only edges are same-entity temporal lags (no heterogeneous edges across concept types) → **not `rai_predictive`**; redirect to a time-series or tabular regressor outside RAI, and load forecasts as `pre_computed` if downstream reasoners need them
 - "Find anomalies / cluster entities" → **not supported by the GNN**; only emit as `pre_computed` if an external scoring/clustering table already exists in the schema
 - Pre-computed prediction table exists in schema → **predictive (pre_computed mode)** — suggest downstream use
 
@@ -168,7 +172,7 @@ What ontology patterns indicate prediction potential:
 
 ### For rai_predictive mode (GNN training)
 - **Predictive engine provisioned**: `rai_predictive` mode requires a Predictive reasoner — it is opt-in and most accounts default to Logic only. Before classifying a question as `rai_predictive`-feasible, confirm `CALL RELATIONALAI.API.GET_REASONER('predictive', '<name>')` returns `STATUS=READY`. If no Predictive reasoner exists yet, treat the question as feasible-after-provisioning and surface that as the next step (see `rai-predictive-modeling` § Two-engine model + Engine sizing). Pre-computed mode is unaffected — it runs on Logic.
-- **Graph topology**: At least one edge concept (FK-joined or via an interaction concept) connecting the predicted-on entity to other entities — the GNN's structural advantage comes from this. Without graph structure, node classification/regression still trains but loses most of the GNN signal.
+- **Graph topology**: Heterogeneous edges connecting the predicted-on entity to entities of at least one *different* concept type (FK-joined or via an interaction concept) — this is what the GNN actually learns from. Same-entity temporal-lag edges (a node linked only to its own prior periods) do **not** satisfy this and are a misuse of `rai_predictive` — redirect those to a time-series or tabular regressor, optionally loaded as `pre_computed` predictions.
 - **Feature availability**: Target property with sufficient non-null values; 3+ candidate features with variance
 - **Temporal span**: For temporal node classification/regression and `repeated_link_prediction`, at least 2 full cycles of the target period
 - **Label quality**: For node classification, labels exist and are reasonably balanced (flag extreme imbalance like 99%/1%)
@@ -178,7 +182,7 @@ What ontology patterns indicate prediction potential:
 
 **Minimum viable ontology for prediction:**
 - *Pre-computed:* a prediction table exists and links to other concepts.
-- *rai_predictive (node classification / node regression):* a graph node concept with a target property (what to predict) and 2+ feature properties, plus at least one edge concept tying it to neighbor entities.
+- *rai_predictive (node classification / node regression):* a graph node concept with a target property (what to predict) and 2+ feature properties, plus at least one **heterogeneous** edge concept tying it to entities of a *different* concept type. Same-entity temporal-lag edges alone don't qualify.
 - *rai_predictive (link prediction):* two graph node concepts plus historical (source, target) pair rows in a flat task table; optional timestamp for `repeated_link_prediction`.
 
 See `rai-predictive-modeling` for the full data modeling workflow and `rai-predictive-training` for the task-type/eval-metric matrix.
