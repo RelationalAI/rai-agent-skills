@@ -22,6 +22,8 @@ The RAI predictive reasoner supports three task families. Anything outside these
 | **Node Regression** | "How much / what value will X be?" / "Forecast X's value next period" (per-node regression, with or without time) | Numeric target on a graph node concept + numeric/categorical features, historical actuals. Temporal flavor adds a time column on the node. |
 | **Link Prediction / Recommendation** | "Will X be linked to Y?" / "Which Ys should we recommend for each X?" / "Which pairs will interact next period?" | Two node concepts joined by an interaction/edge concept; historical pair data; optionally a timestamp on the edge |
 
+**What makes a strong GNN use case?** Feature richness and relational context drawn from the ontology. The more heterogeneous features (categorical, continuous, datetime, text) the GNN can pull from the predicted-on entity *and from its neighbors across different concept types*, the larger its lift over a flat model. This is why **node classification and link prediction on heterogeneous graphs outperform continuous time-series forecasts** — in a time-series problem the only signal the GNN can pass is the entity's own prior values, which lag features in a tabular model already capture. When ranking candidate predictive questions, prefer the ones where the predicted-on entity sits in a rich neighborhood of other concept types you can feed in as features.
+
 **Disambiguation rules:**
 - "What will happen?" with historical labeled data → predictive
 - "What should we do about it?" → predictive → prescriptive chain
