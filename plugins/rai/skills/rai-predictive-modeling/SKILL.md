@@ -196,14 +196,12 @@ Relationships encode the task structure using a template string with three parts
 
 ### Relationship Arity Rules
 
-For classification and regression, `has_time_column` is independent of the task type — add the `at` clause when the task table has a time column, omit it otherwise. For link prediction, the choice of task type **is** the temporal flag: `link_prediction` is non-temporal; `repeated_link_prediction` is temporal and the `at` clause is required.
-
 | Task Type | Train/Val template | Test template |
 |-----------|-------------------|---------------|
-| classification | `f"{Source} has {Any:label}"` (add `at {Any:ts}` if temporal) | `f"{Source}"` (add `at {Any:ts}` if temporal) |
-| regression | `f"{Source} has {Any:value}"` (add `at {Any:ts}` if temporal) | `f"{Source}"` (add `at {Any:ts}` if temporal) |
-| link_prediction (non-temporal) | `f"{Source} has {Target}"` | `f"{Source}"` |
-| repeated_link_prediction (temporal) | `f"{Source} at {Any:ts} has {Target}"` | `f"{Source} at {Any:ts}"` |
+| classification | `f"{Source} has {Any:label}"` (add `at {Any:ts}` if task table has time column) | `f"{Source}"` (add `at {Any:ts}` if task table has time column) |
+| regression | `f"{Source} has {Any:value}"` (add `at {Any:ts}` if task table has time column) | `f"{Source}"` (add `at {Any:ts}` if task table has time column) |
+| link_prediction | `f"{Source} has {Target}"` (add `at {Any:ts}` if task table has time column) | `f"{Source}"` (add `at {Any:ts}` if task table has time column) |
+| repeated_link_prediction | `f"{Source} has {Target}"` (add `at {Any:ts}` if task table has time column) | `f"{Source}"` (add `at {Any:ts}` if task table has time column) |
 
 For full code examples of all task type patterns, see [references/task-relationships.md](references/task-relationships.md).
 
