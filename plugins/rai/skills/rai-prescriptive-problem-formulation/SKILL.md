@@ -43,6 +43,10 @@ description: Formulates optimization problems from ontology models covering deci
 from relationalai.semantics.reasoners.prescriptive import Problem
 from relationalai.semantics.std import aggregates as aggs
 
+# Problem(model, Float) — LP / MILP / NLP with HiGHS, Gurobi, or Ipopt.
+# Problem(model, Integer) — MiniZinc-style (all-integer decisions and data,
+# globals, multi-solution enumeration) with solver="minizinc". See
+# references/csp-formulation.md.
 problem = Problem(model, Float)
 
 # Decision variable — prefer scoped form (where=[...]) over unscoped.
@@ -417,6 +421,11 @@ For detailed heuristics, examples, and the over-specification recognition table,
 | `solve_for(where=expr)` errors on PyRel's `__bool__` guard | `where` argument is iterated as a tuple; passing a bare expression triggers Python truthiness, which PyRel rejects | Wrap in a list: `where=[Concept.prop >= threshold, ...]` |
 | `problem.satisfy(<expr>)` raises `TypeError` complaining it expects a `Fragment` | Bare comparison expression passed to `problem.satisfy()` instead of the result of `model.require(...)` | Wrap with `model.require(<expr>)` or use `model.where(<scope>).require(<expr>)`. See [constraint-formulation.md](references/constraint-formulation.md) > Style 1/Style 2 |
 | `solve_for(concept_ref.property)` raises `TypeError` about Chain start | First arg requires bare `Concept.property` — refs are valid only inside `where=[...]`. Symmetric instinct from using refs in scope clauses doesn't extend to the variable declaration itself | Pass bare `Concept.property` to `solve_for(...)`; reserve refs for `where=[...]` joins |
+| Multi-solution overclaim: treating `solution_limit=K` as top-K-optimal, ranked, or diversity-maximized | MiniZinc returns up to K **distinct feasible** solutions; the set is neither ranked by objective nor maximally diverse | Document the semantics: up to K distinct feasible, no ordering guarantee. For "top-K by objective," resolve K times with the previous-best as a constraint. See [csp-formulation.md](references/csp-formulation.md) § Multi-solution mode. |
+| Silent: `verify()` returns OK on `implies`-bodied integrity constraints, even when the IC is violated by the solution | The verify engine cannot ground the antecedent of `implies(condition, body)` at check time, so it silently returns OK. This is **not** a solver bug; it is a documented engine limitation | For any IC whose body uses `implies` (decision-indexed table lookups in particular), add an explicit post-solve assertion in Python that re-evaluates the constraint against the extracted values. Templates that demonstrate this skip: `planogram_optimization` (planogram_optimization.py:306), `synthetic_order_lifecycle` (242-243), `synthetic_eligibility_records` (213-214). See [csp-formulation.md](references/csp-formulation.md) § 6 for the canonical wording. |
+| Audit verdict misread: `num_points() == 0` interpreted as "property holds" | In status-aware audit problems (`INFEASIBLE` = PASS, `OPTIMAL`/`SOLUTION_LIMIT` = FAIL), a zero `num_points` can result from a crash, time-limit, or any non-success status — NOT necessarily proof that the property holds | Always check `termination_status` first. Only `INFEASIBLE` proves the property holds. `TIME_LIMIT`, errors, and `LOCALLY_SOLVED` on a CSP are INCONCLUSIVE. See [csp-formulation.md](references/csp-formulation.md) § 5. |
+| Integer-ID decision variable bounded by `lower=min(id), upper=max(id)` admits non-existent IDs | The solver can pick any integer in `[min..max]`. If the reference data is sparse (some IDs missing in the middle of the range), or if the range is wider than the reference table, the solver may pick an uncovered ID — downstream lookups silently miss, and the solution is wrong | Add an explicit membership IC: `model.where(...).require(<some predicate proving the picked ID is in the reference set>)`. Alternatively validate that the decision range is dense over the reference table before solving. See [csp-formulation.md](references/csp-formulation.md) § 2c. |
+| `implies` cascade lookup with sparse / non-total Ref table — aux variable silently unconstrained where Ref row is missing | An `implies(decision == Ref.id, aux == Ref.value)` cascade only constrains `aux` when there is a Ref row matching the picked `decision`. If the cascade is non-total over the decision's domain, the cascade-bound aux variable is unconstrained for the missing values, and the solver freely picks whatever value optimizes — typically the bound, producing a confident wrong answer that `verify()` does NOT catch (see row above) | Pair the cascade with the integer-ID membership IC (row above) AND a pre-solve lookup-totality check: assert `decision_domain_size == len(model.select(Ref).to_df())` before solving. See [csp-formulation.md](references/csp-formulation.md) § 3d for the worked form and `implies_table_lookup.py` for the example. |
 
 For detailed unwired relationship symptoms, checks, and code examples, see [constraint-formulation.md](references/constraint-formulation.md) > Unwired Relationships (Detailed).
 
@@ -462,6 +471,17 @@ prod_cost = ProdCapacity.production_cost * sum(x_prod).per(ProdCapacity).where(
 
 For constraint naming with lists, re-solve behavior (multi-scenario patterns), `| 0` fallback limitation, and numpy type casting, see [known-limitations.md](references/known-limitations.md).
 
+### MiniZinc-style limitations
+
+When using `Problem(model, Integer)` + `solver="minizinc"`:
+- **`Problem(model, Integer)` is required.** A single Float decision variable or Float data coerces the problem to MIP — MiniZinc will reject it. Mismatched pairings (`Problem(model, Float)` + `solver="minizinc"` returns a server error; `Problem(model, Integer)` + `solver="highs"` returns an Int128 result-extraction error) — see `rai-prescriptive-solver-management/SKILL.md` Common Pitfalls.
+- **Empty-aggregate silent-drop is documented correctness.** A `sum` / `count` over an empty relation drops the IC at compile time. Detect via a `num_constraints` / `num_min_objectives` diff before and after a model edit.
+- **Mixed symbolic + constant arms in `model.union(...)` / `|` are rejected.** Same-shape fallbacks (literal `|` literal, symbolic `|` symbolic) are fine; mixed shapes raise `NotImplementedError`. The aggregate-default form `sum(empty) | sum(populated)` works. (Tracked as RAI-49989.)
+- **`circuit`, `cumulative`, `element`, `table`, `no_overlap`, `inverse`, `lex_lesseq` are not Python-callable today.** MiniZinc's native global-constraint library is far richer than what PyRel exposes; only `all_different`, `implies`, SOS1, SOS2 are callable from PyRel. See [global-constraints.md](references/global-constraints.md) for the per-solver coverage matrix.
+- **`%` and `//` on two decision variables are hard-rejected** by the wire on both MIP and MiniZinc paths. Not a style differentiator.
+
+For the full MiniZinc-style style guide (idioms, decision flow, audit/witness, multi-solution mode, the `verify()` caveat on `implies`-bodied ICs), see [csp-formulation.md](references/csp-formulation.md).
+
 ### Problem is additive — solve_for / satisfy / minimize accumulate
 
 `Problem` inherits PyRel's append-only behavior (see `rai-pyrel-coding` > Definitions). Every `problem.solve_for()`, `problem.satisfy()`, `problem.minimize()`/`maximize()` **adds** to the Problem — there is no remove/replace API.
@@ -486,7 +506,8 @@ For constraint naming with lists, re-solve behavior (multi-scenario patterns), `
 | Constraint formulation | Forcing, capacity, balance, linking, `.where()` scoping, parameter derivation | [constraint-formulation.md](references/constraint-formulation.md) |
 | Objective formulation | Direction, multi-component, penalty terms, scenario formulation | [objective-formulation.md](references/objective-formulation.md) |
 | Problem patterns & validation | Common patterns (assignment, flow, knapsack) and the validation checklist | [problem-patterns-and-validation.md](references/problem-patterns-and-validation.md) |
-| Global constraints | `all_different`, `implies`, SOS1/SOS2 syntax, solver requirements, CP vs MIP guide | [global-constraints.md](references/global-constraints.md) |
+| Global constraints | `all_different`, `implies`, SOS1/SOS2 syntax, per-solver coverage matrix, MIP-style vs MiniZinc-style decision flow with template precedents | [global-constraints.md](references/global-constraints.md) |
+| MiniZinc-style formulation | When this style fits, decision-variable shapes, constraint idioms, multi-solution mode, audit/witness, verify() limitation on implies-bodied ICs, the 4 globals available today | [csp-formulation.md](references/csp-formulation.md) |
 | Scenario analysis | Scenario Concept vs Loop + where= patterns, decision matrix, code examples | [scenario-analysis.md](references/scenario-analysis.md) |
 | Formulation simplification | Static vs dynamic parameters, goals vs constraints, grouped constraints, over-specification | [formulation-simplification.md](references/formulation-simplification.md) |
 | Multi-objective formulation | Approach selection, epsilon constraint method, tension heuristics, pitfalls | [multi-objective-formulation.md](references/multi-objective-formulation.md) |
