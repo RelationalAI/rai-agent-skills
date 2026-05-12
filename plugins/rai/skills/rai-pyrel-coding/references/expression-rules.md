@@ -366,6 +366,52 @@ model.where(
 rel["field"]  # Access a named field of a relationship
 ```
 
+---
+
+## Undirected-edge expansion via reverse-define
+
+PyRel relationships are directed. Any aggregate, query, or constraint over an *undirected* graph must either expand the edge relation at the Rules level so both orientations are present, or `.ref()`-pair both directions inline. Without one of these, the IC silently matches a single orientation and misses half the symmetric counterparts. Two patterns:
+
+### Pattern 1 — Rules-level expansion (persistent symmetric relation)
+
+Declare a relationship and populate it in **both directions** from a raw directed edge concept. Downstream queries / ICs reference the symmetric relation as a single source.
+
+```python
+RawEdge = model.Concept("RawEdge", identify_by={"a": Integer, "b": Integer})
+# ... populate RawEdge from data
+
+# Symmetric Edge relation — populated from RawEdge in both orientations
+Edge = model.Relationship(f"{Node:a} adjacent to {Node:b}")
+model.where(RawEdge).define(
+    Edge(Node.filter_by(id=RawEdge.a), Node.filter_by(id=RawEdge.b))
+)
+model.where(RawEdge).define(
+    Edge(Node.filter_by(id=RawEdge.b), Node.filter_by(id=RawEdge.a))
+)
+
+# Downstream IC matches both orientations automatically
+Na, Nb = Node, Node.ref()
+problem.satisfy(model.where(Edge(Na, Nb), Na.id < Nb.id).require(Na.color != Nb.color))
+```
+
+The `Na.id < Nb.id` half-pair filter is a symmetry break — without it, each undirected edge is counted twice (as `(a,b)` and `(b,a)`).
+
+### Pattern 2 — Inline `.ref()` pair (no persisted symmetric relation)
+
+For single-IC undirected matching, walrus `:=` two `Edge.ref()`s inside a `where` and constrain the reverse direction inline. Use when the IC is one-off and a persistent symmetric relation is not needed elsewhere.
+
+```python
+Ei := Edge.ref()
+Ej := Edge.ref()
+problem.satisfy(
+    model.where(Ei, Ej.i == Ei.j, Ej.j == Ei.i).require(...)
+)
+```
+
+For a concrete worked example using Pattern 1, see `rai-prescriptive-problem-formulation/examples/chromatic_number.py`.
+
+---
+
 ### Chain.ref() and .alt()
 
 **`Chain.ref()`** — creates an independent occurrence of a chain path. Use when the same multi-hop path must appear twice in a query as two independent traversals (e.g., comparing two different values on the same relationship). Distinct from `Concept.ref()` (which creates a new entity variable):
