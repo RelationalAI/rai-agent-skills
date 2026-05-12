@@ -369,10 +369,10 @@ positional arguments. Inside `where(...)`, the invocation **binds** each ref arg
 relation's tuples; it is not a filter on a specific value.
 
 ```python
+n_groups, group_size = ..., ...          # problem constants (group count, players per group)
 w = Integer.ref().alias("w")
 x = Integer.ref().alias("x")
 group_val = std.common.range(n_groups)   # data range over group indices
-group_size = ...                         # problem constant (players per group)
 
 # In an IC, `Player.assign(w, x)` in where() iterates (Player, w, x) tuples of the relation.
 # Each iteration carries one (Player, week, group) binding for the body to constrain.
