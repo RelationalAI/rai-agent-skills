@@ -39,7 +39,7 @@ description: Translation, ideation, and routing layer between an ontology and th
 
 | Signal in Ontology | Reasoner | Question Pattern |
 |--------------------|----------|-----------------|
-| Constrained resources, costs, capacities | **Prescriptive** | "What should we do?" — allocate, schedule, route |
+| Constrained resources, costs, capacities | **Prescriptive** | "What should we do?" — allocate, schedule, route. Within prescriptive, formulation splits along a style axis: **MIP-style** (`Problem(model, Float)` + HiGHS/Gurobi — continuous-friendly) vs **MiniZinc-style** (`Problem(model, Integer)` + MiniZinc — all-integer with globals, multi-solution enumeration, audit/witness). See `prescriptive.md` § Formulation Style Detection. |
 | Network topology, graph structure | **Graph** | "What patterns exist?" — centrality, clusters, paths |
 | Labels/values per entity, historical pair data, graph topology | **Predictive** | "What will happen?" / "Which Y for each X?" — node classification, node regression, link prediction |
 | Threshold/status fields, business rules | **Rules** | "Is this valid?" — compliance, classification |
@@ -111,7 +111,7 @@ Each suggestion must be tagged with one or more reasoner types. Use these signal
 
 | Signal | Primary Reasoner | Question Pattern |
 |--------|-----------------|------------------|
-| Optimizing decisions over constrained resources | **Prescriptive** | "What should we do?" — allocate, schedule, route, price |
+| Optimizing decisions over constrained resources | **Prescriptive** | "What should we do?" — allocate, schedule, route, price. Cross-cutting style choice within prescriptive: MIP-style (continuous-friendly) vs MiniZinc-style (all-integer + globals). See `prescriptive.md` § Formulation Style Detection. |
 | Understanding structure, connectivity, influence | **Graph** | "What patterns exist?" — who is central, what clusters exist, shortest path |
 | Predicting node labels/values or future links from features and graph topology | **Predictive** | "What will happen?" / "Which Y for each X?" — node classification, node regression, link prediction |
 | Enforcing business rules and logical constraints | **Rules** | "Is this valid?" — compliance, classification, derivation |
@@ -124,6 +124,7 @@ Each suggestion must be tagged with one or more reasoner types. Use these signal
 - If a question spans two categories, consider a multi-reasoner chain
 - **Competing objectives?** If the problem has two measurable goals in tension (improving one worsens the other) — flag `competing_objectives` in the prescriptive hint. See `prescriptive.md` § Multi-Objective Detection for the checklist.
 - **Parameter variations?** If a key constraint parameter could plausibly vary and the user would benefit from comparing solutions across levels — flag `scenario_parameter` in the prescriptive hint. See `prescriptive.md` § Scenario Detection for the checklist.
+- **Pure feasibility, find-K, counterexample, audit, or "enumerate all valid X"?** Signal phrases include "find K of these," "is this property always true," "enumerate all configurations satisfying," "audit / counterexample," "configurator," "all-integer decisions and data," "constraint satisfaction," "satisfaction mode," "pure satisfaction." Flag `minizinc_style_witness_enumeration` in the prescriptive hint — a style choice within an existing problem type, not a new problem type. See `prescriptive.md` § Formulation Style Detection for the checklist.
 
 For detailed question types, classification signals, and structural checklists per reasoner, see the reasoner-specific reference files: `prescriptive.md`, `graph.md`, `predictive.md`, `rules.md`.
 
@@ -398,7 +399,7 @@ Each suggestion includes a `reasoners` field — an ordered list specifying the 
 
 | Reasoner | Fields |
 |----------|--------|
-| **prescriptive** | `decision_scope`, `forcing_requirement`, `objective_property`, `decision_variable`, `scenario_parameter`, `competing_objectives` |
+| **prescriptive** | `decision_scope`, `forcing_requirement`, `objective_property`, `decision_variable`, `scenario_parameter`, `competing_objectives`, `minizinc_style_witness_enumeration` |
 | **graph** | `algorithm`, `graph_construction` (`node_concept`, `directed`, `weighted`, `edge_definition`), `target_filter`, `output_binding` |
 | **rules** | `rule_type`, `source_concept`, `condition_properties`, `join_path`, `threshold`, `output_type`, `output_property`, `downstream_use` |
 | **predictive** | User-facing: `type` (`node_classification` \| `node_regression` \| `link_prediction`), `mode` (`pre_computed` \| `rai_predictive`). Concept routing: `target_concept`, `target_property` (classification/regression), `link_target_concept` (link prediction only), `feature_properties`, `output_concept`, `pre_computed_table`. GNN task routing (for `rai_predictive` mode): `task_type` (`binary_classification` \| `multiclass_classification` \| `multilabel_classification` \| `regression` \| `link_prediction` \| `repeated_link_prediction`), `eval_metric`, `has_time_column`, `temporal_column` (when `has_time_column=True`). See `predictive.md` for the user-type → task_type translation rules. |
