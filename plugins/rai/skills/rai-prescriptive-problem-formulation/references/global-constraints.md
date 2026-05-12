@@ -129,7 +129,8 @@ Either style works for these expressions. CSP-style writes them directly; MIP-st
 
 ### Filter 4: Global constraints
 
-- Heavy use of `all_different` → **CSP-style**. MIP requires manual binary/disjunctive reformulation (`!=` not native in the wire — see Filter 2).
+- Any use of the `all_different` callable → **CSP-style**. Per the per-solver matrix, only MiniZinc supports `all_different`; the same semantics can be hand-modeled in MIP via pairwise binary indicators + big-M (`!=` not native in the MIP wire — see Filter 2).
+- Any use of `special_ordered_set_type_1` / `special_ordered_set_type_2` → **MIP-style with Gurobi**. Per the matrix, only Gurobi supports SOS; HiGHS and MiniZinc do not. For HiGHS, hand-model with explicit binary indicators (see SOS1/SOS2 sections above).
 - Many `implies` cascades with non-binary antecedents (`decision_id == k` for `k ∉ {0, 1}`) → both styles big-M; CSP-style writes shorter. Binary-antecedent `implies(x == 0, body)` / `implies(x == 1, body)` with Gurobi uses native indicator constraints.
 
 Template precedents: `chromatic_number` (per-edge `!=`), `sudoku` (`all_different` per row/column/box), `planogram_optimization` (`implies` cascade lookup).
