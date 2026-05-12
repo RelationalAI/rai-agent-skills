@@ -10,7 +10,7 @@ Demonstrates:
   always check termination_status first
 - Multi-witness enumeration via solution_limit
 - Status-gated extraction
-- Pure-satisfaction MiniZinc-style: no objective, only constraints
+- Pure-satisfaction CSP-style: no objective, only constraints
 
 Triggering pattern: "is there any X where Y happens," "find counterexamples," "audit / witness check,"
 "is this policy violated." Outcome lives in the status, not the objective.

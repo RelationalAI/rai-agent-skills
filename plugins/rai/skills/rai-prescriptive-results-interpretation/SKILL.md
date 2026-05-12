@@ -258,7 +258,7 @@ Compilation or solver errors prevented a solution.
 **What to tell users:** "The model could not be solved due to a technical error: [error message]. This needs to be fixed before we can get results."
 **Next steps:** Check compilation output, fix expression syntax, verify all referenced properties exist.
 
-### Audit / witness mode — status-aware verdict (MiniZinc-style)
+### Audit / witness mode — status-aware verdict (CSP-style)
 
 When the question is "does the property hold?" or "is there any configuration where X happens?", the answer comes from the termination status, not the objective value. This **inverts** MIP intuition: `INFEASIBLE` is the desired outcome.
 

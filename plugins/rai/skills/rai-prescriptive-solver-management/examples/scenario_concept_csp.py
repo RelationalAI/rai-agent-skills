@@ -1,4 +1,4 @@
-# Pattern: Scenario Concept — MiniZinc analog of scenario_concept_milp.py
+# Pattern: Scenario Concept — CSP-style analog of scenario_concept_milp.py
 # Mirrors the MILP form: Scenario as a data concept indexes integer decisions; single solve runs
 # all scenarios together. Differs from the MILP analog only in Problem(model, Integer) +
 # solver="minizinc" and integer-only decision/data shapes.
@@ -8,7 +8,7 @@ import time
 from relationalai.semantics import Integer, Model, String, sum
 from relationalai.semantics.reasoners.prescriptive import Problem
 
-model = Model(f"scenario_concept_minizinc_{time.time_ns()}")
+model = Model(f"scenario_concept_csp_{time.time_ns()}")
 Concept, Property = model.Concept, model.Property
 
 # --- Ontology ---

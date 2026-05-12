@@ -44,7 +44,7 @@ from relationalai.semantics.reasoners.prescriptive import Problem
 from relationalai.semantics.std import aggregates as aggs
 
 # Problem(model, Float) — LP / MILP / NLP with HiGHS, Gurobi, or Ipopt.
-# Problem(model, Integer) — MiniZinc-style (all-integer decisions and data,
+# Problem(model, Integer) — CSP-style (all-integer decisions and data,
 # globals, multi-solution enumeration) with solver="minizinc". See
 # references/csp-formulation.md.
 problem = Problem(model, Float)
@@ -472,7 +472,7 @@ prod_cost = ProdCapacity.production_cost * sum(x_prod).per(ProdCapacity).where(
 
 For constraint naming with lists, re-solve behavior (multi-scenario patterns), `| 0` fallback limitation, and numpy type casting, see [known-limitations.md](references/known-limitations.md).
 
-### MiniZinc-style limitations
+### CSP-style limitations
 
 When using `Problem(model, Integer)` + `solver="minizinc"`:
 - **`Problem(model, Integer)` is required.** A single Float decision variable or Float data coerces the problem to MIP — MiniZinc will reject it. Mismatched pairings (`Problem(model, Float)` + `solver="minizinc"` returns a server error; `Problem(model, Integer)` + `solver="highs"` returns an Int128 result-extraction error) — see `rai-prescriptive-solver-management/SKILL.md` Common Pitfalls.
@@ -481,7 +481,7 @@ When using `Problem(model, Integer)` + `solver="minizinc"`:
 - **`circuit`, `cumulative`, `element`, `table`, `no_overlap`, `inverse`, `lex_lesseq` are not Python-callable today.** MiniZinc's native global-constraint library is far richer than what PyRel exposes; only `all_different`, `implies`, SOS1, SOS2 are callable from PyRel. See [global-constraints.md](references/global-constraints.md) for the per-solver coverage matrix.
 - **`%` and `//` on two decision variables are hard-rejected** by the wire on both MIP and MiniZinc paths. Not a style differentiator.
 
-For the full MiniZinc-style style guide (idioms, decision flow, audit/witness, multi-solution mode, the `verify()` caveat on `implies`-bodied ICs), see [csp-formulation.md](references/csp-formulation.md).
+For the full CSP-style guide (idioms, decision flow, audit/witness, multi-solution mode, the `verify()` caveat on `implies`-bodied ICs), see [csp-formulation.md](references/csp-formulation.md).
 
 ### Problem is additive — solve_for / satisfy / minimize accumulate
 
@@ -507,8 +507,8 @@ For the full MiniZinc-style style guide (idioms, decision flow, audit/witness, m
 | Constraint formulation | Forcing, capacity, balance, linking, `.where()` scoping, parameter derivation | [constraint-formulation.md](references/constraint-formulation.md) |
 | Objective formulation | Direction, multi-component, penalty terms, scenario formulation | [objective-formulation.md](references/objective-formulation.md) |
 | Problem patterns & validation | Common patterns (assignment, flow, knapsack) and the validation checklist | [problem-patterns-and-validation.md](references/problem-patterns-and-validation.md) |
-| Global constraints | `all_different`, `implies`, SOS1/SOS2 syntax, per-solver coverage matrix, MIP-style vs MiniZinc-style decision flow with template precedents | [global-constraints.md](references/global-constraints.md) |
-| MiniZinc-style (CSP-style) formulation | When this style fits, decision-variable shapes, constraint idioms, multi-solution mode, audit/witness, verify() limitation on implies-bodied ICs, the 4 globals available today | [csp-formulation.md](references/csp-formulation.md) |
+| Global constraints | `all_different`, `implies`, SOS1/SOS2 syntax, per-solver coverage matrix, MIP-style vs CSP-style decision flow with template precedents | [global-constraints.md](references/global-constraints.md) |
+| CSP-style formulation | When this style fits, decision-variable shapes, constraint idioms, multi-solution mode, audit/witness, verify() limitation on implies-bodied ICs, the 4 globals available today | [csp-formulation.md](references/csp-formulation.md) |
 | Scenario analysis | Scenario Concept vs Loop + where= patterns, decision matrix, code examples | [scenario-analysis.md](references/scenario-analysis.md) |
 | Formulation simplification | Static vs dynamic parameters, goals vs constraints, grouped constraints, over-specification | [formulation-simplification.md](references/formulation-simplification.md) |
 | Multi-objective formulation | Approach selection, epsilon constraint method, tension heuristics, pitfalls | [multi-objective-formulation.md](references/multi-objective-formulation.md) |

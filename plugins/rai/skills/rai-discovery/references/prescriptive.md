@@ -130,28 +130,28 @@ Within the five prescriptive problem types above, formulation can take two style
 - LP relaxation provides a useful quality gap on TIME_LIMIT
 - Provable optimality is required
 
-**MiniZinc-style** (`Problem(model, Integer)` + `solver="minizinc"`):
+**CSP-style** (`Problem(model, Integer)` + `solver="minizinc"`):
 - All-integer decisions and data — a single Float variable coerces to MIP
 - `min`/`max` in the objective, `count`/`all_different` over decision variables, `implies` cascades, products of decision variables
 - Multi-solution enumeration (`solution_limit=K`, `Variable.values`)
 - Pure satisfaction / audit / witness / counterexample / configurator / "find K feasible" framings
 - Hard to verbalize: "is there any configuration where X happens" — answer is INFEASIBLE = no, OPTIMAL = yes
 
-**Style triggers (any one is sufficient to consider MiniZinc-style):** all-integer decisions and data; `min`/`max` in objective; heavy `all_different` use; complex `implies` cascades; products of decision variables; multi-solution enumeration; audit / witness / property-check; configurator; "find K feasible." **Forcing MIP-style:** any continuous decision or data; convex QP objective; gap-reporting required on TIME_LIMIT; provable optimality required.
+**Style triggers (any one is sufficient to consider CSP-style):** all-integer decisions and data; `min`/`max` in objective; heavy `all_different` use; complex `implies` cascades; products of decision variables; multi-solution enumeration; audit / witness / property-check; configurator; "find K feasible." **Forcing MIP-style:** any continuous decision or data; convex QP objective; gap-reporting required on TIME_LIMIT; provable optimality required.
 
-**Routing:** Set `minizinc_style_witness_enumeration` in the prescriptive implementation hint when the style triggers fire — particularly when the question is "find K feasible / find counterexamples / enumerate all builds satisfying" rather than minimize / maximize:
+**Routing:** Set `csp_style_witness_enumeration` in the prescriptive implementation hint when the style triggers fire — particularly when the question is "find K feasible / find counterexamples / enumerate all builds satisfying" rather than minimize / maximize:
 
 ```json
-"minizinc_style_witness_enumeration": {
+"csp_style_witness_enumeration": {
   "mode": "enumeration",
   "k": 10,
   "framing": "Show K different facility layouts that all satisfy the affinity constraints"
 }
 ```
 
-`mode` values: `"enumeration"` (return K distinct feasible solutions), `"audit"` (INFEASIBLE = property holds, OPTIMAL/SOLUTION_LIMIT = counterexample found), `"optimization"` (objective set but MiniZinc-style globals/expression surface make it the natural fit).
+`mode` values: `"enumeration"` (return K distinct feasible solutions), `"audit"` (INFEASIBLE = property holds, OPTIMAL/SOLUTION_LIMIT = counterexample found), `"optimization"` (objective set but CSP-style globals/expression surface make it the natural fit).
 
-This signals `rai-prescriptive-problem-formulation` to use MiniZinc-style formulation (see its `csp-formulation.md`) rather than defaulting to MIP-style for the problem type.
+This signals `rai-prescriptive-problem-formulation` to use CSP-style formulation (see its `csp-formulation.md`) rather than defaulting to MIP-style for the problem type.
 
 ---
 
@@ -206,7 +206,7 @@ Deciding how much of a divisible resource goes where.
 - **Constraints:** Budget/capacity limits, minimum coverage or return targets, diversification/balance limits
 - **Objective:** Minimize cost/risk or maximize return/coverage
 - **Verify:** Budget constraint present? Forcing constraint ensures non-trivial allocation? Allocations sum correctly?
-- **Formulation style:** MIP-style is the default — divisible-resource problems usually have continuous allocations and a linear cost objective, where LP relaxation drives quality. MiniZinc-style fits when the allocation is fully integer and you want to enumerate K different valid allocations (configurator-style: "show me 10 different valid product bundles satisfying the constraints"). See `rai-prescriptive-problem-formulation/references/csp-formulation.md` for the MiniZinc-style decision flow.
+- **Formulation style:** MIP-style is the default — divisible-resource problems usually have continuous allocations and a linear cost objective, where LP relaxation drives quality. CSP-style fits when the allocation is fully integer and you want to enumerate K different valid allocations (configurator-style: "show me 10 different valid product bundles satisfying the constraints"). See `rai-prescriptive-problem-formulation/references/csp-formulation.md` for the CSP-style decision flow.
 
 ### Network Flow / Design
 Moving flow through a graph, optionally selecting which infrastructure to build.
@@ -222,7 +222,7 @@ Moving flow through a graph, optionally selecting which infrastructure to build.
 - **Constraints:** Flow conservation at interior nodes, arc capacity, source/sink limits, linking constraints (flow only if open)
 - **Objective:** Minimize transport + fixed cost, or maximize total flow
 - **Verify:** Every interior node has conservation constraint? Source/sink boundary conditions correct? No isolated nodes? Linking constraint prevents flow through closed arcs?
-- **Formulation style:** MIP-style is the default — flow volumes are typically continuous and LP relaxation drives the gap. MiniZinc-style fits when flows are unit-valued (path-routing, packet-style) and the question is "find K feasible routings" or "enumerate all topologies satisfying capacity bounds." See `rai-prescriptive-problem-formulation/references/csp-formulation.md`.
+- **Formulation style:** MIP-style is the default — flow volumes are typically continuous and LP relaxation drives the gap. CSP-style fits when flows are unit-valued (path-routing, packet-style) and the question is "find K feasible routings" or "enumerate all topologies satisfying capacity bounds." See `rai-prescriptive-problem-formulation/references/csp-formulation.md`.
 
 ### Routing
 Determining paths or sequences for vehicles/shipments visiting locations.
@@ -238,7 +238,7 @@ Determining paths or sequences for vehicles/shipments visiting locations.
 - **Constraints:** Visit each location exactly once, degree constraints, vehicle capacity, subtour elimination (MTZ or similar)
 - **Objective:** Minimize total distance/time/cost
 - **Verify:** Subtour elimination present? Depot start/end constraints? Degree constraints enforce exactly one in-edge and one out-edge?
-- **Formulation style:** MIP-style is dominant for cost-objective routing — MTZ subtour elimination + LP relaxation drives the gap on TIME_LIMIT. MiniZinc-style fits when the routing problem is combinatorial with `all_different` constraints, or when the question shifts to "find K distinct tours" (witness enumeration). See `rai-prescriptive-problem-formulation/references/csp-formulation.md`.
+- **Formulation style:** MIP-style is dominant for cost-objective routing — MTZ subtour elimination + LP relaxation drives the gap on TIME_LIMIT. CSP-style fits when the routing problem is combinatorial with `all_different` constraints, or when the question shifts to "find K distinct tours" (witness enumeration). See `rai-prescriptive-problem-formulation/references/csp-formulation.md`.
 
 ### Scheduling / Assignment
 Deciding when activities occur or which resources handle which tasks.
@@ -254,7 +254,7 @@ Deciding when activities occur or which resources handle which tasks.
 - **Constraints:** Each task assigned exactly once, resource capacity not exceeded, precedence ordering, time windows, no-overlap
 - **Objective:** Minimize makespan, tardiness, or cost; maximize coverage
 - **Verify:** Binary variables for decisions? Task coverage (each task assigned)? Resource capacity not exceeded? Time variables bounded within horizon?
-- **Formulation style:** Most live use of MiniZinc-style. Slot assignment with `all_different`, precedence cascades via `implies`, multi-solution enumeration of valid schedules, and pure-satisfaction "is there any schedule covering all shifts" framings all fit MiniZinc-style naturally. MIP-style fits when the objective is a linear cost or makespan minimization with LP-relaxation value. See `rai-prescriptive-problem-formulation/references/csp-formulation.md` — particularly the integer-slot-with-sentinel and audit/witness idioms.
+- **Formulation style:** Most live use of CSP-style. Slot assignment with `all_different`, precedence cascades via `implies`, multi-solution enumeration of valid schedules, and pure-satisfaction "is there any schedule covering all shifts" framings all fit CSP-style naturally. MIP-style fits when the objective is a linear cost or makespan minimization with LP-relaxation value. See `rai-prescriptive-problem-formulation/references/csp-formulation.md` — particularly the integer-slot-with-sentinel and audit/witness idioms.
 
 ### Multi-Period Considerations (applies to any type)
 When a problem has a temporal/period dimension, these additional structural elements apply regardless of the base type:
@@ -283,7 +283,7 @@ Setting prices to optimize revenue subject to demand response and business rules
 - **Constraints:** Price bounds, markdown monotonicity, inventory/demand coupling
 - **Objective:** Maximize revenue or profit
 - **Verify:** Demand-price relationship captured? Price bounds from data? Revenue calculation correct?
-- **Formulation style:** MIP-style by default — continuous price levels, possibly bilinear revenue terms. MiniZinc-style fits when prices are restricted to a discrete tier menu and the objective is a revenue lookup via `implies` cascade (planogram-style: prices and SKUs are all-integer, decision-indexed table lookups for revenue per chosen tier). See `rai-prescriptive-problem-formulation/references/csp-formulation.md` — particularly the implies-cascade table-lookup idiom.
+- **Formulation style:** MIP-style by default — continuous price levels, possibly bilinear revenue terms. CSP-style fits when prices are restricted to a discrete tier menu and the objective is a revenue lookup via `implies` cascade (planogram-style: prices and SKUs are all-integer, decision-indexed table lookups for revenue per chosen tier). See `rai-prescriptive-problem-formulation/references/csp-formulation.md` — particularly the implies-cascade table-lookup idiom.
 
 ---
 

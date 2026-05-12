@@ -97,15 +97,15 @@ See [csp-formulation.md](csp-formulation.md) § 4 for the worked-out pattern, an
 
 The companion silent-failure mode is the empty-aggregate silent-drop: `sum` / `count` over an empty relation drops the IC at compile time. Detect both classes by diffing `num_constraints` / `num_min_objectives` before and after a model edit.
 
-## MIP-style vs MiniZinc-style — when to choose which
+## MIP-style vs CSP-style — when to choose which
 
-Many problems can be formulated either way. A Scheduling/Assignment problem with integer slot IDs and a linear cost objective can be solved either as MIP (`Problem(model, Float)` + HiGHS — bigger LP but standard solver) or MiniZinc-style (`Problem(model, Integer)` + MiniZinc — globals + propagation, no LP gap). Choose by which solver's strengths the problem leans on. The five filters below pick the dominant strength; apply in order, first hard rule that fires decides.
+Many problems can be formulated either way. A Scheduling/Assignment problem with integer slot IDs and a linear cost objective can be solved either as MIP (`Problem(model, Float)` + HiGHS — bigger LP but standard solver) or CSP-style (`Problem(model, Integer)` + MiniZinc — globals + propagation, no LP gap). Choose by which solver's strengths the problem leans on. The five filters below pick the dominant strength; apply in order, first hard rule that fires decides.
 
 ### Filter 1: Continuity (hard rule)
 
 Any continuous decision variable or continuous numeric data participating in a constraint → **MIP-style** (`Problem(model, Float)` + HiGHS/Gurobi/Ipopt). MiniZinc requires `Problem(model, Integer)`; mixing in a Float coerces the problem to MIP.
 
-Template precedents: continuous-quantity Resource Allocation, Network Flow, and Pricing problems (e.g., `ad_spend_allocation`, `portfolio_balancing`, `production_planning`, `supply_chain_transport`). **Verify each template's `Problem(model, ...)` signature at write time before citing it** rather than trust the directory name — several CSP-shaped templates (`shift_assignment`, `book_slate_recommendation`) use `Problem(model, Integer)` and are MiniZinc-style despite the resource-allocation framing.
+Template precedents: continuous-quantity Resource Allocation, Network Flow, and Pricing problems (e.g., `ad_spend_allocation`, `portfolio_balancing`, `production_planning`, `supply_chain_transport`). **Verify each template's `Problem(model, ...)` signature at write time before citing it** rather than trust the directory name — several CSP-shaped templates (`shift_assignment`, `book_slate_recommendation`) use `Problem(model, Integer)` and are CSP-style despite the resource-allocation framing.
 
 ### Filter 2: Expression surface (MIP is the more restrictive standard form)
 
@@ -117,22 +117,22 @@ MIP's standard form forbids many natural expressions: `min`/`max` in the objecti
 - `all_different` → **manual binary/disjunctive reformulation** (HiGHS) or indicator constraints (Gurobi only). MIP solvers do not consume `!=` natively as a linear inequality — the wire bridge treats it as nonlinear/logical (`Solvers.jl/src/model.jl:564`).
 - `implies(decision == v, body)` → big-M reformulation in MIP. Gurobi indicator constraints require the antecedent to compare a variable to `0` or `1` (`Solvers.jl/src/model.jl:581`), so an `implies(decision_id == k, body)` with `k ∉ {0, 1}` cannot use the native Gurobi indicator path — it lowers via big-M too.
 
-If the natural formulation uses any of these expressions, **MiniZinc-style** saves the linearization work and produces a smaller, more readable model. Use **MIP-style** only when you've already done (or want) the linearization — e.g., the linearized form has better LP relaxation, or you need gap reporting.
+If the natural formulation uses any of these expressions, **CSP-style** saves the linearization work and produces a smaller, more readable model. Use **MIP-style** only when you've already done (or want) the linearization — e.g., the linearized form has better LP relaxation, or you need gap reporting.
 
 `//` (floor division) and `%` (modulo) on two decision variables are **not accepted by either solver wire** — both raise compile-time errors. They are not a MIP-vs-MiniZinc differentiator.
 
 ### Filter 3: Problem mode
 
-- Pure feasibility / "find K feasible" / property-check (counterexample search) / audit-witness / multi-solution enumeration → **MiniZinc-style** is the natural fit (status set, `solution_limit`, `Variable.values`). Template precedents: `underwriting_audit` (INFEASIBLE = PASS), AML motif (enumerate witnesses), `patient_cohort_recruitment` (find K satisfying).
+- Pure feasibility / "find K feasible" / property-check (counterexample search) / audit-witness / multi-solution enumeration → **CSP-style** is the natural fit (status set, `solution_limit`, `Variable.values`). Template precedents: `underwriting_audit` (INFEASIBLE = PASS), AML motif (enumerate witnesses), `patient_cohort_recruitment` (find K satisfying).
 - Optimization with gap-reporting on TIME_LIMIT or provable optimality → **MIP-style** (LP relaxation gives the gap).
 
 ### Filter 4: Global constraints
 
-Heavy use of `all_different` or many `implies` cascades → **MiniZinc-style** exploits these natively via propagation. MIP requires manual binary/disjunctive reformulation of `all_different` (`!=` is not native in HiGHS / Solvers.jl wire — see Filter 2). Template precedents: `chromatic_number` (all_different per edge), `planogram_optimization` (implies cascade lookup).
+Heavy use of `all_different` or many `implies` cascades → **CSP-style** exploits these natively via propagation. MIP requires manual binary/disjunctive reformulation of `all_different` (`!=` is not native in HiGHS / Solvers.jl wire — see Filter 2). Template precedents: `chromatic_number` (all_different per edge), `planogram_optimization` (implies cascade lookup).
 
 ### Filter 5: Data shape
 
-- Sparse, structural, combinatorial / all-integer IDs → **MiniZinc-style**.
+- Sparse, structural, combinatorial / all-integer IDs → **CSP-style**.
 - Dense continuous flows, network-flow with volumes, portfolio with continuous weights → **MIP-style**.
 - Convex QP objective → **HiGHS** (MiniZinc has no QP).
 

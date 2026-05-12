@@ -3,7 +3,7 @@
 Graph coloring: assign a color (integer) to each node so connected nodes have different colors.
 Objective: minimize the maximum color used (= chromatic number).
 
-This is the canonical example showing that MiniZinc-style problems regularly have objectives.
+This is the canonical example showing that CSP-style problems regularly have objectives.
 MIP's standard form would require an auxiliary variable t with t >= each_color and minimize(t);
 MiniZinc accepts minimize(max(Node.color)) directly. The aggregate-as-objective form is shorter
 than the aux-variable form. The symmetry break is a footnote, not the lesson.
@@ -16,7 +16,7 @@ Demonstrates:
 - Symmetry break (fix Node 1's color to 1) — a one-line footnote, not the structural idea
 
 Triggering pattern: "minimize the largest X," "minimize the worst case," "tightest band/spread"
-under combinatorial constraints. MiniZinc-style is the natural form; MIP requires an aux variable.
+under combinatorial constraints. CSP-style is the natural form; MIP requires an aux variable.
 
 For undirected-edge expansion mechanics, see rai-pyrel-coding/references/expression-rules.md.
 """

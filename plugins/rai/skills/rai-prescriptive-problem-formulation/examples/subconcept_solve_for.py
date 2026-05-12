@@ -12,7 +12,7 @@ Demonstrates:
   variables for the eligible rows
 - The scoping is structural, not cosmetic: ineligible patients have no decision variable, so
   the cohort-size constraint cannot accidentally count them
-- Pure-satisfaction MiniZinc-style: find K satisfying members; no objective
+- Pure-satisfaction CSP-style: find K satisfying members; no objective
 
 Triggering pattern: "select K of these that meet criteria," "form a cohort," "pick a subset
 satisfying property X." Cleaner than a binary x_eligible flag per Patient when the candidate pool

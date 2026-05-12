@@ -117,7 +117,7 @@ model.require(problem.num_min_objectives() + problem.num_max_objectives() == 1)
 #     raise AssertionError(f"cap_constr fired {n_g}/{n_e}")
 ```
 
-### 6. MiniZinc-style cross-check — `Problem(model, ...)` / solver pairing
+### 6. CSP-style cross-check — `Problem(model, ...)` / solver pairing
 
 Before solving, verify the `Problem(model, ...)` type matches the chosen solver:
 
@@ -143,7 +143,7 @@ elif solver_name == "highs":
     )
 ```
 
-The check uses `Problem.numeric_type` — the documented public attribute that holds the type passed at construction (`Float` or `Integer`). For the full MiniZinc-style formulation guide, see [csp-formulation.md](../../rai-prescriptive-problem-formulation/references/csp-formulation.md).
+The check uses `Problem.numeric_type` — the documented public attribute that holds the type passed at construction (`Float` or `Integer`). For the full CSP-style formulation guide, see [csp-formulation.md](../../rai-prescriptive-problem-formulation/references/csp-formulation.md).
 
 ### 7. Multi-arg Properties (Scenario Concept pattern)
 

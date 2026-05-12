@@ -1,8 +1,8 @@
-# MiniZinc-style formulation in PyRel
+# CSP-style formulation in PyRel
 
-This doc covers PyRel's MiniZinc-style prescriptive formulation — often called CSP as community shorthand. It covers both problems with objectives (e.g., `chromatic_number` minimizes max color, `book_slate` maximizes revenue, `planogram` maximizes revenue via an `implies` cascade) and pure-satisfaction modes (audit / witness / property-check, multi-solution enumeration without ranking — see §§ Multi-solution mode, Audit / witness enumeration).
+This doc covers PyRel's CSP-style (constraint satisfaction problem style) prescriptive formulation. It covers both problems with objectives (e.g., `chromatic_number` minimizes max color, `book_slate` maximizes revenue, `planogram` maximizes revenue via an `implies` cascade) and pure-satisfaction modes (audit / witness / property-check, multi-solution enumeration without ranking — see §§ Multi-solution mode, Audit / witness enumeration). The community shorthand "CSP" technically denotes satisfaction-only problems; the style as practiced in PyRel includes optimization too, so treat "CSP-style" here as the broader paradigm.
 
-MiniZinc-style is a **style**, not a separate problem class. It is characterized by `Problem(model, Integer)` + `solver="minizinc"`, all-discrete decisions and data, and constraint + objective shapes (globals, `count` / products over decision variables, `min`/`max` in objective) that MiniZinc supports natively where HiGHS/Gurobi require manual reformulation. Any of the five existing prescriptive problem types (Resource Allocation, Network Flow / Design, Routing, Scheduling / Assignment, Pricing) can adopt this style.
+CSP-style is a **style**, not a separate problem class. It is characterized by `Problem(model, Integer)` + `solver="minizinc"`, all-discrete decisions and data, and constraint + objective shapes (globals, `count` / products over decision variables, `min`/`max` in objective) that MiniZinc supports natively where HiGHS/Gurobi require manual reformulation. Any of the five existing prescriptive problem types (Resource Allocation, Network Flow / Design, Routing, Scheduling / Assignment, Pricing) can adopt this style.
 
 <!-- TOC -->
 - [0. PyRel-level cross-references](#0-pyrel-level-cross-references)
@@ -22,39 +22,39 @@ MiniZinc-style is a **style**, not a separate problem class. It is characterized
 
 ## 0. PyRel-level cross-references
 
-This doc focuses on what is distinctive about MiniZinc-style formulation. General PyRel mechanics live one level up in `rai-pyrel-coding`. Before reading the rest of this doc, know that:
+This doc focuses on what is distinctive about CSP-style formulation. General PyRel mechanics live one level up in `rai-pyrel-coding`. Before reading the rest of this doc, know that:
 
-- `count(X, condition)` syntax — second arg is a condition expression on `X` — is documented in `rai-pyrel-coding/references/common-pitfalls.md` (count syntax row). This doc only surfaces the MiniZinc-style-distinctive twist on top of that base syntax (see § Constraint idioms).
+- `count(X, condition)` syntax — second arg is a condition expression on `X` — is documented in `rai-pyrel-coding/references/common-pitfalls.md` (count syntax row). This doc only surfaces the CSP-style-distinctive twist on top of that base syntax (see § Constraint idioms).
 - `.ref()` mechanics for pairwise self-joins (`Concept.ref()`) and value-binding (`Float.ref()`, `Integer.ref()`) are documented in `rai-pyrel-coding/SKILL.md` § References and Aliasing.
-- Undirected-edge expansion via reverse-define is documented in `rai-pyrel-coding/references/expression-rules.md` (undirected-edge expansion section). MiniZinc-style chromatic_number / pod_placement / book_slate problems hit this mechanic frequently — see the cross-reference in `chromatic_number.py`.
+- Undirected-edge expansion via reverse-define is documented in `rai-pyrel-coding/references/expression-rules.md` (undirected-edge expansion section). CSP-style chromatic_number / pod_placement / book_slate problems hit this mechanic frequently — see the cross-reference in `chromatic_number.py`.
 - `model.union()` branch-shape requirement is documented in `rai-pyrel-coding/references/common-pitfalls.md` (inconsistent branches row).
 
 ---
 
 ## 1. When this style fits
 
-Two headline rules govern the choice between MIP-style and MiniZinc-style:
+Two headline rules govern the choice between MIP-style and CSP-style:
 
 - **Any continuous decision or data forces MIP — no middle ground.** MiniZinc requires `Problem(model, Integer)`; a single Float decision variable coerces the whole problem to MIP.
-- **MIP is the more restrictive standard form.** MiniZinc accepts a richer expression surface in constraints and objectives without manual linearization: `min`/`max` directly in the objective (`minimize(max(...))` — see `chromatic_number.py`; `minimize(min(...))` for worst-case-bound problems), `*` on two decision variables (bilinear), `count` and `all_different` as primitives, `implies` as a direct indicator. MIP requires equivalent reformulation: auxiliary `t` with `t >= each_term` for max-in-objective, McCormick envelopes for bilinear, big-M for indicators, manual binary/disjunctive reformulation for `all_different`. MiniZinc-style often saves real formulation work even when both solver families could in principle handle the problem.
+- **MIP is the more restrictive standard form.** MiniZinc accepts a richer expression surface in constraints and objectives without manual linearization: `min`/`max` directly in the objective (`minimize(max(...))` — see `chromatic_number.py`; `minimize(min(...))` for worst-case-bound problems), `*` on two decision variables (bilinear), `count` and `all_different` as primitives, `implies` as a direct indicator. MIP requires equivalent reformulation: auxiliary `t` with `t >= each_term` for max-in-objective, McCormick envelopes for bilinear, big-M for indicators, manual binary/disjunctive reformulation for `all_different`. CSP-style often saves real formulation work even when both solver families could in principle handle the problem.
 
 **Decision flow (apply in order; first hard rule that fires decides):**
 
 1. **Continuity filter (hard rule)** — any continuous decision variable or continuous numeric data participating in a constraint → MIP-style.
-2. **Expression-surface filter** — `min`/`max` in objective, `*` on two decision variables, `count` / `all_different` as primitives, `implies` cascades → MiniZinc-style fits naturally; MIP requires manual reformulation.
-3. **Problem-mode filter** — pure feasibility, find-K-feasible, property-check / counterexample search, audit-witness, multi-solution enumeration → MiniZinc-style. Optimization with provable optimality or gap-reporting on TIME_LIMIT → MIP-style.
-4. **Global-constraint filter** — heavy `all_different` or many `implies` cascades → MiniZinc-style exploits these via propagation.
-5. **Data-shape filter** — sparse, structural, combinatorial / all-integer IDs → MiniZinc-style. Dense continuous flows, portfolio with continuous weights → MIP-style. Convex QP objective → HiGHS (MiniZinc has no QP).
+2. **Expression-surface filter** — `min`/`max` in objective, `*` on two decision variables, `count` / `all_different` as primitives, `implies` cascades → CSP-style fits naturally; MIP requires manual reformulation.
+3. **Problem-mode filter** — pure feasibility, find-K-feasible, property-check / counterexample search, audit-witness, multi-solution enumeration → CSP-style. Optimization with provable optimality or gap-reporting on TIME_LIMIT → MIP-style.
+4. **Global-constraint filter** — heavy `all_different` or many `implies` cascades → CSP-style exploits these via propagation.
+5. **Data-shape filter** — sparse, structural, combinatorial / all-integer IDs → CSP-style. Dense continuous flows, portfolio with continuous weights → MIP-style. Convex QP objective → HiGHS (MiniZinc has no QP).
 
 **Note on operator support.** `//` (floor division) and `%` (modulo) on two decision variables are **not accepted by either solver wire** — both raise compile-time errors. They are not a MiniZinc-vs-MIP differentiator. See `rai-pyrel-coding/references/common-pitfalls.md` (`//` on two decision variables row) and `rai-prescriptive-solver-management/SKILL.md` § Unsupported operators.
 
-For the expanded reference table with per-filter template precedents and the rationale behind each, see `global-constraints.md` § "MIP-style vs MiniZinc-style — when to choose which."
+For the expanded reference table with per-filter template precedents and the rationale behind each, see `global-constraints.md` § "MIP-style vs CSP-style — when to choose which."
 
 ---
 
 ## 2. Decision-variable shapes
 
-MiniZinc-style problems share a small set of recurring decision-variable shapes. Pick the one that matches the data, then verify membership.
+CSP-style problems share a small set of recurring decision-variable shapes. Pick the one that matches the data, then verify membership.
 
 ### 2a. Integer slot in `{1..K+1}` with `K+1` = unpicked sentinel
 
@@ -88,7 +88,7 @@ Demonstrated end-to-end in `subconcept_solve_for.py` (distilled from `patient_co
 
 ### 2c. Integer-ID decision with explicit membership IC
 
-This is the shape that admits the most-frequent silent-failure mode in MiniZinc-style formulation. **When an integer decision variable is bounded only by `lower=min(Ref.id), upper=max(Ref.id)`, the solver is free to pick any integer in that range — including IDs not present in the reference data.** If a downstream `implies(decision_id == Ref.id, ...)` cascade looks up properties on the chosen ID and the lookup is non-total, those properties stay silently unconstrained, and `verify()` returns OK because `implies`-bodied ICs are not re-evaluated post-solve (see § 6).
+This is the shape that admits the most-frequent silent-failure mode in CSP-style formulation. **When an integer decision variable is bounded only by `lower=min(Ref.id), upper=max(Ref.id)`, the solver is free to pick any integer in that range — including IDs not present in the reference data.** If a downstream `implies(decision_id == Ref.id, ...)` cascade looks up properties on the chosen ID and the lookup is non-total, those properties stay silently unconstrained, and `verify()` returns OK because `implies`-bodied ICs are not re-evaluated post-solve (see § 6).
 
 Two safe forms:
 
@@ -111,7 +111,7 @@ Demonstrated in `implies_table_lookup.py` (distilled from `planogram_optimizatio
 
 ### 2d. Binary-availability-scoped decision
 
-Familiar pattern from MIP-style scheduling (e.g., `shift_assignment`). Worth listing here because it remains correct in MiniZinc-style and pairs naturally with `count` over decision-dependent filters (idiom 3a).
+Familiar pattern from MIP-style scheduling (e.g., `shift_assignment`). Worth listing here because it remains correct in CSP-style and pairs naturally with `count` over decision-dependent filters (idiom 3a).
 
 ```python
 Worker.x_assigned = model.Property(f"{Worker} on {Shift} is {Integer:assigned}")
@@ -128,7 +128,7 @@ problem.solve_for(
 
 ### 3a. Cardinality via `count(X, cond).per(group)` — decision-dependent filter
 
-The MiniZinc-style-distinctive point on top of the base `count(X, cond)` syntax (documented in `rai-pyrel-coding/references/common-pitfalls.md`): when `cond` depends on a decision variable, the comparison **must live inside** `count`'s second argument, not as a filter in an outer `where`. An outer `where` filter on a decision-variable value would prune the search space at pre-solve, eliminating feasible search states; the inner form lets `count` count states per branch during solving.
+The CSP-style-distinctive point on top of the base `count(X, cond)` syntax (documented in `rai-pyrel-coding/references/common-pitfalls.md`): when `cond` depends on a decision variable, the comparison **must live inside** `count`'s second argument, not as a filter in an outer `where`. An outer `where` filter on a decision-variable value would prune the search space at pre-solve, eliminating feasible search states; the inner form lets `count` count states per branch during solving.
 
 ```python
 # CORRECT — decision-dependent filter inside count
@@ -168,13 +168,13 @@ The MIP-side cost of this shape is steep — pairwise `count(...) <= 1` over dec
 
 ### 3b. Undirected-edge expansion via reverse-define
 
-PyRel relationships are directed. MiniZinc-style graph problems (coloring, pod placement on an anti-affinity graph, book-slate authorship pairs) need both orientations. Use reverse-define at the Rules level for persistent symmetric relations, or `.ref()`-pair inline for single-IC undirected matching.
+PyRel relationships are directed. CSP-style graph problems (coloring, pod placement on an anti-affinity graph, book-slate authorship pairs) need both orientations. Use reverse-define at the Rules level for persistent symmetric relations, or `.ref()`-pair inline for single-IC undirected matching.
 
 For the mechanic, see `rai-pyrel-coding/references/expression-rules.md` (undirected-edge expansion section). `chromatic_number.py` carries the concrete worked example.
 
-### 3c. Pairwise via dual `.ref()` + `id_a < id_b` — MiniZinc-style symmetry-break
+### 3c. Pairwise via dual `.ref()` + `id_a < id_b` — CSP-style symmetry-break
 
-`.ref()` mechanics (pairwise `Concept.ref()` + `Float.ref()` value-binding) are documented in `rai-pyrel-coding/SKILL.md` § References and Aliasing. The MiniZinc-style point is the `id_a < id_b` half-pair filter: it prevents the solver from re-encoding `(a, b)` and `(b, a)` as two separate constraint instances, halving the constraint count without changing the feasible set.
+`.ref()` mechanics (pairwise `Concept.ref()` + `Float.ref()` value-binding) are documented in `rai-pyrel-coding/SKILL.md` § References and Aliasing. The CSP-style point is the `id_a < id_b` half-pair filter: it prevents the solver from re-encoding `(a, b)` and `(b, a)` as two separate constraint instances, halving the constraint count without changing the feasible set.
 
 ```python
 Qi = Queen
@@ -189,7 +189,7 @@ problem.satisfy(model.where(Qi.row < Qj.row).require(
 
 ### 3d. `implies` cascade as decision-indexed table lookup + lookup-totality pre-solve check
 
-The dominant pattern for "predict-then-optimize" in MiniZinc-style: a decision integer selects an entry from a reference table; an `implies` cascade binds an auxiliary variable to the chosen row's value; downstream constraints / objective use the auxiliary.
+The dominant pattern for "predict-then-optimize" in CSP-style: a decision integer selects an entry from a reference table; an `implies` cascade binds an auxiliary variable to the chosen row's value; downstream constraints / objective use the auxiliary.
 
 ```python
 # Decision: which assortment is placed at this position
@@ -218,7 +218,7 @@ assert n_decision_domain == n_ref_rows, "implies-cascade lookup is non-total"
 
 ## 4. Multi-solution mode
 
-MiniZinc-style problems frequently want K different feasible solutions rather than one optimum. `solution_limit` enables this; the semantics need care.
+CSP-style problems frequently want K different feasible solutions rather than one optimum. `solution_limit` enables this; the semantics need care.
 
 - **`solution_limit=K` is a `solve(...)` kwarg, not `solve_for(...)`.**
 - **Termination status interpretation:**
@@ -337,7 +337,7 @@ For the full per-solver coverage matrix (which of the four globals each solver s
 
 ## 9. Cross-reasoner handoff
 
-MiniZinc-style problems frequently chain off a graph-reasoner output. The typical handoff is `Graph.reachable` (or `Graph.connected_component`) producing a binary closure relation, which the CSP then scopes over via `where=[Reachable(EntityA, EntityB)]`. The CSP's decision variables then range only over the reachable closure, dramatically shrinking the search.
+CSP-style problems frequently chain off a graph-reasoner output. The typical handoff is `Graph.reachable` (or `Graph.connected_component`) producing a binary closure relation, which the CSP then scopes over via `where=[Reachable(EntityA, EntityB)]`. The CSP's decision variables then range only over the reachable closure, dramatically shrinking the search.
 
 For the chained-discovery handshake (how to declare the closure as enrichment from `rai-graph-analysis`), see `rai-discovery/SKILL.md` § Multi-Reasoner Chaining. `patient_cohort_recruitment` is the canonical template precedent.
 
@@ -356,4 +356,4 @@ The seven examples that distill the idioms above:
 | `examples/subconcept_solve_for.py` | § 2b (sub-concept predicate marker) |
 | `examples/chromatic_number.py` | `minimize(max(...))` directly (no MIP linearization), data-driven bounds, undirected-edge expansion |
 | `examples/pairwise_no_repeat.py` | § 3a (binder-in-where + double-symbolic `count(r, g0 == g1)`) — pairwise no-repeat, adapted from the social golfer benchmark |
-| `../../rai-prescriptive-solver-management/examples/scenario_concept_minizinc.py` | MiniZinc analog of `scenario_concept_milp.py` — Scenario as data concept indexing integer decisions; single MiniZinc solve |
+| `../../rai-prescriptive-solver-management/examples/scenario_concept_csp.py` | CSP-style analog of `scenario_concept_milp.py` — Scenario as data concept indexing integer decisions; single MiniZinc solve over all scenarios |

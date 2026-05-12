@@ -33,4 +33,4 @@ problem.solve("ipopt", time_limit_sec=60)    # NLP (open-source)
 
 MiniZinc today is **Chuffed-only**. Gecode and CP-SAT are MiniZinc backends but are not currently selectable from the PyRel surface — backend selection is future work, not delivered. Until that lands, `solver="minizinc"` always dispatches to Chuffed.
 
-Native MiniZinc logging is not captured into LogMessage events (the solver service fall-through in `Solvers.jl:683`). For visibility during a solve, use `log_to_console=True` on `solve(...)`. For the full MiniZinc-style formulation guide, see [csp-formulation.md](../../rai-prescriptive-problem-formulation/references/csp-formulation.md).
+Native MiniZinc logging is not captured into LogMessage events (the solver service fall-through in `Solvers.jl:683`). For visibility during a solve, use `log_to_console=True` on `solve(...)`. For the full CSP-style formulation guide, see [csp-formulation.md](../../rai-prescriptive-problem-formulation/references/csp-formulation.md).

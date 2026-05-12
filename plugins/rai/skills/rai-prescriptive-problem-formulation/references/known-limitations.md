@@ -78,7 +78,7 @@ problem.satisfy(model.require(Entity.supply >= Entity.inflow))
 
 **Fix:** Cast to Python builtins before use: `float(value)`, `int(value)`.
 
-## MiniZinc-style limitations
+## CSP-style limitations
 
 When using `Problem(model, Integer)` + `solver="minizinc"`:
 
@@ -90,4 +90,4 @@ When using `Problem(model, Integer)` + `solver="minizinc"`:
 - **MiniZinc supports a single scalar objective.** No multi-objective MiniZinc lower; use the epsilon-constraint loop (see `multi-objective-formulation.md`) for bi-objective.
 - **Chuffed is the only MiniZinc backend exposed.** Gecode / CP-SAT are not currently selectable. Native MiniZinc logging is not captured into LogMessage events.
 
-For the full MiniZinc-style style guide, see [csp-formulation.md](csp-formulation.md).
+For the full CSP-style guide, see [csp-formulation.md](csp-formulation.md).
