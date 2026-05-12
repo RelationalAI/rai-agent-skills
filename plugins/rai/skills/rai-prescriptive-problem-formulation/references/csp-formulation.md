@@ -128,7 +128,7 @@ problem.solve_for(
 
 ### 3a. Cardinality via `count(X, cond).per(group)` — decision-dependent filter
 
-The MiniZinc-style-distinctive point on top of the base `count(X, cond)` syntax (documented in `rai-pyrel-coding/references/common-pitfalls.md`): when `cond` depends on a decision variable, the filter **must live inside** `count`'s second argument, not in an outer `where`. An outer `where` would prune the search space at pre-solve, eliminating feasible search states; the inner form lets `count` count states per branch during solving.
+The MiniZinc-style-distinctive point on top of the base `count(X, cond)` syntax (documented in `rai-pyrel-coding/references/common-pitfalls.md`): when `cond` depends on a decision variable, the comparison **must live inside** `count`'s second argument, not as a filter in an outer `where`. An outer `where` filter on a decision-variable value would prune the search space at pre-solve, eliminating feasible search states; the inner form lets `count` count states per branch during solving.
 
 ```python
 # CORRECT — decision-dependent filter inside count
@@ -141,6 +141,29 @@ problem.satisfy(model.where(Slot.choice == c).require(
     count(Slot).per(c) <= max_per_choice
 ))
 ```
+
+**Binder vs filter in the outer `where`.** A multi-arity-property invocation in `where(...)` (e.g., `Player.assign(w, x)`) is a binder over the relation's tuples — it does NOT prune to a specific decision value. See `rai-pyrel-coding/references/expression-rules.md` (Multi-arity property invocation in where as binder) for the general mechanic. The CSP-specific consequence is the rule above: putting a decision-var **equality** in the outer where is a search-pruning filter and is the failure mode this section guards against.
+
+**Two decision-variable refs in the count's comparison.** When `count`'s second-arg comparison is between TWO decision-variable values rather than decision-vs-data, both refs must be bound through the outer `where` (via the multi-arity-binder pattern). This is the pairwise no-repeat shape — count occurrences of "two entities' decisions match" across a data dimension.
+
+```python
+# Pairwise no-repeat: count rounds where two players are in the same group, must be <= 1
+model.where(
+    p0 := Player.ref(),
+    p1 := Player.ref(),
+    p0.p < p1.p,                # data filter (Player.p is data) — picks one orientation
+    g0 := Integer.ref(),
+    g1 := Integer.ref(),
+    p0.assign(r, g0),           # binder — anchors g0 to p0's decision value at round r
+    p1.assign(r, g1),           # binder — anchors g1 to p1's decision value at round r
+).require(
+    count(r, g0 == g1).per(p0, p1) <= 1   # count's last arg compares two decision refs
+)
+```
+
+The MIP-side cost of this shape is steep — pairwise `count(...) <= 1` over decision-variable equality lowers to `O(n_pairs × n_rounds)` big-M disjunctions. MiniZinc consumes the equality directly via propagation. Demonstrated end-to-end in `pairwise_no_repeat.py` (distilled from `social_golfer`).
+
+**Symbolic in `per(...)`** is always wrong — `per(...)` groups by data dimensions, not by decision values. If grouping requires a derived integer (e.g., sudoku's 3×3 box index `(i - 1) // side`), arithmetic on data refs in `per(...)` is fine; arithmetic involving a decision-variable value is not.
 
 ### 3b. Undirected-edge expansion via reverse-define
 
@@ -331,4 +354,5 @@ The seven examples that distill the idioms above:
 | `examples/implies_table_lookup.py` | § 3d (implies cascade) + § 2c (integer-ID membership IC) + § 6 (verify() skip) |
 | `examples/subconcept_solve_for.py` | § 2b (sub-concept predicate marker) |
 | `examples/chromatic_number.py` | `minimize(max(...))` directly (no MIP linearization), data-driven bounds, undirected-edge expansion |
+| `examples/pairwise_no_repeat.py` | § 3a (binder-in-where + double-symbolic `count(r, g0 == g1)`) — pairwise no-repeat distilled from `social_golfer` |
 | `../../rai-prescriptive-solver-management/examples/scenario_concept_minizinc.py` | MiniZinc analog of `scenario_concept_milp.py` — Scenario as data concept indexing integer decisions; single MiniZinc solve |

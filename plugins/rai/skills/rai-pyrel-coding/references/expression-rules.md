@@ -360,6 +360,53 @@ model.where(
 ).require(Ni.color != Nj.color)
 ```
 
+### Multi-arity property invocation in `where()` as binder
+
+A property declared with extra arities — e.g.
+`Player.assign = model.Property(f"{Player} in {Integer:week} is in {Integer:group}")`
+has signature `Player × Integer(week) → Integer(group)` — is invoked by name with refs as
+positional arguments. Inside `where(...)`, the invocation **binds** each ref argument to the
+relation's tuples; it is not a filter on a specific value.
+
+```python
+w = Integer.ref().alias("w")
+x = Integer.ref().alias("x")
+
+# In an IC, `Player.assign(w, x)` in where() iterates (Player, w, x) tuples of the relation.
+# Each iteration carries one (Player, week, group) binding for the body to constrain.
+model.where(Player.assign(w, x)).require(
+    count(Player, x == group_val).per(w, group_val) == group_size
+)
+```
+
+Two consequences:
+
+1. **The invocation is a binder, not a filter.** `where(Player.assign(w, x))` does NOT prune
+   to a specific `(w, x)`; it iterates the whole relation. Adding `x == 2` as a separate
+   condition turns it into a filter. When `x` is a decision-variable value, the binder/filter
+   distinction is load-bearing — see
+   `rai-prescriptive-problem-formulation/references/csp-formulation.md` § 3a.
+
+2. **It composes naturally with pairwise self-joins.** For ICs over two distinct entities each
+   carrying their own decision value, walrus-bind two `Concept.ref()` and two value-refs, then
+   invoke the property on each:
+
+   ```python
+   model.where(
+       p0 := Player.ref(),
+       p1 := Player.ref(),
+       p0.p < p1.p,           # data filter (Player.p is data) — symmetry-break half-pair
+       x0 := Integer.ref(),
+       x1 := Integer.ref(),
+       p0.assign(w, x0),      # binds x0 to p0's decision value at week w
+       p1.assign(w, x1),      # binds x1 to p1's decision value at week w
+   ).require(...)
+   ```
+
+For a worked example combining both consequences, see
+`rai-prescriptive-problem-formulation/examples/pairwise_no_repeat.py` (distilled from
+`social_golfer`).
+
 ### Bracket notation for relationships
 
 ```python
