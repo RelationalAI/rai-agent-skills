@@ -30,7 +30,7 @@ Triggering pattern: "no pair X meets twice," "diversify co-occurrence," "round-r
 scheduling," "tournament without rematches." Whenever the IC's shape is "for each PAIR of
 entities, count co-occurrences in a data dimension ≤ N," this is the form.
 
-Distilled from social_golfer (~/PyRel/example/prescriptive/social_golfer/solve.py).
+Distilled from social_golfer.
 """
 
 import time
@@ -107,8 +107,8 @@ if si.termination_status in ("OPTIMAL", "LOCALLY_SOLVED"):
     model.select(Player.p, r, g).where(Player.assign(r, g)).inspect()
 elif si.termination_status == "INFEASIBLE":
     print(
-        "\nNo schedule exists with these parameters — too many rounds for the pair budget "
-        "(R x C(S,2) x G > C(N,2) when N=4, R=3, G=2, S=2 the budget is exactly tight)."
+        "\nNo schedule exists with these parameters — the pair-occurrence budget "
+        "R * C(S, 2) * G exceeds the number of distinct unordered pairs C(N, 2)."
     )
 else:
     print(f"\nSolver did not converge (status={si.termination_status}).")
