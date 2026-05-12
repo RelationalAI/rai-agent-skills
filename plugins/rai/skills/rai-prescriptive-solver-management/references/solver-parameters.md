@@ -39,6 +39,18 @@ problem.solve("ipopt", time_limit_sec=60, max_iter=1000, tol=1e-8, mu_strategy="
 
 **Prefer first-class parameters** over solver-specific equivalents: use `time_limit_sec` (not HiGHS `time_limit` or Gurobi `TimeLimit`), `relative_gap_tolerance` (not `mip_rel_gap` or `MIPGap`), `solution_limit` (not MiniZinc-specific kwargs).
 
+### `solution_limit` semantics (MiniZinc multi-solution mode)
+
+`solution_limit=K` is a `solve(...)` kwarg, not a `solve_for(...)` kwarg. It enables multi-solution enumeration in MiniZinc:
+
+- **`OPTIMAL`** = the search exhausted the feasible space with at most K solutions found.
+- **`SOLUTION_LIMIT`** = the search stopped at K with more feasible solutions remaining.
+- The returned set is **up to K distinct feasible** solutions — NOT top-K-optimal, NOT ranked, NOT diversity-maximized.
+
+**MAX_WITNESSES sizing rule:** for a stable, deterministic enumeration that terminates with `OPTIMAL`, size K **above** the expected feasible-set size. If K < feasible-set size, you get a `SOLUTION_LIMIT` cut-off whose order is solver-dependent — fine for K-of-many enumeration, problematic when downstream tests expect a deterministic full set.
+
+For the extraction pattern (`Variable.values(sol_index, value_ref)` + `populate=False`), see [csp-formulation.md](../../rai-prescriptive-problem-formulation/references/csp-formulation.md) § 4.
+
 **When to tune parameters:**
 - Solver hits time limit -> increase `time_limit_sec`, or tighten formulation first
 - MIP gap too wide -> tighten `relative_gap_tolerance` (costs more time)

@@ -117,7 +117,35 @@ model.require(problem.num_min_objectives() + problem.num_max_objectives() == 1)
 #     raise AssertionError(f"cap_constr fired {n_g}/{n_e}")
 ```
 
-### 6. Multi-arg Properties (Scenario Concept pattern)
+### 6. MiniZinc-style cross-check — `Problem(model, ...)` / solver pairing
+
+Before solving, verify the `Problem(model, ...)` type matches the chosen solver:
+
+| `Problem(model, ...)` | Compatible solvers | Incompatible — known failure modes |
+|-----------------------|--------------------|------------------------------------|
+| `Float` | `"highs"`, `"gurobi"`, `"ipopt"` | `"minizinc"` returns a server error |
+| `Integer` | `"minizinc"`, `"gurobi"` | `"highs"` returns an Int128 result-extraction error |
+
+Mismatch is the dominant cause of the `Problem(model, Float)` + minizinc and `Problem(model, Integer)` + highs failures documented in [SKILL.md](../SKILL.md) Common Pitfalls. The check is a one-liner — do it before `problem.solve(...)` rather than after a confusing error.
+
+```python
+# Sanity check before solve
+if solver_name == "minizinc":
+    # MiniZinc requires Integer-typed Problem
+    # (Float decisions / data coerce to MIP — MiniZinc will reject)
+    assert hasattr(problem, "_type") and problem._type is Integer, (
+        "MiniZinc requires Problem(model, Integer)."
+    )
+elif solver_name == "highs":
+    # HiGHS cannot return Int128; needs a Float-typed Problem
+    assert hasattr(problem, "_type") and problem._type is Float, (
+        "HiGHS requires Problem(model, Float); for Integer use minizinc or gurobi."
+    )
+```
+
+The above is a doc-level checklist row; the introspection API on `Problem._type` may differ — replace with whatever introspection the SDK exposes for the registered numeric type. For the full MiniZinc-style formulation guide, see [csp-formulation.md](../../rai-prescriptive-problem-formulation/references/csp-formulation.md).
+
+### 7. Multi-arg Properties (Scenario Concept pattern)
 
 When using the Scenario Concept pattern, decision variables are registered as multi-arg Properties:
 
