@@ -401,14 +401,15 @@ The `Na.id < Nb.id` half-pair filter is a symmetry break — without it, each un
 For single-IC undirected matching, pair two `Edge.ref()`s inline (or via walrus `:=` inside the `where`) and constrain the reverse direction. Use when the IC is one-off and a persistent symmetric relation is not needed elsewhere.
 
 ```python
-# Standard assignment form
+# Standard assignment form — Ei and Ej must appear bare in the where() to
+# anchor each ref to the Edge relation; field references alone don't bind.
 Ei, Ej = Edge.ref(), Edge.ref()
 problem.satisfy(
-    model.where(Ej.i == Ei.j, Ej.j == Ei.i).require(...)
+    model.where(Ei, Ej, Ej.i == Ei.j, Ej.j == Ei.i).require(...)
 )
 
 # Equivalent walrus form (operator-position only — walrus is valid inside an
-# expression, not at module scope)
+# expression, not at module scope). The walrus expression itself anchors the ref.
 problem.satisfy(
     model.where(Ei := Edge.ref(), Ej := Edge.ref(), Ej.i == Ei.j, Ej.j == Ei.i).require(...)
 )

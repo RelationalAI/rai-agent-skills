@@ -129,7 +129,7 @@ Before solving, verify the `Problem(model, ...)` type matches the chosen solver:
 Mismatch is the dominant cause of the `Problem(model, Float)` + minizinc and `Problem(model, Integer)` + highs failures documented in [SKILL.md](../SKILL.md) Common Pitfalls. The check is a one-liner — do it before `problem.solve(...)` rather than after a confusing error.
 
 ```python
-# Sanity check before solve — uses the documented public attribute
+# Pre-solve type check — uses the documented public attribute
 if solver_name == "minizinc":
     # MiniZinc requires Integer-typed Problem
     # (Float decisions / data coerce to MIP — MiniZinc will reject)
