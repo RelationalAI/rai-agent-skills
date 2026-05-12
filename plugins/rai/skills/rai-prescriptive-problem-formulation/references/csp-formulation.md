@@ -147,6 +147,7 @@ problem.satisfy(model.where(Slot.choice == c).require(
 **Two decision-variable refs in the count's comparison.** When `count`'s second-arg comparison is between TWO decision-variable values rather than decision-vs-data, both refs must be bound through the outer `where` (via the multi-arity-binder pattern). This is the pairwise no-repeat shape — count occurrences of "two entities' decisions match" across a data dimension.
 
 ```python
+r = Integer.ref()   # shared round-dimension ref
 # Pairwise no-repeat: count rounds where two players are in the same group, must be <= 1
 model.where(
     p0 := Player.ref(),

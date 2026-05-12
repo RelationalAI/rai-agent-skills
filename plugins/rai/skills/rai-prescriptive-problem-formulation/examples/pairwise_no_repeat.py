@@ -99,7 +99,7 @@ problem.solve("minizinc", time_limit_sec=30)
 si = problem.solve_info()
 si.display()
 
-if si.termination_status in ("OPTIMAL", "LOCALLY_SOLVED"):
+if si.termination_status in ("OPTIMAL", "SOLUTION_LIMIT", "LOCALLY_SOLVED"):
     print(
         f"\nTournament schedule ({N_PLAYERS} players, {N_ROUNDS} rounds, "
         f"{N_GROUPS} groups of {GROUP_SIZE}):"
@@ -107,8 +107,9 @@ if si.termination_status in ("OPTIMAL", "LOCALLY_SOLVED"):
     model.select(Player.p, r, g).where(Player.assign(r, g)).inspect()
 elif si.termination_status == "INFEASIBLE":
     print(
-        "\nNo schedule exists with these parameters — the pair-occurrence budget "
-        "R * C(S, 2) * G exceeds the number of distinct unordered pairs C(N, 2)."
+        "\nNo schedule exists with these parameters. Check: (1) N_PLAYERS must equal "
+        "N_GROUPS * GROUP_SIZE so each round partitions players exactly; (2) "
+        "R * C(S, 2) * G must not exceed C(N, 2) so the pair-occurrence budget fits."
     )
 else:
     print(f"\nSolver did not converge (status={si.termination_status}).")

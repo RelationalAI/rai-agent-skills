@@ -392,6 +392,7 @@ Two consequences:
    invoke the property on each:
 
    ```python
+   w = Integer.ref()  # shared week-dimension ref
    model.where(
        p0 := Player.ref(),
        p1 := Player.ref(),
