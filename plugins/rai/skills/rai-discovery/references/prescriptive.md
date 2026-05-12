@@ -136,10 +136,10 @@ Within the five prescriptive problem types above, formulation can take two style
 - Audit / witness / "find K feasible" framings — answer in termination status (`INFEASIBLE` = no, `OPTIMAL`/`SOLUTION_LIMIT` = yes)
 - Also accepts directly: `min`/`max` in objective, `count` over decision variables, `implies` cascades, products of decision variables. MIP requires linearization for these (the wire applies the `implies` → big-M automatically); both styles work — preference.
 
-**Forcing MIP-style:** continuous decision or data; convex QP objective; LP-relaxation gap required on `TIME_LIMIT`.
-**Forcing CSP-style (in PyRel today):** multi-solution workflow via `Variable.values`. Theoretical MIP alternatives (Gurobi solution pools, re-solve with no-good cuts) aren't surfaced.
+**Forcing MIP-style:** continuous decision or data; convex QP objective; use of `special_ordered_set_type_1` / `special_ordered_set_type_2` callables (Gurobi-only per the matrix in `rai-prescriptive-problem-formulation/references/global-constraints.md`).
+**Forcing CSP-style (in PyRel today):** use of the `all_different` callable (MiniZinc-only per the matrix); multi-solution workflow via `Variable.values` (theoretical MIP alternatives — Gurobi solution pools, re-solve with no-good cuts — aren't surfaced in PyRel).
 
-Many problems land outside both lists. In the gray zone, pick the style that's easier to maintain; if performance matters on a specific instance, try both styles and measure. Both families prove optimality.
+Many problems land outside both lists. In the gray zone, pick the style that's easier to maintain; if performance matters on a specific instance, try both styles and measure. Both families prove optimality. When filters are inconclusive, check the **Formulation style** note in each problem-type checklist below — each type has a default.
 
 **Routing:** Set `csp_style_witness_enumeration` in the prescriptive implementation hint when the style triggers fire — particularly when the question is "find K feasible / find counterexamples / enumerate all builds satisfying" rather than minimize / maximize:
 

@@ -143,7 +143,7 @@ Template precedents: `chromatic_number` (per-edge `!=`), `sudoku` (`all_differen
 
 ### Performance rules of thumb
 
-- Both families can prove optimality. CP completes the search tree on bounded discrete domains; MIP closes the gap via branch-and-bound.
+- Both families can prove optimality — CP by completing the search tree on bounded discrete domains (tight bounds matter for CP performance), MIP by closing the gap via branch-and-bound.
 - MIP tends to win when the LP relaxation is tight (small integrality gap).
 - CP tends to win on heavily logical / global-constraint structure (`all_different`, pairwise equality counts).
 - Gurobi is typically faster than HiGHS where both apply.
