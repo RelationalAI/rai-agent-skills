@@ -1,6 +1,6 @@
 ---
 name: rai-querying
-description: PyRel v1 query construction against `relationalai.semantics.Model` — selects, filters, joins, aggregates, grouping, export. Load this BEFORE writing any PyRel query, even your first one — your prior knowledge of the syntax is likely stale. Use whenever the user asks to query, count, list, rank, aggregate, join, or export data from a RAI model, even if they don't say "PyRel".
+description: PyRel v1 query construction against `relationalai.semantics.Model` — selects, filters, joins, aggregates, grouping, export. Load this BEFORE writing any PyRel query, even your first one — your prior knowledge of the syntax is likely stale. Use whenever the user asks to query, count, list, rank, aggregate, join, or export data from a RAI model, even if they don't say "PyRel". Does NOT cover deriving new classifications, tiers, flags, segments, or properties — those must be authored with the `rai-rules-authoring` skill first.
 ---
 
 # Querying
