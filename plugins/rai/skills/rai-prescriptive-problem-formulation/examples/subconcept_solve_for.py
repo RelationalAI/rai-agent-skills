@@ -26,7 +26,7 @@ import time
 
 import pandas as pd
 
-from relationalai.semantics import Integer, Model, count, sum
+from relationalai.semantics import Integer, Model, sum
 from relationalai.semantics.reasoners.prescriptive import Problem
 
 model = Model(f"prescriptive_subconcept_solve_for_{time.time_ns()}")
@@ -74,13 +74,12 @@ problem.solve_for(
 problem.satisfy(model.require(sum(EligiblePatient.is_in_cohort) == COHORT_SIZE))
 
 # --- Constraint: at least 3 cohort members have age >= 40 (balance requirement) ---
+# The age filter is pure data (no decision variable), so an outer where(...) is fine —
+# it scopes the aggregate before the cohort decision is summed. See csp-formulation.md
+# § Constraint idioms for the converse case (decision-dependent filter must live INSIDE count).
 problem.satisfy(
-    model.require(
-        count(
-            EligiblePatient,
-            (EligiblePatient.is_in_cohort == 1) & (EligiblePatient.age >= 40),
-        )
-        >= 3
+    model.where(EligiblePatient.age >= 40).require(
+        sum(EligiblePatient.is_in_cohort) >= 3
     )
 )
 

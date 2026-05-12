@@ -90,12 +90,13 @@ elif si.termination_status in ("OPTIMAL", "SOLUTION_LIMIT"):
     for sol_idx in range(n_points):
         df = (
             model.select(
-                Employee.id.alias("employee"),
-                Employee.salary.alias("salary"),
+                flag_var.employee.id.alias("employee"),
+                flag_var.employee.salary.alias("salary"),
                 val.alias("flagged"),
             )
             .where(flag_var.values(sol_idx, val), val > 0.5)
             .to_df()
+            .sort_values("employee")
         )
         total = int(df["salary"].astype(int).sum().item())
         print(f"\n  Witness {sol_idx}: total = ${total:,}")

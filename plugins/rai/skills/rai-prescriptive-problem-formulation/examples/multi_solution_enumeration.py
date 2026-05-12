@@ -73,9 +73,10 @@ else:
     val = Integer.ref()
     for sol_idx in range(n_points):
         df = (
-            model.select(Slot.position.alias("slot"), val.alias("feature"))
+            model.select(slot_var.slot.position.alias("slot"), val.alias("feature"))
             .where(slot_var.values(sol_idx, val))
             .to_df()
+            .sort_values("slot")
         )
         print(f"\n  Configuration {sol_idx}:")
         print(df.to_string(index=False))
