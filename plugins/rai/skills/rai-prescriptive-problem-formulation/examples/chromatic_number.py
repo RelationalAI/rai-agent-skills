@@ -48,12 +48,10 @@ model.define(RawEdge.new(model.data(edge_data).to_schema()))
 # Persist a symmetric adjacency relation: every {a,b} raw pair appears in both orientations.
 # Without this, constraints over (Adj.left, Adj.right) only match one direction of each raw edge.
 Adj = model.Relationship(f"{Node:a} adjacent to {Node:b}")
-model.where(RawEdge).define(
-    Adj(Node.filter_by(id=RawEdge.a), Node.filter_by(id=RawEdge.b))
-)
-model.where(RawEdge).define(
-    Adj(Node.filter_by(id=RawEdge.b), Node.filter_by(id=RawEdge.a))
-)
+Na = Node.ref()
+Nb = Node.ref()
+model.define(Adj(Na, Nb)).where(Na.id == RawEdge.a, Nb.id == RawEdge.b)
+model.define(Adj(Na, Nb)).where(Na.id == RawEdge.b, Nb.id == RawEdge.a)
 
 # --- Decision: color per node, bounded by node count (data-driven upper bound) ---
 NUM_NODES = len(node_data)
@@ -69,9 +67,9 @@ problem.solve_for(
 )
 
 # --- Constraint: adjacent nodes have different colors (over the symmetric Adj relation;
-# Na.id < Nb.id picks one orientation of each pair so the IC isn't double-counted) ---
-Na, Nb = Node, Node.ref()
-problem.satisfy(model.where(Adj(Na, Nb), Na.id < Nb.id).require(Na.color != Nb.color))
+# Pa.id < Pb.id picks one orientation of each pair so the IC isn't double-counted) ---
+Pa, Pb = Node, Node.ref()
+problem.satisfy(model.where(Adj(Pa, Pb), Pa.id < Pb.id).require(Pa.color != Pb.color))
 
 # --- Symmetry break (footnote): fix Node 1's color to 1.
 # The chromatic number is invariant under permutations of color labels, so without this constraint

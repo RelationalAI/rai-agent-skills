@@ -28,7 +28,7 @@ import time
 
 import pandas as pd
 
-from relationalai.semantics import Float, Integer, Model, std, sum
+from relationalai.semantics import Integer, Model, count, std, sum
 from relationalai.semantics.reasoners.prescriptive import Problem, implies
 
 model = Model(f"prescriptive_implies_table_lookup_{time.time_ns()}")
@@ -40,12 +40,12 @@ Position = model.Concept("Position", identify_by={"index": Integer})
 model.define(Position.new(index=std.common.range(1, P + 1)))
 
 Assortment = model.Concept("Assortment", identify_by={"id": Integer})
-Assortment.revenue = model.Property(f"{Assortment} has {Float:revenue}")
+Assortment.revenue = model.Property(f"{Assortment} has {Integer:revenue}")
 
-# Reference table — note ids are 10..14 (dense, no gaps). The decision variable's bounds below match
-# this dense range; we still add the explicit membership IC defensively.
+# Reference table — note ids are 10..14 (dense, no gaps). Revenue is Integer because MiniZinc
+# requires Problem(model, Integer); a single Float would coerce the problem to MIP.
 assort_data = pd.DataFrame(
-    [(10, 200.0), (11, 150.0), (12, 175.0), (13, 90.0), (14, 240.0)],
+    [(10, 200), (11, 150), (12, 175), (13, 90), (14, 240)],
     columns=["id", "revenue"],
 )
 model.define(Assortment.new(model.data(assort_data).to_schema()))
@@ -61,9 +61,9 @@ assert decision_domain_size == ref_id_count, (
     f"but reference table has {ref_id_count} rows. Either restrict the decision domain or expand the reference table."
 )
 
-# --- Decision variables ---
+# --- Decision variables (all integer — MiniZinc constraint) ---
 Position.x_assort = model.Property(f"{Position} carries {Integer:assort_id}")
-Position.x_rev = model.Property(f"{Position} earns {Float:position_revenue}")
+Position.x_rev = model.Property(f"{Position} earns {Integer:position_revenue}")
 
 problem = Problem(model, Integer)
 problem.solve_for(
@@ -75,8 +75,8 @@ problem.solve_for(
 )
 problem.solve_for(
     Position.x_rev,
-    type="cont",
-    lower=0.0,
+    type="int",
+    lower=0,
     name=["rev", Position.index],
 )
 
@@ -84,8 +84,8 @@ problem.solve_for(
 # Even though MIN_ID..MAX_ID is dense here, this IC defends against silent failure if the reference
 # table changes (rows added/removed) and the bounds aren't updated in lockstep.
 problem.satisfy(
-    model.where(Position.x_assort == Integer).require(
-        sum(1).where(Assortment.id == Position.x_assort).per(Position) == 1
+    model.require(
+        count(Assortment, Assortment.id == Position.x_assort).per(Position) == 1
     )
 )
 
@@ -124,10 +124,10 @@ if si.termination_status in ("OPTIMAL", "SOLUTION_LIMIT"):
     print(rows.to_string(index=False))
     positions = rows["position"].astype(int).tolist()
     assorts = rows["x_assort"].astype(int).tolist()
-    revs = rows["x_rev"].astype(float).tolist()
+    revs = rows["x_rev"].astype(int).tolist()
     for pos, aid, rev in zip(positions, assorts, revs):
         expected = rev_lookup[aid]
-        assert abs(expected - rev) < 1e-6, (
+        assert expected == rev, (
             f"implies cascade violated at position {pos}: "
             f"x_assort={aid}, x_rev={rev}, expected={expected}"
         )

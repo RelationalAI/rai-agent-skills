@@ -65,8 +65,11 @@ flag_var = problem.solve_for(
 problem.satisfy(model.require(sum(Employee.x_flagged) == K))
 
 # --- Constraint: the flagged subset's total salary breaches the cap ---
-# Half-reify the per-employee contribution: salary * x_flagged is in {0, salary}.
-problem.satisfy(model.require(sum(Employee.salary * Employee.x_flagged) > BUDGET_CAP))
+# Mask each salary by the flagged binary: per-employee contribution is salary when
+# flagged (binary == 1) and 0 otherwise.
+problem.satisfy(
+    model.require(sum(Employee.salary * Employee.x_flagged) >= BUDGET_CAP + 1)
+)
 
 # --- Solve as pure satisfaction (no objective) ---
 problem.solve("minizinc", solution_limit=MAX_WITNESSES, time_limit_sec=30)

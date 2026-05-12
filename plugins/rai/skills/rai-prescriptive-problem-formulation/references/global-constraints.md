@@ -142,4 +142,4 @@ Heavy use of `all_different` or many `implies` cascades → **MiniZinc-style** e
 - MIP scales well when LP relaxation is tight (small integrality gap).
 - For problems with both `all_different` and continuous variables, the continuity filter (1) forces MIP; the `all_different` then needs manual reformulation per Filter 2.
 
-For the agent-facing condensed form of these filters (decision flowchart + style triggers), see [csp-formulation.md](csp-formulation.md) § 1. This file holds the expanded reference table; csp-formulation.md holds the writing-time signal map.
+For the condensed form of these filters (decision flowchart + style triggers) used at formulation time, see [csp-formulation.md](csp-formulation.md) § 1. This file holds the expanded reference table; csp-formulation.md holds the writing-time signal map.

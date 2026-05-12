@@ -129,21 +129,21 @@ Before solving, verify the `Problem(model, ...)` type matches the chosen solver:
 Mismatch is the dominant cause of the `Problem(model, Float)` + minizinc and `Problem(model, Integer)` + highs failures documented in [SKILL.md](../SKILL.md) Common Pitfalls. The check is a one-liner — do it before `problem.solve(...)` rather than after a confusing error.
 
 ```python
-# Sanity check before solve
+# Sanity check before solve — uses the documented public attribute
 if solver_name == "minizinc":
     # MiniZinc requires Integer-typed Problem
     # (Float decisions / data coerce to MIP — MiniZinc will reject)
-    assert hasattr(problem, "_type") and problem._type is Integer, (
+    assert problem.numeric_type is Integer, (
         "MiniZinc requires Problem(model, Integer)."
     )
 elif solver_name == "highs":
     # HiGHS cannot return Int128; needs a Float-typed Problem
-    assert hasattr(problem, "_type") and problem._type is Float, (
+    assert problem.numeric_type is Float, (
         "HiGHS requires Problem(model, Float); for Integer use minizinc or gurobi."
     )
 ```
 
-The above is a doc-level checklist row; the introspection API on `Problem._type` may differ — replace with whatever introspection the SDK exposes for the registered numeric type. For the full MiniZinc-style formulation guide, see [csp-formulation.md](../../rai-prescriptive-problem-formulation/references/csp-formulation.md).
+The check uses `Problem.numeric_type` — the documented public attribute that holds the type passed at construction (`Float` or `Integer`). For the full MiniZinc-style formulation guide, see [csp-formulation.md](../../rai-prescriptive-problem-formulation/references/csp-formulation.md).
 
 ### 7. Multi-arg Properties (Scenario Concept pattern)
 
