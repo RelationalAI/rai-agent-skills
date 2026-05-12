@@ -93,13 +93,18 @@ This is the shape that admits the most-frequent silent-failure mode in MiniZinc-
 Two safe forms:
 
 ```python
-# Form A: explicit membership IC
+# Form A: explicit membership IC — exactly one Reference row matches each Decision
 problem.solve_for(Decision.id, type="int", lower=min_id, upper=max_id)
-problem.satisfy(model.where(Decision.id == id).require(Reference(id)))
+problem.satisfy(model.require(
+    count(Reference, Reference.id == Decision.id).per(Decision) == 1
+))
 
 # Form B: dense-contiguous validation upfront (pre-solve)
 # Check at problem-build time that {min_id..max_id} == set(Reference.id);
 # if not, switch to Form A or filter Reference to a dense range.
+n_decision_domain = (max_id - min_id + 1)
+n_ref_rows = len(model.select(Reference.id).to_df())
+assert n_decision_domain == n_ref_rows, "integer-ID decision domain is not dense over Reference"
 ```
 
 Demonstrated in `implies_table_lookup.py` (distilled from `planogram_optimization` and cross-referenced with `underwriting_audit`).
@@ -165,8 +170,8 @@ The dominant pattern for "predict-then-optimize" in MiniZinc-style: a decision i
 ```python
 # Decision: which assortment is placed at this position
 problem.solve_for(Position.x_assort, type="int", lower=min_id, upper=max_id)
-# Auxiliary: revenue at this position
-problem.solve_for(Position.x_revenue, type="cont")
+# Auxiliary: revenue at this position (Integer — MiniZinc requires Problem(model, Integer))
+problem.solve_for(Position.x_revenue, type="int", lower=0)
 # Cascade: revenue is the looked-up value for the chosen assortment
 problem.satisfy(model.require(
     implies(Position.x_assort == Assortment.id, Position.x_revenue == Assortment.revenue)
@@ -294,7 +299,7 @@ sum(x_flow).per(Path) + BIG_M * active <= TOL + BIG_M
 
 For decision-indexed **table lookup** (body references a single Ref row's value, not an aggregate), `implies` is still the right shape — see `planogram_optimization` and § 3d above. The pitfall is specific to aggregate-body active-iff in enumeration mode.
 
-Demonstrated at `v1/money_laundering_motif_detection/motif_butterfly.py:165-170`.
+Demonstrated in `motif_butterfly.py` in the AML template (`money_laundering_motif_detection`) — search the file for "Big-M is preferred" to find the inline comment explaining the choice.
 
 ---
 

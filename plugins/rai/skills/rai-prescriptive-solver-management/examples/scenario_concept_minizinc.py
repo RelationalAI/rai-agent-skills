@@ -68,15 +68,16 @@ problem.solve_for(
 )
 
 # --- Constraint: total capacity needed by approved projects per Site, per Scenario, stays under
-# (Site.current_capacity + Scenario.bound — the scenario lifts the bound by an integer amount) ---
-x_approved_ref = Integer.ref()
+# (Site.current_capacity + Scenario.bound — the scenario lifts the bound by an integer amount).
+# Bind the decision value (x_ref) through ProjectRef inside the aggregate's where so the
+# decision and the capacity belong to the SAME project row — see the coupled_binary_knapsack
+# pattern in problem-formulation/examples/. Decoupling x_approved_ref from ProjectRef would
+# multiply one project's decision by another's capacity. ---
+x_ref = Integer.ref()
 problem.satisfy(
-    model.where(
-        Project.x_approved(Scenario, x_approved_ref),
-        Project.site(Site),
-    ).require(
-        sum(x_approved_ref * ProjectRef.capacity_needed)
-        .where(ProjectRef.site == Site)
+    model.require(
+        sum(x_ref * ProjectRef.capacity_needed)
+        .where(ProjectRef.x_approved(Scenario, x_ref), ProjectRef.site == Site)
         .per(Site, Scenario)
         <= Site.current_capacity + Scenario.bound
     )

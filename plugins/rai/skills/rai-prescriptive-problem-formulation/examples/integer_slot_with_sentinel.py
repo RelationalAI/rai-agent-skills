@@ -23,7 +23,7 @@ import time
 
 import pandas as pd
 
-from relationalai.semantics import Float, Integer, Model, count, std, sum
+from relationalai.semantics import Integer, Model, count, std, sum
 from relationalai.semantics.reasoners.prescriptive import Problem, implies
 
 model = Model(f"prescriptive_integer_slot_with_sentinel_{time.time_ns()}")
@@ -39,17 +39,18 @@ Slot = model.Concept("Slot", identify_by={"position": Integer})
 model.define(Slot.new(position=std.common.range(1, K + 1)))
 
 Book = model.Concept("Book", identify_by={"id": Integer})
-Book.revenue = model.Property(f"{Book} has {Float:revenue}")
+Book.revenue = model.Property(f"{Book} has {Integer:revenue}")
 
+# Integer revenue — MiniZinc requires Problem(model, Integer); a single Float would coerce to MIP.
 book_data = pd.DataFrame(
-    [(1, 30.0), (2, 25.0), (3, 18.0), (4, 12.0), (5, 8.0), (6, 5.0)],
+    [(1, 30), (2, 25), (3, 18), (4, 12), (5, 8), (6, 5)],
     columns=["id", "revenue"],
 )
 model.define(Book.new(model.data(book_data).to_schema()))
 
 # --- Decision: which book id occupies each slot (or sentinel) ---
 Slot.x_book = model.Property(f"{Slot} contains {Integer:book_id}")
-Slot.x_revenue = model.Property(f"{Slot} earns {Float:slot_revenue}")
+Slot.x_revenue = model.Property(f"{Slot} earns {Integer:slot_revenue}")
 
 problem = Problem(model, Integer)
 problem.solve_for(
@@ -61,8 +62,8 @@ problem.solve_for(
 )
 problem.solve_for(
     Slot.x_revenue,
-    type="cont",
-    lower=0.0,
+    type="int",
+    lower=0,
     name=["slot_rev", Slot.position],
 )
 
@@ -76,7 +77,7 @@ problem.satisfy(
     model.require(implies(Slot.x_book == Book.id, Slot.x_revenue == Book.revenue))
 )
 # Sentinel earns 0 revenue
-problem.satisfy(model.require(implies(Slot.x_book == SENTINEL, Slot.x_revenue == 0.0)))
+problem.satisfy(model.require(implies(Slot.x_book == SENTINEL, Slot.x_revenue == 0)))
 
 # --- Constraint: symmetry break — slot positions are ordered (no permutation re-counting) ---
 Si, Sj = Slot, Slot.ref()
