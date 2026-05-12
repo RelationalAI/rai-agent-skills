@@ -99,7 +99,7 @@ The companion silent-failure mode is the empty-aggregate silent-drop: `sum` / `c
 
 ## MIP-style vs CSP-style — when to choose which
 
-Many problems can be formulated either way. A Scheduling/Assignment problem with integer slot IDs and a linear cost objective can be solved either as MIP (`Problem(model, Float)` + HiGHS — bigger LP but standard solver) or CSP-style (`Problem(model, Integer)` + MiniZinc — globals + propagation, no LP gap). Choose by which solver's strengths the problem leans on. The five filters below pick the dominant strength; apply in order, first hard rule that fires decides.
+Many problems can be formulated either way. A Scheduling/Assignment problem with integer slot IDs and a linear cost objective can be solved either as MIP (`Problem(model, Float)` + HiGHS — bigger LP but standard solver) or CSP-style (`Problem(model, Integer)` + MiniZinc — globals + propagation, no LP gap). Filter 1 (continuity) is a hard rule; the other filters surface the dominant signal for each style, but most problems land in the gray zone where both styles work and the choice is a modeling preference.
 
 ### Filter 1: Continuity (hard rule)
 
@@ -107,39 +107,46 @@ Any continuous decision variable or continuous numeric data participating in a c
 
 Template precedents: continuous-quantity Resource Allocation, Network Flow, and Pricing problems (e.g., `ad_spend_allocation`, `portfolio_balancing`, `production_planning`, `supply_chain_transport`). **Verify each template's `Problem(model, ...)` signature at write time before citing it** rather than trust the directory name — several CSP-shaped templates (`shift_assignment`, `book_slate_recommendation`) use `Problem(model, Integer)` and are CSP-style despite the resource-allocation framing.
 
-### Filter 2: Expression surface (MIP is the more restrictive standard form)
+### Filter 2: Expression surface
 
-MIP's standard form forbids many natural expressions: `min`/`max` in the objective or constraints, `*` on two decision variables (bilinear), `count` / `all_different` as primitives, `implies` as a direct indicator. MiniZinc accepts all of these directly. MIP requires manual reformulation:
+MiniZinc accepts these expressions directly; MIP requires linearization:
 
 - `minimize(max(x_i))` → introduce `t`, constrain `t >= x_i` for each `i`, then `minimize(t)`. Template precedent: `chromatic_number` (minimizes max color directly under MiniZinc).
 - bilinear `x * y` → McCormick envelope, or accept a non-convex QP (Gurobi only; HiGHS rejects). Template precedent: AML motif detection (products of role flags).
 - `count(X, cond)` over decision variables → sum of `1{cond}` indicators with big-M.
-- `all_different` → **manual binary/disjunctive reformulation** (HiGHS) or indicator constraints (Gurobi only). MIP solvers do not consume `!=` natively as a linear inequality — the wire bridge treats it as nonlinear/logical (`Solvers.jl/src/model.jl:564`).
-- `implies(decision == v, body)` → big-M reformulation in MIP. Gurobi indicator constraints require the antecedent to compare a variable to `0` or `1` (`Solvers.jl/src/model.jl:581`), so an `implies(decision_id == k, body)` with `k ∉ {0, 1}` cannot use the native Gurobi indicator path — it lowers via big-M too.
+- `all_different` and `!=` / `==` between decision variables → the MIP wire does not consume `!=` natively as a linear inequality (the wire bridge treats it as nonlinear/logical, `Solvers.jl/src/model.jl:564`). Pairwise binary indicators with big-M are required. The same root cause makes pairwise `count(r, g0 == g1) <= 1` over two decision-variable refs (the social-golfer shape) tedious in MIP.
+- `implies(decision == v, body)` → big-M reformulation in MIP. Gurobi indicator constraints require the antecedent to compare a variable to `0` or `1` (`Solvers.jl/src/model.jl:581`); binary-antecedent `implies(x == 0, body)` / `implies(x == 1, body)` uses the native indicator path (typically faster than big-M), but `implies(decision_id == k, body)` with `k ∉ {0, 1}` lowers to big-M even on Gurobi. HiGHS lowers all `implies` to big-M via `LazyBridgeOptimizer`.
 
-If the natural formulation uses any of these expressions, **CSP-style** saves the linearization work and produces a smaller, more readable model. Use **MIP-style** only when you've already done (or want) the linearization — e.g., the linearized form has better LP relaxation, or you need gap reporting.
+Either style works for these expressions. CSP-style writes them directly; MIP-style produces a more standard form. `all_different` and pairwise decision-variable equality are the cases where CSP-style is markedly easier to write — for the other expressions the wire applies the linearization automatically, so the choice is shorter source vs. more standard form.
 
 `//` (floor division) and `%` (modulo) on two decision variables are **not accepted by either solver wire** — both raise compile-time errors. They are not a MIP-vs-MiniZinc differentiator.
 
 ### Filter 3: Problem mode
 
-- Pure feasibility / "find K feasible" / property-check (counterexample search) / audit-witness / multi-solution enumeration → **CSP-style** is the natural fit (status set, `solution_limit`, `Variable.values`). Template precedents: `underwriting_audit` (INFEASIBLE = PASS), AML motif (enumerate witnesses), `patient_cohort_recruitment` (find K satisfying).
-- Optimization with gap-reporting on TIME_LIMIT or provable optimality → **MIP-style** (LP relaxation gives the gap).
+- Multi-solution enumeration via `solution_limit=K` + `Variable.values(sol_index, val)` → **CSP-style** (only exposed on the MiniZinc path in PyRel today; theoretical alternatives like Gurobi solution pools or re-solve with no-good cuts exist but aren't surfaced). Template precedents: `multi_solution_enumeration` (K-of-feasible), AML motif (enumerate witnesses).
+- Audit / witness / counterexample search → CSP-style API is the natural match (status set, `Variable.values` extraction). MIP can express the same logic via `minimize(0)` and INFEASIBLE/OPTIMAL semantics for single witnesses. Template precedents: `underwriting_audit` (INFEASIBLE = PASS), `patient_cohort_recruitment` (find K satisfying).
+- Optimization where an LP-relaxation gap on `TIME_LIMIT` is useful → **MIP-style** (LP relaxation gives the gap). MiniZinc reports best-incumbent + search progress without an LP-style gap. Both families prove optimality when the search completes.
 
 ### Filter 4: Global constraints
 
-Heavy use of `all_different` or many `implies` cascades → **CSP-style** exploits these natively via propagation. MIP requires manual binary/disjunctive reformulation of `all_different` (`!=` is not native in HiGHS / Solvers.jl wire — see Filter 2). Template precedents: `chromatic_number` (all_different per edge), `planogram_optimization` (implies cascade lookup).
+- Heavy use of `all_different` → **CSP-style**. MIP requires manual binary/disjunctive reformulation (`!=` not native in the wire — see Filter 2).
+- Many `implies` cascades with non-binary antecedents (`decision_id == k` for `k ∉ {0, 1}`) → both styles big-M; CSP-style writes shorter. Binary-antecedent `implies(x == 0, body)` / `implies(x == 1, body)` with Gurobi uses native indicator constraints.
+
+Template precedents: `chromatic_number` (per-edge `!=`), `sudoku` (`all_different` per row/column/box), `planogram_optimization` (`implies` cascade lookup).
 
 ### Filter 5: Data shape
 
-- Sparse, structural, combinatorial / all-integer IDs → **CSP-style**.
-- Dense continuous flows, network-flow with volumes, portfolio with continuous weights → **MIP-style**.
-- Convex QP objective → **HiGHS** (MiniZinc has no QP).
+- Sparse, structural, combinatorial / all-integer IDs → **CSP-style** is a natural fit.
+- Dense continuous flows, network-flow with volumes, portfolio with continuous weights → forced to **MIP-style** by Filter 1 anyway.
+- Convex QP objective → **HiGHS** or **Gurobi** (MiniZinc has no QP).
 
 ### Performance rules of thumb
 
-- CP/MiniZinc scales well with tight logical constraints but poorly with loose continuous bounds (which it can't take anyway).
-- MIP scales well when LP relaxation is tight (small integrality gap).
+- Both families can prove optimality. CP completes the search tree on bounded discrete domains; MIP closes the gap via branch-and-bound.
+- MIP tends to win when the LP relaxation is tight (small integrality gap).
+- CP tends to win on heavily logical / global-constraint structure (`all_different`, pairwise equality counts).
+- Gurobi is typically faster than HiGHS where both apply.
 - For problems with both `all_different` and continuous variables, the continuity filter (1) forces MIP; the `all_different` then needs manual reformulation per Filter 2.
+- If performance matters on a specific instance, try both styles and measure.
 
-For the condensed form of these filters (decision flowchart + style triggers) used at formulation time, see [csp-formulation.md](csp-formulation.md) § 1. This file holds the expanded reference table; csp-formulation.md holds the writing-time signal map.
+For the condensed form of these filters used at formulation time, see [csp-formulation.md](csp-formulation.md) § 1. This file holds the expanded reference table; csp-formulation.md holds the writing-time signal map.

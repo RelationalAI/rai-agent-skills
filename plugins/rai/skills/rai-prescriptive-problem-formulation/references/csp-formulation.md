@@ -33,22 +33,32 @@ This doc focuses on what is distinctive about CSP-style formulation. General PyR
 
 ## 1. When this style fits
 
-Two headline rules govern the choice between MIP-style and CSP-style:
+Most prescriptive problems can be formulated either way — the choice is usually a modeling preference, and on a given instance either style may be faster. A few cases are genuinely structural.
 
-- **Any continuous decision or data forces MIP — no middle ground.** MiniZinc requires `Problem(model, Integer)`; a single Float decision variable coerces the whole problem to MIP.
-- **MIP is the more restrictive standard form.** MiniZinc accepts a richer expression surface in constraints and objectives without manual linearization: `min`/`max` directly in the objective (`minimize(max(...))` — see `chromatic_number.py`; `minimize(min(...))` for worst-case-bound problems), `*` on two decision variables (bilinear), `count` and `all_different` as primitives, `implies` as a direct indicator. MIP requires equivalent reformulation: auxiliary `t` with `t >= each_term` for max-in-objective, McCormick envelopes for bilinear, big-M for indicators, manual binary/disjunctive reformulation for `all_different`. CSP-style often saves real formulation work even when both solver families could in principle handle the problem.
+**Hard rules forcing MIP-style:**
 
-**Decision flow (apply in order; first hard rule that fires decides):**
+- Any continuous decision variable or continuous numeric data participating in a constraint. MiniZinc requires `Problem(model, Integer)`; a single Float coerces to MIP.
+- Convex QP objective. MiniZinc has no QP.
 
-1. **Continuity filter (hard rule)** — any continuous decision variable or continuous numeric data participating in a constraint → MIP-style.
-2. **Expression-surface filter** — `min`/`max` in objective, `*` on two decision variables, `count` / `all_different` as primitives, `implies` cascades → CSP-style fits naturally; MIP requires manual reformulation.
-3. **Problem-mode filter** — pure feasibility, find-K-feasible, property-check / counterexample search, audit-witness, multi-solution enumeration → CSP-style. Optimization with provable optimality or gap-reporting on TIME_LIMIT → MIP-style.
-4. **Global-constraint filter** — heavy `all_different` or many `implies` cascades → CSP-style exploits these via propagation.
-5. **Data-shape filter** — sparse, structural, combinatorial / all-integer IDs → CSP-style. Dense continuous flows, portfolio with continuous weights → MIP-style. Convex QP objective → HiGHS (MiniZinc has no QP).
+**Cases where CSP-style is markedly easier to write:**
 
-**Note on operator support.** `//` (floor division) and `%` (modulo) on two decision variables are **not accepted by either solver wire** — both raise compile-time errors. They are not a MiniZinc-vs-MIP differentiator. See `rai-pyrel-coding/references/common-pitfalls.md` (`//` on two decision variables row) and `rai-prescriptive-solver-management/SKILL.md` § Unsupported operators.
+- `all_different`, `!=` / `==` between decision variables, and pairwise `count` over decision-variable equality. The MIP wire does not consume `!=` natively (`Solvers.jl/src/model.jl:564`), so the MIP equivalent is pairwise binary indicators with big-M per pair. MiniZinc takes these directly with strong propagation. See `n_queens.py`, `sudoku.py`, `chromatic_number.py` (per-edge `!=`), `pairwise_no_repeat.py`.
+- Multi-solution enumeration. In PyRel today, `solution_limit=K` + `Variable.values(sol_index, val)` is only exposed on the MiniZinc path; MIP solvers return a single primal point. (Theoretical alternatives — Gurobi solution pools, re-solve with no-good cuts — exist but aren't surfaced.) See `multi_solution_enumeration.py`, `audit_witness.py`.
 
-For the expanded reference table with per-filter template precedents and the rationale behind each, see `global-constraints.md` § "MIP-style vs CSP-style — when to choose which."
+**Everything else — `min`/`max` in objective, `count` over decision variables not in the equality shape above, `implies` cascades, products of decision variables — both styles work.** MiniZinc accepts these expressions directly; MIP requires linearization (auxiliary `t` for `max`, big-M for indicators, McCormick or non-convex QP for bilinear), and the wire applies this automatically for `implies` via `LazyBridgeOptimizer`. CSP-style is shorter to write; MIP-style produces a more standard linear/quadratic form. Many of the examples in this skill (`integer_slot_with_sentinel.py`, `implies_table_lookup.py`, `subconcept_solve_for.py`, `scenario_concept_csp.py`) could be formulated either way — they are collected under CSP-style for readability and pattern coverage, not because MIP cannot express them.
+
+**Performance.** Both families can prove optimality (Chuffed completes the search tree on bounded discrete domains; MIP solvers close the gap via branch-and-bound). Neither family is universally faster:
+
+- MIP tends to win when the LP relaxation is tight.
+- CP tends to win on heavily logical / global-constraint structure.
+- Gurobi is typically faster than HiGHS where both apply. Gurobi has native indicator constraints, but only when the antecedent compares a variable to `0` or `1` (`Solvers.jl/src/model.jl:581`); for `implies(decision_id == k, body)` with `k ∉ {0, 1}` the wire lowers to big-M even on Gurobi — so the indicator advantage is binary-antecedent specific.
+- MIP reports an LP-relaxation gap on `TIME_LIMIT`; MiniZinc reports best-incumbent + search progress without an LP-style gap.
+
+If performance matters on a specific instance, try both styles and measure.
+
+**Note on operator support.** `//` (floor division) and `%` (modulo) on two decision variables are rejected by both wires — not a style differentiator. See `rai-pyrel-coding/references/common-pitfalls.md` (`//` on two decision variables row) and `rai-prescriptive-solver-management/SKILL.md` § Unsupported operators.
+
+For the expanded reference table with per-filter template precedents, see `global-constraints.md` § "MIP-style vs CSP-style — when to choose which."
 
 ---
 
@@ -354,6 +364,6 @@ The seven examples that distill the idioms above:
 | `examples/integer_slot_with_sentinel.py` | § 2a (K+1 sentinel) + § 3a (count over decision-dependent filter) |
 | `examples/implies_table_lookup.py` | § 3d (implies cascade) + § 2c (integer-ID membership IC) + § 6 (verify() skip) |
 | `examples/subconcept_solve_for.py` | § 2b (sub-concept predicate marker) |
-| `examples/chromatic_number.py` | `minimize(max(...))` directly (no MIP linearization), data-driven bounds, undirected-edge expansion |
+| `examples/chromatic_number.py` | `minimize(max(...))` directly (no aux-variable rewrite), data-driven bounds, undirected-edge expansion, per-edge `!=` |
 | `examples/pairwise_no_repeat.py` | § 3a (binder-in-where + double-symbolic `count(r, g0 == g1)`) — pairwise no-repeat, adapted from the social golfer benchmark |
 | `../../rai-prescriptive-solver-management/examples/scenario_concept_csp.py` | CSP-style analog of `scenario_concept_milp.py` — Scenario as data concept indexing integer decisions; single MiniZinc solve over all scenarios |

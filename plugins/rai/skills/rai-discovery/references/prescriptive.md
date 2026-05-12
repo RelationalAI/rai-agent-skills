@@ -122,22 +122,24 @@ This signals `rai-prescriptive-problem-formulation` to use scenario analysis (se
 
 ## Formulation Style Detection
 
-Within the five prescriptive problem types above, formulation can take two styles, each leaning on a different solver family. **This is a style axis cross-cutting the five problem types — not a sixth type.** Any of Resource Allocation, Network Flow / Design, Routing, Scheduling / Assignment, or Pricing can adopt either style when the decisions and data fit.
+Within the five prescriptive problem types above, formulation can take two styles, each leaning on a different solver family. **This is a style axis cross-cutting the five problem types — not a sixth type.** Any of Resource Allocation, Network Flow / Design, Routing, Scheduling / Assignment, or Pricing can adopt either style when the decisions and data fit. Most problems can be formulated either way; the style is then a modeling preference.
 
 **MIP-style** (`Problem(model, Float)` + `solver="highs"` / `"gurobi"` / `"ipopt"`):
 - Continuous decision variables or continuous data participating in constraints
 - Linear objectives, optionally convex quadratic
-- LP relaxation provides a useful quality gap on TIME_LIMIT
-- Provable optimality is required
+- LP-relaxation gap on `TIME_LIMIT` is useful
 
 **CSP-style** (`Problem(model, Integer)` + `solver="minizinc"`):
 - All-integer decisions and data — a single Float variable coerces to MIP
-- `min`/`max` in the objective, `count`/`all_different` over decision variables, `implies` cascades, products of decision variables
-- Multi-solution enumeration (`solution_limit=K`, `Variable.values`)
-- Pure satisfaction / audit / witness / counterexample / configurator / "find K feasible" framings
-- Hard to verbalize: "is there any configuration where X happens" — answer is INFEASIBLE = no, OPTIMAL = yes
+- `all_different` constraints — the MIP wire does not consume `!=` natively, so the MIP equivalent is tedious pairwise binaries + big-M
+- Multi-solution enumeration via `solution_limit=K` + `Variable.values(sol_index, val)` — only exposed on the MiniZinc path in PyRel today
+- Audit / witness / "find K feasible" framings — answer in termination status (`INFEASIBLE` = no, `OPTIMAL`/`SOLUTION_LIMIT` = yes)
+- Also accepts directly: `min`/`max` in objective, `count` over decision variables, `implies` cascades, products of decision variables. MIP requires linearization for these (the wire applies the `implies` → big-M automatically); both styles work — preference.
 
-**Style triggers (any one is sufficient to consider CSP-style):** all-integer decisions and data; `min`/`max` in objective; heavy `all_different` use; complex `implies` cascades; products of decision variables; multi-solution enumeration; audit / witness / property-check; configurator; "find K feasible." **Forcing MIP-style:** any continuous decision or data; convex QP objective; gap-reporting required on TIME_LIMIT; provable optimality required.
+**Forcing MIP-style:** continuous decision or data; convex QP objective; LP-relaxation gap required on `TIME_LIMIT`.
+**Forcing CSP-style (in PyRel today):** multi-solution workflow via `Variable.values`. Theoretical MIP alternatives (Gurobi solution pools, re-solve with no-good cuts) aren't surfaced.
+
+Many problems land outside both lists. In the gray zone, pick the style that's easier to maintain; if performance matters on a specific instance, try both styles and measure. Both families prove optimality.
 
 **Routing:** Set `csp_style_witness_enumeration` in the prescriptive implementation hint when the style triggers fire — particularly when the question is "find K feasible / find counterexamples / enumerate all builds satisfying" rather than minimize / maximize:
 

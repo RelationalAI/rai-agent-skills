@@ -4,19 +4,23 @@ Graph coloring: assign a color (integer) to each node so connected nodes have di
 Objective: minimize the maximum color used (= chromatic number).
 
 This is the canonical example showing that CSP-style problems regularly have objectives.
-MIP's standard form would require an auxiliary variable t with t >= each_color and minimize(t);
-MiniZinc accepts minimize(max(Node.color)) directly. The aggregate-as-objective form is shorter
-than the aux-variable form. The symmetry break is a footnote, not the lesson.
+The MIP form would introduce an auxiliary `t` with `t >= each_color` and `minimize(t)`;
+MiniZinc accepts `minimize(max(Node.color))` directly. Both solve fine — the aggregate-as-
+objective form is shorter to write. The structurally CSP-favorable side here is the
+`Pa.color != Pb.color` adjacency constraint: the MIP wire does not take `!=` natively
+(see csp-formulation.md § 1), so the MIP equivalent is pairwise binary indicators + big-M.
+The symmetry break is a footnote, not the lesson.
 
 Demonstrates:
-- minimize(max(...)) directly in the objective — no MIP linearization required
+- minimize(max(...)) directly in the objective — no MIP-style aux-variable rewrite needed
 - Data-driven upper bound: Node.color in {1..num_nodes}; arbitrary bounds blow up search
 - Undirected-edge expansion via reverse-define (Rules level) — without it, the graph constraints
   would match each edge in one direction only and miss the symmetric violations
 - Symmetry break (fix Node 1's color to 1) — a one-line footnote, not the structural idea
 
 Triggering pattern: "minimize the largest X," "minimize the worst case," "tightest band/spread"
-under combinatorial constraints. CSP-style is the natural form; MIP requires an aux variable.
+under combinatorial constraints. CSP-style writes this directly; MIP-style introduces an aux
+variable. Both work.
 
 For undirected-edge expansion mechanics, see rai-pyrel-coding/references/expression-rules.md.
 """
