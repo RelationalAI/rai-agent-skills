@@ -162,7 +162,7 @@ model.where(
 )
 ```
 
-The MIP-side cost of this shape is steep — pairwise `count(...) <= 1` over decision-variable equality lowers to `O(n_pairs × n_rounds)` big-M disjunctions. MiniZinc consumes the equality directly via propagation. Demonstrated end-to-end in `pairwise_no_repeat.py` (distilled from `social_golfer`).
+The MIP-side cost of this shape is steep — pairwise `count(...) <= 1` over decision-variable equality lowers to `O(n_pairs × n_rounds)` big-M disjunctions. MiniZinc consumes the equality directly via propagation. Demonstrated end-to-end in `pairwise_no_repeat.py` (adapted from the classic social golfer benchmark, CSPLib Problem 010).
 
 **Symbolic in `per(...)`** is always wrong — `per(...)` groups by data dimensions, not by decision values. If grouping requires a derived integer (e.g., sudoku's 3×3 box index `(i - 1) // side`), arithmetic on data refs in `per(...)` is fine; arithmetic involving a decision-variable value is not.
 
@@ -355,5 +355,5 @@ The seven examples that distill the idioms above:
 | `examples/implies_table_lookup.py` | § 3d (implies cascade) + § 2c (integer-ID membership IC) + § 6 (verify() skip) |
 | `examples/subconcept_solve_for.py` | § 2b (sub-concept predicate marker) |
 | `examples/chromatic_number.py` | `minimize(max(...))` directly (no MIP linearization), data-driven bounds, undirected-edge expansion |
-| `examples/pairwise_no_repeat.py` | § 3a (binder-in-where + double-symbolic `count(r, g0 == g1)`) — pairwise no-repeat distilled from `social_golfer` |
+| `examples/pairwise_no_repeat.py` | § 3a (binder-in-where + double-symbolic `count(r, g0 == g1)`) — pairwise no-repeat, adapted from the social golfer benchmark |
 | `../../rai-prescriptive-solver-management/examples/scenario_concept_minizinc.py` | MiniZinc analog of `scenario_concept_milp.py` — Scenario as data concept indexing integer decisions; single MiniZinc solve |

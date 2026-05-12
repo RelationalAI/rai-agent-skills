@@ -88,7 +88,7 @@ problem.solve("minizinc", time_limit_sec=30)
 si = problem.solve_info()
 si.display()
 
-if si.termination_status in ("OPTIMAL", "SOLUTION_LIMIT", "LOCALLY_SOLVED"):
+if si.termination_status in ("OPTIMAL", "SOLUTION_LIMIT"):
     print(f"\nSelected cohort of {COHORT_SIZE}:")
     model.select(
         EligiblePatient.id,

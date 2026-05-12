@@ -3,7 +3,7 @@
 Round-robin tournament: N=4 players, R=3 rounds, G=2 groups of S=2 players each.
 Constraint: no pair of players is in the same group more than once across all rounds.
 
-This is the social_golfer pattern distilled to its smallest pedagogically useful form. With
+This adapts the social golfer benchmark (CSPLib Problem 010) to its smallest pedagogically useful form. With
 N=4 and group_size=2, the unordered pair count is C(4,2)=6, and the schedule contributes
 R × C(S,2) × G = 3 × 1 × 2 = 6 pair-occurrences — so the "no-repeat" IC forces exactly one
 meeting per pair across the schedule (a perfect round-robin).
@@ -30,7 +30,7 @@ Triggering pattern: "no pair X meets twice," "diversify co-occurrence," "round-r
 scheduling," "tournament without rematches." Whenever the IC's shape is "for each PAIR of
 entities, count co-occurrences in a data dimension ≤ N," this is the form.
 
-Distilled from social_golfer.
+Adapted from the social golfer benchmark (CSPLib Problem 010).
 """
 
 import time
@@ -99,7 +99,7 @@ problem.solve("minizinc", time_limit_sec=30)
 si = problem.solve_info()
 si.display()
 
-if si.termination_status in ("OPTIMAL", "SOLUTION_LIMIT", "LOCALLY_SOLVED"):
+if si.termination_status in ("OPTIMAL", "SOLUTION_LIMIT"):
     print(
         f"\nTournament schedule ({N_PLAYERS} players, {N_ROUNDS} rounds, "
         f"{N_GROUPS} groups of {GROUP_SIZE}):"

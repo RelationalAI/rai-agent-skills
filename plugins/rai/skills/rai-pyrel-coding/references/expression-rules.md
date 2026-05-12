@@ -371,6 +371,8 @@ relation's tuples; it is not a filter on a specific value.
 ```python
 w = Integer.ref().alias("w")
 x = Integer.ref().alias("x")
+group_val = std.common.range(n_groups)   # data range over group indices
+group_size = ...                         # problem constant (players per group)
 
 # In an IC, `Player.assign(w, x)` in where() iterates (Player, w, x) tuples of the relation.
 # Each iteration carries one (Player, week, group) binding for the body to constrain.
@@ -405,8 +407,8 @@ Two consequences:
    ```
 
 For a worked example combining both consequences, see
-`rai-prescriptive-problem-formulation/examples/pairwise_no_repeat.py` (distilled from
-`social_golfer`).
+`rai-prescriptive-problem-formulation/examples/pairwise_no_repeat.py` (adapted from the
+classic social golfer benchmark — CSPLib Problem 010).
 
 ### Bracket notation for relationships
 
