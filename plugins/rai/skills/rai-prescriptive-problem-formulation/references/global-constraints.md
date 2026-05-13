@@ -19,7 +19,7 @@ This table is the single source of truth for which solver supports which global.
 | `special_ordered_set_type_1` | ✓ | — | ✓ | — | — |
 | `special_ordered_set_type_2` | ✓ | — | ✓ | — | — |
 
-HiGHS does not support SOS as a solver feature (`highs/io/FilereaderLp.cpp:31-34` parses SOS but hard-errors with `"SOS not supported by HiGHS"`). The HiGHS.jl issue tracking SOS was closed in 2022. If MIP-side SOS is required, use Gurobi or reformulate with explicit binary variables (see `numerical-and-mip.md` > Reformulation Techniques).
+HiGHS does not support SOS as a solver feature — passing SOS to HiGHS raises `"SOS not supported by HiGHS"`. If MIP-side SOS is required, use Gurobi or reformulate with explicit binary variables (see `numerical-and-mip.md` > Reformulation Techniques).
 
 ## `all_different` — pairwise distinct values
 
@@ -91,11 +91,11 @@ Extract via `Variable.values(sol_index, value_ref)` on the `ProblemVariable` ret
 
 See [csp-formulation.md](csp-formulation.md) § 4 for the worked-out pattern, and `examples/multi_solution_enumeration.py` for an end-to-end example.
 
-## `verify()` caveat for `implies`-bodied integrity constraints
+## `verify()` caveat for solver-only IC bodies
 
-> **`verify()` does not re-evaluate `implies`-bodied integrity constraints.** When an IC's body is wrapped in `implies(condition, body)`, the verify engine has no way to ground the antecedent at check time and silently returns OK — even when the IC is violated by the returned solution. This is **not** a bug in the solver; it is a documented engine limitation. For any IC whose body uses `implies` (decision-indexed table lookups in particular), add an explicit post-solve assertion in Python that re-evaluates the constraint against the extracted values. Templates that demonstrate this skip: `planogram_optimization` (planogram_optimization.py:306), `synthetic_order_lifecycle` (242-243), `synthetic_eligibility_records` (213-214).
+`verify()` silently returns OK on ICs whose body is a solver-only construct (`implies`-bodied or `all_different`-bodied), even when the IC is violated by the returned solution. The verify engine cannot ground these wire-format constraint relations at check time. The companion silent-failure mode is the empty-aggregate silent-drop (`sum` / `count` over an empty relation drops the IC at compile time).
 
-The companion silent-failure mode is the empty-aggregate silent-drop: `sum` / `count` over an empty relation drops the IC at compile time. Detect both classes by diffing `num_constraints` / `num_min_objectives` before and after a model edit.
+See [csp-formulation.md](csp-formulation.md) § 6 for the three regimes (mixed; all solver-only; `populate=False`) and the post-solve-assertion pattern.
 
 ## MIP-style vs CSP-style — when to choose which
 
@@ -114,8 +114,8 @@ MiniZinc accepts these expressions directly; MIP requires linearization:
 - `minimize(max(x_i))` → introduce `t`, constrain `t >= x_i` for each `i`, then `minimize(t)`. Template precedent: `chromatic_number` (minimizes max color directly under MiniZinc).
 - bilinear `x * y` → McCormick envelope, or accept a non-convex QP (Gurobi only; HiGHS rejects). Template precedent: AML motif detection (products of role flags).
 - `count(X, cond)` over decision variables → sum of `1{cond}` indicators with big-M.
-- `all_different` and `!=` / `==` between decision variables → the MIP wire does not consume `!=` natively as a linear inequality (the wire bridge treats it as nonlinear/logical, `Solvers.jl/src/model.jl:564`). Pairwise binary indicators with big-M are required. The same root cause makes pairwise `count(r, g0 == g1) <= 1` over two decision-variable refs (the social-golfer shape) tedious in MIP.
-- `implies(decision == v, body)` → big-M reformulation in MIP. Gurobi indicator constraints require the antecedent to compare a variable to `0` or `1` (`Solvers.jl/src/model.jl:581`); binary-antecedent `implies(x == 0, body)` / `implies(x == 1, body)` uses the native indicator path (typically faster than big-M), but `implies(decision_id == k, body)` with `k ∉ {0, 1}` lowers to big-M even on Gurobi. HiGHS lowers all `implies` to big-M via `LazyBridgeOptimizer`.
+- `all_different` and `!=` / `==` between decision variables → the MIP wire does not consume `!=` natively as a linear inequality (the wire bridge treats it as nonlinear/logical). Pairwise binary indicators with big-M are required. The same root cause makes pairwise `count(r, g0 == g1) <= 1` over two decision-variable refs (the social-golfer shape) tedious in MIP.
+- `implies(decision == v, body)` → big-M reformulation in MIP. Gurobi indicator constraints require the antecedent to compare a variable to `0` or `1`; binary-antecedent `implies(x == 0, body)` / `implies(x == 1, body)` uses the native indicator path (typically faster than big-M), but `implies(decision_id == k, body)` with `k ∉ {0, 1}` lowers to big-M even on Gurobi. HiGHS lowers all `implies` to big-M via the wire's bridge mechanism.
 
 Either style works for these expressions. CSP-style writes them directly; MIP-style produces a more standard form. `all_different` and pairwise decision-variable equality are the cases where CSP-style is markedly easier to write — for the other expressions the wire applies the linearization automatically, so the choice is shorter source vs. more standard form.
 

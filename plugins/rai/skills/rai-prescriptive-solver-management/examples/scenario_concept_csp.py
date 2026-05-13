@@ -1,7 +1,24 @@
 # Pattern: Scenario Concept — CSP-style analog of scenario_concept_milp.py
-# Mirrors the MILP form: Scenario as a data concept indexes integer decisions; single solve runs
-# all scenarios together. Differs from the MILP analog only in Problem(model, Integer) +
-# solver="minizinc" and integer-only decision/data shapes.
+"""
+Capacity allocation across 3 scenarios that each raise the capacity bound by an integer amount.
+Scenario is modeled as a data concept indexing integer decisions; a single MiniZinc solve covers
+all scenarios together (rather than re-solving once per scenario).
+
+Demonstrates:
+- Problem(model, Integer) + solver="minizinc" — integer-only decisions and data
+- Scenario as a data concept (not a Python loop) — the parameter dimension lives in the model
+- Multi-arity decision property indexed by (Project, Scenario)
+- Per-scenario constraints via `.per(Site, Scenario)` two-level grouping
+- Single solve replaces N solver invocations; the solver picks each scenario's best assignment jointly
+
+Triggering pattern: "compare K parameter levels," "show the optimal plan under each scenario,"
+"sweep the capacity bound and pick the best assignment for each level." When the parameter axis is
+finite, well-defined, and shares the same constraint structure across levels, encode Scenario as a
+data concept rather than a Python re-solve loop.
+
+Mirrors `scenario_concept_milp.py` in this directory — same pattern with integer decisions and the
+MiniZinc backend instead of HiGHS / Gurobi.
+"""
 
 import time
 

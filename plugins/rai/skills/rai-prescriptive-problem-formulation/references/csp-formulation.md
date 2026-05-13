@@ -11,7 +11,7 @@ CSP-style is a **style**, not a separate problem class. It is characterized by `
 - [3. Constraint idioms](#3-constraint-idioms)
 - [4. Multi-solution mode](#4-multi-solution-mode)
 - [5. Audit / witness enumeration](#5-audit--witness-enumeration)
-- [6. The verify() caveat for implies-bodied ICs](#6-the-verify-caveat-for-implies-bodied-ics)
+- [6. The verify() caveat for solver-only IC bodies](#6-the-verify-caveat-for-solver-only-ic-bodies)
 - [7. Pitfall: big-M vs half-reified implies for active-iff with aggregate body](#7-pitfall-big-m-vs-half-reified-implies-for-active-iff-with-aggregate-body)
 - [8. Globals available today](#8-globals-available-today)
 - [9. Cross-reasoner handoff](#9-cross-reasoner-handoff)
@@ -43,7 +43,7 @@ Most prescriptive problems can be formulated either way — the choice is usuall
 
 **Cases where CSP-style is markedly easier to write:**
 
-- `all_different` (callable MiniZinc-only — see the matrix in `global-constraints.md`), `!=` / `==` between decision variables, and pairwise `count` over decision-variable equality. The MIP wire does not consume `!=` natively (`Solvers.jl/src/model.jl:564`), so the MIP equivalent is pairwise binary indicators with big-M per pair. MiniZinc takes these directly with strong propagation. See `n_queens.py`, `sudoku.py`, `chromatic_number.py` (per-edge `!=`), `pairwise_no_repeat.py`.
+- `all_different` (callable MiniZinc-only — see the matrix in `global-constraints.md`), `!=` / `==` between decision variables, and pairwise `count` over decision-variable equality. The MIP wire does not consume `!=` natively, so the MIP equivalent is pairwise binary indicators with big-M per pair. MiniZinc takes these directly with strong propagation. See `n_queens.py`, `sudoku.py`, `chromatic_number.py` (per-edge `!=`), `pairwise_no_repeat.py`.
 - Multi-solution enumeration. In PyRel today, `solution_limit=K` + `Variable.values(sol_index, val)` is only exposed on the MiniZinc path; MIP solvers return a single primal point. (Theoretical alternatives — Gurobi solution pools, re-solve with no-good cuts — exist but aren't surfaced.) See `multi_solution_enumeration.py`, `audit_witness.py`.
 
 **Everything else — `min`/`max` in objective, `count` over decision variables not in the equality shape above, `implies` cascades, products of decision variables — both styles work.** MiniZinc accepts these expressions directly; MIP requires linearization. The wire auto-lowers `implies` (big-M on HiGHS via `LazyBridgeOptimizer`; native indicator constraints on Gurobi for binary antecedents). The rest is hand-written: aux `t` for `max`, McCormick or non-convex QP for bilinear, pairwise indicators for `count` / `==` / `!=` over decision variables. CSP-style is shorter to write; MIP-style produces a more standard linear/quadratic form. Many of the examples in this skill (`integer_slot_with_sentinel.py`, `implies_table_lookup.py`, `subconcept_solve_for.py`, `scenario_concept_csp.py`) could be formulated either way — they are collected under CSP-style for readability and pattern coverage, not because MIP cannot express them.
@@ -52,7 +52,7 @@ Most prescriptive problems can be formulated either way — the choice is usuall
 
 - MIP tends to win when the LP relaxation is tight.
 - CP tends to win on heavily logical / global-constraint structure.
-- Gurobi is typically faster than HiGHS where both apply. Gurobi has native indicator constraints, but only when the antecedent compares a variable to `0` or `1` (`Solvers.jl/src/model.jl:581`); for `implies(decision_id == k, body)` with `k ∉ {0, 1}` the wire lowers to big-M even on Gurobi — so the indicator advantage is binary-antecedent specific.
+- Gurobi is typically faster than HiGHS where both apply. Gurobi has native indicator constraints, but only when the antecedent compares a variable to `0` or `1`; for `implies(decision_id == k, body)` with `k ∉ {0, 1}` the wire lowers to big-M even on Gurobi — so the indicator advantage is binary-antecedent specific.
 - MIP reports an LP-relaxation gap on `TIME_LIMIT`; MiniZinc reports best-incumbent + search progress without an LP-style gap.
 
 If performance matters on a specific instance, try both styles and measure.
@@ -271,6 +271,8 @@ decision_var = problem.solve_for(Decision.x, type="bin", populate=False)
 
 When the question is "does the property hold?" or "is there any configuration where X happens?", the solver answer comes from the termination status, not the objective value. This **inverts** MIP intuition: `INFEASIBLE` is the desired outcome.
 
+**Counterexample IC = property negation.** The modeling move behind every audit problem: encode the property to be audited as its negation in the constraint set. `INFEASIBLE` on the negated form proves the original property holds across the entire feasible space (not just sampled fixtures); `OPTIMAL` / `SOLUTION_LIMIT` returns a witness that violates the original property. `audit_witness.py` follows this move — the IC `sum(salary × x_flagged) >= cap + 1` is the negation of "no K-subset exceeds cap"; INFEASIBLE on the negation = PASS on the original.
+
 | Termination status | Audit verdict |
 |--------------------|---------------|
 | `INFEASIBLE` | **PASS** — no configuration satisfies the witness condition. The property holds. |
@@ -291,15 +293,21 @@ else:
     verdict = "INCONCLUSIVE"
 ```
 
-`audit_witness.py` (distilled from `underwriting_audit`) carries this pattern end-to-end.
+`audit_witness.py` (distilled from `underwriting_audit`) carries this pattern end-to-end. A "FAIL" verdict line should disambiguate itself (e.g., `FAIL (ruleset has counterexamples)`) so consumers don't misread a property failure as a template error.
 
 ---
 
-## 6. The verify() caveat for implies-bodied ICs
+## 6. The verify() caveat for solver-only IC bodies
 
-> **`verify()` does not re-evaluate `implies`-bodied integrity constraints.** When an IC's body is wrapped in `implies(condition, body)`, the verify engine has no way to ground the antecedent at check time and silently returns OK — even when the IC is violated by the returned solution. This is **not** a bug in the solver; it is a documented engine limitation. For any IC whose body uses `implies` (decision-indexed table lookups in particular), add an explicit post-solve assertion in Python that re-evaluates the constraint against the extracted values. Templates that demonstrate this skip: `planogram_optimization` (planogram_optimization.py:306), `synthetic_order_lifecycle` (242-243), `synthetic_eligibility_records` (213-214).
+> **`verify()` does not re-evaluate ICs whose body is a solver-only construct (`implies`-bodied or `all_different`-bodied).** These constraints lower to wire-format constraint relations the verify engine cannot ground at check time, so verify silently returns OK — even when the IC is violated by the returned solution. This is **not** a bug in the solver; it is a documented engine limitation. The `implies` case is the most common (decision-indexed table lookups in particular); `all_different` has the same root cause and the same silent-OK behavior.
 
 The companion silent-failure mode is the empty-aggregate silent-drop: `sum` / `count` over an empty relation drops the IC at compile time. Detect both classes by diffing `num_constraints` / `num_min_objectives` before and after a model edit — if the count drops unexpectedly, an IC was dropped silently.
+
+### Three regimes for handling verify() with solver-only ICs
+
+Pick the regime that matches the constraint mix:
+
+**Regime 1 — Mixed (some arithmetic ICs, some solver-only).** Call `verify()` to re-evaluate the arithmetic ICs; pair each solver-only IC with an explicit post-solve Python assertion that re-evaluates the constraint against the extracted values. `implies_table_lookup.py` follows this regime — the `implies` cascade ships with the post-solve loop below.
 
 ```python
 # Post-solve assertion for an implies-bodied IC
@@ -315,6 +323,10 @@ for row in extracted.itertuples():
     actual_aux = aux_values[row.entity]
     assert actual_aux == expected, f"implies cascade violated at entity={row.entity}"
 ```
+
+**Regime 2 — All solver-only (every IC is `implies`- or `all_different`-bodied).** `verify()` has nothing it can re-evaluate; skip it entirely and rely on per-IC post-solve Python assertions. Calling `verify()` in this regime just adds noise.
+
+**Regime 3 — `populate=False`.** Multi-solution and audit/witness workflows use `populate=False` so decision values stay solver-side rather than being written back to the relational layer (see § 4). With no values in the relational layer, `verify()` cannot ground *any* IC against the chosen solution — even pure-arithmetic ICs — and prints spurious "Requirements not met" warnings instead of doing real verification. Skip `verify()` and use per-IC post-solve assertions, OR `model.select(decision_var.values(idx, val))`-style extraction + Python checks. `multi_solution_enumeration.py` and `audit_witness.py` are in this regime.
 
 ---
 
@@ -332,9 +344,9 @@ implies(active == 1, sum(x_flow).per(Path) <= 0)
 sum(x_flow).per(Path) + BIG_M * active <= TOL + BIG_M
 ```
 
-For decision-indexed **table lookup** (body references a single Ref row's value, not an aggregate), `implies` is still the right shape — see `planogram_optimization` and § 3d above. The pitfall is specific to aggregate-body active-iff in enumeration mode.
+For decision-indexed **table lookup** (body references a single Ref row's value, not an aggregate), `implies` is still the right shape — see § 3d above. The pitfall is specific to aggregate-body active-iff in enumeration mode.
 
-Demonstrated in `motif_butterfly.py` in the AML template (`money_laundering_motif_detection`) — search the file for "Big-M is preferred" to find the inline comment explaining the choice.
+Demonstrated end-to-end in `big_m_active_iff_aggregate.py` (distilled from the AML motif-butterfly detector — hub-balance constraint that is active only when an account is chosen as a hub).
 
 ---
 
@@ -356,7 +368,7 @@ For the chained-discovery handshake (how to declare the closure as enrichment fr
 
 ## 10. Cross-links to examples
 
-The seven examples that distill the idioms above:
+Local examples that distill the idioms above, plus a cross-link to `scenario_concept_csp.py` in `rai-prescriptive-solver-management`:
 
 | File | Idioms |
 |------|--------|
@@ -367,4 +379,8 @@ The seven examples that distill the idioms above:
 | `examples/subconcept_solve_for.py` | § 2b (sub-concept predicate marker) |
 | `examples/chromatic_number.py` | `minimize(max(...))` directly (no aux-variable rewrite), data-driven bounds, undirected-edge expansion, per-edge `!=` |
 | `examples/pairwise_no_repeat.py` | § 3a (binder-in-where + double-symbolic `count(r, g0 == g1)`) — pairwise no-repeat, adapted from the social golfer benchmark |
+| `examples/big_m_active_iff_aggregate.py` | § 7 (big-M form of active-iff with aggregate body — preferred over half-reified `implies` in multi-solution mode) |
+| `examples/pair_table_anti_affinity.py` | Pairwise no-co-location via symmetric forbidden-pair table — `xi + xj <= 1` per (Slot, pair) tuple; CP-friendly (no big-M) |
+| `examples/gang_atomicity_reified.py` | All-or-nothing group placement via reified cardinality `sum(member.placed).per(group) == replicas × group.placed` |
+| `examples/or_arithmetic_binaries.py` | Linear three-inequality encoding of `y = a OR b` on binaries (`y >= a`, `y >= b`, `y <= a + b`) |
 | `../../rai-prescriptive-solver-management/examples/scenario_concept_csp.py` | CSP-style analog of `scenario_concept_milp.py` — Scenario as data concept indexing integer decisions; single MiniZinc solve over all scenarios |

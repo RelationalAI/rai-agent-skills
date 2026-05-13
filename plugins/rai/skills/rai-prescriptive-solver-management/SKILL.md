@@ -174,7 +174,7 @@ Choose the solver based on variable types and objective/constraint structure:
 - Requires `Problem(model, Integer)` — a single Float decision variable or Float data coerces the problem to MIP and MiniZinc will reject it.
 - `solution_limit=K` enables multi-solution enumeration. Termination status `SOLUTION_LIMIT` (not `OPTIMAL`) when search stopped at K with more feasible remaining; `OPTIMAL` means search exhausted with ≤ K found.
 - Chuffed is the only backend exposed today; Gecode / CP-SAT are not selectable.
-- Native MiniZinc logging is NOT captured into LogMessage events (the solver service fall-through in `Solvers.jl:683`). Use `log_to_console=True` to stream logs.
+- Native MiniZinc logging is NOT captured into LogMessage events. Use `log_to_console=True` to stream logs.
 
 For the full CSP-style formulation guide, see [csp-formulation.md](../rai-prescriptive-problem-formulation/references/csp-formulation.md).
 

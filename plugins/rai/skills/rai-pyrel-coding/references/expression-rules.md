@@ -432,16 +432,14 @@ RawEdge = model.Concept("RawEdge", identify_by={"a": Integer, "b": Integer})
 
 # Symmetric Edge relation — populated from RawEdge in both orientations
 Edge = model.Relationship(f"{Node:a} adjacent to {Node:b}")
-model.where(RawEdge).define(
-    Edge(Node.filter_by(id=RawEdge.a), Node.filter_by(id=RawEdge.b))
-)
-model.where(RawEdge).define(
-    Edge(Node.filter_by(id=RawEdge.b), Node.filter_by(id=RawEdge.a))
-)
+Na = Node.ref()
+Nb = Node.ref()
+model.define(Edge(Na, Nb)).where(Na.id == RawEdge.a, Nb.id == RawEdge.b)
+model.define(Edge(Na, Nb)).where(Na.id == RawEdge.b, Nb.id == RawEdge.a)
 
 # Downstream IC matches both orientations automatically
-Na, Nb = Node, Node.ref()
-problem.satisfy(model.where(Edge(Na, Nb), Na.id < Nb.id).require(Na.color != Nb.color))
+Pa, Pb = Node, Node.ref()
+problem.satisfy(model.where(Edge(Pa, Pb), Pa.id < Pb.id).require(Pa.color != Pb.color))
 ```
 
 The `Na.id < Nb.id` half-pair filter is a symmetry break — without it, each undirected edge is counted twice (as `(a,b)` and `(b,a)`).
