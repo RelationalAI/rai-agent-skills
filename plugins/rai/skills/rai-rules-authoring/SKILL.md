@@ -1,6 +1,6 @@
 ---
 name: rai-rules-authoring
-description: Load this FIRST when the task requires a new classification, tier, flag, segment, or derived property. Converts natural language business rules into PyRel derived properties. Covers validation, classification, derivation, alerting, and reconciliation patterns. Use for business logic, flags, subtypes, segmentation, or compliance rules. Must run before rai-querying if the task involves creating new derived properties — rai-querying cannot create derived properties.
+description: Converts natural language business rules into PyRel derived properties. Covers validation, classification, derivation, alerting, and reconciliation patterns. Use for business logic, flags, subtypes, segmentation, or compliance rules. Must run before rai-querying if the task involves creating new derived properties — rai-querying cannot create derived properties.
 ---
 
 # Rules Authoring
@@ -30,7 +30,7 @@ and reconciliation rule types.
 **When to use:**
 - Translating a business rule from natural language to PyRel (e.g., "flag high-value customers")
 - Classifying which rule pattern to use (validation, classification, derivation, alerting, reconciliation)
-- Declaring a new `model.Property()` or `model.Relationship()` to encode business logic like classification, flags, tiers, or segments using `define()` + `where()` expressions
+- Declaring a new `model.Property()`, `model.Relationship()`, or sub-concept `model.Concept()` to encode business logic like classification, flags, tiers, or segments
 - Reviewing or debugging an existing rule definition
 - Chaining rules with other reasoner outputs (graph metrics, predictions)
 - Testing that a rule produces correct results on known data
@@ -46,7 +46,8 @@ and reconciliation rule types.
 1. Parse the natural language rule to identify intent, entities, conditions, and output
 2. Classify the rule type (validation, classification, derivation, alerting, reconciliation)
 3. Ground in the current model via `inspect.schema(model)` before mapping entities to ontology — catches duplicates, hallucinated surface, and wrong-type inference
-4. Declare a new PyRel `model.Property()` or `model.Relationship()` to encode business logic like classification, flags, tiers, or segments using `define()` + `where()` expressions
+4. Declare a new `model.Property()`, `model.Relationship()` or sub-concept `model.Concept()` first, then encode business logic like classification, flags, tiers, or segments using `model.where().define()` or `model.define()` expressions
+- Reviewing or debugging an existing rule definition
 5. Validate the rule against known test cases
 6. Connect to downstream consumers (queries, other rules, or reasoner chains)
 
@@ -419,7 +420,7 @@ flag_df = query_flag(model, Entity.fails_check, Entity, "fails_check")
 base_df = base_df.merge(flag_df, on="id", how="left")
 base_df["fails_check"] = base_df["fails_check"].fillna(False)
 ```
-This merge pattern is only for surfacing boolean Relationships that cannot appear in select(). Any derived values that depend on these flags — counts of flags, tier classifications, risk scores — must still be declared as model.Property() with model.where().define(), not computed from the merged DataFrame. Using .apply(), .map(), or arithmetic on merged boolean columns to produce a new derived column is the same mistake as computing the rule output in pandas.
+This merge pattern is only for surfacing boolean `Relationship`s that cannot appear in `select()`. Any derived values that depend on these flags — counts of flags, tier classifications, risk scores — must still be declared as `model.Property()` with `model.where().define()`, not computed from the merged DataFrame. Using `.apply()`, `.map()`, or arithmetic on merged boolean columns to produce a new derived column is the same mistake as computing the rule output in pandas.
 
 For general PyRel pitfalls (type mismatches, aggregation scoping, join expansion, missing data,
 f-string syntax, `rai` function availability, subtype limitations, boolean negation), see
