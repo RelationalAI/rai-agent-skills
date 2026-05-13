@@ -258,6 +258,20 @@ Compilation or solver errors prevented a solution.
 **What to tell users:** "The model could not be solved due to a technical error: [error message]. This needs to be fixed before we can get results."
 **Next steps:** Check compilation output, fix expression syntax, verify all referenced properties exist.
 
+### Audit / witness mode — status-aware verdict (CSP-style)
+
+When the question is "does the property hold?" or "is there any configuration where X happens?", the answer comes from the termination status, not the objective value. This **inverts** MIP intuition: `INFEASIBLE` is the desired outcome.
+
+| Termination status | Audit verdict |
+|--------------------|---------------|
+| `INFEASIBLE` | **PASS** — no configuration satisfies the witness condition. The property holds. |
+| `OPTIMAL` or `SOLUTION_LIMIT` | **FAIL** — at least one configuration was found that violates the property. Extract witnesses for the report. |
+| Other (`TIME_LIMIT`, error, `LOCALLY_SOLVED` on a CSP) | **INCONCLUSIVE** — solver did not exhaust the search. Do not interpret as PASS. |
+
+**Critical:** `num_points() == 0` does **not** prove the property holds — the solver may have crashed, hit a time limit, or produced zero solutions for any other reason. Always check the termination status first.
+
+For the full pattern (counterexample-IC-as-negation, verdict-gated extraction, witness reporting), see `rai-prescriptive-problem-formulation/references/csp-formulation.md` § 5 and `examples/audit_witness.py`.
+
 ---
 
 ## Solvability Ladder
@@ -441,6 +455,9 @@ For parameter sweep patterns, scenario comparison tables, and Pareto frontier co
 | Infeasible: demand > capacity | Total demand exceeds supply | Add slack/penalty variables or relax demand constraints |
 | Silent: `problem.termination_status == "OPTIMAL"` (no parens) — always False | `termination_status` on the `Problem` object is a bound method, not a property; comparing a method to a string is never equal and the bug is silent | Read status Python-side: `problem.solve_info().termination_status == "OPTIMAL"` (no parens — `solve_info()` returns a dataclass-like value with a string field). Engine-side inside `model.require(...)`: `problem.termination_status() == "OPTIMAL"` (with parens — that's the engine-side Relationship) |
 | Silent: non-OPTIMAL result extraction returns empty DataFrame / None objective | Loop / scenario workflows extract `Variable.values()` or read `si.objective_value` without checking status first. Infeasible / time-limited solves produce an empty query and `None` objective, silently propagated into downstream code | Always guard: `if si.termination_status not in ("OPTIMAL", "LOCALLY_SOLVED"): continue` (or raise) before touching `si.objective_value` or the extraction query |
+| Multi-solution overclaim — treating `solution_limit=K` results as top-K-optimal, ranked, or diversity-maximized | MiniZinc returns up to K **distinct feasible** solutions; the set is neither ranked by objective nor maximally diverse | Document the semantics to consumers: up to K distinct feasible, no ordering guarantee. For "top-K by objective," resolve K times with the previous-best as a constraint. See `rai-prescriptive-problem-formulation/references/csp-formulation.md` § Multi-solution mode. |
+| Silent: `verify()` returns OK on solver-only-IC bodies (`implies`-bodied or `all_different`-bodied) even when the IC is violated | The verify engine cannot ground these wire-format constraint relations at check time, so it silently returns OK. Documented engine limitation, not a solver bug | Pick the regime that matches the constraint mix (`rai-prescriptive-problem-formulation/references/csp-formulation.md` § 6): mixed → call `verify()` + post-solve assertions on solver-only ICs; all-solver-only → skip `verify()` entirely; `populate=False` → skip `verify()` (no relational-layer values to ground) |
+| Audit misread: `num_points() == 0` interpreted as "property holds" | In status-aware audit problems, a zero `num_points` can result from a crash, time-limit, or any non-success status — NOT necessarily proof that the property holds | Always check `termination_status` first. Only `INFEASIBLE` proves the property holds. `TIME_LIMIT`, errors, and `LOCALLY_SOLVED` on a CSP are INCONCLUSIVE. See Audit / witness mode section above. |
 
 For additional pitfalls (numerical instability, degenerate solutions, wrong aggregation scope, missing/null data) — distinct from the silent-bug rows above — see [references/common-pitfalls.md](references/common-pitfalls.md).
 

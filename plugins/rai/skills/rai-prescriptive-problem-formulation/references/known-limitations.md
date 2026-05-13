@@ -77,3 +77,17 @@ problem.satisfy(model.require(Entity.supply >= Entity.inflow))
 `numpy.float64`, `numpy.int64`, and other numpy scalar types are not accepted as literals in solver constraints. Extracting a value from a DataFrame (e.g., `df["col"].iloc[0]`) returns a numpy scalar, and passing it directly to `model.require()` causes `NotImplementedError: Literal type not implemented for value type: numpy.float64`.
 
 **Fix:** Cast to Python builtins before use: `float(value)`, `int(value)`.
+
+## CSP-style limitations
+
+When using `Problem(model, Integer)` + `solver="minizinc"`:
+
+- **`Problem(model, Integer)` is required.** A single Float decision variable or Float data coerces the problem to MIP — MiniZinc will reject it. Mismatched pairings: `Problem(model, Float)` + `solver="minizinc"` returns a server error; `Problem(model, Integer)` + `solver="highs"` returns an Int128 result-extraction error.
+- **Empty-aggregate silent-drop is documented correctness.** A `sum` / `count` over an empty relation drops the IC at compile time. Detect via a `num_constraints` / `num_min_objectives` diff before and after a model edit. Sibling silent-failure mode to the `verify()` skip on `implies`-bodied ICs (see [global-constraints.md](global-constraints.md) > verify() caveat).
+- **Mixed symbolic + constant arms in `model.union(...)` / `|` are rejected.** Same-shape fallbacks (literal `|` literal, symbolic `|` symbolic) are fine; mixed shapes raise `NotImplementedError`. The aggregate-default form `sum(empty) | sum(populated)` works.
+- **`circuit`, `cumulative`, `element`, `table`, `no_overlap`, `inverse`, `lex_lesseq` are not Python-callable today.** MiniZinc's native global-constraint library is far richer than what PyRel exposes; only `all_different`, `implies`, SOS1, SOS2 are callable from PyRel. See [global-constraints.md](global-constraints.md) > Per-solver coverage matrix.
+- **`%` and `//` on two decision variables are hard-rejected** by the wire on both MIP and MiniZinc paths. Not a style differentiator.
+- **MiniZinc supports a single scalar objective.** No multi-objective MiniZinc lower; use the epsilon-constraint loop (see `multi-objective-formulation.md`) for bi-objective.
+- **Chuffed is the only MiniZinc backend exposed.** Gecode / CP-SAT are not currently selectable. Native MiniZinc logging is not captured into LogMessage events.
+
+For the full CSP-style guide, see [csp-formulation.md](csp-formulation.md).

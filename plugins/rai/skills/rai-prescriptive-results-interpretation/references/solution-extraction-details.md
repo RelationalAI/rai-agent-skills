@@ -159,9 +159,27 @@ sol2_df = model.select(
 
 **How many solutions to request:**
 
-Keep `solution_limit` small (typically 3-10). The primary use case for multiple solutions is enabling human evaluation — like Google Maps showing a few route options — but humans are not effective at comparing hundreds of alternatives. If there is an analytical way to compare solutions, that comparison criterion belongs in the objective function, not in post-hoc filtering of a large solution set.
+Two distinct sizing rules apply, depending on the use case:
 
-Requesting very large solution counts (e.g., 100,000) is almost never appropriate. The few specialized cases where large solution sets make sense include running downstream simulations over candidate solutions or feeding alternatives into a separate evaluation pipeline. For standard decision-support problems, a handful of near-optimal alternatives is far more useful than an exhaustive enumeration.
+1. **Human-comparison mode (3–10):** When the primary use is enabling human evaluation — like Google Maps showing a few route options — humans are not effective at comparing hundreds of alternatives. If there is an analytical way to compare solutions, that criterion belongs in the objective function, not in post-hoc filtering of a large set.
+
+2. **Audit / witness enumeration mode (above feasible-set size):** When the use is "find ALL configurations violating the property" or "enumerate every valid build" (CSP-style audit / witness), `solution_limit` must exceed the expected feasible-set size so the search terminates with `OPTIMAL` (= search exhausted) rather than `SOLUTION_LIMIT` (= stopped at K with more remaining). `SOLUTION_LIMIT` is a valid status for K-of-many enumeration but its order is solver-dependent — fine for sampling, problematic when downstream tests expect a deterministic full set. See `rai-prescriptive-problem-formulation/references/csp-formulation.md` § 4 and `examples/audit_witness.py`.
+
+Requesting very large solution counts (e.g., 100,000) is rarely appropriate in human-comparison mode. The few specialized cases where large solution sets make sense include audit / witness enumeration above, downstream simulation over candidate solutions, or feeding alternatives into a separate evaluation pipeline.
+
+**Status-gated extraction:** for either mode, gate the extraction loop on `termination_status`:
+
+```python
+if si.termination_status not in ("OPTIMAL", "SOLUTION_LIMIT"):
+    # Solver did not enumerate — do not iterate sol_index; results are undefined
+    ...
+else:
+    n_points = si.num_points or 0
+    for sol_idx in range(n_points):
+        ...
+```
+
+A non-success status with `num_points == 0` (TIME_LIMIT, crash) does NOT mean the search was exhaustive — it means the search did not run to completion. Treating "zero results" as "exhaustive enumeration found nothing" is a silent-failure mode in audit-mode problems (see SKILL.md > Audit / witness mode).
 
 **By problem type:**
 
@@ -174,7 +192,7 @@ Requesting very large solution counts (e.g., 100,000) is almost never appropriat
 
 **Solver-specific limits:**
 - **HiGHS:** Limited multi-solution support — typically returns 1–2 solutions. Cap at 5.
-- **MiniZinc:** Native support for solution enumeration. Can handle 10–20+.
+- **MiniZinc (Chuffed):** Native support for solution enumeration; can handle hundreds when the feasible space is structurally constrained. For audit / witness use, size above expected feasible-set size; termination is `OPTIMAL` when exhausted, `SOLUTION_LIMIT` when cut off. Requires `Problem(model, Integer)`.
 - **Gurobi:** Pool search mode supports 10–20+ solutions efficiently.
 
 ## Iterative Solving

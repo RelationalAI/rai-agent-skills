@@ -360,11 +360,112 @@ model.where(
 ).require(Ni.color != Nj.color)
 ```
 
+### Multi-arity property invocation in `where()` as binder
+
+A property declared with extra arities — e.g.
+`Player.assign = model.Property(f"{Player} in {Integer:week} is in {Integer:group}")`
+has signature `Player × Integer(week) → Integer(group)` — is invoked by name with refs as
+positional arguments. Inside `where(...)`, the invocation **binds** each ref argument to the
+relation's tuples; it is not a filter on a specific value.
+
+```python
+n_groups, group_size = ..., ...          # problem constants (group count, players per group)
+w = Integer.ref().alias("w")
+x = Integer.ref().alias("x")
+group_val = std.common.range(n_groups)   # data range over group indices
+
+# In an IC, `Player.assign(w, x)` in where() iterates (Player, w, x) tuples of the relation.
+# Each iteration carries one (Player, week, group) binding for the body to constrain.
+model.where(Player.assign(w, x)).require(
+    count(Player, x == group_val).per(w, group_val) == group_size
+)
+```
+
+Two consequences:
+
+1. **The invocation is a binder, not a filter.** `where(Player.assign(w, x))` does NOT prune
+   to a specific `(w, x)`; it iterates the whole relation. Adding `x == 2` as a separate
+   condition turns it into a filter. When `x` is a decision-variable value, the binder/filter
+   distinction is load-bearing — see
+   `rai-prescriptive-problem-formulation/references/csp-formulation.md` § 3a.
+
+2. **It composes naturally with pairwise self-joins.** For ICs over two distinct entities each
+   carrying their own decision value, walrus-bind two `Concept.ref()` and two value-refs, then
+   invoke the property on each:
+
+   ```python
+   w = Integer.ref()  # shared week-dimension ref
+   model.where(
+       p0 := Player.ref(),
+       p1 := Player.ref(),
+       p0.p < p1.p,           # data filter (Player.p is data) — symmetry-break half-pair
+       x0 := Integer.ref(),
+       x1 := Integer.ref(),
+       p0.assign(w, x0),      # binds x0 to p0's decision value at week w
+       p1.assign(w, x1),      # binds x1 to p1's decision value at week w
+   ).require(...)
+   ```
+
+For a worked example combining both consequences, see
+`rai-prescriptive-problem-formulation/examples/pairwise_no_repeat.py` (adapted from the
+classic social golfer benchmark — CSPLib Problem 010).
+
 ### Bracket notation for relationships
 
 ```python
 rel["field"]  # Access a named field of a relationship
 ```
+
+---
+
+## Undirected-edge expansion via reverse-define
+
+PyRel relationships are directed. Any aggregate, query, or constraint over an *undirected* graph must either expand the edge relation at the Rules level so both orientations are present, or `.ref()`-pair both directions inline. Without one of these, the IC silently matches a single orientation and misses half the symmetric counterparts. Two patterns:
+
+### Pattern 1 — Rules-level expansion (persistent symmetric relation)
+
+Declare a relationship and populate it in **both directions** from a raw directed edge concept. Downstream queries / ICs reference the symmetric relation as a single source.
+
+```python
+RawEdge = model.Concept("RawEdge", identify_by={"a": Integer, "b": Integer})
+# ... populate RawEdge from data
+
+# Symmetric Edge relation — populated from RawEdge in both orientations
+Edge = model.Relationship(f"{Node:a} adjacent to {Node:b}")
+Na = Node.ref()
+Nb = Node.ref()
+model.define(Edge(Na, Nb)).where(Na.id == RawEdge.a, Nb.id == RawEdge.b)
+model.define(Edge(Na, Nb)).where(Na.id == RawEdge.b, Nb.id == RawEdge.a)
+
+# Downstream IC matches both orientations automatically
+Pa, Pb = Node, Node.ref()
+problem.satisfy(model.where(Edge(Pa, Pb), Pa.id < Pb.id).require(Pa.color != Pb.color))
+```
+
+The `Na.id < Nb.id` half-pair filter is a symmetry break — without it, each undirected edge is counted twice (as `(a,b)` and `(b,a)`).
+
+### Pattern 2 — Inline `.ref()` pair (no persisted symmetric relation)
+
+For single-IC undirected matching, pair two `Edge.ref()`s inline (or via walrus `:=` inside the `where`) and constrain the reverse direction. Use when the IC is one-off and a persistent symmetric relation is not needed elsewhere.
+
+```python
+# Standard assignment form — Ei and Ej must appear bare in the where() to
+# anchor each ref to the Edge relation; field references alone don't bind.
+Ei, Ej = Edge.ref(), Edge.ref()
+problem.satisfy(
+    model.where(Ei, Ej, Ej.i == Ei.j, Ej.j == Ei.i).require(...)
+)
+
+# Equivalent walrus form (operator-position only — walrus is valid inside an
+# expression, not at module scope). The walrus expression itself anchors the ref.
+problem.satisfy(
+    model.where(Ei := Edge.ref(), Ej := Edge.ref(), Ej.i == Ei.j, Ej.j == Ei.i).require(...)
+)
+```
+
+For a concrete worked example using Pattern 1, see `rai-prescriptive-problem-formulation/examples/chromatic_number.py`.
+
+---
 
 ### Chain.ref() and .alt()
 

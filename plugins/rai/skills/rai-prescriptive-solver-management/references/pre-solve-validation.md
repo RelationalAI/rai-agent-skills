@@ -117,7 +117,35 @@ model.require(problem.num_min_objectives() + problem.num_max_objectives() == 1)
 #     raise AssertionError(f"cap_constr fired {n_g}/{n_e}")
 ```
 
-### 6. Multi-arg Properties (Scenario Concept pattern)
+### 6. CSP-style cross-check — `Problem(model, ...)` / solver pairing
+
+Before solving, verify the `Problem(model, ...)` type matches the chosen solver:
+
+| `Problem(model, ...)` | Compatible solvers | Incompatible — known failure modes |
+|-----------------------|--------------------|------------------------------------|
+| `Float` | `"highs"`, `"gurobi"`, `"ipopt"` | `"minizinc"` returns a server error |
+| `Integer` | `"minizinc"`, `"gurobi"` | `"highs"` returns an Int128 result-extraction error |
+
+Mismatch is the dominant cause of the `Problem(model, Float)` + minizinc and `Problem(model, Integer)` + highs failures documented in [SKILL.md](../SKILL.md) Common Pitfalls. The check is a one-liner — do it before `problem.solve(...)` rather than after a confusing error.
+
+```python
+# Pre-solve type check — uses the documented public attribute
+if solver_name == "minizinc":
+    # MiniZinc requires Integer-typed Problem
+    # (Float decisions / data coerce to MIP — MiniZinc will reject)
+    assert problem.numeric_type is Integer, (
+        "MiniZinc requires Problem(model, Integer)."
+    )
+elif solver_name == "highs":
+    # HiGHS cannot return Int128; needs a Float-typed Problem
+    assert problem.numeric_type is Float, (
+        "HiGHS requires Problem(model, Float); for Integer use minizinc or gurobi."
+    )
+```
+
+The check uses `Problem.numeric_type` — the documented public attribute that holds the type passed at construction (`Float` or `Integer`). For the full CSP-style formulation guide, see [csp-formulation.md](../../rai-prescriptive-problem-formulation/references/csp-formulation.md).
+
+### 7. Multi-arg Properties (Scenario Concept pattern)
 
 When using the Scenario Concept pattern, decision variables are registered as multi-arg Properties:
 

@@ -168,7 +168,15 @@ Choose the solver based on variable types and objective/constraint structure:
 
 **Gurobi** (`solver="gurobi"`): Commercial (available via RAI). Best for large-scale MILP, QP, QCP, and nonlinear problems. Industry-leading MILP performance, discrete + continuous + quadratic + nonlinear (`math.exp`, `math.log`, `math.sqrt`, `x ** n`), excellent diagnostics, multi-objective support. Params: `TimeLimit`, `MIPGap`, `MIPFocus` (0=balanced, 1=feasibility, 2=optimality, 3=bound), `Presolve` (2 for aggressive), `Threads` (0 for auto). **License required:** Gurobi requires a named prescriptive engine with a Snowflake secret and external access integration configured in `raiconfig.yaml`. See [rai-setup](../rai-setup/SKILL.md) for setup. If unavailable, fall back to HiGHS (LP/MILP) or Ipopt (NLP). Large MIP problems may solve significantly faster with Gurobi than HiGHS.
 
-**MiniZinc** (`solver="minizinc"`): Open-source (Chuffed backend). Best for CP, combinatorial, constraint satisfaction. Powerful propagation, global constraints (`all_different`, `circuit`), multiple solutions. Params: `time_limit_sec`, `solution_limit`. Cannot handle continuous variables, LP, QP, NLP.
+**MiniZinc** (`solver="minizinc"`): Open-source (Chuffed backend). Best for CP, combinatorial, constraint satisfaction. Powerful propagation, native support for `all_different` and `implies`, multiple solutions via `solution_limit`. Params: `time_limit_sec`, `solution_limit`. Cannot handle continuous variables, LP, QP, NLP, or SOS constraints. MiniZinc's native global-constraint library is far richer (`circuit`, `cumulative`, `element`, ...) but only `all_different` and `implies` are exposed from PyRel to MiniZinc today; SOS1/SOS2 are PyRel-exposed but Gurobi-only.
+
+**MiniZinc-specific requirements and behavior:**
+- Requires `Problem(model, Integer)` — a single Float decision variable or Float data coerces the problem to MIP and MiniZinc will reject it.
+- `solution_limit=K` enables multi-solution enumeration. Termination status `SOLUTION_LIMIT` (not `OPTIMAL`) when search stopped at K with more feasible remaining; `OPTIMAL` means search exhausted with ≤ K found.
+- Chuffed is the only backend exposed today; Gecode / CP-SAT are not selectable.
+- Native MiniZinc logging is NOT captured into LogMessage events. Use `log_to_console=True` to stream logs.
+
+For the full CSP-style formulation guide, see [csp-formulation.md](../rai-prescriptive-problem-formulation/references/csp-formulation.md).
 
 **Ipopt** (`solver="ipopt"`): Open-source. Best for continuous nonlinear optimization. Interior-point for smooth NLP, handles nonlinear objectives AND constraints. Finds local optima only. Params: `max_iter`, `max_wall_time`, `tol` (e.g. 1e-8), `print_level`, `mu_strategy`. Cannot handle integer or binary variables -- will FAIL.
 
@@ -340,6 +348,8 @@ The following operators are **not lowered to the solver** and will raise errors 
 | Numerical issues | Coefficients differing by >1e6 | Rescale data to similar magnitudes |
 | `problem.termination_status == "OPTIMAL"` is always False | Missing parens — `problem.termination_status` returns a bound method, not a string | Use `problem.termination_status()` (with parens) in `model.require()`, or `problem.solve_info().termination_status` for Python-side |
 | `AttributeError` on `problem.solve()` return value | Assigning `result = problem.solve()` and accessing `result.status` | `problem.solve()` returns `None`. Use `problem.solve_info()` for status. For solution values, use `model.select()` (populate=True) or `Variable.values()` (populate=False). |
+| `Problem(model, Float)` + `solver="minizinc"` returns a server error | MiniZinc requires `Problem(model, Integer)`. A Float problem cannot be lowered to the MiniZinc backend | Use `Problem(model, Integer)` for MiniZinc. If the problem has continuous data or decisions, choose MIP-style (`Problem(model, Float)` + HiGHS / Gurobi / Ipopt). See `Problem(model, Float)` vs `Problem(model, Integer)` pairing rules in [pre-solve-validation.md](references/pre-solve-validation.md) > CSP-style cross-check. |
+| `Problem(model, Integer)` + `solver="highs"` returns an Int128 result-extraction error | The Integer problem registers Int128 result tuples that the HiGHS extraction path cannot decode | Pair `Problem(model, Integer)` with `solver="minizinc"` (or `solver="gurobi"`). If staying on HiGHS, use `Problem(model, Float)` and rely on integer type hints in `solve_for(..., type="int")`. |
 
 For formulation-time pitfalls (wrong aggregation scope, loose Big-M, missing forcing requirement, unwired relationships, etc.), see `rai-prescriptive-problem-formulation` > Common Pitfalls.
 
@@ -355,6 +365,7 @@ Post-solve diagnosis (trivial all-zero solutions, infeasibility root causes, qua
 | Scenario Concept (multi-binary MILP) | Two binary variable types indexed by Scenario, `.per(Entity, Scenario)` grouping, cross-variable budget | [examples/scenario_concept_milp.py](examples/scenario_concept_milp.py) |
 | Entity exclusion (disruption) | Loop + `where=[]` with `!=` filter to exclude entities, `populate=False`, `Variable.values()` results | [examples/entity_exclusion_disruption.py](examples/entity_exclusion_disruption.py) |
 | Partitioned sub-problems (loop) | Loop + `where=[]` filter per partition, `populate=False`, `Variable.values()` results | [examples/partitioned_iteration_scenarios.py](examples/partitioned_iteration_scenarios.py) |
+| Scenario Concept (CSP) | CSP-style analog of `scenario_concept_milp.py` — Scenario as data concept indexing integer decisions; single MiniZinc solve over all scenarios | [examples/scenario_concept_csp.py](examples/scenario_concept_csp.py) |
 
 ---
 
@@ -370,3 +381,4 @@ Post-solve diagnosis (trivial all-zero solutions, infeasibility root causes, qua
 | Compilation errors | Entity reference errors, type mismatch, zero entities, fix taxonomy | [compilation-errors.md](references/compilation-errors.md) |
 | Diagnostic taxonomy | Root cause codes, fix action types, status-specific fix direction | [diagnostic-taxonomy.md](references/diagnostic-taxonomy.md) |
 | Solver parameters | Solver-specific kwargs, tuning, cloud pipeline, warm starting, scenario analysis | [solver-parameters.md](references/solver-parameters.md) |
+| CSP-style formulation | When this style fits, decision-variable shapes, constraint idioms, multi-solution mode semantics, audit / witness verdict mapping, verify() three-regime guidance for solver-only-IC bodies | [csp-formulation.md](../rai-prescriptive-problem-formulation/references/csp-formulation.md) |

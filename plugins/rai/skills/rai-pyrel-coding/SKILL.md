@@ -59,7 +59,7 @@ print(Product.cost > 10)   # → Product.cost > 10
 Product.cost.inspect()     # → executes query, prints DataFrame to stdout
 ```
 
-For solver formulation (Problem, solve_for, satisfy, minimize/maximize), see `rai-prescriptive-problem-formulation`.
+For solver formulation (Problem, solve_for, satisfy, minimize/maximize), see `rai-prescriptive-problem-formulation`. For CSP-style formulation specifically (`Problem(model, Integer)` + `solver="minizinc"`, all-discrete decisions and data, globals, multi-solution enumeration), see `rai-prescriptive-problem-formulation/references/csp-formulation.md`.
 
 ---
 

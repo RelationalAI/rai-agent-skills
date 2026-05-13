@@ -1,0 +1,386 @@
+# CSP-style formulation in PyRel
+
+This doc covers PyRel's CSP-style (constraint satisfaction problem style) prescriptive formulation. It covers both problems with objectives (e.g., `chromatic_number` minimizes max color, `book_slate` maximizes revenue, `planogram` maximizes revenue via an `implies` cascade) and pure-satisfaction modes (audit / witness / property-check, multi-solution enumeration without ranking — see §§ Multi-solution mode, Audit / witness enumeration). The community shorthand "CSP" technically denotes satisfaction-only problems; the style as practiced in PyRel includes optimization too, so treat "CSP-style" here as the broader paradigm.
+
+CSP-style is a **style**, not a separate problem class. It is characterized by `Problem(model, Integer)` + `solver="minizinc"`, all-discrete decisions and data, and constraint + objective shapes (globals, `count` / products over decision variables, `min`/`max` in objective) that MiniZinc supports natively where HiGHS/Gurobi require manual reformulation. Any of the five existing prescriptive problem types (Resource Allocation, Network Flow / Design, Routing, Scheduling / Assignment, Pricing) can adopt this style.
+
+<!-- TOC -->
+- [0. PyRel-level cross-references](#0-pyrel-level-cross-references)
+- [1. When this style fits](#1-when-this-style-fits)
+- [2. Decision-variable shapes](#2-decision-variable-shapes)
+- [3. Constraint idioms](#3-constraint-idioms)
+- [4. Multi-solution mode](#4-multi-solution-mode)
+- [5. Audit / witness enumeration](#5-audit--witness-enumeration)
+- [6. The verify() caveat for solver-only IC bodies](#6-the-verify-caveat-for-solver-only-ic-bodies)
+- [7. Pitfall: big-M vs half-reified implies for active-iff with aggregate body](#7-pitfall-big-m-vs-half-reified-implies-for-active-iff-with-aggregate-body)
+- [8. Globals available today](#8-globals-available-today)
+- [9. Cross-reasoner handoff](#9-cross-reasoner-handoff)
+- [10. Cross-links to examples](#10-cross-links-to-examples)
+<!-- /TOC -->
+
+---
+
+## 0. PyRel-level cross-references
+
+This doc focuses on what is distinctive about CSP-style formulation. General PyRel mechanics live one level up in `rai-pyrel-coding`. Before reading the rest of this doc, know that:
+
+- `count(X, condition)` syntax — second arg is a condition expression on `X` — is documented in `rai-pyrel-coding/references/common-pitfalls.md` (count syntax row). This doc only surfaces the CSP-style-distinctive twist on top of that base syntax (see § Constraint idioms).
+- `.ref()` mechanics for pairwise self-joins (`Concept.ref()`) and value-binding (`Float.ref()`, `Integer.ref()`) are documented in `rai-pyrel-coding/SKILL.md` § References and Aliasing.
+- Undirected-edge expansion via reverse-define is documented in `rai-pyrel-coding/references/expression-rules.md` (undirected-edge expansion section). CSP-style chromatic_number / pod_placement / book_slate problems hit this mechanic frequently — see the cross-reference in `chromatic_number.py`.
+- `model.union()` branch-shape requirement is documented in `rai-pyrel-coding/references/common-pitfalls.md` (inconsistent branches row).
+
+---
+
+## 1. When this style fits
+
+Most prescriptive problems can be formulated either way — the choice is usually a modeling preference, and on a given instance either style may be faster. A few cases are genuinely structural.
+
+**Hard rules forcing MIP-style:**
+
+- Any continuous decision variable or continuous numeric data participating in a constraint. MiniZinc requires `Problem(model, Integer)`; a single Float coerces to MIP.
+- Convex QP objective. MiniZinc has no QP.
+- Use of the `special_ordered_set_type_1` / `special_ordered_set_type_2` callables — Gurobi only (per the matrix in `global-constraints.md`). The semantics can be hand-modeled with explicit binary indicators in HiGHS or MiniZinc, but the callables force Gurobi-MIP.
+
+**Cases where CSP-style is markedly easier to write:**
+
+- `all_different` (callable MiniZinc-only — see the matrix in `global-constraints.md`), `!=` / `==` between decision variables, and pairwise `count` over decision-variable equality. The MIP wire does not consume `!=` natively, so the MIP equivalent is pairwise binary indicators with big-M per pair. MiniZinc takes these directly with strong propagation. See `n_queens.py`, `sudoku.py`, `chromatic_number.py` (per-edge `!=`), `pairwise_no_repeat.py`.
+- Multi-solution enumeration. In PyRel today, `solution_limit=K` + `Variable.values(sol_index, val)` is only exposed on the MiniZinc path; MIP solvers return a single primal point. (Theoretical alternatives — Gurobi solution pools, re-solve with no-good cuts — exist but aren't surfaced.) See `multi_solution_enumeration.py`, `audit_witness.py`.
+
+**Everything else — `min`/`max` in objective, `count` over decision variables not in the equality shape above, `implies` cascades, products of decision variables — both styles work.** MiniZinc accepts these expressions directly; MIP requires linearization. The wire auto-lowers `implies` (big-M on HiGHS via `LazyBridgeOptimizer`; native indicator constraints on Gurobi for binary antecedents). The rest is hand-written: aux `t` for `max`, McCormick or non-convex QP for bilinear, pairwise indicators for `count` / `==` / `!=` over decision variables. CSP-style is shorter to write; MIP-style produces a more standard linear/quadratic form. Many of the examples in this skill (`integer_slot_with_sentinel.py`, `implies_table_lookup.py`, `subconcept_solve_for.py`, `scenario_concept_csp.py`) could be formulated either way — they are collected under CSP-style for readability and pattern coverage, not because MIP cannot express them.
+
+**Performance.** Both families can prove optimality (Chuffed completes the search tree on bounded discrete domains; MIP solvers close the gap via branch-and-bound). Neither family is universally faster:
+
+- MIP tends to win when the LP relaxation is tight.
+- CP tends to win on heavily logical / global-constraint structure.
+- Gurobi is typically faster than HiGHS where both apply. Gurobi has native indicator constraints, but only when the antecedent compares a variable to `0` or `1`; for `implies(decision_id == k, body)` with `k ∉ {0, 1}` the wire lowers to big-M even on Gurobi — so the indicator advantage is binary-antecedent specific.
+- MIP reports an LP-relaxation gap on `TIME_LIMIT`; MiniZinc reports best-incumbent + search progress without an LP-style gap.
+
+If performance matters on a specific instance, try both styles and measure.
+
+**Note on operator support.** `//` (floor division) and `%` (modulo) on two decision variables are rejected by both wires — not a style differentiator. See `rai-pyrel-coding/references/common-pitfalls.md` (`//` on two decision variables row) and `rai-prescriptive-solver-management/SKILL.md` § Unsupported operators.
+
+For the expanded reference table with per-filter template precedents, see `global-constraints.md` § "MIP-style vs CSP-style — when to choose which."
+
+---
+
+## 2. Decision-variable shapes
+
+CSP-style problems share a small set of recurring decision-variable shapes. Pick the one that matches the data, then verify membership.
+
+### 2a. Integer slot in `{1..K+1}` with `K+1` = unpicked sentinel
+
+When a decision is "which of K choices, or nothing," reserve `K+1` as the sentinel for "not picked" and let cardinality fall out of how many slots equal each choice. One variable carries both the cardinality and the position information.
+
+```python
+# Slot = position in K+1-long range; K+1 is the sentinel for "not picked"
+problem.solve_for(Slot.choice, type="int", lower=1, upper=K + 1, name=["choice", Slot.index])
+# A choice c is "selected" iff at least one slot picked it:
+chosen = count(Slot.choice, Slot.choice == c).per(c)
+```
+
+Demonstrated end-to-end in `integer_slot_with_sentinel.py` (distilled from `book_slate_recommendation`).
+
+### 2b. Sub-concept predicate marker + `solve_for(Sub.prop)`
+
+Declare a sub-concept whose membership is the eligibility predicate, declare the decision Property on the parent concept, and `solve_for` the property keyed by the sub-concept — the solver only creates decision variables for sub-concept rows. The scoping is structural: ineligible parent rows have no variable, so downstream constraints cannot accidentally pick them.
+
+```python
+# Sub-concept populated by the Rules layer
+EligiblePatient = model.Concept("EligiblePatient", extends=[Patient])
+model.define(EligiblePatient(Patient)).where(Patient.score >= threshold)
+
+# Decision Property declared on the parent concept, scoped via solve_for
+Patient.is_in_cohort = model.Property(f"{Patient} is in cohort if {Integer:in_cohort}")
+problem.solve_for(EligiblePatient.is_in_cohort, type="bin")
+problem.satisfy(model.require(sum(EligiblePatient.is_in_cohort) == cohort_size))
+```
+
+Demonstrated end-to-end in `subconcept_solve_for.py` (distilled from `patient_cohort_recruitment`).
+
+### 2c. Integer-ID decision with explicit membership IC
+
+This is the shape that admits the most-frequent silent-failure mode in CSP-style formulation. **When an integer decision variable is bounded only by `lower=min(Ref.id), upper=max(Ref.id)`, the solver is free to pick any integer in that range — including IDs not present in the reference data.** If a downstream `implies(decision_id == Ref.id, ...)` cascade looks up properties on the chosen ID and the lookup is non-total, those properties stay silently unconstrained, and `verify()` returns OK because `implies`-bodied ICs are not re-evaluated post-solve (see § 6).
+
+Two safe forms:
+
+```python
+# Form A: explicit membership IC — exactly one Reference row matches each Decision
+problem.solve_for(Decision.id, type="int", lower=min_id, upper=max_id)
+problem.satisfy(model.require(
+    count(Reference, Reference.id == Decision.id).per(Decision) == 1
+))
+
+# Form B: dense-contiguous validation upfront (pre-solve)
+# Check at problem-build time that {min_id..max_id} == set(Reference.id);
+# if not, switch to Form A or filter Reference to a dense range.
+n_decision_domain = (max_id - min_id + 1)
+n_ref_rows = len(model.select(Reference.id).to_df())
+assert n_decision_domain == n_ref_rows, "integer-ID decision domain is not dense over Reference"
+```
+
+Demonstrated in `implies_table_lookup.py` (distilled from `planogram_optimization` and cross-referenced with `underwriting_audit`).
+
+### 2d. Binary-availability-scoped decision
+
+Familiar pattern from MIP-style scheduling (e.g., `shift_assignment`). Worth listing here because it remains correct in CSP-style and pairs naturally with `count` over decision-dependent filters (idiom 3a).
+
+```python
+Worker.x_assigned = model.Property(f"{Worker} on {Shift} is {Integer:assigned}")
+problem.solve_for(
+    Worker.x_assigned, type="bin",
+    where=[Worker.available_for(Shift)],
+    name=["assign", Worker.id, Shift.id],
+)
+```
+
+---
+
+## 3. Constraint idioms
+
+### 3a. Cardinality via `count(X, cond).per(group)` — decision-dependent filter
+
+The CSP-style-distinctive point on top of the base `count(X, cond)` syntax (documented in `rai-pyrel-coding/references/common-pitfalls.md`): when `cond` depends on a decision variable, the comparison **must live inside** `count`'s second argument, not as a filter in an outer `where`. An outer `where` filter on a decision-variable value would prune the search space at pre-solve, eliminating feasible search states; the inner form lets `count` count states per branch during solving.
+
+```python
+# CORRECT — decision-dependent filter inside count
+problem.satisfy(model.require(
+    count(Slot, Slot.choice == c).per(c) <= max_per_choice
+))
+
+# WRONG — outer where prunes the search instead of counting
+problem.satisfy(model.where(Slot.choice == c).require(
+    count(Slot).per(c) <= max_per_choice
+))
+```
+
+**Binder vs filter in the outer `where`.** A multi-arity-property invocation in `where(...)` (e.g., `Player.assign(w, x)`) is a binder over the relation's tuples — it does NOT prune to a specific decision value. See `rai-pyrel-coding/references/expression-rules.md` (Multi-arity property invocation in where as binder) for the general mechanic. The CSP-specific consequence is the rule above: putting a decision-var **equality** in the outer where is a search-pruning filter and is the failure mode this section guards against.
+
+**Two decision-variable refs in the count's comparison.** When `count`'s second-arg comparison is between TWO decision-variable values rather than decision-vs-data, both refs must be bound through the outer `where` (via the multi-arity-binder pattern). This is the pairwise no-repeat shape — count occurrences of "two entities' decisions match" across a data dimension.
+
+```python
+r = Integer.ref()   # shared round-dimension ref
+# Pairwise no-repeat: count rounds where two players are in the same group, must be <= 1
+model.where(
+    p0 := Player.ref(),
+    p1 := Player.ref(),
+    p0.p < p1.p,                # data filter (Player.p is data) — picks one orientation
+    g0 := Integer.ref(),
+    g1 := Integer.ref(),
+    p0.assign(r, g0),           # binder — anchors g0 to p0's decision value at round r
+    p1.assign(r, g1),           # binder — anchors g1 to p1's decision value at round r
+).require(
+    count(r, g0 == g1).per(p0, p1) <= 1   # count's last arg compares two decision refs
+)
+```
+
+The MIP-side cost of this shape is steep — pairwise `count(...) <= 1` over decision-variable equality lowers to `O(n_pairs × n_rounds)` big-M disjunctions. MiniZinc consumes the equality directly via propagation. Demonstrated end-to-end in `pairwise_no_repeat.py` (adapted from the classic social golfer benchmark, CSPLib Problem 010).
+
+**Symbolic in `per(...)`** is always wrong — `per(...)` groups by data dimensions, not by decision values. If grouping requires a derived integer (e.g., sudoku's 3×3 box index `(i - 1) // side`), arithmetic on data refs in `per(...)` is fine; arithmetic involving a decision-variable value is not.
+
+### 3b. Undirected-edge expansion via reverse-define
+
+PyRel relationships are directed. CSP-style graph problems (coloring, pod placement on an anti-affinity graph, book-slate authorship pairs) need both orientations. Use reverse-define at the Rules level for persistent symmetric relations, or `.ref()`-pair inline for single-IC undirected matching.
+
+For the mechanic, see `rai-pyrel-coding/references/expression-rules.md` (undirected-edge expansion section). `chromatic_number.py` carries the concrete worked example.
+
+### 3c. Pairwise via dual `.ref()` + `id_a < id_b` — CSP-style symmetry-break
+
+`.ref()` mechanics (pairwise `Concept.ref()` + `Float.ref()` value-binding) are documented in `rai-pyrel-coding/SKILL.md` § References and Aliasing. The CSP-style point is the `id_a < id_b` half-pair filter: it prevents the solver from re-encoding `(a, b)` and `(b, a)` as two separate constraint instances, halving the constraint count without changing the feasible set.
+
+```python
+Qi = Queen
+Qj = Queen.ref()
+problem.satisfy(model.where(Qi.row < Qj.row).require(
+    Qi.column != Qj.column,
+    std.math.abs(Qi.column - Qj.column) != Qj.row - Qi.row,
+))
+```
+
+`n_queens.py` demonstrates this end-to-end.
+
+### 3d. `implies` cascade as decision-indexed table lookup + lookup-totality pre-solve check
+
+The dominant pattern for "predict-then-optimize" in CSP-style: a decision integer selects an entry from a reference table; an `implies` cascade binds an auxiliary variable to the chosen row's value; downstream constraints / objective use the auxiliary.
+
+```python
+# Decision: which assortment is placed at this position
+problem.solve_for(Position.x_assort, type="int", lower=min_id, upper=max_id)
+# Auxiliary: revenue at this position (Integer — MiniZinc requires Problem(model, Integer))
+problem.solve_for(Position.x_revenue, type="int", lower=0)
+# Cascade: revenue is the looked-up value for the chosen assortment
+problem.satisfy(model.require(
+    implies(Position.x_assort == Assortment.id, Position.x_revenue == Assortment.revenue)
+))
+problem.maximize(sum(Position.x_revenue))
+```
+
+This idiom is sound **only if every value in the decision's domain has a covering Ref row**. Otherwise the chosen-but-uncovered case leaves `x_revenue` unconstrained and `verify()` silently returns OK (see § 6). Use the integer-ID membership IC from § 2c, plus a pre-solve check that the reference table is total over the decision's range:
+
+```python
+# Pre-solve lookup-totality assertion (runs in-engine before solve)
+n_decision_domain = (max_id - min_id + 1)  # or len of explicit domain
+n_ref_rows = len(model.select(Assortment.id).to_df())
+assert n_decision_domain == n_ref_rows, "implies-cascade lookup is non-total"
+```
+
+`implies_table_lookup.py` carries the canonical worked form including the totality check.
+
+---
+
+## 4. Multi-solution mode
+
+CSP-style problems frequently want K different feasible solutions rather than one optimum. `solution_limit` enables this; the semantics need care.
+
+- **`solution_limit=K` is a `solve(...)` kwarg, not `solve_for(...)`.**
+- **Termination status interpretation:**
+  - `OPTIMAL` means the search exhausted the feasible space with ≤ K solutions found.
+  - `SOLUTION_LIMIT` means the search stopped at K with more feasible solutions remaining.
+- **K must exceed the feasible-set size for `OPTIMAL` + stable extraction order.** If K < feasible-set size, you get a `SOLUTION_LIMIT` cut-off whose order is solver-dependent — fine for K-of-many enumeration, problematic when the test expects a deterministic full set.
+- **Extract via `Variable.values(sol_index, value_ref)`** — solution `0` to `num_points - 1`. With `populate=True` the first solution is also written back to model properties; with `populate=False` only `Variable.values` is populated, and the model is unchanged.
+- **The returned set is up to K distinct feasible solutions — NOT top-K-optimal, NOT ranked, NOT diversity-maximized.** Don't promise any of these properties to users.
+
+```python
+problem.solve("minizinc", solution_limit=K, time_limit_sec=60)
+si = problem.solve_info()
+if si.termination_status in ("OPTIMAL", "SOLUTION_LIMIT"):
+    val = Integer.ref()
+    for idx in range(si.num_points):
+        df = (
+            model.select(decision_var.entity.id.alias("entity"), val.alias("value"))
+            .where(decision_var.values(idx, val))
+            .to_df()
+        )
+        # process solution idx
+```
+
+`multi_solution_enumeration.py` carries this end-to-end including `populate=False` and the MAX_WITNESSES sizing rule.
+
+### Use `populate=False` for multi-solution workflows
+
+`populate=True` writes the first solution back to model properties — every subsequent solve on the same model raises `FDError: Found non-unique values` because the property already has tuples from the prior solve. `populate=False` keeps the solver-side values only, accessible via `Variable.values(sol_index, value_ref)`.
+
+```python
+decision_var = problem.solve_for(Decision.x, type="bin", populate=False)
+```
+
+`populate=False` also suppresses spurious `verify()` warnings tied to the first-solution write-back.
+
+---
+
+## 5. Audit / witness enumeration
+
+When the question is "does the property hold?" or "is there any configuration where X happens?", the solver answer comes from the termination status, not the objective value. This **inverts** MIP intuition: `INFEASIBLE` is the desired outcome.
+
+**Counterexample IC = property negation.** The modeling move behind every audit problem: encode the property to be audited as its negation in the constraint set. `INFEASIBLE` on the negated form proves the original property holds across the entire feasible space (not just sampled fixtures); `OPTIMAL` / `SOLUTION_LIMIT` returns a witness that violates the original property. `audit_witness.py` follows this move — the IC `sum(salary × x_flagged) >= cap + 1` is the negation of "no K-subset exceeds cap"; INFEASIBLE on the negation = PASS on the original.
+
+| Termination status | Audit verdict |
+|--------------------|---------------|
+| `INFEASIBLE` | **PASS** — no configuration satisfies the witness condition. The property holds. |
+| `OPTIMAL` or `SOLUTION_LIMIT` | **FAIL** — at least one configuration was found that violates the property. Extract witnesses for the report. |
+| Other (`TIME_LIMIT`, error, `LOCALLY_SOLVED` on a CSP) | **INCONCLUSIVE** — solver did not exhaust the search. Do not interpret as PASS. |
+
+`num_points() == 0` does **not** prove the property holds — the solver may have crashed, hit a time limit, or produced zero solutions for any other reason. Always check the termination status first.
+
+```python
+problem.solve("minizinc", solution_limit=MAX_WITNESSES, time_limit_sec=60)
+si = problem.solve_info()
+if si.termination_status == "INFEASIBLE":
+    verdict = "PASS"
+elif si.termination_status in ("OPTIMAL", "SOLUTION_LIMIT"):
+    verdict = "FAIL"
+    # extract up to si.num_points witnesses
+else:
+    verdict = "INCONCLUSIVE"
+```
+
+`audit_witness.py` (distilled from `underwriting_audit`) carries this pattern end-to-end. A "FAIL" verdict line should disambiguate itself (e.g., `FAIL (ruleset has counterexamples)`) so consumers don't misread a property failure as a template error.
+
+---
+
+## 6. The verify() caveat for solver-only IC bodies
+
+> **`verify()` does not re-evaluate ICs whose body is a solver-only construct (`implies`-bodied or `all_different`-bodied).** These constraints lower to wire-format constraint relations the verify engine cannot ground at check time, so verify silently returns OK — even when the IC is violated by the returned solution. This is **not** a bug in the solver; it is a documented engine limitation. The `implies` case is the most common (decision-indexed table lookups in particular); `all_different` has the same root cause and the same silent-OK behavior.
+
+The companion silent-failure mode is the empty-aggregate silent-drop: `sum` / `count` over an empty relation drops the IC at compile time. Detect both classes by diffing `num_constraints` / `num_min_objectives` before and after a model edit — if the count drops unexpectedly, an IC was dropped silently.
+
+### Three regimes for handling verify() with solver-only ICs
+
+Pick the regime that matches the constraint mix:
+
+**Regime 1 — Mixed (some arithmetic ICs, some solver-only).** Call `verify()` to re-evaluate the arithmetic ICs; pair each solver-only IC with an explicit post-solve Python assertion that re-evaluates the constraint against the extracted values. `implies_table_lookup.py` follows this regime — the `implies` cascade ships with the post-solve loop below.
+
+```python
+# Post-solve assertion for an implies-bodied IC
+val = Float.ref()
+chosen = Integer.ref()
+extracted = (
+    model.select(decision_var.entity.id, chosen.alias("chosen"))
+    .where(decision_var.values(0, chosen))
+    .to_df()
+)
+for row in extracted.itertuples():
+    expected = reference_table.loc[row.chosen, "value"]
+    actual_aux = aux_values[row.entity]
+    assert actual_aux == expected, f"implies cascade violated at entity={row.entity}"
+```
+
+**Regime 2 — All solver-only (every IC is `implies`- or `all_different`-bodied).** `verify()` has nothing it can re-evaluate; skip it entirely and rely on per-IC post-solve Python assertions. Calling `verify()` in this regime just adds noise.
+
+**Regime 3 — `populate=False`.** Multi-solution and audit/witness workflows use `populate=False` so decision values stay solver-side rather than being written back to the relational layer (see § 4). With no values in the relational layer, `verify()` cannot ground *any* IC against the chosen solution — even pure-arithmetic ICs — and prints spurious "Requirements not met" warnings instead of doing real verification. Skip `verify()` and use per-IC post-solve assertions, OR `model.select(decision_var.values(idx, val))`-style extraction + Python checks. `multi_solution_enumeration.py` and `audit_witness.py` are in this regime.
+
+---
+
+## 7. Pitfall: big-M vs half-reified implies for active-iff with aggregate body
+
+When an active-iff condition's body is an aggregate over decision variables AND multi-solution mode is on, `implies(active == 1, body <= 0)` spawns a free Boolean auxiliary per inactive row. In enumeration mode this exponentially inflates `num_points` with solutions that differ only in the values of these free auxiliaries.
+
+The big-M form `body + M*active <= TOL + M` has no auxiliary — it is a single inequality whose feasibility flips with `active`. Use it for active-iff conditions where the body is an aggregate over decision variables in multi-solution mode.
+
+```python
+# AVOID in multi-solution mode when body is an aggregate over DVs:
+implies(active == 1, sum(x_flow).per(Path) <= 0)
+
+# PREFER in multi-solution mode:
+sum(x_flow).per(Path) + BIG_M * active <= TOL + BIG_M
+```
+
+For decision-indexed **table lookup** (body references a single Ref row's value, not an aggregate), `implies` is still the right shape — see § 3d above. The pitfall is specific to aggregate-body active-iff in enumeration mode.
+
+Demonstrated end-to-end in `big_m_active_iff_aggregate.py` (distilled from the AML motif-butterfly detector — hub-balance constraint that is active only when an account is chosen as a hub).
+
+---
+
+## 8. Globals available today
+
+Only four global constraints are callable from PyRel today: `all_different`, `implies`, `special_ordered_set_type_1`, `special_ordered_set_type_2`. MiniZinc's native global-constraint library is far richer (`circuit`, `cumulative`, `element`, `table`, `no_overlap`, `inverse`, `lex_lesseq`) but those are not yet exposed.
+
+For the full per-solver coverage matrix (which of the four globals each solver supports) and the syntax for each, see `global-constraints.md`.
+
+---
+
+## 9. Cross-reasoner handoff
+
+CSP-style problems frequently chain off a graph-reasoner output. The typical handoff is `Graph.reachable` (or `Graph.connected_component`) producing a binary closure relation, which the CSP then scopes over via `where=[Reachable(EntityA, EntityB)]`. The CSP's decision variables then range only over the reachable closure, dramatically shrinking the search.
+
+For the chained-discovery handshake (how to declare the closure as enrichment from `rai-graph-analysis`), see `rai-discovery/SKILL.md` § Multi-Reasoner Chaining. `patient_cohort_recruitment` is the canonical template precedent.
+
+---
+
+## 10. Cross-links to examples
+
+Local examples that distill the idioms above, plus a cross-link to `scenario_concept_csp.py` in `rai-prescriptive-solver-management`:
+
+| File | Idioms |
+|------|--------|
+| `examples/multi_solution_enumeration.py` | § 4 (solution_limit, Variable.values, status-gated extraction, MAX_WITNESSES, populate=False) |
+| `examples/audit_witness.py` | § 5 (audit verdict mapping, pure-satisfaction property encoding) |
+| `examples/integer_slot_with_sentinel.py` | § 2a (K+1 sentinel) + § 3a (count over decision-dependent filter) |
+| `examples/implies_table_lookup.py` | § 3d (implies cascade) + § 2c (integer-ID membership IC) + § 6 (verify() skip) |
+| `examples/subconcept_solve_for.py` | § 2b (sub-concept predicate marker) |
+| `examples/chromatic_number.py` | `minimize(max(...))` directly (no aux-variable rewrite), data-driven bounds, undirected-edge expansion, per-edge `!=` |
+| `examples/pairwise_no_repeat.py` | § 3a (binder-in-where + double-symbolic `count(r, g0 == g1)`) — pairwise no-repeat, adapted from the social golfer benchmark |
+| `examples/big_m_active_iff_aggregate.py` | § 7 (big-M form of active-iff with aggregate body — preferred over half-reified `implies` in multi-solution mode) |
+| `examples/pair_table_anti_affinity.py` | Pairwise no-co-location via symmetric forbidden-pair table — `xi + xj <= 1` per (Slot, pair) tuple; CP-friendly (no big-M) |
+| `examples/gang_atomicity_reified.py` | All-or-nothing group placement via reified cardinality `sum(member.placed).per(group) == replicas × group.placed` |
+| `examples/or_arithmetic_binaries.py` | Linear three-inequality encoding of `y = a OR b` on binaries (`y >= a`, `y >= b`, `y <= a + b`) |
+| `../../rai-prescriptive-solver-management/examples/scenario_concept_csp.py` | CSP-style analog of `scenario_concept_milp.py` — Scenario as data concept indexing integer decisions; single MiniZinc solve over all scenarios |

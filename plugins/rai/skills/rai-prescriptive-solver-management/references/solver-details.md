@@ -28,3 +28,9 @@ problem.solve("ipopt", time_limit_sec=60)    # NLP (open-source)
 ```
 
 **Do not default to any single solver.** Always select based on the problem type (see Decision Rules above) and confirm the user has the required license (Gurobi is commercial). The second argument (`Float` or `Integer`) sets the default numeric type. Variables can override with `type="bin"`, `type="int"`, or `type="cont"` in `solve_for()`.
+
+## MiniZinc profile
+
+MiniZinc today is **Chuffed-only**. Gecode and CP-SAT are MiniZinc backends but are not currently selectable from the PyRel surface — backend selection is future work, not delivered. Until that lands, `solver="minizinc"` always dispatches to Chuffed.
+
+Native MiniZinc logging is not captured into LogMessage events. For visibility during a solve, use `log_to_console=True` on `solve(...)`. For the full CSP-style formulation guide, see [csp-formulation.md](../../rai-prescriptive-problem-formulation/references/csp-formulation.md).

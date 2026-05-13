@@ -43,6 +43,7 @@ description: Formulates optimization problems from ontology models covering deci
 from relationalai.semantics.reasoners.prescriptive import Problem
 from relationalai.semantics.std import aggregates as aggs
 
+# Problem(model, Float) for MIP-style; Problem(model, Integer) for CSP-style (see [csp-formulation.md](references/csp-formulation.md)).
 problem = Problem(model, Float)
 
 # Decision variable — prefer scoped form (where=[...]) over unscoped.
@@ -417,6 +418,9 @@ For detailed heuristics, examples, and the over-specification recognition table,
 | `solve_for(where=expr)` errors on PyRel's `__bool__` guard | `where` argument is iterated as a tuple; passing a bare expression triggers Python truthiness, which PyRel rejects | Wrap in a list: `where=[Concept.prop >= threshold, ...]` |
 | `problem.satisfy(<expr>)` raises `TypeError` complaining it expects a `Fragment` | Bare comparison expression passed to `problem.satisfy()` instead of the result of `model.require(...)` | Wrap with `model.require(<expr>)` or use `model.where(<scope>).require(<expr>)`. See [constraint-formulation.md](references/constraint-formulation.md) > Style 1/Style 2 |
 | `solve_for(concept_ref.property)` raises `TypeError` about Chain start | First arg requires bare `Concept.property` — refs are valid only inside `where=[...]`. Symmetric instinct from using refs in scope clauses doesn't extend to the variable declaration itself | Pass bare `Concept.property` to `solve_for(...)`; reserve refs for `where=[...]` joins |
+| Silent: `verify()` returns OK on solver-only-IC bodies (`implies`-bodied or `all_different`-bodied), even when the IC is violated | The verify engine cannot ground these wire-format constraint relations at check time, so it silently returns OK. Documented engine limitation, not a solver bug | Pick the regime that matches the constraint mix (see [csp-formulation.md](references/csp-formulation.md) § 6): mixed → call `verify()` + post-solve assertions on solver-only ICs; all-solver-only → skip `verify()` entirely; `populate=False` → skip `verify()` (no relational-layer values to ground). Multi-solution overclaim and audit-verdict-misread (`num_points() == 0` ≠ PASS) are post-solve concerns — see `rai-prescriptive-results-interpretation` Common Pitfalls. |
+| Integer-ID decision + `implies` cascade lookup with sparse / non-total Ref table — solver picks a non-existent ID, cascade-bound aux variable stays silently unconstrained | A decision variable bounded by `lower=min(id), upper=max(id)` can pick any integer in that range, including IDs not present in the Ref table. The `implies(decision == Ref.id, aux == Ref.value)` cascade only fires for present IDs; for missing IDs the aux is free, the solver picks whatever optimizes (typically the bound), and `verify()` does NOT catch this (see row above) | Pair an explicit membership IC (`model.require(count(Ref, Ref.id == Decision.id).per(Decision) == 1)`) with a pre-solve lookup-totality check (`assert decision_domain_size == len(model.select(Ref).to_df())`). See [csp-formulation.md](references/csp-formulation.md) §§ 2c, 3d and `implies_table_lookup.py`. |
+| Decision-variable **equality** in outer `where(...)` prunes the search instead of constraining it | `model.where(x == k).require(...)` where `x` is a decision-variable value (or a value-ref bound to one) is a search-space filter — the solver never sees the eliminated states. Distinct from multi-arity-property invocation in where (`Player.assign(r, g)`), which is a relational **binder** over the (Player, r, g) tuples and is correct | Put decision-var comparisons inside `count(X, x == k)`'s second argument (cardinality idiom) or inside `require(x == k)` (equality IC). For a value-ref `x` bound via a multi-arity property, keep the binder in `where` and only move the equality out: `model.where(Concept.dec(idx, x)).require(x == k)`. For double-symbolic count (`count(r, g0 == g1)` — pair-shared comparison) see [csp-formulation.md](references/csp-formulation.md) § 3a and `pairwise_no_repeat.py`. For the general PyRel binder mechanic, see `rai-pyrel-coding/references/expression-rules.md` (Multi-arity property invocation in where as binder). |
 
 For detailed unwired relationship symptoms, checks, and code examples, see [constraint-formulation.md](references/constraint-formulation.md) > Unwired Relationships (Detailed).
 
@@ -462,6 +466,10 @@ prod_cost = ProdCapacity.production_cost * sum(x_prod).per(ProdCapacity).where(
 
 For constraint naming with lists, re-solve behavior (multi-scenario patterns), `| 0` fallback limitation, and numpy type casting, see [known-limitations.md](references/known-limitations.md).
 
+### CSP-style limitations
+
+MiniZinc-specific gotchas (`Problem(model, Integer)` pairing, empty-aggregate silent-drop, mixed `union` shapes, unexposed globals, `%`/`//` rejection, single-objective, Chuffed-only backend) are catalogued in [known-limitations.md](references/known-limitations.md) § CSP-style limitations. For the full CSP-style guide (idioms, decision flow, audit/witness, multi-solution mode, the `verify()` caveat on solver-only-IC bodies), see [csp-formulation.md](references/csp-formulation.md).
+
 ### Problem is additive — solve_for / satisfy / minimize accumulate
 
 `Problem` inherits PyRel's append-only behavior (see `rai-pyrel-coding` > Definitions). Every `problem.solve_for()`, `problem.satisfy()`, `problem.minimize()`/`maximize()` **adds** to the Problem — there is no remove/replace API.
@@ -486,7 +494,8 @@ For constraint naming with lists, re-solve behavior (multi-scenario patterns), `
 | Constraint formulation | Forcing, capacity, balance, linking, `.where()` scoping, parameter derivation | [constraint-formulation.md](references/constraint-formulation.md) |
 | Objective formulation | Direction, multi-component, penalty terms, scenario formulation | [objective-formulation.md](references/objective-formulation.md) |
 | Problem patterns & validation | Common patterns (assignment, flow, knapsack) and the validation checklist | [problem-patterns-and-validation.md](references/problem-patterns-and-validation.md) |
-| Global constraints | `all_different`, `implies`, SOS1/SOS2 syntax, solver requirements, CP vs MIP guide | [global-constraints.md](references/global-constraints.md) |
+| Global constraints | `all_different`, `implies`, SOS1/SOS2 syntax, per-solver coverage matrix, MIP-style vs CSP-style decision flow with template precedents | [global-constraints.md](references/global-constraints.md) |
+| CSP-style formulation | When this style fits, decision-variable shapes, constraint idioms, multi-solution mode, audit/witness, verify() limitation on implies-bodied ICs, the 4 globals available today | [csp-formulation.md](references/csp-formulation.md) |
 | Scenario analysis | Scenario Concept vs Loop + where= patterns, decision matrix, code examples | [scenario-analysis.md](references/scenario-analysis.md) |
 | Formulation simplification | Static vs dynamic parameters, goals vs constraints, grouped constraints, over-specification | [formulation-simplification.md](references/formulation-simplification.md) |
 | Multi-objective formulation | Approach selection, epsilon constraint method, tension heuristics, pitfalls | [multi-objective-formulation.md](references/multi-objective-formulation.md) |
