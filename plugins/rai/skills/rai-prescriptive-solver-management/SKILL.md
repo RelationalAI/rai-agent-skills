@@ -381,4 +381,4 @@ Post-solve diagnosis (trivial all-zero solutions, infeasibility root causes, qua
 | Compilation errors | Entity reference errors, type mismatch, zero entities, fix taxonomy | [compilation-errors.md](references/compilation-errors.md) |
 | Diagnostic taxonomy | Root cause codes, fix action types, status-specific fix direction | [diagnostic-taxonomy.md](references/diagnostic-taxonomy.md) |
 | Solver parameters | Solver-specific kwargs, tuning, cloud pipeline, warm starting, scenario analysis | [solver-parameters.md](references/solver-parameters.md) |
-| CSP-style formulation | When this style fits, decision-variable shapes, constraint idioms, multi-solution mode semantics, audit / witness verdict mapping, verify() limitation on implies-bodied ICs | [csp-formulation.md](../rai-prescriptive-problem-formulation/references/csp-formulation.md) |
+| CSP-style formulation | When this style fits, decision-variable shapes, constraint idioms, multi-solution mode semantics, audit / witness verdict mapping, verify() three-regime guidance for solver-only-IC bodies | [csp-formulation.md](../rai-prescriptive-problem-formulation/references/csp-formulation.md) |
