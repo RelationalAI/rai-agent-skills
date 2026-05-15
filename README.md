@@ -283,3 +283,23 @@ Rules). To expose the plugin as a unit rather than loose skills, symlink the who
 the agent's local-plugins location (e.g., `~/.cursor/plugins/local/rai`). Run `git pull` inside the clone to update.
 
 </details>
+
+## External contributions
+
+We welcome contributions from the community. The flow depends on which paths you're touching.
+
+**Small fixes to skill content under [`plugins/rai/skills/`](plugins/rai/skills/)** — typo fixes, doc
+clarifications, minor corrections — are welcome as PRs. These paths are covered by
+[CODEOWNERS](.github/CODEOWNERS), so maintainers (`@RelationalAI/rai-agent-skills-admin`) are
+auto-requested for review. Accepted PRs are merged upstream and carry forward into future releases,
+with your authorship preserved via a `Co-authored-by` trailer — your fix won't be lost in a later
+release.
+
+**Substantive changes to a skill** — adding a new skill, rewriting a large portion of an existing
+one, or altering its intended behavior — should
+[start with an issue](https://github.com/RelationalAI/rai-agent-skills/issues/new). Maintainers can
+help scope the work before you invest in a PR.
+
+**Non-skill paths** — this README, `LICENSE`, plugin manifests under `.claude-plugin/` and
+`plugins/rai/`, and the examples under `contrib/` — follow the standard PR flow and aren't routed
+through CODEOWNERS.

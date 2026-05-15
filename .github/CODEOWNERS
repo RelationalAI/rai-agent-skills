@@ -1,0 +1,6 @@
+# Skill content under plugins/rai/skills/ is reviewed by the maintainer team.
+# PRs that touch these paths auto-request a review so maintainers can help
+# scope the change or coordinate the rollout before merge. See the
+# "External contributions" section of README.md for the contribution policy.
+
+/plugins/rai/skills/   @RelationalAI/rai-agent-skills-admin
