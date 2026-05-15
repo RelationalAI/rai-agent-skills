@@ -1,0 +1,790 @@
+# =============================================================================
+# Reference solution for evals/fixtures/tpc_h/schema.sql
+#
+# Drafted under the Phase 1.3 authorship plan. See the synthetic.orm.yaml header
+# for the full review-protocol context.
+#
+# TPC-H characteristics:
+#   - 8 tables; all have PKs (added via local-modification ALTER TABLE statements
+#     per the TPC-H spec — see fixtures/tpc_h/schema.sql).
+#   - Composite PK on PARTSUPP (PS_PARTKEY, PS_SUPPKEY) → objectified entity.
+#   - Composite PK on LINEITEM (L_ORDERKEY, L_LINENUMBER) → objectified entity.
+#   - Composite FK from LINEITEM to PARTSUPP (L_PARTKEY, L_SUPPKEY).
+#   - No self-FKs, no CHECK constraints, no enum-flavored VARCHARs.
+#   - Tests pure mechanical lift on a clean industry-standard schema.
+#   - Should produce ZERO antipattern flags — the clean baseline benchmark.
+# =============================================================================
+
+version: 1
+
+source:
+  kind: ddl-file
+  dialect: postgres
+  scope: { schema: PUBLIC, tables: ["*"] }
+  introspected_at: "2026-05-04T18:00:00Z"
+  confidence: standard
+  mode: guided
+
+# =============================================================================
+# Object types
+# =============================================================================
+object_types:
+  # ---- Single-PK entity types ----
+  - id: region
+    name: Region
+    kind: entity
+    reference: { mode: popular, value_type: region_key }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.REGION
+      pk_column: R_REGIONKEY
+      halpin_reference: "ORM 2 Graphical Notation — Object Types & Reference Modes (popular)"
+
+  - id: nation
+    name: Nation
+    kind: entity
+    reference: { mode: popular, value_type: nation_key }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.NATION
+      pk_column: N_NATIONKEY
+      halpin_reference: "ORM 2 Graphical Notation — Object Types & Reference Modes (popular)"
+
+  - id: part
+    name: Part
+    kind: entity
+    reference: { mode: popular, value_type: part_key }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.PART
+      pk_column: P_PARTKEY
+      halpin_reference: "ORM 2 Graphical Notation — Object Types & Reference Modes (popular)"
+
+  - id: supplier
+    name: Supplier
+    kind: entity
+    reference: { mode: popular, value_type: supp_key }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.SUPPLIER
+      pk_column: S_SUPPKEY
+      halpin_reference: "ORM 2 Graphical Notation — Object Types & Reference Modes (popular)"
+
+  - id: customer
+    name: Customer
+    kind: entity
+    reference: { mode: popular, value_type: cust_key }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.CUSTOMER
+      pk_column: C_CUSTKEY
+      halpin_reference: "ORM 2 Graphical Notation — Object Types & Reference Modes (popular)"
+
+  - id: orders
+    name: Orders
+    kind: entity
+    reference: { mode: popular, value_type: order_key }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.ORDERS
+      pk_column: O_ORDERKEY
+      halpin_reference: "ORM 2 Graphical Notation — Object Types & Reference Modes (popular)"
+
+  # ---- Composite-PK entity types (objectified) ----
+  - id: part_supp
+    name: PartSupp
+    kind: entity
+    reference: { mode: external }
+    provenance:
+      origin: junction-table
+      table: PUBLIC.PARTSUPP
+      warning: ambiguous-junction-with-extras
+      warning_detail:
+        matched_columns: [PS_PARTKEY, PS_SUPPKEY]
+        extra_columns: [PS_AVAILQTY, PS_SUPPLYCOST, PS_COMMENT]
+      resolution:
+        action: objectified
+        decided_at: 9c
+        decided_by: user
+      halpin_reference: "ORM 2 Graphical Notation — Objectification (junction with extras → objectified entity)"
+
+  - id: line_item
+    name: LineItem
+    kind: entity
+    reference: { mode: external }
+    provenance:
+      origin: junction-table                    # PK is composite of order_key + line_number
+      table: PUBLIC.LINEITEM
+      # Note: LINEITEM is not strictly an "all-FK PK" junction (l_linenumber is a sequencing column
+      # within an order, not an FK), but conceptually it is an objectification of the lineitem-of-order
+      # relationship with order-scoped sequencing. v0.1 SRP would emit this as objectified.
+      halpin_reference: "ORM 2 Graphical Notation — Objectification (composite PK on table with extras)"
+
+  # ---- Value types ----
+  - id: region_key
+    name: RegionKey
+    kind: value
+    primitive: Integer
+  - id: nation_key
+    name: NationKey
+    kind: value
+    primitive: Integer
+  - id: part_key
+    name: PartKey
+    kind: value
+    primitive: Integer
+  - id: supp_key
+    name: SuppKey
+    kind: value
+    primitive: Integer
+  - id: cust_key
+    name: CustKey
+    kind: value
+    primitive: Integer
+  - id: order_key
+    name: OrderKey
+    kind: value
+    primitive: Integer
+
+  # Decimal value types — TPC-H uses DECIMAL(15,2) widely
+  - id: decimal_15_2
+    name: Decimal_15_2
+    kind: value
+    primitive: Number
+    precision: 15
+    scale: 2
+
+# =============================================================================
+# Fact types
+# =============================================================================
+fact_types:
+  # ---- Region ----
+  - id: region_has_name
+    reading: "{Region} has name {String}"
+    roles: [{ object_type: region, role_name: region }, { object_type: string, role_name: name }]
+    constraints:
+      - { type: uniqueness, roles: [region], source: explicit, status: confirmed }
+      - { type: mandatory, role: region, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.REGION, column: R_NAME, nullable: false } }
+
+  - id: region_has_comment
+    reading: "{Region} has comment {String}"
+    roles: [{ object_type: region, role_name: region }, { object_type: string, role_name: comment }]
+    constraints: [{ type: uniqueness, roles: [region], source: explicit, status: confirmed }]
+    # R_COMMENT is nullable in canonical DDL.
+
+  # ---- Nation ----
+  - id: nation_has_name
+    reading: "{Nation} has name {String}"
+    roles: [{ object_type: nation, role_name: nation }, { object_type: string, role_name: name }]
+    constraints:
+      - { type: uniqueness, roles: [nation], source: explicit, status: confirmed }
+      - { type: mandatory, role: nation, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.NATION, column: N_NAME, nullable: false } }
+
+  - id: nation_in_region
+    reading: "{Nation} is in {Region}"
+    roles: [{ object_type: nation, role_name: nation }, { object_type: region, role_name: region }]
+    constraints:
+      - { type: uniqueness, roles: [nation], source: explicit, status: confirmed }
+      - { type: mandatory, role: nation, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.NATION, column: N_REGIONKEY, constraint_type: FK,
+                        fk: { references_table: PUBLIC.REGION, references_columns: [R_REGIONKEY] } } }
+
+  - id: nation_has_comment
+    reading: "{Nation} has comment {String}"
+    roles: [{ object_type: nation, role_name: nation }, { object_type: string, role_name: comment }]
+    constraints: [{ type: uniqueness, roles: [nation], source: explicit, status: confirmed }]
+
+  # ---- Part ----
+  - id: part_has_name
+    reading: "{Part} has name {String}"
+    roles: [{ object_type: part, role_name: part }, { object_type: string, role_name: name }]
+    constraints:
+      - { type: uniqueness, roles: [part], source: explicit, status: confirmed }
+      - { type: mandatory, role: part, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.PART, column: P_NAME, nullable: false } }
+
+  - id: part_has_mfgr
+    reading: "{Part} has manufacturer {String}"
+    roles: [{ object_type: part, role_name: part }, { object_type: string, role_name: mfgr }]
+    constraints:
+      - { type: uniqueness, roles: [part], source: explicit, status: confirmed }
+      - { type: mandatory, role: part, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.PART, column: P_MFGR, nullable: false } }
+
+  - id: part_has_brand
+    reading: "{Part} has brand {String}"
+    roles: [{ object_type: part, role_name: part }, { object_type: string, role_name: brand }]
+    constraints:
+      - { type: uniqueness, roles: [part], source: explicit, status: confirmed }
+      - { type: mandatory, role: part, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.PART, column: P_BRAND, nullable: false } }
+
+  - id: part_has_type
+    reading: "{Part} has type {String}"
+    roles: [{ object_type: part, role_name: part }, { object_type: string, role_name: type }]
+    constraints:
+      - { type: uniqueness, roles: [part], source: explicit, status: confirmed }
+      - { type: mandatory, role: part, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.PART, column: P_TYPE, nullable: false } }
+    # Note: P_TYPE is high-cardinality VARCHAR (e.g., "ECONOMY ANODIZED STEEL", ~150 distinct
+    # values in TPC-H sample). NOT an encoded-enum antipattern; cardinality is too high.
+
+  - id: part_has_size
+    reading: "{Part} has size {Integer}"
+    roles: [{ object_type: part, role_name: part }, { object_type: integer, role_name: size }]
+    constraints:
+      - { type: uniqueness, roles: [part], source: explicit, status: confirmed }
+      - { type: mandatory, role: part, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.PART, column: P_SIZE, nullable: false } }
+
+  - id: part_has_container
+    reading: "{Part} has container {String}"
+    roles: [{ object_type: part, role_name: part }, { object_type: string, role_name: container }]
+    constraints:
+      - { type: uniqueness, roles: [part], source: explicit, status: confirmed }
+      - { type: mandatory, role: part, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.PART, column: P_CONTAINER, nullable: false } }
+
+  - id: part_has_retail_price
+    reading: "{Part} has retail-price {Decimal_15_2}"
+    roles: [{ object_type: part, role_name: part }, { object_type: decimal_15_2, role_name: retailPrice }]
+    constraints:
+      - { type: uniqueness, roles: [part], source: explicit, status: confirmed }
+      - { type: mandatory, role: part, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.PART, column: P_RETAILPRICE, nullable: false } }
+
+  - id: part_has_comment
+    reading: "{Part} has comment {String}"
+    roles: [{ object_type: part, role_name: part }, { object_type: string, role_name: comment }]
+    constraints:
+      - { type: uniqueness, roles: [part], source: explicit, status: confirmed }
+      - { type: mandatory, role: part, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.PART, column: P_COMMENT, nullable: false } }
+
+  # ---- Supplier ----
+  - id: supplier_has_name
+    reading: "{Supplier} has name {String}"
+    roles: [{ object_type: supplier, role_name: supplier }, { object_type: string, role_name: name }]
+    constraints:
+      - { type: uniqueness, roles: [supplier], source: explicit, status: confirmed }
+      - { type: mandatory, role: supplier, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.SUPPLIER, column: S_NAME, nullable: false } }
+
+  - id: supplier_has_address
+    reading: "{Supplier} has address {String}"
+    roles: [{ object_type: supplier, role_name: supplier }, { object_type: string, role_name: address }]
+    constraints:
+      - { type: uniqueness, roles: [supplier], source: explicit, status: confirmed }
+      - { type: mandatory, role: supplier, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.SUPPLIER, column: S_ADDRESS, nullable: false } }
+
+  - id: supplier_in_nation
+    reading: "{Supplier} is in {Nation}"
+    roles: [{ object_type: supplier, role_name: supplier }, { object_type: nation, role_name: nation }]
+    constraints:
+      - { type: uniqueness, roles: [supplier], source: explicit, status: confirmed }
+      - { type: mandatory, role: supplier, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.SUPPLIER, column: S_NATIONKEY, constraint_type: FK,
+                        fk: { references_table: PUBLIC.NATION, references_columns: [N_NATIONKEY] } } }
+
+  - id: supplier_has_phone
+    reading: "{Supplier} has phone {String}"
+    roles: [{ object_type: supplier, role_name: supplier }, { object_type: string, role_name: phone }]
+    constraints:
+      - { type: uniqueness, roles: [supplier], source: explicit, status: confirmed }
+      - { type: mandatory, role: supplier, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.SUPPLIER, column: S_PHONE, nullable: false } }
+
+  - id: supplier_acct_balance
+    reading: "{Supplier} has account-balance {Decimal_15_2}"
+    roles: [{ object_type: supplier, role_name: supplier }, { object_type: decimal_15_2, role_name: acctBal }]
+    constraints:
+      - { type: uniqueness, roles: [supplier], source: explicit, status: confirmed }
+      - { type: mandatory, role: supplier, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.SUPPLIER, column: S_ACCTBAL, nullable: false } }
+
+  - id: supplier_has_comment
+    reading: "{Supplier} has comment {String}"
+    roles: [{ object_type: supplier, role_name: supplier }, { object_type: string, role_name: comment }]
+    constraints:
+      - { type: uniqueness, roles: [supplier], source: explicit, status: confirmed }
+      - { type: mandatory, role: supplier, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.SUPPLIER, column: S_COMMENT, nullable: false } }
+
+  # ---- PartSupp (objectified) ----
+  - id: part_supp_for_part
+    reading: "{PartSupp} for {Part}"
+    roles: [{ object_type: part_supp, role_name: partSupp }, { object_type: part, role_name: part }]
+    constraints:
+      - { type: mandatory, role: partSupp, source: explicit, status: confirmed }
+
+  - id: part_supp_for_supplier
+    reading: "{PartSupp} for {Supplier}"
+    roles: [{ object_type: part_supp, role_name: partSupp }, { object_type: supplier, role_name: supplier }]
+    constraints:
+      - { type: mandatory, role: partSupp, source: explicit, status: confirmed }
+
+  - id: part_supp_avail_qty
+    reading: "{PartSupp} has available-quantity {Integer}"
+    roles: [{ object_type: part_supp, role_name: partSupp }, { object_type: integer, role_name: availQty }]
+    constraints:
+      - { type: uniqueness, roles: [partSupp], source: explicit, status: confirmed }
+      - { type: mandatory, role: partSupp, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.PARTSUPP, column: PS_AVAILQTY, nullable: false } }
+
+  - id: part_supp_supply_cost
+    reading: "{PartSupp} has supply-cost {Decimal_15_2}"
+    roles: [{ object_type: part_supp, role_name: partSupp }, { object_type: decimal_15_2, role_name: supplyCost }]
+    constraints:
+      - { type: uniqueness, roles: [partSupp], source: explicit, status: confirmed }
+      - { type: mandatory, role: partSupp, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.PARTSUPP, column: PS_SUPPLYCOST, nullable: false } }
+
+  - id: part_supp_has_comment
+    reading: "{PartSupp} has comment {String}"
+    roles: [{ object_type: part_supp, role_name: partSupp }, { object_type: string, role_name: comment }]
+    constraints:
+      - { type: uniqueness, roles: [partSupp], source: explicit, status: confirmed }
+      - { type: mandatory, role: partSupp, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.PARTSUPP, column: PS_COMMENT, nullable: false } }
+
+  # ---- Customer ----
+  - id: customer_has_name
+    reading: "{Customer} has name {String}"
+    roles: [{ object_type: customer, role_name: customer }, { object_type: string, role_name: name }]
+    constraints:
+      - { type: uniqueness, roles: [customer], source: explicit, status: confirmed }
+      - { type: mandatory, role: customer, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.CUSTOMER, column: C_NAME, nullable: false } }
+
+  - id: customer_has_address
+    reading: "{Customer} has address {String}"
+    roles: [{ object_type: customer, role_name: customer }, { object_type: string, role_name: address }]
+    constraints:
+      - { type: uniqueness, roles: [customer], source: explicit, status: confirmed }
+      - { type: mandatory, role: customer, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.CUSTOMER, column: C_ADDRESS, nullable: false } }
+
+  - id: customer_in_nation
+    reading: "{Customer} is in {Nation}"
+    roles: [{ object_type: customer, role_name: customer }, { object_type: nation, role_name: nation }]
+    constraints:
+      - { type: uniqueness, roles: [customer], source: explicit, status: confirmed }
+      - { type: mandatory, role: customer, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.CUSTOMER, column: C_NATIONKEY, constraint_type: FK,
+                        fk: { references_table: PUBLIC.NATION, references_columns: [N_NATIONKEY] } } }
+
+  - id: customer_has_phone
+    reading: "{Customer} has phone {String}"
+    roles: [{ object_type: customer, role_name: customer }, { object_type: string, role_name: phone }]
+    constraints:
+      - { type: uniqueness, roles: [customer], source: explicit, status: confirmed }
+      - { type: mandatory, role: customer, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.CUSTOMER, column: C_PHONE, nullable: false } }
+
+  - id: customer_acct_balance
+    reading: "{Customer} has account-balance {Decimal_15_2}"
+    roles: [{ object_type: customer, role_name: customer }, { object_type: decimal_15_2, role_name: acctBal }]
+    constraints:
+      - { type: uniqueness, roles: [customer], source: explicit, status: confirmed }
+      - { type: mandatory, role: customer, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.CUSTOMER, column: C_ACCTBAL, nullable: false } }
+
+  - id: customer_market_segment
+    reading: "{Customer} in market-segment {String}"
+    roles: [{ object_type: customer, role_name: customer }, { object_type: string, role_name: mktSegment }]
+    constraints:
+      - { type: uniqueness, roles: [customer], source: explicit, status: confirmed }
+      - { type: mandatory, role: customer, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.CUSTOMER, column: C_MKTSEGMENT, nullable: false } }
+    # C_MKTSEGMENT has 5 distinct values in TPC-H sample (BUILDING, AUTOMOBILE, MACHINERY, HOUSEHOLD, FURNITURE).
+    # Plausibly an encoded-enum antipattern, BUT TPC-H is canonically clean — sample probing on a non-sample-bearing
+    # DDL-only input wouldn't surface this. Not flagged in this reference solution; live-DB run might propose it.
+
+  - id: customer_has_comment
+    reading: "{Customer} has comment {String}"
+    roles: [{ object_type: customer, role_name: customer }, { object_type: string, role_name: comment }]
+    constraints:
+      - { type: uniqueness, roles: [customer], source: explicit, status: confirmed }
+      - { type: mandatory, role: customer, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.CUSTOMER, column: C_COMMENT, nullable: false } }
+
+  # ---- Orders ----
+  - id: orders_placed_by
+    reading: "{Orders} placed by {Customer}"
+    roles: [{ object_type: orders, role_name: orders }, { object_type: customer, role_name: customer }]
+    constraints:
+      - { type: uniqueness, roles: [orders], source: explicit, status: confirmed }
+      - { type: mandatory, role: orders, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.ORDERS, column: O_CUSTKEY, constraint_type: FK,
+                        fk: { references_table: PUBLIC.CUSTOMER, references_columns: [C_CUSTKEY] } } }
+
+  - id: orders_status
+    reading: "{Orders} has order-status {String}"
+    roles: [{ object_type: orders, role_name: orders }, { object_type: string, role_name: orderStatus }]
+    constraints:
+      - { type: uniqueness, roles: [orders], source: explicit, status: confirmed }
+      - { type: mandatory, role: orders, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.ORDERS, column: O_ORDERSTATUS, nullable: false } }
+    # O_ORDERSTATUS is CHAR(1) with 3 distinct values in sample data (F, O, P).
+    # Encoded-enum candidate on live-DB input.
+
+  - id: orders_total_price
+    reading: "{Orders} has total-price {Decimal_15_2}"
+    roles: [{ object_type: orders, role_name: orders }, { object_type: decimal_15_2, role_name: totalPrice }]
+    constraints:
+      - { type: uniqueness, roles: [orders], source: explicit, status: confirmed }
+      - { type: mandatory, role: orders, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.ORDERS, column: O_TOTALPRICE, nullable: false } }
+
+  - id: orders_order_date
+    reading: "{Orders} ordered on {Date}"
+    roles: [{ object_type: orders, role_name: orders }, { object_type: date, role_name: orderDate }]
+    constraints:
+      - { type: uniqueness, roles: [orders], source: explicit, status: confirmed }
+      - { type: mandatory, role: orders, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.ORDERS, column: O_ORDERDATE, nullable: false } }
+
+  - id: orders_priority
+    reading: "{Orders} has order-priority {String}"
+    roles: [{ object_type: orders, role_name: orders }, { object_type: string, role_name: orderPriority }]
+    constraints:
+      - { type: uniqueness, roles: [orders], source: explicit, status: confirmed }
+      - { type: mandatory, role: orders, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.ORDERS, column: O_ORDERPRIORITY, nullable: false } }
+
+  - id: orders_clerk
+    reading: "{Orders} processed by clerk {String}"
+    roles: [{ object_type: orders, role_name: orders }, { object_type: string, role_name: clerk }]
+    constraints:
+      - { type: uniqueness, roles: [orders], source: explicit, status: confirmed }
+      - { type: mandatory, role: orders, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.ORDERS, column: O_CLERK, nullable: false } }
+
+  - id: orders_ship_priority
+    reading: "{Orders} has ship-priority {Integer}"
+    roles: [{ object_type: orders, role_name: orders }, { object_type: integer, role_name: shipPriority }]
+    constraints:
+      - { type: uniqueness, roles: [orders], source: explicit, status: confirmed }
+      - { type: mandatory, role: orders, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.ORDERS, column: O_SHIPPRIORITY, nullable: false } }
+
+  - id: orders_has_comment
+    reading: "{Orders} has comment {String}"
+    roles: [{ object_type: orders, role_name: orders }, { object_type: string, role_name: comment }]
+    constraints:
+      - { type: uniqueness, roles: [orders], source: explicit, status: confirmed }
+      - { type: mandatory, role: orders, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.ORDERS, column: O_COMMENT, nullable: false } }
+
+  # ---- LineItem (objectified — composite PK on a busy line-of-order table) ----
+  - id: line_item_for_orders
+    reading: "{LineItem} for {Orders}"
+    roles: [{ object_type: line_item, role_name: lineItem }, { object_type: orders, role_name: orders }]
+    constraints:
+      - { type: mandatory, role: lineItem, source: explicit, status: confirmed }
+
+  - id: line_item_line_number
+    reading: "{LineItem} has line-number {Integer}"
+    roles: [{ object_type: line_item, role_name: lineItem }, { object_type: integer, role_name: lineNumber }]
+    constraints:
+      - { type: uniqueness, roles: [lineItem], source: explicit, status: confirmed }
+      - { type: mandatory, role: lineItem, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.LINEITEM, column: L_LINENUMBER, nullable: false } }
+
+  # Composite FK from LINEITEM (l_partkey, l_suppkey) → PARTSUPP (ps_partkey, ps_suppkey).
+  # Modelled as a single binary fact type to PartSupp, mandatory.
+  - id: line_item_for_part_supp
+    reading: "{LineItem} for {PartSupp}"
+    roles: [{ object_type: line_item, role_name: lineItem }, { object_type: part_supp, role_name: partSupp }]
+    provenance:
+      origin: composite-fk
+      table: PUBLIC.LINEITEM
+      columns: [L_PARTKEY, L_SUPPKEY]
+      warning: composite-fk
+      halpin_reference: "ORM 2 Graphical Notation — Mandatory Role (composite FK side)"
+    constraints:
+      - { type: uniqueness, roles: [lineItem], source: explicit, status: confirmed }
+      - { type: mandatory, role: lineItem, source: explicit, status: confirmed }
+
+  - id: line_item_quantity
+    reading: "{LineItem} has quantity {Decimal_15_2}"
+    roles: [{ object_type: line_item, role_name: lineItem }, { object_type: decimal_15_2, role_name: quantity }]
+    constraints:
+      - { type: uniqueness, roles: [lineItem], source: explicit, status: confirmed }
+      - { type: mandatory, role: lineItem, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.LINEITEM, column: L_QUANTITY, nullable: false } }
+
+  - id: line_item_extended_price
+    reading: "{LineItem} has extended-price {Decimal_15_2}"
+    roles: [{ object_type: line_item, role_name: lineItem }, { object_type: decimal_15_2, role_name: extendedPrice }]
+    constraints:
+      - { type: uniqueness, roles: [lineItem], source: explicit, status: confirmed }
+      - { type: mandatory, role: lineItem, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.LINEITEM, column: L_EXTENDEDPRICE, nullable: false } }
+
+  - id: line_item_discount
+    reading: "{LineItem} has discount {Decimal_15_2}"
+    roles: [{ object_type: line_item, role_name: lineItem }, { object_type: decimal_15_2, role_name: discount }]
+    constraints:
+      - { type: uniqueness, roles: [lineItem], source: explicit, status: confirmed }
+      - { type: mandatory, role: lineItem, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.LINEITEM, column: L_DISCOUNT, nullable: false } }
+
+  - id: line_item_tax
+    reading: "{LineItem} has tax {Decimal_15_2}"
+    roles: [{ object_type: line_item, role_name: lineItem }, { object_type: decimal_15_2, role_name: tax }]
+    constraints:
+      - { type: uniqueness, roles: [lineItem], source: explicit, status: confirmed }
+      - { type: mandatory, role: lineItem, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.LINEITEM, column: L_TAX, nullable: false } }
+
+  - id: line_item_return_flag
+    reading: "{LineItem} has return-flag {String}"
+    roles: [{ object_type: line_item, role_name: lineItem }, { object_type: string, role_name: returnFlag }]
+    constraints:
+      - { type: uniqueness, roles: [lineItem], source: explicit, status: confirmed }
+      - { type: mandatory, role: lineItem, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.LINEITEM, column: L_RETURNFLAG, nullable: false } }
+    # CHAR(1); only 3 distinct values in TPC-H sample (R, A, N). Encoded-enum candidate live.
+
+  - id: line_item_line_status
+    reading: "{LineItem} has line-status {String}"
+    roles: [{ object_type: line_item, role_name: lineItem }, { object_type: string, role_name: lineStatus }]
+    constraints:
+      - { type: uniqueness, roles: [lineItem], source: explicit, status: confirmed }
+      - { type: mandatory, role: lineItem, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.LINEITEM, column: L_LINESTATUS, nullable: false } }
+    # CHAR(1); 2 distinct values (O, F). Encoded-enum candidate live.
+
+  - id: line_item_ship_date
+    reading: "{LineItem} ship-date {Date}"
+    roles: [{ object_type: line_item, role_name: lineItem }, { object_type: date, role_name: shipDate }]
+    constraints:
+      - { type: uniqueness, roles: [lineItem], source: explicit, status: confirmed }
+      - { type: mandatory, role: lineItem, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.LINEITEM, column: L_SHIPDATE, nullable: false } }
+
+  - id: line_item_commit_date
+    reading: "{LineItem} commit-date {Date}"
+    roles: [{ object_type: line_item, role_name: lineItem }, { object_type: date, role_name: commitDate }]
+    constraints:
+      - { type: uniqueness, roles: [lineItem], source: explicit, status: confirmed }
+      - { type: mandatory, role: lineItem, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.LINEITEM, column: L_COMMITDATE, nullable: false } }
+
+  - id: line_item_receipt_date
+    reading: "{LineItem} receipt-date {Date}"
+    roles: [{ object_type: line_item, role_name: lineItem }, { object_type: date, role_name: receiptDate }]
+    constraints:
+      - { type: uniqueness, roles: [lineItem], source: explicit, status: confirmed }
+      - { type: mandatory, role: lineItem, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.LINEITEM, column: L_RECEIPTDATE, nullable: false } }
+
+  - id: line_item_ship_instruct
+    reading: "{LineItem} has ship-instruction {String}"
+    roles: [{ object_type: line_item, role_name: lineItem }, { object_type: string, role_name: shipInstruct }]
+    constraints:
+      - { type: uniqueness, roles: [lineItem], source: explicit, status: confirmed }
+      - { type: mandatory, role: lineItem, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.LINEITEM, column: L_SHIPINSTRUCT, nullable: false } }
+
+  - id: line_item_ship_mode
+    reading: "{LineItem} has ship-mode {String}"
+    roles: [{ object_type: line_item, role_name: lineItem }, { object_type: string, role_name: shipMode }]
+    constraints:
+      - { type: uniqueness, roles: [lineItem], source: explicit, status: confirmed }
+      - { type: mandatory, role: lineItem, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.LINEITEM, column: L_SHIPMODE, nullable: false } }
+    # CHAR(10); 7 distinct values in sample (AIR, RAIL, SHIP, TRUCK, MAIL, FOB, REG AIR).
+
+  - id: line_item_has_comment
+    reading: "{LineItem} has comment {String}"
+    roles: [{ object_type: line_item, role_name: lineItem }, { object_type: string, role_name: comment }]
+    constraints:
+      - { type: uniqueness, roles: [lineItem], source: explicit, status: confirmed }
+      - { type: mandatory, role: lineItem, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.LINEITEM, column: L_COMMENT, nullable: false } }
+
+# =============================================================================
+# Top-level constraints
+# =============================================================================
+constraints:
+  # ---- External UCs from composite PKs ----
+  - type: uniqueness
+    scope: external
+    role_refs:
+      - { fact_type: part_supp_for_part, role: part }
+      - { fact_type: part_supp_for_supplier, role: supplier }
+    preferred: true
+    source: explicit
+    status: confirmed
+    rationale: "Composite PK (PS_PARTKEY, PS_SUPPKEY) on PUBLIC.PARTSUPP."
+    provenance:
+      table: PUBLIC.PARTSUPP
+      columns: [PS_PARTKEY, PS_SUPPKEY]
+      constraint_type: PK
+      halpin_reference: "ORM 2 Graphical Notation — External Uniqueness"
+
+  - type: uniqueness
+    scope: external
+    role_refs:
+      - { fact_type: line_item_for_orders, role: orders }
+      - { fact_type: line_item_line_number, role: lineNumber }
+    preferred: true
+    source: explicit
+    status: confirmed
+    rationale: "Composite PK (L_ORDERKEY, L_LINENUMBER) on PUBLIC.LINEITEM."
+    provenance:
+      table: PUBLIC.LINEITEM
+      columns: [L_ORDERKEY, L_LINENUMBER]
+      constraint_type: PK
+      halpin_reference: "ORM 2 Graphical Notation — External Uniqueness"
+
+  # ---- Common-sense library proposals ----
+  - type: value
+    object_type: decimal_15_2
+    role_ref: { fact_type: part_has_retail_price, role: retailPrice }
+    range: { min: 0, min_inclusive: true }
+    source: common-sense
+    status: proposed
+    modality: alethic
+    rationale: "Retail prices are non-negative — Money library entry."
+    provenance: { library_entry: money-positive }
+
+  - type: value
+    object_type: integer
+    role_ref: { fact_type: part_has_size, role: size }
+    range: { min: 0, min_inclusive: true }
+    source: common-sense
+    status: proposed
+    modality: alethic
+    rationale: "Part sizes are non-negative."
+    provenance: { library_entry: count-non-negative }
+
+  - type: value
+    object_type: decimal_15_2
+    role_ref: { fact_type: supplier_acct_balance, role: acctBal }
+    # Note: account balances CAN be negative (overdrafts). No range proposed.
+    source: common-sense
+    status: rejected
+    rejection_reason: "Account balances may legitimately be negative."
+    rejected_at: "2026-05-04"
+
+  - type: value
+    object_type: decimal_15_2
+    role_ref: { fact_type: customer_acct_balance, role: acctBal }
+    source: common-sense
+    status: rejected
+    rejection_reason: "Account balances may legitimately be negative."
+    rejected_at: "2026-05-04"
+
+  - type: value
+    object_type: integer
+    role_ref: { fact_type: part_supp_avail_qty, role: availQty }
+    range: { min: 0, min_inclusive: true }
+    source: common-sense
+    status: proposed
+    modality: alethic
+    rationale: "Available quantities are non-negative — Count library entry."
+    provenance: { library_entry: count-non-negative }
+
+  - type: value
+    object_type: decimal_15_2
+    role_ref: { fact_type: part_supp_supply_cost, role: supplyCost }
+    range: { min: 0, min_inclusive: true }
+    source: common-sense
+    status: proposed
+    modality: alethic
+    provenance: { library_entry: money-positive }
+
+  - type: value
+    object_type: decimal_15_2
+    role_ref: { fact_type: orders_total_price, role: totalPrice }
+    range: { min: 0, min_inclusive: true }
+    source: common-sense
+    status: proposed
+    modality: alethic
+    provenance: { library_entry: money-positive }
+
+  - type: value
+    object_type: decimal_15_2
+    role_ref: { fact_type: line_item_quantity, role: quantity }
+    range: { min: 0, min_inclusive: false }                # quantities are positive
+    source: common-sense
+    status: proposed
+    modality: alethic
+    provenance: { library_entry: count-non-negative }
+
+  - type: value
+    object_type: decimal_15_2
+    role_ref: { fact_type: line_item_extended_price, role: extendedPrice }
+    range: { min: 0, min_inclusive: true }
+    source: common-sense
+    status: proposed
+    modality: alethic
+    provenance: { library_entry: money-positive }
+
+  - type: value
+    object_type: decimal_15_2
+    role_ref: { fact_type: line_item_discount, role: discount }
+    range: { min: 0, max: 1, min_inclusive: true, max_inclusive: true }
+    source: common-sense
+    status: proposed
+    modality: alethic
+    rationale: "Discount is a 0..1 fractional value (TPC-H convention)."
+    provenance: { library_entry: discount-fraction }
+
+  - type: value
+    object_type: decimal_15_2
+    role_ref: { fact_type: line_item_tax, role: tax }
+    range: { min: 0, min_inclusive: true }
+    source: common-sense
+    status: proposed
+    modality: alethic
+    provenance: { library_entry: count-non-negative }
+
+  # ---- Common-sense temporal constraints (LineItem dates) ----
+  - type: value-comparison
+    operator: "<="
+    role_a: { fact_type: line_item_ship_date, role: shipDate }
+    role_b: { fact_type: line_item_receipt_date, role: receiptDate }
+    source: common-sense
+    status: proposed
+    modality: alethic
+    rationale: "Shipments are received no earlier than they are shipped."
+    provenance:
+      library_entry: temporal-lifecycle-shipped-delivered
+      halpin_reference: "ORM 2 Graphical Notation — Value-Comparison Constraints"
+
+  - type: value-comparison
+    operator: "<="
+    role_a: { fact_type: orders_order_date, role: orderDate }
+    role_b: { fact_type: line_item_ship_date, role: shipDate }
+    source: common-sense
+    status: proposed
+    modality: alethic
+    rationale: "Line items ship no earlier than their order's order-date."
+    provenance:
+      library_entry: temporal-lifecycle-placed-shipped
+
+rejected_proposals:
+  - type: value
+    object_type: decimal_15_2
+    role_ref: { fact_type: supplier_acct_balance, role: acctBal }
+    range: { min: 0, min_inclusive: true }
+    source: common-sense
+    rationale: "Money library entry would propose non-negative."
+    rejection_reason: "Account balances may legitimately be negative (overdrafts)."
+    rejected_at: "2026-05-04"
+
+  - type: value
+    object_type: decimal_15_2
+    role_ref: { fact_type: customer_acct_balance, role: acctBal }
+    range: { min: 0, min_inclusive: true }
+    source: common-sense
+    rationale: "Money library entry would propose non-negative."
+    rejection_reason: "Account balances may legitimately be negative."
+    rejected_at: "2026-05-04"

@@ -1,0 +1,261 @@
+# examples/movie_catalog.orm.yaml
+# Recovered ORM model for movie_catalog.sql. Output of SRP Steps 1-9.
+# All explicit constraints lifted from DDL; one common-sense range constraint proposed.
+
+version: 1
+
+source:
+  kind: ddl-file
+  dialect: postgres
+  scope: { schema: PUBLIC, tables: ["*"] }
+  introspected_at: "2026-05-04T15:00:00Z"
+  confidence: standard
+  mode: guided
+
+object_types:
+  - id: director
+    name: Director
+    kind: entity
+    reference:
+      mode: popular
+      value_type: director_id
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.DIRECTOR
+      pk_column: DIRECTOR_ID
+
+  - id: actor
+    name: Actor
+    kind: entity
+    reference:
+      mode: popular
+      value_type: actor_id
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.ACTOR
+      pk_column: ACTOR_ID
+
+  - id: movie
+    name: Movie
+    kind: entity
+    reference:
+      mode: popular
+      value_type: movie_id
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.MOVIE
+      pk_column: MOVIE_ID
+
+  - id: movie_actor
+    name: MovieActor
+    kind: entity
+    reference:
+      mode: external
+    provenance:
+      origin: junction-table
+      table: PUBLIC.MOVIE_ACTOR
+
+  - id: director_id
+    name: DirectorId
+    kind: value
+    primitive: Integer
+
+  - id: actor_id
+    name: ActorId
+    kind: value
+    primitive: Integer
+
+  - id: movie_id
+    name: MovieId
+    kind: value
+    primitive: Integer
+
+  - id: rating
+    name: Rating
+    kind: value
+    primitive: String
+
+fact_types:
+  - id: director_has_name
+    reading: "{Director} has name {String}"
+    roles:
+      - { object_type: director, role_name: director }
+      - { object_type: string, role_name: name }
+    constraints:
+      - type: uniqueness
+        roles: [director]
+        preferred: false
+        source: explicit
+        status: confirmed
+        provenance: { table: PUBLIC.DIRECTOR, column: NAME, constraint: UNIQUE }
+      - type: uniqueness
+        roles: [name]
+        source: explicit
+        status: confirmed
+        provenance: { table: PUBLIC.DIRECTOR, column: NAME, constraint: UNIQUE }
+      - type: mandatory
+        role: director
+        source: explicit
+        status: confirmed
+        provenance: { table: PUBLIC.DIRECTOR, column: NAME, nullable: false }
+
+  - id: actor_has_name
+    reading: "{Actor} has name {String}"
+    roles:
+      - { object_type: actor, role_name: actor }
+      - { object_type: string, role_name: name }
+    constraints:
+      - type: uniqueness
+        roles: [actor]
+        source: explicit
+        status: confirmed
+      - type: uniqueness
+        roles: [name]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: actor
+        source: explicit
+        status: confirmed
+
+  - id: movie_has_title
+    reading: "{Movie} has title {String}"
+    roles:
+      - { object_type: movie, role_name: movie }
+      - { object_type: string, role_name: title }
+    constraints:
+      - type: uniqueness
+        roles: [movie]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: movie
+        source: explicit
+        status: confirmed
+        provenance: { table: PUBLIC.MOVIE, column: TITLE, nullable: false }
+
+  - id: movie_released_in
+    reading: "{Movie} was released in {Integer}"
+    roles:
+      - { object_type: movie, role_name: movie }
+      - { object_type: integer, role_name: year }
+    constraints:
+      - type: uniqueness
+        roles: [movie]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: movie
+        source: explicit
+        status: confirmed
+      - type: value
+        role: year
+        range: { min: 1888, max: 2100, min_inclusive: true, max_inclusive: true }
+        source: explicit
+        status: confirmed
+        provenance:
+          table: PUBLIC.MOVIE
+          column: RELEASE_YEAR
+          constraint_type: CHECK
+          check_expression: "RELEASE_YEAR BETWEEN 1888 AND 2100"
+
+  - id: movie_has_rating
+    reading: "{Movie} has rating {Rating}"
+    roles:
+      - { object_type: movie, role_name: movie }
+      - { object_type: rating, role_name: rating }
+    constraints:
+      - type: uniqueness
+        roles: [movie]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: movie
+        source: explicit
+        status: confirmed
+
+  - id: movie_directed_by
+    reading: "{Movie} directed by {Director}"
+    roles:
+      - { object_type: movie, role_name: movie }
+      - { object_type: director, role_name: director }
+    constraints:
+      - type: uniqueness
+        roles: [movie]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: movie
+        source: explicit
+        status: confirmed
+        provenance:
+          table: PUBLIC.MOVIE
+          column: DIRECTOR_ID
+          constraint_type: FK
+          fk: { references_table: PUBLIC.DIRECTOR, references_columns: [DIRECTOR_ID] }
+
+  - id: movie_actor_for_movie
+    reading: "{MovieActor} for {Movie}"
+    roles:
+      - { object_type: movie_actor, role_name: movieActor }
+      - { object_type: movie, role_name: movie }
+    constraints:
+      - type: mandatory
+        role: movieActor
+        source: explicit
+        status: confirmed
+
+  - id: movie_actor_for_actor
+    reading: "{MovieActor} for {Actor}"
+    roles:
+      - { object_type: movie_actor, role_name: movieActor }
+      - { object_type: actor, role_name: actor }
+    constraints:
+      - type: mandatory
+        role: movieActor
+        source: explicit
+        status: confirmed
+
+  - id: movie_actor_plays_character
+    reading: "{MovieActor} plays character {String}"
+    roles:
+      - { object_type: movie_actor, role_name: movieActor }
+      - { object_type: string, role_name: characterName }
+    constraints:
+      - type: uniqueness
+        roles: [movieActor]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: movieActor
+        source: explicit
+        status: confirmed
+        provenance: { table: PUBLIC.MOVIE_ACTOR, column: CHARACTER_NAME, nullable: false }
+
+constraints:
+  - type: uniqueness
+    scope: external
+    role_refs:
+      - { fact_type: movie_actor_for_movie, role: movie }
+      - { fact_type: movie_actor_for_actor, role: actor }
+    preferred: true
+    source: explicit
+    status: confirmed
+    rationale: "Composite PK (MOVIE_ID, ACTOR_ID) on PUBLIC.MOVIE_ACTOR."
+    provenance:
+      table: PUBLIC.MOVIE_ACTOR
+      columns: [MOVIE_ID, ACTOR_ID]
+      constraint_type: PK
+
+  - type: value
+    object_type: rating
+    allowed: ['G', 'PG', 'PG-13', 'R', 'NC-17']
+    source: explicit
+    status: confirmed
+    provenance:
+      table: PUBLIC.MOVIE
+      column: RATING
+      constraint_type: CHECK
+      check_expression: "RATING IN ('G','PG','PG-13','R','NC-17')"
+
+rejected_proposals: []

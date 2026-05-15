@@ -1,0 +1,292 @@
+# examples/subtype_from_type_column.orm.yaml
+# Recovered ORM model for subtype_from_type_column.sql.
+#
+# Demonstrates:
+#   - Step 7 detects TYPE column + correlated side tables → propose subtypes.
+#   - Subtype-partition constraint with exclusive=true (column has one value per row)
+#     and exhaustive=true (TYPE is NOT NULL — every Vehicle has a TYPE).
+#   - Each subtype carries its own derivation rule keyed on the TYPE value.
+#   - Subtype-specific attributes live as fact types rooted in the subtype.
+
+version: 1
+
+source:
+  kind: sql
+  dialect: postgres
+  scope: { schema: PUBLIC, tables: ["*"] }
+  introspected_at: "2026-05-04T15:30:00Z"
+  confidence: standard
+  mode: guided
+
+object_types:
+  - id: vehicle
+    name: Vehicle
+    kind: entity
+    reference: { mode: popular, value_type: vehicle_id }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.VEHICLE
+      pk_column: VEHICLE_ID
+
+  # ---- Subtypes recovered from the TYPE column ----
+  - id: car
+    name: Car
+    kind: entity
+    subtype_of: [vehicle]
+    inherits_reference: true                # dashed arrow — Car inherits Vehicle's identifier
+    derivation: derived
+    derivation_rule: "Each Car is a Vehicle whose Type is 'CAR'."
+    storage: computed
+    provenance:
+      origin: subtype-from-type-column
+      source_table: PUBLIC.VEHICLE
+      type_column: TYPE
+      type_value: CAR
+      side_table: PUBLIC.CAR_DETAILS
+
+  - id: truck
+    name: Truck
+    kind: entity
+    subtype_of: [vehicle]
+    inherits_reference: true
+    derivation: derived
+    derivation_rule: "Each Truck is a Vehicle whose Type is 'TRUCK'."
+    storage: computed
+    provenance:
+      origin: subtype-from-type-column
+      source_table: PUBLIC.VEHICLE
+      type_column: TYPE
+      type_value: TRUCK
+      side_table: PUBLIC.TRUCK_DETAILS
+
+  - id: motorcycle
+    name: Motorcycle
+    kind: entity
+    subtype_of: [vehicle]
+    inherits_reference: true
+    derivation: derived
+    derivation_rule: "Each Motorcycle is a Vehicle whose Type is 'MOTORCYCLE'."
+    storage: computed
+    provenance:
+      origin: subtype-from-type-column
+      source_table: PUBLIC.VEHICLE
+      type_column: TYPE
+      type_value: MOTORCYCLE
+      side_table: PUBLIC.MOTORCYCLE_DETAILS
+
+  - id: vehicle_id
+    name: VehicleId
+    kind: value
+    primitive: Integer
+
+  - id: vehicle_type
+    name: VehicleType
+    kind: value
+    primitive: String
+
+  - id: body_style
+    name: BodyStyle
+    kind: value
+    primitive: String
+
+fact_types:
+  # ---- Vehicle's own fact types ----
+  - id: vehicle_has_make
+    reading: "{Vehicle} has make {String}"
+    roles:
+      - { object_type: vehicle, role_name: vehicle }
+      - { object_type: string, role_name: make }
+    constraints:
+      - type: uniqueness
+        roles: [vehicle]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: vehicle
+        source: explicit
+        status: confirmed
+
+  - id: vehicle_has_model
+    reading: "{Vehicle} has model {String}"
+    roles:
+      - { object_type: vehicle, role_name: vehicle }
+      - { object_type: string, role_name: model }
+    constraints:
+      - type: uniqueness
+        roles: [vehicle]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: vehicle
+        source: explicit
+        status: confirmed
+
+  - id: vehicle_has_type
+    reading: "{Vehicle} has type {VehicleType}"
+    roles:
+      - { object_type: vehicle, role_name: vehicle }
+      - { object_type: vehicle_type, role_name: type }
+    provenance:
+      origin: column
+      table: PUBLIC.VEHICLE
+      column: TYPE
+      warning: type-column-subtype          # this column drove the subtype split
+    constraints:
+      - type: uniqueness
+        roles: [vehicle]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: vehicle
+        source: explicit
+        status: confirmed
+
+  # ---- Subtype-specific fact types ----
+  - id: car_has_num_seats
+    reading: "{Car} has number of seats {Integer}"
+    roles:
+      - { object_type: car, role_name: car }
+      - { object_type: integer, role_name: numSeats }
+    constraints:
+      - type: uniqueness
+        roles: [car]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: car
+        source: explicit
+        status: confirmed
+      - type: value
+        role: numSeats
+        range: { min: 1, max: 9, min_inclusive: true, max_inclusive: true }
+        source: explicit
+        status: confirmed
+        provenance:
+          table: PUBLIC.CAR_DETAILS
+          column: NUM_SEATS
+          constraint_type: CHECK
+          check_expression: "NUM_SEATS BETWEEN 1 AND 9"
+
+  - id: car_has_body_style
+    reading: "{Car} has body style {BodyStyle}"
+    roles:
+      - { object_type: car, role_name: car }
+      - { object_type: body_style, role_name: bodyStyle }
+    constraints:
+      - type: uniqueness
+        roles: [car]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: car
+        source: explicit
+        status: confirmed
+
+  - id: truck_has_payload_capacity
+    reading: "{Truck} has payload capacity {Integer}"
+    roles:
+      - { object_type: truck, role_name: truck }
+      - { object_type: integer, role_name: payloadCapacity }
+    constraints:
+      - type: uniqueness
+        roles: [truck]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: truck
+        source: explicit
+        status: confirmed
+      - type: value
+        role: payloadCapacity
+        range: { min: 0, min_inclusive: false }
+        source: explicit
+        status: confirmed
+        provenance:
+          table: PUBLIC.TRUCK_DETAILS
+          column: PAYLOAD_CAPACITY
+          constraint_type: CHECK
+          check_expression: "PAYLOAD_CAPACITY > 0"
+
+  - id: truck_has_bed_length
+    reading: "{Truck} has bed length {Number}"
+    roles:
+      - { object_type: truck, role_name: truck }
+      - { object_type: number, role_name: bedLength }
+    constraints:
+      - type: uniqueness
+        roles: [truck]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: truck
+        source: explicit
+        status: confirmed
+      - type: value
+        role: bedLength
+        range: { min: 0, min_inclusive: false }
+        source: explicit
+        status: confirmed
+
+  - id: motorcycle_has_engine_cc
+    reading: "{Motorcycle} has engine displacement {Integer}"
+    roles:
+      - { object_type: motorcycle, role_name: motorcycle }
+      - { object_type: integer, role_name: engineCc }
+    constraints:
+      - type: uniqueness
+        roles: [motorcycle]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: motorcycle
+        source: explicit
+        status: confirmed
+      - type: value
+        role: engineCc
+        range: { min: 0, min_inclusive: false }
+        source: explicit
+        status: confirmed
+
+constraints:
+  # The TYPE column is constrained by CHECK in the DDL — this constraint is the value enum.
+  - type: value
+    object_type: vehicle_type
+    allowed: ['CAR', 'TRUCK', 'MOTORCYCLE']
+    source: explicit
+    status: confirmed
+    provenance:
+      table: PUBLIC.VEHICLE
+      column: TYPE
+      constraint_type: CHECK
+      check_expression: "TYPE IN ('CAR', 'TRUCK', 'MOTORCYCLE')"
+
+  # The body-style enum.
+  - type: value
+    object_type: body_style
+    allowed: ['SEDAN', 'HATCHBACK', 'SUV', 'COUPE', 'WAGON']
+    source: explicit
+    status: confirmed
+    provenance:
+      table: PUBLIC.CAR_DETAILS
+      column: BODY_STYLE
+      constraint_type: CHECK
+      check_expression: "BODY_STYLE IN ('SEDAN','HATCHBACK','SUV','COUPE','WAGON')"
+
+  # Subtype-partition constraint — the heart of this example.
+  # exclusive=true: TYPE is a single column, one value per row, so no Vehicle is two subtypes.
+  # exhaustive=true: TYPE is NOT NULL, so every Vehicle has exactly one subtype.
+  - type: subtype-partition
+    supertype: vehicle
+    subtypes: [car, truck, motorcycle]
+    exclusive: true
+    exhaustive: true
+    source: common-sense
+    status: proposed
+    rationale: "TYPE column on PUBLIC.VEHICLE is single-valued (exclusive) and NOT NULL with three side tables correlating to its three values (exhaustive). User confirmed at Step 9c."
+    provenance:
+      origin: type-column-detection
+      table: PUBLIC.VEHICLE
+      column: TYPE
+      side_tables: [PUBLIC.CAR_DETAILS, PUBLIC.TRUCK_DETAILS, PUBLIC.MOTORCYCLE_DETAILS]
+
+rejected_proposals: []

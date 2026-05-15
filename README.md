@@ -40,6 +40,8 @@ The skills in this repo instruct your agent **how to use the `relationalai` Pyth
 | 12 | [rai-prescriptive-results-interpretation](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-prescriptive-results-interpretation) | Reasoning | Post-solve — solution extraction, status codes, quality, sensitivity |
 | 13 | [rai-cortex-integration](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-cortex-integration) | Operations | Deploy RAI models as Snowflake Cortex Agents |
 | 14 | [rai-health-skill](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-health-skill) | Operations | Diagnose engine performance — memory, CPU, demand metrics, remediation |
+| 15 | [rai-orm-from-schema](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-orm-from-schema) | Schema modeling | Recover an ORM 2 conceptual model from a relational schema; emit YAML with constraint provenance + PyRel translation |
+| 16 | [rai-orm-from-text](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-orm-from-text) | Conceptual modeling | Design an ORM 2 conceptual model from natural-language domain description via Halpin's CSDP; emit YAML + PyRel translation |
 
 ## Prerequisites
 **Requires `relationalai` (PyRel) v1.0.14+**

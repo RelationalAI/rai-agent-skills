@@ -1,0 +1,71 @@
+{
+  "$schema_note": "Eval-case definitions for rai-orm-from-text, v0.2. Mirror of the schema-skill's cases.json structure. Claude reads this in-session, runs each case, and compares against expected.",
+  "version": 1,
+  "v0_2_pass_bar": "T-E1 must pass on the synthetic_good_user dialogue + (future work) 3 paraphrased Halpin Workbook exercises; T-E2 coverage targets met per exercise; T-E3 and T-E4 pass on manual review; T-E5 pass with at least one stakeholder.",
+  "future_fixtures_pending": [
+    "fixtures/workbook_exercise_1/dialogue.md (paraphrased from Halpin Workbook per S12 copyright; not yet authored)",
+    "fixtures/workbook_exercise_2/dialogue.md",
+    "fixtures/workbook_exercise_3/dialogue.md (objectification + subtyping focus)"
+  ],
+  "cases": [
+    {
+      "id": "T-E1-synthetic-good-user",
+      "type": "reference-solution-match",
+      "description": "Synthetic dialogue with a well-engaged user (provides examples, answers clarifying questions, distinguishes alethic from deontic).",
+      "fixture": "fixtures/synthetic_good_user/dialogue.md",
+      "input_kind": "text-conversation",
+      "expected": "expected/synthetic_good_user.orm.yaml"
+    },
+    {
+      "id": "T-E2-coverage",
+      "type": "constraint-coverage",
+      "description": "Count constraints by source category per exercise; verify each category meets its target.",
+      "applies_to": ["T-E1-synthetic-good-user"],
+      "targets": {
+        "explicit": "≥ 60% of total constraints (CSDP is dialogue-driven; explicit constraints from user statements dominate)",
+        "sample": "≥ 1 constraint per exercise (small Halpin populations should yield at least one)",
+        "common-sense": "≥ 40% of expected count (library hits on common object-type names)",
+        "llm-inferred": "≥ 1 proposal per exercise with rationale_world_fact populated; ≥ 50% rejected at 6d/7b (LLM is highest-hallucination-risk source)",
+        "user-supplied": "≥ 1 per exercise (CSDP Step 7d should typically surface at least one missed rule)"
+      }
+    },
+    {
+      "id": "T-E3-question-asking-quality",
+      "type": "qualitative-review",
+      "description": "Manual review of Claude's question-asking quality at ambiguous CSDP steps.",
+      "review_criteria": [
+        "Did Claude elicit reference schemes explicitly (vs assuming attribute thinking)? Especially: was each new entity type's reference mode chosen by an explicit user decision?",
+        "Did Claude verbalize each fact as a question, never as an assertion?",
+        "Did Claude push back on premature subtyping using the Halpin role-based criterion?",
+        "Did Claude decompose compound predicates into elementary facts?",
+        "Did Claude redirect ER vocabulary (table/column/attribute) to Halpin terms (fact type/role/object type)?"
+      ],
+      "pass": "All five criteria pass on manual review across all T-E1 cases."
+    },
+    {
+      "id": "T-E4-halpin-posture-adherence",
+      "type": "qualitative-review",
+      "description": "Manual review of Halpin-posture adherence — terminology, atomic decomposition, fact-based thinking.",
+      "review_criteria": [
+        "All emitted YAML uses Halpin vocabulary (fact_type, object_type, reference mode, role, etc.) — never ER vocabulary (table, column, attribute, relationship type, junction)",
+        "All fact types are atomic (no compound predicates)",
+        "No subtypes are emitted whose justification is attribute-based rather than role-based",
+        "Sample populations rendered in the verbalization (when present in YAML)",
+        "User quotes cited in provenance for source=explicit and source=user-supplied constraints"
+      ],
+      "pass": "All five criteria pass."
+    },
+    {
+      "id": "T-E5-stakeholder-reviewability",
+      "type": "qualitative-review",
+      "description": "Hand the verbalization to a non-PyRel stakeholder; can they validate the model by reading verbalizations?",
+      "method": "Run CSDP on one of the T-E1 fixtures. Hand the resulting verbalization.txt to a domain expert who is NOT familiar with PyRel, ORM 2 notation, or Halpin's textbook. Have them fill in evals/reviewability_checklist.md.",
+      "pass": "At least one stakeholder confirms they can validate the model without help (no need to see the YAML or original schema/dialogue)."
+    }
+  ],
+  "running_evals": {
+    "manual_methodology": "Claude runs CSDP on each fixture in-session, writes outputs to evals/results/<YYYY-MM-DD>/<exercise>/{output.orm.yaml, output.py, output.verbalization.txt, diff.md}, then produces a per-case verdict comparing against the expected reference and the pass criteria.",
+    "diff_format": "diff.md per run: (1) T-E1 structural diff, (2) T-E2 source-category counts vs targets, (3) T-E3 question-asking review with concrete examples, (4) T-E4 posture-adherence review, (5) overall pass/fail.",
+    "automation_status": "v0.2: manual. Stretch goal — eval runner if N grows."
+  }
+}

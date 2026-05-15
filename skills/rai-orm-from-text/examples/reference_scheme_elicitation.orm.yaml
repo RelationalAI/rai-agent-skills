@@ -1,0 +1,130 @@
+# examples/reference_scheme_elicitation.orm.yaml
+# Outcome of the dialogue in reference_scheme_elicitation.dialogue.md.
+# Shows the three reference-mode patterns: `general` (Project, Employee), `external` (Task).
+
+version: 1
+
+source:
+  kind: text-conversation
+  session_id: reference_scheme_demo
+  started_at: "2026-05-14T13:00:00Z"
+  confidence: standard
+  mode: guided
+
+object_types:
+  - id: project
+    name: Project
+    kind: entity
+    reference: { mode: general, value_type: project_name }
+    provenance:
+      origin: csdp-step-1
+      csdp_step: 1
+      dialogue_turn: 7
+      user_quote: "Project names are unique in our org. So name is the identifier."
+      rationale: "User confirmed name as unique identifier; `general` mode chosen over `popular` because the identifier is a meaningful named value, not an arbitrary primitive."
+
+  - id: employee
+    name: Employee
+    kind: entity
+    reference: { mode: general, value_type: username }
+    provenance:
+      origin: csdp-step-1
+      csdp_step: 1
+      dialogue_turn: 10
+      user_quote: "Identify by username — that's how everyone refers to them. Usernames are unique, always — we enforce that at user creation."
+
+  - id: task
+    name: Task
+    kind: entity
+    reference: { mode: external }
+    provenance:
+      origin: csdp-step-1-composite
+      csdp_step: 1
+      dialogue_turn: 14
+      user_quote: "We can have 'design schema' in two different projects without conflict."
+      rationale: "Task names are only unique within a Project; composite identifier (Project, TaskName) required."
+
+  - id: project_name
+    name: ProjectName
+    kind: value
+    primitive: String
+
+  - id: username
+    name: Username
+    kind: value
+    primitive: String
+
+  - id: task_name
+    name: TaskName
+    kind: value
+    primitive: String
+
+fact_types:
+  - id: project_has_start_date
+    reading: "{Project} has start date {Date}"
+    roles: [{ object_type: project, role_name: project }, { object_type: date, role_name: startDate }]
+    constraints:
+      - { type: uniqueness, roles: [project], source: explicit, status: confirmed }
+      - { type: mandatory, role: project, source: explicit, status: confirmed }
+
+  - id: project_has_status
+    reading: "{Project} has status {String}"
+    roles: [{ object_type: project, role_name: project }, { object_type: string, role_name: status }]
+    constraints:
+      - { type: uniqueness, roles: [project], source: explicit, status: confirmed }
+      - { type: mandatory, role: project, source: explicit, status: confirmed }
+
+  - id: employee_has_full_name
+    reading: "{Employee} has full name {String}"
+    roles: [{ object_type: employee, role_name: employee }, { object_type: string, role_name: fullName }]
+    constraints:
+      - { type: uniqueness, roles: [employee], source: explicit, status: confirmed }
+      - { type: mandatory, role: employee, source: explicit, status: confirmed }
+
+  - id: employee_works_on_project
+    reading: "{Employee} works on {Project}"
+    roles: [{ object_type: employee, role_name: employee }, { object_type: project, role_name: project }]
+    # m:n — neither role unique alone
+    constraints:
+      - { type: uniqueness, roles: [employee, project], preferred: true, source: explicit, status: confirmed }
+      - { type: mandatory, role: employee, source: explicit, status: confirmed }
+      - { type: mandatory, role: project, source: explicit, status: confirmed }
+
+  # Reference-bearing fact types for Task (external composite identifier)
+  - id: task_in_project
+    reading: "{Task} in {Project}"
+    roles: [{ object_type: task, role_name: task }, { object_type: project, role_name: project }]
+    constraints:
+      - { type: mandatory, role: task, source: explicit, status: confirmed }
+
+  - id: task_has_name
+    reading: "{Task} has name {TaskName}"
+    roles: [{ object_type: task, role_name: task }, { object_type: task_name, role_name: name }]
+    constraints:
+      - { type: uniqueness, roles: [task], source: explicit, status: confirmed }
+      - { type: mandatory, role: task, source: explicit, status: confirmed }
+
+  - id: task_assigned_to_employee
+    reading: "{Task} assigned to {Employee}"
+    roles: [{ object_type: task, role_name: task }, { object_type: employee, role_name: employee }]
+    constraints:
+      - { type: uniqueness, roles: [task], source: explicit, status: confirmed }
+
+constraints:
+  # External UC for Task's composite identifier
+  - type: uniqueness
+    scope: external
+    role_refs:
+      - { fact_type: task_in_project, role: project }
+      - { fact_type: task_has_name, role: name }
+    preferred: true
+    source: explicit
+    status: confirmed
+    rationale: "Task identified by the (Project, TaskName) composite. User confirmed names are unique within a project but not across projects."
+    provenance:
+      csdp_step: 1
+      dialogue_turn: 14
+      user_quote: "We can have 'design schema' in two different projects without conflict."
+      halpin_reference: "ORM 2 Graphical Notation — External Uniqueness (composite reference scheme)"
+
+rejected_proposals: []

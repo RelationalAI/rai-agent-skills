@@ -1,0 +1,171 @@
+# examples/library_with_subtypes.orm.yaml
+# Outcome of the dialogue in library_with_subtypes.dialogue.md.
+# Shows the Halpin role-based subtype criterion in YAML form:
+#   - BookItem / PeriodicalItem confirmed as subtypes of LibraryItem (each plays distinct roles)
+#   - Reference / Circulating REJECTED as subtypes; replaced with a BookType value enum + deontic policy
+
+version: 1
+
+source:
+  kind: text-conversation
+  session_id: library_subtypes_demo
+  started_at: "2026-05-14T11:00:00Z"
+  confidence: standard
+  mode: guided
+
+object_types:
+  - id: library_item
+    name: LibraryItem
+    kind: entity
+    reference: { mode: popular, value_type: item_id }
+
+  - id: book_item
+    name: BookItem
+    kind: entity
+    subtype_of: [library_item]
+    inherits_reference: true
+    derivation: derived
+    derivation_rule: "A LibraryItem is a BookItem if it has the roles of has-author and has-publisher."
+    provenance:
+      origin: csdp-step-6
+      csdp_step: 6
+      dialogue_turn: 30
+      user_quote: "BookItem has an author and a publisher."
+      rationale: "Role-based justification: BookItem plays has-author and has-publisher roles, PeriodicalItem doesn't."
+
+  - id: periodical_item
+    name: PeriodicalItem
+    kind: entity
+    subtype_of: [library_item]
+    inherits_reference: true
+    derivation: derived
+    derivation_rule: "A LibraryItem is a PeriodicalItem if it has the role of has-issue-number."
+    provenance:
+      origin: csdp-step-6
+      csdp_step: 6
+      dialogue_turn: 30
+      user_quote: "PeriodicalItem has an issue-number and a publication-date."
+
+  - id: book_type
+    name: BookType
+    kind: value
+    primitive: String
+    provenance:
+      origin: csdp-step-6
+      rationale: "Replaces the rejected Reference/Circulating subtype split."
+
+  - id: author
+    name: Author
+    kind: entity
+    reference: { mode: general, value_type: author_name }
+
+  - id: patron
+    name: Patron
+    kind: entity
+    reference: { mode: popular, value_type: patron_id }
+
+  - id: item_id
+    name: ItemId
+    kind: value
+    primitive: Integer
+
+  - id: author_name
+    name: AuthorName
+    kind: value
+    primitive: String
+
+  - id: patron_id
+    name: PatronId
+    kind: value
+    primitive: Integer
+
+fact_types:
+  # LibraryItem-level
+  - id: library_item_has_title
+    reading: "{LibraryItem} has title {String}"
+    roles: [{ object_type: library_item, role_name: item }, { object_type: string, role_name: title }]
+    constraints:
+      - { type: uniqueness, roles: [item], source: explicit, status: confirmed }
+      - { type: mandatory, role: item, source: explicit, status: confirmed }
+
+  # BookItem-specific
+  - id: book_item_has_author
+    reading: "{BookItem} has author {Author}"
+    roles: [{ object_type: book_item, role_name: book }, { object_type: author, role_name: author }]
+    constraints:
+      - { type: uniqueness, roles: [book], source: explicit, status: confirmed }
+      - { type: mandatory, role: book, source: explicit, status: confirmed }
+
+  - id: book_item_has_type
+    reading: "{BookItem} has type {BookType}"
+    roles: [{ object_type: book_item, role_name: book }, { object_type: book_type, role_name: type }]
+    constraints:
+      - { type: uniqueness, roles: [book], source: explicit, status: confirmed }
+      - { type: mandatory, role: book, source: explicit, status: confirmed }
+
+  # PeriodicalItem-specific
+  - id: periodical_item_has_issue_number
+    reading: "{PeriodicalItem} has issue-number {Integer}"
+    roles: [{ object_type: periodical_item, role_name: periodical }, { object_type: integer, role_name: issueNumber }]
+    constraints:
+      - { type: uniqueness, roles: [periodical], source: explicit, status: confirmed }
+      - { type: mandatory, role: periodical, source: explicit, status: confirmed }
+
+  # Checkout (applies to BookItem only — modelled via deontic constraint below for Reference subtype)
+  - id: library_item_checked_out_by_patron
+    reading: "{LibraryItem} checked-out-by {Patron}"
+    roles: [{ object_type: library_item, role_name: item }, { object_type: patron, role_name: patron }]
+    constraints:
+      - { type: uniqueness, roles: [item], source: explicit, status: confirmed }
+
+constraints:
+  # The rejected Reference/Circulating subtypes become a value enum constraint
+  - type: value
+    object_type: book_type
+    allowed: ['Reference', 'Circulating']
+    source: user-supplied
+    status: confirmed
+    rationale: "Replaces the rejected subtype split: book_type is a value, not a subtype."
+    provenance:
+      csdp_step: 6
+      dialogue_turn: 42
+
+  # Deontic policy constraint replacing the structural subtype distinction
+  - type: textual
+    expression: "A BookItem with book_type='Reference' should not be checked out."
+    formal_language: natural
+    source: user-supplied
+    status: confirmed
+    modality: deontic
+    rationale: "Policy enforced at application layer; schema doesn't structurally prevent this."
+    provenance:
+      csdp_step: 7
+      dialogue_turn: 50
+      user_quote: "We enforce the no-checkout policy in the application layer, not in the data model."
+
+  # Subtype-partition for the BookItem / PeriodicalItem split
+  - type: subtype-partition
+    supertype: library_item
+    subtypes: [book_item, periodical_item]
+    exclusive: true
+    exhaustive: true
+    source: user-supplied
+    status: confirmed
+    rationale: "Library items are partitioned into Books and Periodicals; no item is both, every item is one or the other."
+    provenance:
+      csdp_step: 6
+      dialogue_turn: 31
+
+rejected_proposals:
+  # The premature-subtyping proposal that was rejected
+  - type: subtype-partition
+    supertype: book_item
+    subtypes: ["reference_book (proposed)", "circulating_book (proposed)"]
+    exclusive: true
+    exhaustive: true
+    source: user-supplied
+    rejection_reason: "Reference vs Circulating is an attribute distinction, not a role distinction. No role exists on Reference books that doesn't exist on Circulating books (or vice versa). Replaced with BookType value enum + deontic policy."
+    rejected_at: "2026-05-14"
+    provenance:
+      csdp_step: 6
+      dialogue_turn: 36
