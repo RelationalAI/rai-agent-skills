@@ -1,0 +1,1794 @@
+# =============================================================================
+# Reference solution for evals/fixtures/synthetic/schema.sql
+#
+# Drafted under the Phase 1.3 authorship plan; constraints carry provenance
+# with `halpin_reference` (where the ORM 2 Graphical Notation justifies the
+# structural choice), `library_entry` (where the constraint comes from the
+# typed library; entry ids match `references/constraint-inference.md`), or
+# `sample_query` (where the constraint comes from probing the sample data).
+#
+# Example Halpin reference resolution:
+#   halpin_reference: "ORM 2 Graphical Notation — Internal Uniqueness Constraints"
+#   ↳ resolves to: Halpin, "ORM 2 Graphical Notation" (2010), §3 (Internal UCs);
+#                  a bar over role boxes; double bar marks the preferred internal UC.
+#
+# Schema characteristics exercised here (per notes/phase1-synthetic-schema-spec.md):
+#   - All 5 source values populated.
+#   - Antipatterns: denormalized address (Customer + Warehouse), encoded enum
+#     (6 columns), ambiguous junction (2 cases), TYPE-column subtype.
+#   - Common-sense ring: PRODUCT_CATEGORY parent (acyclic). INVENTORY_TRANSFER
+#     from ≠ to is emitted as a `value-comparison` constraint (operator `!=`),
+#     per representation-format.md — not a ring constraint, since the from-
+#     and to-warehouse are separate fact types rather than a single ring.
+#   - Common-sense temporal: ORDERS placed/shipped/delivered.
+#   - LLM-inferred subset: RETURN_REQUEST → DELIVERED orders.
+#   - Deontic constraint: promotion codes should be applied before their expiry
+#     (`order_promotion.applied_at <= promotion_code.valid_to`, modality=deontic).
+# =============================================================================
+
+version: 1
+
+source:
+  kind: ddl-file
+  dialect: postgres
+  scope: { schema: PUBLIC, tables: ["*"] }
+  introspected_at: "2026-05-04T18:00:00Z"
+  confidence: standard
+  mode: guided
+
+# =============================================================================
+# Object types
+# =============================================================================
+object_types:
+  # ---- Entity types lifted from tables with single-column PK ----
+  - id: product_category
+    name: ProductCategory
+    kind: entity
+    reference: { mode: popular, value_type: category_id }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.PRODUCT_CATEGORY
+      pk_column: CATEGORY_ID
+      halpin_reference: "ORM 2 Graphical Notation — Object Types & Reference Modes (popular: single-column PK becomes the entity's reference scheme)"
+
+  - id: product
+    name: Product
+    kind: entity
+    reference: { mode: popular, value_type: product_id }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.PRODUCT
+      pk_column: PRODUCT_ID
+      halpin_reference: "ORM 2 Graphical Notation — Object Types & Reference Modes (popular)"
+
+  - id: customer
+    name: Customer
+    kind: entity
+    reference: { mode: popular, value_type: customer_id }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.CUSTOMER
+      pk_column: CUSTOMER_ID
+      halpin_reference: "ORM 2 Graphical Notation — Object Types & Reference Modes (popular)"
+      warning: denormalized-address
+      warning_detail:
+        matched_columns: [ADDRESS_LINE1, ADDRESS_LINE2, CITY, STATE, ZIP, COUNTRY]
+        severity: high
+      resolution:
+        action: keep_as_is                    # v0.1 catalog default — flag for documentation, don't auto-restructure
+        decided_at: 9c
+        decided_by: user
+
+  - id: customer_address
+    name: CustomerAddress
+    kind: entity
+    reference: { mode: popular, value_type: address_id }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.CUSTOMER_ADDRESS
+      pk_column: ADDRESS_ID
+      halpin_reference: "ORM 2 Graphical Notation — Object Types & Reference Modes (popular)"
+
+  - id: warehouse
+    name: Warehouse
+    kind: entity
+    reference: { mode: popular, value_type: warehouse_id }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.WAREHOUSE
+      pk_column: WAREHOUSE_ID
+      halpin_reference: "ORM 2 Graphical Notation — Object Types & Reference Modes (popular)"
+      warning: denormalized-address
+      warning_detail:
+        matched_columns: [ADDRESS_LINE1, ADDRESS_LINE2, CITY, STATE, ZIP, COUNTRY]
+        severity: high
+      resolution:
+        action: keep_as_is
+        decided_at: 9c
+        decided_by: user
+
+  - id: inventory_transfer
+    name: InventoryTransfer
+    kind: entity
+    reference: { mode: popular, value_type: transfer_id }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.INVENTORY_TRANSFER
+      pk_column: TRANSFER_ID
+      halpin_reference: "ORM 2 Graphical Notation — Object Types & Reference Modes (popular)"
+
+  - id: orders
+    name: Orders
+    kind: entity
+    reference: { mode: popular, value_type: order_id }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.ORDERS
+      pk_column: ORDER_ID
+      halpin_reference: "ORM 2 Graphical Notation — Object Types & Reference Modes (popular)"
+
+  - id: tag
+    name: Tag
+    kind: entity
+    reference: { mode: popular, value_type: tag_id }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.TAG
+      pk_column: TAG_ID
+      halpin_reference: "ORM 2 Graphical Notation — Object Types & Reference Modes (popular)"
+
+  - id: carrier
+    name: Carrier
+    kind: entity
+    reference: { mode: popular, value_type: carrier_id }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.CARRIER
+      pk_column: CARRIER_ID
+      halpin_reference: "ORM 2 Graphical Notation — Object Types & Reference Modes (popular)"
+
+  - id: shipment
+    name: Shipment
+    kind: entity
+    reference: { mode: popular, value_type: shipment_id }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.SHIPMENT
+      pk_column: SHIPMENT_ID
+      halpin_reference: "ORM 2 Graphical Notation — Object Types & Reference Modes (popular)"
+
+  - id: shipment_event
+    name: ShipmentEvent
+    kind: entity
+    reference: { mode: popular, value_type: event_id }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.SHIPMENT_EVENT
+      pk_column: EVENT_ID
+      halpin_reference: "ORM 2 Graphical Notation — Object Types & Reference Modes (popular)"
+
+  - id: return_request
+    name: ReturnRequest
+    kind: entity
+    reference: { mode: popular, value_type: return_id }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.RETURN_REQUEST
+      pk_column: RETURN_ID
+      halpin_reference: "ORM 2 Graphical Notation — Object Types & Reference Modes (popular)"
+
+  - id: payment
+    name: Payment
+    kind: entity
+    reference: { mode: popular, value_type: payment_id }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.PAYMENT
+      pk_column: PAYMENT_ID
+      halpin_reference: "ORM 2 Graphical Notation — Object Types & Reference Modes (popular)"
+
+  - id: promotion_code
+    name: PromotionCode
+    kind: entity
+    reference: { mode: general, value_type: code }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.PROMOTION_CODE
+      pk_column: CODE
+      halpin_reference: "ORM 2 Graphical Notation — Object Types & Reference Modes (general; injective string identifier like Halpin's Book(ISBN))"
+
+  # ---- Entity types from junction tables (composite-PK / objectification) ----
+  - id: order_item
+    name: OrderItem
+    kind: entity
+    reference: { mode: external }
+    provenance:
+      origin: junction-table
+      table: PUBLIC.ORDER_ITEM
+      halpin_reference: "ORM 2 Graphical Notation — Objectification (junction with extras → objectified entity, identified externally via composite UC)"
+
+  - id: inventory
+    name: Inventory
+    kind: entity
+    reference: { mode: external }
+    provenance:
+      origin: junction-table
+      table: PUBLIC.INVENTORY
+      halpin_reference: "ORM 2 Graphical Notation — External Uniqueness (composite PK on junction with extra → external identity)"
+
+  - id: order_promotion
+    name: OrderPromotion
+    kind: entity
+    reference: { mode: external }
+    provenance:
+      origin: junction-table
+      table: PUBLIC.ORDER_PROMOTION
+      warning: ambiguous-junction-with-extras
+      warning_detail:
+        matched_columns: [ORDER_ID, PROMOTION_CODE]
+        extra_columns: [APPLIED_AT]
+      resolution:
+        action: objectified                   # default per antipattern catalog
+        decided_at: 9c
+        decided_by: user
+      halpin_reference: "ORM 2 Graphical Notation — Objectification (junction with extra column = APPLIED_AT)"
+
+  # ---- TYPE-column subtypes (recovered from PRODUCT.TYPE + side tables) ----
+  - id: physical_product
+    name: PhysicalProduct
+    kind: entity
+    subtype_of: [product]
+    inherits_reference: true                  # dashed arrow — Product's reference scheme inherited
+    derivation: derived
+    derivation_rule: "Each PhysicalProduct is a Product whose Type is 'PHYSICAL'."
+    storage: computed
+    provenance:
+      origin: subtype-from-type-column
+      source_table: PUBLIC.PRODUCT
+      type_column: TYPE
+      type_value: PHYSICAL
+      side_table: PUBLIC.PHYSICAL_PRODUCT_DETAILS
+      halpin_reference: "ORM 2 Graphical Notation — Subtyping (dashed arrow inherits supertype reference; derivation rule keyed on TYPE)"
+
+  - id: digital_product
+    name: DigitalProduct
+    kind: entity
+    subtype_of: [product]
+    inherits_reference: true
+    derivation: derived
+    derivation_rule: "Each DigitalProduct is a Product whose Type is 'DIGITAL'."
+    storage: computed
+    provenance:
+      origin: subtype-from-type-column
+      source_table: PUBLIC.PRODUCT
+      type_column: TYPE
+      type_value: DIGITAL
+      side_table: PUBLIC.DIGITAL_PRODUCT_DETAILS
+      halpin_reference: "ORM 2 Graphical Notation — Subtyping"
+
+  - id: subscription_product
+    name: SubscriptionProduct
+    kind: entity
+    subtype_of: [product]
+    inherits_reference: true
+    derivation: derived
+    derivation_rule: "Each SubscriptionProduct is a Product whose Type is 'SUBSCRIPTION'."
+    storage: computed
+    provenance:
+      origin: subtype-from-type-column
+      source_table: PUBLIC.PRODUCT
+      type_column: TYPE
+      type_value: SUBSCRIPTION
+      side_table: PUBLIC.SUBSCRIPTION_PRODUCT_DETAILS
+      halpin_reference: "ORM 2 Graphical Notation — Subtyping"
+
+  # ---- Value types ----
+  - id: category_id
+    name: CategoryId
+    kind: value
+    primitive: Integer
+
+  - id: product_id
+    name: ProductId
+    kind: value
+    primitive: Integer
+
+  - id: customer_id
+    name: CustomerId
+    kind: value
+    primitive: Integer
+
+  - id: address_id
+    name: AddressId
+    kind: value
+    primitive: Integer
+
+  - id: warehouse_id
+    name: WarehouseId
+    kind: value
+    primitive: Integer
+
+  - id: transfer_id
+    name: TransferId
+    kind: value
+    primitive: Integer
+
+  - id: order_id
+    name: OrderId
+    kind: value
+    primitive: Integer
+
+  - id: tag_id
+    name: TagId
+    kind: value
+    primitive: Integer
+
+  - id: carrier_id
+    name: CarrierId
+    kind: value
+    primitive: Integer
+
+  - id: shipment_id
+    name: ShipmentId
+    kind: value
+    primitive: Integer
+
+  - id: event_id
+    name: EventId
+    kind: value
+    primitive: Integer
+
+  - id: return_id
+    name: ReturnId
+    kind: value
+    primitive: Integer
+
+  - id: payment_id
+    name: PaymentId
+    kind: value
+    primitive: Integer
+
+  - id: code
+    name: Code
+    kind: value
+    primitive: String
+
+  # Promoted from encoded-enum antipatterns at Step 7
+  - id: customer_tier
+    name: CustomerTier
+    kind: value
+    primitive: String
+    provenance:
+      promoted_from: PUBLIC.CUSTOMER.TIER
+
+  - id: product_type
+    name: ProductType
+    kind: value
+    primitive: String
+    provenance:
+      promoted_from: PUBLIC.PRODUCT.TYPE
+
+  - id: order_status
+    name: OrderStatus
+    kind: value
+    primitive: String
+    provenance:
+      promoted_from: PUBLIC.ORDERS.STATUS
+
+  - id: shipment_event_type
+    name: ShipmentEventType
+    kind: value
+    primitive: String
+    provenance:
+      promoted_from: PUBLIC.SHIPMENT_EVENT.EVENT_TYPE
+
+  - id: return_reason
+    name: ReturnReason
+    kind: value
+    primitive: String
+    provenance:
+      promoted_from: PUBLIC.RETURN_REQUEST.REASON
+
+  - id: payment_method
+    name: PaymentMethod
+    kind: value
+    primitive: String
+    provenance:
+      promoted_from: PUBLIC.PAYMENT.METHOD
+
+  # Decimal value types (one per distinct precision/scale to avoid bare Number)
+  - id: money_10_2
+    name: Money_10_2
+    kind: value
+    primitive: Number
+    precision: 10
+    scale: 2
+
+  - id: weight_8_3
+    name: Weight_8_3
+    kind: value
+    primitive: Number
+    precision: 8
+    scale: 3
+
+  - id: dimension_8_2
+    name: Dimension_8_2
+    kind: value
+    primitive: Number
+    precision: 8
+    scale: 2
+
+  - id: file_size_10_2
+    name: FileSize_10_2
+    kind: value
+    primitive: Number
+    precision: 10
+    scale: 2
+
+  - id: discount_4_3
+    name: Discount_4_3
+    kind: value
+    primitive: Number
+    precision: 4
+    scale: 3
+
+  - id: percent_5_2
+    name: Percent_5_2
+    kind: value
+    primitive: Number
+    precision: 5
+    scale: 2
+
+# =============================================================================
+# Fact types
+# =============================================================================
+fact_types:
+  # ---- ProductCategory ----
+  - id: product_category_has_name
+    reading: "{ProductCategory} has name {String}"
+    roles: [{ object_type: product_category, role_name: category }, { object_type: string, role_name: name }]
+    constraints:
+      - type: uniqueness
+        roles: [category]
+        source: explicit
+        status: confirmed
+        provenance:
+          table: PUBLIC.PRODUCT_CATEGORY
+          column: NAME
+          constraint_type: PK_INDUCED
+          halpin_reference: "ORM 2 Graphical Notation — Internal UC (Property single-valued on category role)"
+      - type: mandatory
+        role: category
+        source: explicit
+        status: confirmed
+        provenance:
+          table: PUBLIC.PRODUCT_CATEGORY
+          column: NAME
+          nullable: false
+          halpin_reference: "ORM 2 Graphical Notation — Mandatory Role Constraints (NOT NULL → mandatory)"
+
+  # Self-referential — both roles on ProductCategory
+  - id: product_category_has_parent
+    reading: "{ProductCategory} has parent {ProductCategory}"
+    roles: [{ object_type: product_category, role_name: child }, { object_type: product_category, role_name: parent }]
+    constraints:
+      - type: uniqueness
+        roles: [child]
+        source: explicit
+        status: confirmed
+        provenance:
+          table: PUBLIC.PRODUCT_CATEGORY
+          column: PARENT_CATEGORY_ID
+          constraint_type: FK
+          halpin_reference: "ORM 2 Graphical Notation — Internal UC (functional self-reference: each child has at most one parent)"
+      # Note: PARENT_CATEGORY_ID is nullable → no mandatory on the child role.
+      - type: ring
+        variant: acyclic
+        source: common-sense
+        status: proposed
+        modality: alethic
+        rationale: "Self-referential 'parent' relation matches the library entry — category hierarchies are universally acyclic (no category is its own ancestor)."
+        provenance:
+          library_entry: ring-parent-of
+          matched_pattern: "self-referential binary fact type with parent/child role names"
+          assumptions: ["Universal hierarchical-parent semantics; no cycles by structural assumption."]
+          halpin_reference: "ORM 2 Graphical Notation — Ring Constraints (acyclic glyph)"
+      - type: ring
+        variant: asymmetric
+        source: common-sense
+        status: proposed
+        modality: alethic
+        rationale: "Parenthood is asymmetric — if A is parent of B, B is not parent of A."
+        provenance:
+          library_entry: ring-parent-of
+          halpin_reference: "ORM 2 Graphical Notation — Ring Constraints (asymmetric glyph)"
+      - type: ring
+        variant: irreflexive
+        source: common-sense
+        status: proposed
+        modality: alethic
+        rationale: "Parenthood is irreflexive — no category is its own parent."
+        provenance:
+          library_entry: ring-parent-of
+          halpin_reference: "ORM 2 Graphical Notation — Ring Constraints (irreflexive glyph)"
+
+  # ---- Product ----
+  - id: product_has_sku
+    reading: "{Product} has sku {String}"
+    roles: [{ object_type: product, role_name: product }, { object_type: string, role_name: sku }]
+    constraints:
+      - type: uniqueness
+        roles: [product]
+        source: explicit
+        status: confirmed
+        halpin_reference: "ORM 2 Graphical Notation — Internal UC"
+      - { type: mandatory, role: product, source: explicit, status: confirmed, provenance: { table: PUBLIC.PRODUCT, column: SKU, nullable: false, halpin_reference: "ORM 2 Graphical Notation — Mandatory" } }
+
+  - id: product_has_name
+    reading: "{Product} has name {String}"
+    roles: [{ object_type: product, role_name: product }, { object_type: string, role_name: name }]
+    constraints:
+      - type: uniqueness
+        roles: [product]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: product, source: explicit, status: confirmed, provenance: { table: PUBLIC.PRODUCT, column: NAME, nullable: false } }
+
+  - id: product_has_unit_price
+    reading: "{Product} has unit-price {Money_10_2}"
+    roles: [{ object_type: product, role_name: product }, { object_type: money_10_2, role_name: unitPrice }]
+    constraints:
+      - type: uniqueness
+        roles: [product]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: product, source: explicit, status: confirmed, provenance: { table: PUBLIC.PRODUCT, column: UNIT_PRICE, nullable: false } }
+
+  - id: product_has_type
+    reading: "{Product} has type {ProductType}"
+    roles: [{ object_type: product, role_name: product }, { object_type: product_type, role_name: type }]
+    provenance:
+      origin: column
+      table: PUBLIC.PRODUCT
+      column: TYPE
+      warnings: [type-column-subtype, encoded-enum-in-varchar]   # multi-flag: drove subtype split AND is itself an encoded enum
+    constraints:
+      - type: uniqueness
+        roles: [product]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: product, source: explicit, status: confirmed, provenance: { table: PUBLIC.PRODUCT, column: TYPE, nullable: false } }
+
+  - id: product_in_category
+    reading: "{Product} is in {ProductCategory}"
+    roles: [{ object_type: product, role_name: product }, { object_type: product_category, role_name: category }]
+    constraints:
+      - type: uniqueness
+        roles: [product]
+        source: explicit
+        status: confirmed
+        provenance: { table: PUBLIC.PRODUCT, column: CATEGORY_ID, halpin_reference: "ORM 2 Graphical Notation — Internal UC" }
+      # CATEGORY_ID is nullable → no mandatory.
+
+  # ---- Subtype-specific fact types ----
+  - id: physical_product_has_weight
+    reading: "{PhysicalProduct} has weight-kg {Weight_8_3}"
+    roles: [{ object_type: physical_product, role_name: product }, { object_type: weight_8_3, role_name: weightKg }]
+    constraints:
+      - type: uniqueness
+        roles: [product]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: product, source: explicit, status: confirmed, provenance: { table: PUBLIC.PHYSICAL_PRODUCT_DETAILS, column: WEIGHT_KG, nullable: false } }
+
+  - id: physical_product_has_length
+    reading: "{PhysicalProduct} has length-cm {Dimension_8_2}"
+    roles: [{ object_type: physical_product, role_name: product }, { object_type: dimension_8_2, role_name: lengthCm }]
+    constraints:
+      - type: uniqueness
+        roles: [product]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: product, source: explicit, status: confirmed }
+
+  - id: physical_product_has_width
+    reading: "{PhysicalProduct} has width-cm {Dimension_8_2}"
+    roles: [{ object_type: physical_product, role_name: product }, { object_type: dimension_8_2, role_name: widthCm }]
+    constraints:
+      - type: uniqueness
+        roles: [product]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: product, source: explicit, status: confirmed }
+
+  - id: physical_product_has_height
+    reading: "{PhysicalProduct} has height-cm {Dimension_8_2}"
+    roles: [{ object_type: physical_product, role_name: product }, { object_type: dimension_8_2, role_name: heightCm }]
+    constraints:
+      - type: uniqueness
+        roles: [product]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: product, source: explicit, status: confirmed }
+
+  - id: digital_product_has_download_url
+    reading: "{DigitalProduct} has download-url {String}"
+    roles: [{ object_type: digital_product, role_name: product }, { object_type: string, role_name: downloadUrl }]
+    constraints:
+      - type: uniqueness
+        roles: [product]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: product, source: explicit, status: confirmed }
+
+  - id: digital_product_has_file_size
+    reading: "{DigitalProduct} has file-size-mb {FileSize_10_2}"
+    roles: [{ object_type: digital_product, role_name: product }, { object_type: file_size_10_2, role_name: fileSizeMb }]
+    constraints:
+      - type: uniqueness
+        roles: [product]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: product, source: explicit, status: confirmed }
+
+  - id: subscription_product_has_period_days
+    reading: "{SubscriptionProduct} has period-days {Integer}"
+    roles: [{ object_type: subscription_product, role_name: product }, { object_type: integer, role_name: periodDays }]
+    constraints:
+      - type: uniqueness
+        roles: [product]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: product, source: explicit, status: confirmed }
+
+  - id: subscription_product_has_auto_renew
+    reading: "{SubscriptionProduct} has auto-renew-default {Boolean}"
+    roles: [{ object_type: subscription_product, role_name: product }, { object_type: boolean, role_name: autoRenewDefault }]
+    constraints:
+      - type: uniqueness
+        roles: [product]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: product
+        source: explicit
+        status: confirmed
+
+  # ---- Customer ----
+  - id: customer_has_name
+    reading: "{Customer} has name {String}"
+    roles: [{ object_type: customer, role_name: customer }, { object_type: string, role_name: name }]
+    constraints:
+      - type: uniqueness
+        roles: [customer]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: customer, source: explicit, status: confirmed }
+
+  - id: customer_has_email
+    reading: "{Customer} has email {String}"
+    roles: [{ object_type: customer, role_name: customer }, { object_type: string, role_name: email }]
+    constraints:
+      - type: uniqueness
+        roles: [customer]
+        source: explicit
+        status: confirmed
+      # Library-proposed uniqueness on the email role (universal convention)
+      - type: uniqueness
+        roles: [email]
+        source: common-sense
+        status: proposed
+        modality: alethic
+        rationale: "Email addresses are universally unique — every customer has a distinct email."
+        provenance:
+          library_entry: email-uniqueness
+          matched_pattern: "object type or value role with name containing 'email'"
+          assumptions: ["RFC 5322 conformance and uniqueness as identifier."]
+      - { type: mandatory, role: customer, source: explicit, status: confirmed }
+
+  - id: customer_has_tier
+    reading: "{Customer} has tier {CustomerTier}"
+    roles: [{ object_type: customer, role_name: customer }, { object_type: customer_tier, role_name: tier }]
+    provenance:
+      origin: column
+      table: PUBLIC.CUSTOMER
+      column: TIER
+      warning: encoded-enum-in-varchar
+      warning_detail:
+        sample_distinct_count: 3
+        sample_size: 10
+        observed_values: ['BRONZE', 'SILVER', 'GOLD']
+      resolution:
+        action: promote_to_enum
+        decided_at: 9c
+        decided_by: user
+    constraints:
+      - type: uniqueness
+        roles: [customer]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: customer
+        source: explicit
+        status: confirmed
+
+  # Denormalized address columns on Customer — kept as flat fact types per the
+  # `keep_as_is` resolution above. The denormalization flag stays on the
+  # Customer object type for documentation; the SRP doesn't restructure unilaterally.
+  - id: customer_has_address_line1
+    reading: "{Customer} has address-line1 {String}"
+    roles: [{ object_type: customer, role_name: customer }, { object_type: string, role_name: addressLine1 }]
+    constraints:
+      - type: uniqueness
+        roles: [customer]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: customer, source: explicit, status: confirmed }
+
+  - id: customer_has_address_line2
+    reading: "{Customer} has address-line2 {String}"
+    roles: [{ object_type: customer, role_name: customer }, { object_type: string, role_name: addressLine2 }]
+    constraints:
+      - type: uniqueness
+        roles: [customer]
+        source: explicit
+        status: confirmed
+      # ADDRESS_LINE2 nullable — no mandatory.
+
+  - id: customer_has_city
+    reading: "{Customer} has city {String}"
+    roles: [{ object_type: customer, role_name: customer }, { object_type: string, role_name: city }]
+    constraints:
+      - type: uniqueness
+        roles: [customer]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: customer, source: explicit, status: confirmed }
+
+  - id: customer_has_state
+    reading: "{Customer} has state {String}"
+    roles: [{ object_type: customer, role_name: customer }, { object_type: string, role_name: state }]
+    constraints:
+      - type: uniqueness
+        roles: [customer]
+        source: explicit
+        status: confirmed
+      # STATE nullable.
+
+  - id: customer_has_zip
+    reading: "{Customer} has zip {String}"
+    roles: [{ object_type: customer, role_name: customer }, { object_type: string, role_name: zip }]
+    constraints:
+      - type: uniqueness
+        roles: [customer]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: customer, source: explicit, status: confirmed }
+
+  - id: customer_has_country
+    reading: "{Customer} has country {String}"
+    roles: [{ object_type: customer, role_name: customer }, { object_type: string, role_name: country }]
+    constraints:
+      - type: uniqueness
+        roles: [customer]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: customer
+        source: explicit
+        status: confirmed
+
+  # ---- CustomerAddress ----
+  - id: customer_address_for_customer
+    reading: "{CustomerAddress} belongs to {Customer}"
+    roles: [{ object_type: customer_address, role_name: address }, { object_type: customer, role_name: customer }]
+    constraints:
+      - type: uniqueness
+        roles: [address]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: address, source: explicit, status: confirmed, provenance: { table: PUBLIC.CUSTOMER_ADDRESS, column: CUSTOMER_ID, constraint_type: FK } }
+
+  - id: customer_address_has_label
+    reading: "{CustomerAddress} has label {String}"
+    roles: [{ object_type: customer_address, role_name: address }, { object_type: string, role_name: label }]
+    constraints:
+      - type: uniqueness
+        roles: [address]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: address
+        source: explicit
+        status: confirmed
+
+  # CustomerAddress also has line1/line2/city/state/zip/country (same shape as
+  # Customer's denormalized address columns). Listed below in single-line form.
+  - id: customer_address_has_line1
+    reading: "{CustomerAddress} has line1 {String}"
+    roles: [{ object_type: customer_address, role_name: address }, { object_type: string, role_name: line1 }]
+    constraints:
+      - { type: uniqueness, roles: [address], source: explicit, status: confirmed }
+      - { type: mandatory, role: address, source: explicit, status: confirmed, provenance: { table: PUBLIC.CUSTOMER_ADDRESS, column: LINE1, nullable: false } }
+  - id: customer_address_has_line2
+    reading: "{CustomerAddress} has line2 {String}"
+    roles: [{ object_type: customer_address, role_name: address }, { object_type: string, role_name: line2 }]
+    constraints: [{ type: uniqueness, roles: [address], source: explicit, status: confirmed }]
+    # LINE2 nullable.
+  - id: customer_address_has_city
+    reading: "{CustomerAddress} has city {String}"
+    roles: [{ object_type: customer_address, role_name: address }, { object_type: string, role_name: city }]
+    constraints:
+      - { type: uniqueness, roles: [address], source: explicit, status: confirmed }
+      - { type: mandatory, role: address, source: explicit, status: confirmed, provenance: { table: PUBLIC.CUSTOMER_ADDRESS, column: CITY, nullable: false } }
+  - id: customer_address_has_state
+    reading: "{CustomerAddress} has state {String}"
+    roles: [{ object_type: customer_address, role_name: address }, { object_type: string, role_name: state }]
+    constraints: [{ type: uniqueness, roles: [address], source: explicit, status: confirmed }]
+    # STATE nullable.
+  - id: customer_address_has_zip
+    reading: "{CustomerAddress} has zip {String}"
+    roles: [{ object_type: customer_address, role_name: address }, { object_type: string, role_name: zip }]
+    constraints:
+      - { type: uniqueness, roles: [address], source: explicit, status: confirmed }
+      - { type: mandatory, role: address, source: explicit, status: confirmed, provenance: { table: PUBLIC.CUSTOMER_ADDRESS, column: ZIP, nullable: false } }
+  - id: customer_address_has_country
+    reading: "{CustomerAddress} has country {String}"
+    roles: [{ object_type: customer_address, role_name: address }, { object_type: string, role_name: country }]
+    constraints:
+      - { type: uniqueness, roles: [address], source: explicit, status: confirmed }
+      - { type: mandatory, role: address, source: explicit, status: confirmed, provenance: { table: PUBLIC.CUSTOMER_ADDRESS, column: COUNTRY, nullable: false } }
+
+  # ---- Warehouse ----
+  - id: warehouse_has_code
+    reading: "{Warehouse} has code {String}"
+    roles: [{ object_type: warehouse, role_name: warehouse }, { object_type: string, role_name: code }]
+    constraints:
+      - type: uniqueness
+        roles: [warehouse]
+        source: explicit
+        status: confirmed
+      - type: uniqueness
+        roles: [code]
+        source: explicit
+        status: confirmed
+        provenance:
+          table: PUBLIC.WAREHOUSE
+          column: CODE
+          constraint_type: UNIQUE
+          halpin_reference: "ORM 2 Graphical Notation — Internal UC (UNIQUE → secondary internal UC; not preferred)"
+      - { type: mandatory, role: warehouse, source: explicit, status: confirmed }
+
+  - id: warehouse_has_name
+    reading: "{Warehouse} has name {String}"
+    roles: [{ object_type: warehouse, role_name: warehouse }, { object_type: string, role_name: name }]
+    constraints:
+      - type: uniqueness
+        roles: [warehouse]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: warehouse
+        source: explicit
+        status: confirmed
+
+  # Address columns (denormalized — kept as flat per resolution; same shape as Customer's).
+  - id: warehouse_has_address_line1
+    reading: "{Warehouse} has address-line1 {String}"
+    roles: [{ object_type: warehouse, role_name: warehouse }, { object_type: string, role_name: addressLine1 }]
+    constraints:
+      - { type: uniqueness, roles: [warehouse], source: explicit, status: confirmed }
+      - { type: mandatory, role: warehouse, source: explicit, status: confirmed, provenance: { table: PUBLIC.WAREHOUSE, column: ADDRESS_LINE1, nullable: false } }
+  - id: warehouse_has_address_line2
+    reading: "{Warehouse} has address-line2 {String}"
+    roles: [{ object_type: warehouse, role_name: warehouse }, { object_type: string, role_name: addressLine2 }]
+    constraints: [{ type: uniqueness, roles: [warehouse], source: explicit, status: confirmed }]
+    # ADDRESS_LINE2 nullable.
+  - id: warehouse_has_city
+    reading: "{Warehouse} has city {String}"
+    roles: [{ object_type: warehouse, role_name: warehouse }, { object_type: string, role_name: city }]
+    constraints:
+      - { type: uniqueness, roles: [warehouse], source: explicit, status: confirmed }
+      - { type: mandatory, role: warehouse, source: explicit, status: confirmed, provenance: { table: PUBLIC.WAREHOUSE, column: CITY, nullable: false } }
+  - id: warehouse_has_state
+    reading: "{Warehouse} has state {String}"
+    roles: [{ object_type: warehouse, role_name: warehouse }, { object_type: string, role_name: state }]
+    constraints: [{ type: uniqueness, roles: [warehouse], source: explicit, status: confirmed }]
+    # STATE nullable.
+  - id: warehouse_has_zip
+    reading: "{Warehouse} has zip {String}"
+    roles: [{ object_type: warehouse, role_name: warehouse }, { object_type: string, role_name: zip }]
+    constraints:
+      - { type: uniqueness, roles: [warehouse], source: explicit, status: confirmed }
+      - { type: mandatory, role: warehouse, source: explicit, status: confirmed, provenance: { table: PUBLIC.WAREHOUSE, column: ZIP, nullable: false } }
+  - id: warehouse_has_country
+    reading: "{Warehouse} has country {String}"
+    roles: [{ object_type: warehouse, role_name: warehouse }, { object_type: string, role_name: country }]
+    constraints:
+      - { type: uniqueness, roles: [warehouse], source: explicit, status: confirmed }
+      - { type: mandatory, role: warehouse, source: explicit, status: confirmed, provenance: { table: PUBLIC.WAREHOUSE, column: COUNTRY, nullable: false } }
+
+  # ---- Inventory (objectified by external composite UC) ----
+  - id: inventory_for_warehouse
+    reading: "{Inventory} for {Warehouse}"
+    roles: [{ object_type: inventory, role_name: inventory }, { object_type: warehouse, role_name: warehouse }]
+    constraints:
+      - { type: mandatory, role: inventory, source: explicit, status: confirmed }
+
+  - id: inventory_for_product
+    reading: "{Inventory} for {Product}"
+    roles: [{ object_type: inventory, role_name: inventory }, { object_type: product, role_name: product }]
+    constraints:
+      - { type: mandatory, role: inventory, source: explicit, status: confirmed }
+
+  - id: inventory_quantity_on_hand
+    reading: "{Inventory} has quantity-on-hand {Integer}"
+    roles: [{ object_type: inventory, role_name: inventory }, { object_type: integer, role_name: quantityOnHand }]
+    constraints:
+      - type: uniqueness
+        roles: [inventory]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: inventory
+        source: explicit
+        status: confirmed
+
+  # ---- InventoryTransfer ----
+  - id: inventory_transfer_from
+    reading: "{InventoryTransfer} from {Warehouse}"
+    roles: [{ object_type: inventory_transfer, role_name: transfer }, { object_type: warehouse, role_name: fromWarehouse }]
+    constraints:
+      - type: uniqueness
+        roles: [transfer]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: transfer, source: explicit, status: confirmed, provenance: { table: PUBLIC.INVENTORY_TRANSFER, column: FROM_WAREHOUSE_ID, constraint_type: FK } }
+
+  - id: inventory_transfer_to
+    reading: "{InventoryTransfer} to {Warehouse}"
+    roles: [{ object_type: inventory_transfer, role_name: transfer }, { object_type: warehouse, role_name: toWarehouse }]
+    constraints:
+      - type: uniqueness
+        roles: [transfer]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: transfer, source: explicit, status: confirmed }
+
+  - id: inventory_transfer_of_product
+    reading: "{InventoryTransfer} of {Product}"
+    roles: [{ object_type: inventory_transfer, role_name: transfer }, { object_type: product, role_name: product }]
+    constraints:
+      - type: uniqueness
+        roles: [transfer]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: transfer, source: explicit, status: confirmed }
+
+  - id: inventory_transfer_quantity
+    reading: "{InventoryTransfer} has quantity {Integer}"
+    roles: [{ object_type: inventory_transfer, role_name: transfer }, { object_type: integer, role_name: quantity }]
+    constraints:
+      - type: uniqueness
+        roles: [transfer]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: transfer, source: explicit, status: confirmed }
+
+  - id: inventory_transfer_at
+    reading: "{InventoryTransfer} occurred at {DateTime}"
+    roles: [{ object_type: inventory_transfer, role_name: transfer }, { object_type: datetime, role_name: transferredAt }]
+    constraints:
+      - type: uniqueness
+        roles: [transfer]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: transfer
+        source: explicit
+        status: confirmed
+
+  # ---- Orders ----
+  - id: orders_placed_by_customer
+    reading: "{Orders} placed by {Customer}"
+    roles: [{ object_type: orders, role_name: orders }, { object_type: customer, role_name: customer }]
+    constraints:
+      - type: uniqueness
+        roles: [orders]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: orders, source: explicit, status: confirmed, provenance: { table: PUBLIC.ORDERS, column: CUSTOMER_ID, constraint_type: FK } }
+
+  - id: orders_has_status
+    reading: "{Orders} has status {OrderStatus}"
+    roles: [{ object_type: orders, role_name: orders }, { object_type: order_status, role_name: status }]
+    provenance:
+      origin: column
+      table: PUBLIC.ORDERS
+      column: STATUS
+      warning: encoded-enum-in-varchar
+      warning_detail:
+        sample_distinct_count: 5
+        sample_size: 20
+        observed_values: ['PENDING', 'PAID', 'SHIPPED', 'DELIVERED', 'CANCELLED']
+      resolution:
+        action: promote_to_enum
+        decided_at: 9c
+        decided_by: user
+    constraints:
+      - type: uniqueness
+        roles: [orders]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: orders, source: explicit, status: confirmed }
+
+  - id: orders_placed_at
+    reading: "{Orders} was placed at {DateTime}"
+    roles: [{ object_type: orders, role_name: orders }, { object_type: datetime, role_name: placedAt }]
+    constraints:
+      - type: uniqueness
+        roles: [orders]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: orders, source: explicit, status: confirmed }
+
+  - id: orders_shipped_at
+    reading: "{Orders} was shipped at {DateTime}"
+    roles: [{ object_type: orders, role_name: orders }, { object_type: datetime, role_name: shippedAt }]
+    constraints:
+      - type: uniqueness
+        roles: [orders]
+        source: explicit
+        status: confirmed
+      # SHIPPED_AT nullable — no mandatory.
+
+  - id: orders_delivered_at
+    reading: "{Orders} was delivered at {DateTime}"
+    roles: [{ object_type: orders, role_name: orders }, { object_type: datetime, role_name: deliveredAt }]
+    constraints:
+      - type: uniqueness
+        roles: [orders]
+        source: explicit
+        status: confirmed
+      # DELIVERED_AT nullable — no mandatory.
+
+  - id: orders_total_amount
+    reading: "{Orders} has total {Money_10_2}"
+    roles: [{ object_type: orders, role_name: orders }, { object_type: money_10_2, role_name: totalAmount }]
+    constraints:
+      - type: uniqueness
+        roles: [orders]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: orders
+        source: explicit
+        status: confirmed
+
+  # ---- OrderItem (objectified, externally identified by composite PK) ----
+  - id: order_item_for_orders
+    reading: "{OrderItem} for {Orders}"
+    roles: [{ object_type: order_item, role_name: orderItem }, { object_type: orders, role_name: orders }]
+    constraints:
+      - { type: mandatory, role: orderItem, source: explicit, status: confirmed }
+
+  - id: order_item_line_no
+    reading: "{OrderItem} has line-no {Integer}"
+    roles: [{ object_type: order_item, role_name: orderItem }, { object_type: integer, role_name: lineNo }]
+    constraints:
+      - type: uniqueness
+        roles: [orderItem]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: orderItem, source: explicit, status: confirmed }
+
+  - id: order_item_for_product
+    reading: "{OrderItem} for {Product}"
+    roles: [{ object_type: order_item, role_name: orderItem }, { object_type: product, role_name: product }]
+    constraints:
+      - type: uniqueness
+        roles: [orderItem]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: orderItem, source: explicit, status: confirmed, provenance: { table: PUBLIC.ORDER_ITEM, column: PRODUCT_ID, constraint_type: FK } }
+
+  - id: order_item_quantity
+    reading: "{OrderItem} has quantity {Integer}"
+    roles: [{ object_type: order_item, role_name: orderItem }, { object_type: integer, role_name: quantity }]
+    constraints:
+      - type: uniqueness
+        roles: [orderItem]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: orderItem, source: explicit, status: confirmed }
+
+  - id: order_item_unit_price
+    reading: "{OrderItem} has unit-price {Money_10_2}"
+    roles: [{ object_type: order_item, role_name: orderItem }, { object_type: money_10_2, role_name: unitPrice }]
+    constraints:
+      - type: uniqueness
+        roles: [orderItem]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: orderItem, source: explicit, status: confirmed }
+
+  - id: order_item_discount
+    reading: "{OrderItem} has discount {Discount_4_3}"
+    roles: [{ object_type: order_item, role_name: orderItem }, { object_type: discount_4_3, role_name: discount }]
+    constraints:
+      - type: uniqueness
+        roles: [orderItem]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: orderItem
+        source: explicit
+        status: confirmed
+
+  # ---- ORDER_ITEM_TAG (pure m:n binary — no objectification) ----
+  - id: order_item_tagged_with
+    reading: "{OrderItem} tagged with {Tag}"
+    roles: [{ object_type: order_item, role_name: orderItem }, { object_type: tag, role_name: tag }]
+    provenance:
+      origin: junction-table
+      table: PUBLIC.ORDER_ITEM_TAG
+      warning: ambiguous-junction-no-extras
+      resolution:
+        action: pure_m_n                      # default per antipattern catalog
+        decided_at: 9c
+        decided_by: user
+    constraints:
+      - type: uniqueness
+        roles: [orderItem, tag]
+        preferred: true
+        source: explicit
+        status: confirmed
+        provenance:
+          table: PUBLIC.ORDER_ITEM_TAG
+          columns: [ORDER_ID, LINE_NO, TAG_ID]
+          constraint_type: PK
+          halpin_reference: "ORM 2 Graphical Notation — Internal UC (m:n spanning UC)"
+      - { type: mandatory, role: orderItem, source: explicit, status: confirmed }
+      - type: mandatory
+        role: tag
+        source: explicit
+        status: confirmed
+
+  # ---- Tag ----
+  - id: tag_has_name
+    reading: "{Tag} has name {String}"
+    roles: [{ object_type: tag, role_name: tag }, { object_type: string, role_name: name }]
+    constraints:
+      - type: uniqueness
+        roles: [tag]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: tag
+        source: explicit
+        status: confirmed
+
+  # ---- Carrier ----
+  - id: carrier_has_name
+    reading: "{Carrier} has name {String}"
+    roles: [{ object_type: carrier, role_name: carrier }, { object_type: string, role_name: name }]
+    constraints:
+      - type: uniqueness
+        roles: [carrier]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: carrier
+        source: explicit
+        status: confirmed
+
+  # ---- Shipment ----
+  - id: shipment_for_orders
+    reading: "{Shipment} for {Orders}"
+    roles: [{ object_type: shipment, role_name: shipment }, { object_type: orders, role_name: orders }]
+    constraints:
+      - type: uniqueness
+        roles: [shipment]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: shipment, source: explicit, status: confirmed, provenance: { table: PUBLIC.SHIPMENT, column: ORDER_ID, constraint_type: FK } }
+
+  - id: shipment_from_warehouse
+    reading: "{Shipment} from {Warehouse}"
+    roles: [{ object_type: shipment, role_name: shipment }, { object_type: warehouse, role_name: warehouse }]
+    constraints:
+      - type: uniqueness
+        roles: [shipment]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: shipment, source: explicit, status: confirmed }
+
+  - id: shipment_via_carrier
+    reading: "{Shipment} via {Carrier}"
+    roles: [{ object_type: shipment, role_name: shipment }, { object_type: carrier, role_name: carrier }]
+    constraints:
+      - type: uniqueness
+        roles: [shipment]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: shipment, source: explicit, status: confirmed }
+
+  - id: shipment_tracking_no
+    reading: "{Shipment} has tracking-no {String}"
+    roles: [{ object_type: shipment, role_name: shipment }, { object_type: string, role_name: trackingNo }]
+    constraints:
+      - type: uniqueness
+        roles: [shipment]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: shipment, source: explicit, status: confirmed }
+
+  - id: shipment_shipped_at
+    reading: "{Shipment} shipped at {DateTime}"
+    roles: [{ object_type: shipment, role_name: shipment }, { object_type: datetime, role_name: shippedAt }]
+    constraints:
+      - type: uniqueness
+        roles: [shipment]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: shipment
+        source: explicit
+        status: confirmed
+
+  # ---- ShipmentEvent ----
+  - id: shipment_event_for_shipment
+    reading: "{ShipmentEvent} for {Shipment}"
+    roles: [{ object_type: shipment_event, role_name: event }, { object_type: shipment, role_name: shipment }]
+    constraints:
+      - type: uniqueness
+        roles: [event]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: event, source: explicit, status: confirmed }
+
+  - id: shipment_event_has_type
+    reading: "{ShipmentEvent} has type {ShipmentEventType}"
+    roles: [{ object_type: shipment_event, role_name: event }, { object_type: shipment_event_type, role_name: eventType }]
+    provenance:
+      origin: column
+      table: PUBLIC.SHIPMENT_EVENT
+      column: EVENT_TYPE
+      warning: encoded-enum-in-varchar
+      warning_detail:
+        sample_distinct_count: 5
+        sample_size: 25
+        observed_values: ['PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'EXCEPTION']
+      resolution:
+        action: promote_to_enum
+        decided_at: 9c
+        decided_by: user
+    constraints:
+      - type: uniqueness
+        roles: [event]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: event, source: explicit, status: confirmed }
+
+  - id: shipment_event_occurred_at
+    reading: "{ShipmentEvent} occurred at {DateTime}"
+    roles: [{ object_type: shipment_event, role_name: event }, { object_type: datetime, role_name: occurredAt }]
+    constraints:
+      - type: uniqueness
+        roles: [event]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: event, source: explicit, status: confirmed }
+
+  - id: shipment_event_has_note
+    reading: "{ShipmentEvent} has note {String}"
+    roles: [{ object_type: shipment_event, role_name: event }, { object_type: string, role_name: note }]
+    constraints:
+      - type: uniqueness
+        roles: [event]
+        source: explicit
+        status: confirmed
+      # NOTE nullable.
+
+  # ---- ReturnRequest ----
+  - id: return_for_order_item
+    reading: "{ReturnRequest} for {OrderItem}"
+    roles: [{ object_type: return_request, role_name: return }, { object_type: order_item, role_name: orderItem }]
+    constraints:
+      - type: uniqueness
+        roles: [return]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: return
+        source: explicit
+        status: confirmed
+        provenance:
+          table: PUBLIC.RETURN_REQUEST
+          columns: [ORDER_ID, LINE_NO]
+          constraint_type: FK_COMPOSITE
+          halpin_reference: "ORM 2 Graphical Notation — Mandatory Role (FK side cannot be unbound)"
+
+  - id: return_has_reason
+    reading: "{ReturnRequest} has reason {ReturnReason}"
+    roles: [{ object_type: return_request, role_name: return }, { object_type: return_reason, role_name: reason }]
+    provenance:
+      origin: column
+      table: PUBLIC.RETURN_REQUEST
+      column: REASON
+      warning: encoded-enum-in-varchar
+      warning_detail:
+        sample_distinct_count: 5
+        sample_size: 5
+        observed_values: ['DEFECTIVE', 'CHANGED_MIND', 'WRONG_ITEM', 'NOT_AS_DESCRIBED', 'DAMAGED']
+      resolution:
+        action: promote_to_enum
+        decided_at: 9c
+        decided_by: user
+    constraints:
+      - type: uniqueness
+        roles: [return]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: return, source: explicit, status: confirmed }
+
+  - id: return_refund_amount
+    reading: "{ReturnRequest} has refund {Money_10_2}"
+    roles: [{ object_type: return_request, role_name: return }, { object_type: money_10_2, role_name: refundAmount }]
+    constraints:
+      - type: uniqueness
+        roles: [return]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: return, source: explicit, status: confirmed }
+
+  - id: return_requested_at
+    reading: "{ReturnRequest} requested at {DateTime}"
+    roles: [{ object_type: return_request, role_name: return }, { object_type: datetime, role_name: requestedAt }]
+    constraints:
+      - type: uniqueness
+        roles: [return]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: return
+        source: explicit
+        status: confirmed
+
+  # ---- Payment ----
+  - id: payment_for_orders
+    reading: "{Payment} for {Orders}"
+    roles: [{ object_type: payment, role_name: payment }, { object_type: orders, role_name: orders }]
+    constraints:
+      - type: uniqueness
+        roles: [payment]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: payment, source: explicit, status: confirmed }
+
+  - id: payment_has_method
+    reading: "{Payment} has method {PaymentMethod}"
+    roles: [{ object_type: payment, role_name: payment }, { object_type: payment_method, role_name: method }]
+    provenance:
+      origin: column
+      table: PUBLIC.PAYMENT
+      column: METHOD
+      warning: encoded-enum-in-varchar
+      warning_detail:
+        sample_distinct_count: 4
+        sample_size: 15
+        observed_values: ['CARD', 'BANK', 'PAYPAL', 'GIFT']
+      resolution:
+        action: promote_to_enum
+        decided_at: 9c
+        decided_by: user
+    constraints:
+      - type: uniqueness
+        roles: [payment]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: payment, source: explicit, status: confirmed }
+
+  - id: payment_amount
+    reading: "{Payment} has amount {Money_10_2}"
+    roles: [{ object_type: payment, role_name: payment }, { object_type: money_10_2, role_name: amount }]
+    constraints:
+      - type: uniqueness
+        roles: [payment]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: payment, source: explicit, status: confirmed }
+
+  - id: payment_processed_at
+    reading: "{Payment} processed at {DateTime}"
+    roles: [{ object_type: payment, role_name: payment }, { object_type: datetime, role_name: processedAt }]
+    constraints:
+      - type: uniqueness
+        roles: [payment]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: payment
+        source: explicit
+        status: confirmed
+
+  # ---- PromotionCode ----
+  - id: promotion_code_discount_pct
+    reading: "{PromotionCode} has discount-pct {Percent_5_2}"
+    roles: [{ object_type: promotion_code, role_name: code }, { object_type: percent_5_2, role_name: discountPct }]
+    constraints:
+      - type: uniqueness
+        roles: [code]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: code, source: explicit, status: confirmed }
+
+  - id: promotion_code_valid_from
+    reading: "{PromotionCode} valid from {Date}"
+    roles: [{ object_type: promotion_code, role_name: code }, { object_type: date, role_name: validFrom }]
+    constraints:
+      - type: uniqueness
+        roles: [code]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: code, source: explicit, status: confirmed }
+
+  - id: promotion_code_valid_to
+    reading: "{PromotionCode} valid to {Date}"
+    roles: [{ object_type: promotion_code, role_name: code }, { object_type: date, role_name: validTo }]
+    constraints:
+      - type: uniqueness
+        roles: [code]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: code
+        source: explicit
+        status: confirmed
+
+  # ---- OrderPromotion (objectified, externally identified) ----
+  - id: order_promotion_for_orders
+    reading: "{OrderPromotion} for {Orders}"
+    roles: [{ object_type: order_promotion, role_name: orderPromotion }, { object_type: orders, role_name: orders }]
+    constraints:
+      - { type: mandatory, role: orderPromotion, source: explicit, status: confirmed }
+
+  - id: order_promotion_uses_code
+    reading: "{OrderPromotion} uses {PromotionCode}"
+    roles: [{ object_type: order_promotion, role_name: orderPromotion }, { object_type: promotion_code, role_name: code }]
+    constraints:
+      - { type: mandatory, role: orderPromotion, source: explicit, status: confirmed }
+
+  - id: order_promotion_applied_at
+    reading: "{OrderPromotion} applied at {DateTime}"
+    roles: [{ object_type: order_promotion, role_name: orderPromotion }, { object_type: datetime, role_name: appliedAt }]
+    constraints:
+      - type: uniqueness
+        roles: [orderPromotion]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: orderPromotion
+        source: explicit
+        status: confirmed
+
+# =============================================================================
+# Top-level constraints
+# =============================================================================
+constraints:
+  # ---- External UCs from composite PKs / objectifications ----
+  - type: uniqueness
+    scope: external
+    role_refs:
+      - { fact_type: order_item_for_orders, role: orders }
+      - { fact_type: order_item_line_no, role: lineNo }
+    preferred: true
+    source: explicit
+    status: confirmed
+    rationale: "Composite PK (ORDER_ID, LINE_NO) on PUBLIC.ORDER_ITEM — OrderItem's preferred reference scheme."
+    provenance:
+      table: PUBLIC.ORDER_ITEM
+      columns: [ORDER_ID, LINE_NO]
+      constraint_type: PK
+      halpin_reference: "ORM 2 Graphical Notation — External Uniqueness (composite PK → external UC across binary fact types)"
+
+  - type: uniqueness
+    scope: external
+    role_refs:
+      - { fact_type: inventory_for_warehouse, role: warehouse }
+      - { fact_type: inventory_for_product, role: product }
+    preferred: true
+    source: explicit
+    status: confirmed
+    rationale: "Composite PK (WAREHOUSE_ID, PRODUCT_ID) on PUBLIC.INVENTORY."
+    provenance:
+      table: PUBLIC.INVENTORY
+      columns: [WAREHOUSE_ID, PRODUCT_ID]
+      constraint_type: PK
+      halpin_reference: "ORM 2 Graphical Notation — External Uniqueness"
+
+  - type: uniqueness
+    scope: external
+    role_refs:
+      - { fact_type: order_promotion_for_orders, role: orders }
+      - { fact_type: order_promotion_uses_code, role: code }
+    preferred: true
+    source: explicit
+    status: confirmed
+    rationale: "Composite PK (ORDER_ID, PROMOTION_CODE) on PUBLIC.ORDER_PROMOTION."
+    provenance:
+      table: PUBLIC.ORDER_PROMOTION
+      columns: [ORDER_ID, PROMOTION_CODE]
+      constraint_type: PK
+      halpin_reference: "ORM 2 Graphical Notation — External Uniqueness"
+
+  # ---- Value enumerations from sample probing (encoded-enum antipatterns) ----
+  - type: value
+    object_type: customer_tier
+    allowed: ['BRONZE', 'SILVER', 'GOLD']
+    source: sample
+    status: confirmed
+    rationale: "Sample distinct values from PUBLIC.CUSTOMER.TIER. Confirmed at Step 9b."
+    provenance:
+      sample_query: "SELECT DISTINCT TIER FROM PUBLIC.CUSTOMER WHERE TIER IS NOT NULL LIMIT 21"
+      sample_size: 10
+      saturation: true
+      observed_values: ['BRONZE', 'SILVER', 'GOLD']
+      halpin_reference: "ORM 2 Graphical Notation — Object Type Value Constraints (enumeration in braces)"
+
+  - type: value
+    object_type: product_type
+    allowed: ['PHYSICAL', 'DIGITAL', 'SUBSCRIPTION']
+    source: sample
+    status: confirmed
+    rationale: "Sample distinct values from PUBLIC.PRODUCT.TYPE."
+    provenance:
+      sample_query: "SELECT DISTINCT TYPE FROM PUBLIC.PRODUCT WHERE TYPE IS NOT NULL LIMIT 21"
+      sample_size: 15
+      saturation: true
+      observed_values: ['PHYSICAL', 'DIGITAL', 'SUBSCRIPTION']
+      halpin_reference: "ORM 2 Graphical Notation — Object Type Value Constraints"
+
+  - type: value
+    object_type: order_status
+    allowed: ['PENDING', 'PAID', 'SHIPPED', 'DELIVERED', 'CANCELLED']
+    source: sample
+    status: confirmed
+    rationale: "Sample distinct values from PUBLIC.ORDERS.STATUS."
+    provenance:
+      sample_query: "SELECT DISTINCT STATUS FROM PUBLIC.ORDERS WHERE STATUS IS NOT NULL LIMIT 21"
+      sample_size: 20
+      saturation: true
+      observed_values: ['PENDING', 'PAID', 'SHIPPED', 'DELIVERED', 'CANCELLED']
+
+  - type: value
+    object_type: shipment_event_type
+    allowed: ['PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'EXCEPTION']
+    source: sample
+    status: confirmed
+    rationale: "Sample distinct values from PUBLIC.SHIPMENT_EVENT.EVENT_TYPE."
+    provenance:
+      sample_query: "SELECT DISTINCT EVENT_TYPE FROM PUBLIC.SHIPMENT_EVENT WHERE EVENT_TYPE IS NOT NULL LIMIT 21"
+      sample_size: 25
+      saturation: true
+      observed_values: ['PICKED_UP', 'IN_TRANSIT', 'OUT_FOR_DELIVERY', 'DELIVERED', 'EXCEPTION']
+
+  - type: value
+    object_type: return_reason
+    allowed: ['DEFECTIVE', 'CHANGED_MIND', 'WRONG_ITEM', 'NOT_AS_DESCRIBED', 'DAMAGED']
+    source: sample
+    status: confirmed
+    rationale: "Sample distinct values from PUBLIC.RETURN_REQUEST.REASON."
+    provenance:
+      sample_query: "SELECT DISTINCT REASON FROM PUBLIC.RETURN_REQUEST WHERE REASON IS NOT NULL LIMIT 21"
+      sample_size: 5
+      saturation: true
+      observed_values: ['DEFECTIVE', 'CHANGED_MIND', 'WRONG_ITEM', 'NOT_AS_DESCRIBED', 'DAMAGED']
+
+  - type: value
+    object_type: payment_method
+    allowed: ['CARD', 'BANK', 'PAYPAL', 'GIFT']
+    source: sample
+    status: confirmed
+    rationale: "Sample distinct values from PUBLIC.PAYMENT.METHOD."
+    provenance:
+      sample_query: "SELECT DISTINCT METHOD FROM PUBLIC.PAYMENT WHERE METHOD IS NOT NULL LIMIT 21"
+      sample_size: 15
+      saturation: true
+      observed_values: ['CARD', 'BANK', 'PAYPAL', 'GIFT']
+
+  # ---- Numeric ranges from sample probing ----
+  - type: value
+    object_type: integer
+    role_ref: { fact_type: inventory_quantity_on_hand, role: quantityOnHand }
+    range: { min: 0, min_inclusive: true }
+    source: sample
+    status: proposed
+    modality: alethic
+    rationale: "Sample observed range; quantity-on-hand is non-negative by domain convention."
+    provenance:
+      sample_query: "SELECT MIN(QUANTITY_ON_HAND), MAX(QUANTITY_ON_HAND) FROM PUBLIC.INVENTORY"
+      sample_size: 14
+      observed_range: { min: 120, max: 1800 }
+      library_entry: count-non-negative
+
+  - type: value
+    object_type: money_10_2
+    role_ref: { fact_type: product_has_unit_price, role: unitPrice }
+    range: { min: 0, min_inclusive: false }
+    source: common-sense
+    status: proposed
+    modality: alethic
+    rationale: "Unit prices are positive — money library entry combined with 'price' name pattern."
+    provenance:
+      library_entry: money-positive
+      assumptions: ["Single-currency assumption."]
+
+  - type: value
+    object_type: integer
+    role_ref: { fact_type: order_item_quantity, role: quantity }
+    range: { min: 1, min_inclusive: true }
+    source: sample
+    status: proposed
+    modality: alethic
+    rationale: "Order-line quantities start at 1 — sample observed; 'quantity' library entry confirms non-zero."
+    provenance:
+      sample_query: "SELECT MIN(QUANTITY), MAX(QUANTITY) FROM PUBLIC.ORDER_ITEM"
+      sample_size: 35
+      observed_range: { min: 1, max: 5 }
+      library_entry: count-non-negative
+
+  - type: value
+    object_type: discount_4_3
+    role_ref: { fact_type: order_item_discount, role: discount }
+    range: { min: 0, max: 1, min_inclusive: true, max_inclusive: true }
+    source: sample
+    status: proposed
+    modality: alethic
+    rationale: "Sample shows discount in [0, 1]; standard 0..1 fractional discount convention."
+    provenance:
+      sample_query: "SELECT MIN(DISCOUNT), MAX(DISCOUNT) FROM PUBLIC.ORDER_ITEM"
+      sample_size: 35
+      observed_range: { min: 0.000, max: 0.300 }
+
+  - type: value
+    object_type: percent_5_2
+    role_ref: { fact_type: promotion_code_discount_pct, role: discountPct }
+    range: { min: 0, max: 100, min_inclusive: false, max_inclusive: true }
+    source: common-sense
+    status: proposed
+    modality: alethic
+    rationale: "Percentage scale 0–100; promotion_code's discount must be positive and ≤ 100."
+    provenance:
+      library_entry: percent-0-100
+
+  - type: value
+    object_type: money_10_2
+    role_ref: { fact_type: return_refund_amount, role: refundAmount }
+    range: { min: 0, min_inclusive: false }
+    source: common-sense
+    status: proposed
+    modality: alethic
+    rationale: "Refund amounts are positive."
+    provenance:
+      library_entry: money-positive
+
+  - type: value
+    object_type: money_10_2
+    role_ref: { fact_type: payment_amount, role: amount }
+    range: { min: 0, min_inclusive: false }
+    source: common-sense
+    status: proposed
+    modality: alethic
+    rationale: "Payment amounts are positive."
+    provenance:
+      library_entry: money-positive
+
+  # ---- Common-sense "from ≠ to" on InventoryTransfer (value-comparison, not ring) ----
+  # Modelled as value-comparison rather than ring constraint because the from-warehouse
+  # and to-warehouse are separate fact types (not a single self-referential binary).
+  # See references/constraint-reference.md "Value-comparison" — the != operator is a
+  # v0.1 extension covering "must-be-distinct" cases on same-type role pairs.
+  - type: value-comparison
+    operator: "!="
+    role_a: { fact_type: inventory_transfer_from, role: fromWarehouse }
+    role_b: { fact_type: inventory_transfer_to, role: toWarehouse }
+    source: common-sense
+    status: proposed
+    modality: alethic
+    rationale: "Transfers between two warehouses presuppose distinct from/to — same FK target on both roles + 'transfer' semantic signals distinct endpoints."
+    provenance:
+      library_entry: ring-transfer-from-to
+      matched_pattern: "two roles on same object type with role names from/to and verb 'transfer'"
+      assumptions: ["Self-loop (from = to) is meaningless for stock transfers."]
+      halpin_reference: "ORM 2 Graphical Notation — Value-Comparison Constraints (≠ operator; v0.1 extension)"
+
+  # ---- Common-sense temporal constraints on ORDERS lifecycle ----
+  - type: value-comparison
+    operator: "<="
+    role_a: { fact_type: orders_placed_at, role: placedAt }
+    role_b: { fact_type: orders_shipped_at, role: shippedAt }
+    source: common-sense
+    status: proposed
+    modality: alethic
+    rationale: "Orders are shipped no earlier than placed — universal lifecycle ordering on status timestamps."
+    provenance:
+      library_entry: temporal-lifecycle-placed-shipped
+      assumptions: ["Status timestamps follow strict happen-before semantics."]
+      halpin_reference: "ORM 2 Graphical Notation — Value-Comparison Constraints (≤)"
+
+  - type: value-comparison
+    operator: "<="
+    role_a: { fact_type: orders_shipped_at, role: shippedAt }
+    role_b: { fact_type: orders_delivered_at, role: deliveredAt }
+    source: common-sense
+    status: proposed
+    modality: alethic
+    rationale: "Orders are delivered no earlier than shipped — universal lifecycle ordering."
+    provenance:
+      library_entry: temporal-lifecycle-shipped-delivered
+      halpin_reference: "ORM 2 Graphical Notation — Value-Comparison Constraints (≤)"
+
+  - type: value-comparison
+    operator: "<="
+    role_a: { fact_type: promotion_code_valid_from, role: validFrom }
+    role_b: { fact_type: promotion_code_valid_to, role: validTo }
+    source: common-sense
+    status: proposed
+    modality: alethic
+    rationale: "Validity intervals: from-date precedes to-date."
+    provenance:
+      library_entry: temporal-validity-interval
+      halpin_reference: "ORM 2 Graphical Notation — Value-Comparison Constraints"
+
+  # ---- LLM-inferred subset: Returns reference DELIVERED orders ----
+  - type: subset
+    subset_role_seq:
+      - { fact_type: return_for_order_item, role: orderItem }
+    superset_role_seq:
+      - { fact_type: order_item_for_orders, role: orderItem }
+    where_predicate: "Orders.status = 'DELIVERED'"
+    source: llm-inferred
+    status: proposed
+    modality: alethic
+    rationale: "Returns presuppose receipt — only delivered orders can have items returned. Returning a non-delivered item is conceptually invalid."
+    provenance:
+      llm_prompt_id: returns-must-reference-delivered-orders
+      rationale_world_fact: "Returns presuppose physical receipt of goods; only DELIVERED orders have receipts."
+      reviewed_at_step_6d: true
+      halpin_reference: "ORM 2 Graphical Notation — Set-Comparison Constraints (subset arrow)"
+
+  # ---- Subtype partition for Product (TYPE-column subtype split) ----
+  - type: subtype-partition
+    supertype: product
+    subtypes: [physical_product, digital_product, subscription_product]
+    exclusive: true
+    exhaustive: true
+    source: common-sense
+    status: proposed
+    rationale: "PUBLIC.PRODUCT.TYPE is single-valued (exclusive) and NOT NULL with three side tables correlating to its three values (exhaustive)."
+    provenance:
+      origin: type-column-detection
+      table: PUBLIC.PRODUCT
+      column: TYPE
+      side_tables: [PUBLIC.PHYSICAL_PRODUCT_DETAILS, PUBLIC.DIGITAL_PRODUCT_DETAILS, PUBLIC.SUBSCRIPTION_PRODUCT_DETAILS]
+      halpin_reference: "ORM 2 Graphical Notation — Subtyping (circled X for exclusion + circled dot for totality = partition)"
+
+  # ---- Deontic constraint: promotion-code expiry (should rule, not enforced) ----
+  # Modelled as a value-comparison between the applied_at and the promotion's valid_to;
+  # `modality: deontic` so PyRel translation emits as `# DEONTIC NOTE:` rather than `model.require`.
+  - type: value-comparison
+    operator: "<="
+    role_a: { fact_type: order_promotion_applied_at, role: appliedAt }
+    role_b: { fact_type: promotion_code_valid_to, role: validTo }
+    source: user-supplied
+    status: confirmed
+    modality: deontic
+    rationale: "Promotion codes should be applied before their expiry date. Soft business rule (deontic) — not enforced at the schema level; violations are policy issues, not data-integrity errors."
+    provenance:
+      added_at_step: 9d
+      user_note: "Added during Step 9d as a policy 'should' rule; labelled deontic at Step 9e."
+      halpin_reference: "ORM 2 Graphical Notation — Modality (alethic vs deontic; deontic typically drawn in blue with 'o' for obligatory)"
+
+rejected_proposals: []
+

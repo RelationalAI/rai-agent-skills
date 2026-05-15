@@ -1,0 +1,183 @@
+# examples/encoded_enum_antipattern.orm.yaml
+# Recovered ORM model for encoded_enum_antipattern.sql.
+#
+# Demonstrates:
+#   - Step 5 sample probing finds CUSTOMER.TIER ∈ {BRONZE, SILVER, GOLD}
+#   - Step 5 sample probing finds ORDERS.STATUS ∈ {PENDING, PAID, SHIPPED, DELIVERED, CANCELLED}
+#   - Step 7 flags both as encoded-enum-in-varchar
+#   - Status promotion: live-SQL input + sample saturation + sample size ≥ threshold → confirmed
+#     (here sample sizes are 8 and 10 — below the 1000 threshold — so status remains `proposed`
+#     until user confirms at Step 9b. With a real production dataset, these would auto-promote.)
+
+version: 1
+
+source:
+  kind: sql
+  dialect: postgres
+  scope: { schema: PUBLIC, tables: ["*"] }
+  introspected_at: "2026-05-04T15:20:00Z"
+  confidence: standard
+  mode: guided
+
+object_types:
+  - id: customer
+    name: Customer
+    kind: entity
+    reference: { mode: popular, value_type: customer_id }
+    provenance: { origin: table-with-pk, table: PUBLIC.CUSTOMER, pk_column: CUSTOMER_ID }
+
+  - id: orders
+    name: Orders
+    kind: entity
+    reference: { mode: popular, value_type: orders_id }
+    provenance: { origin: table-with-pk, table: PUBLIC.ORDERS, pk_column: ORDER_ID }
+
+  - id: customer_id
+    name: CustomerId
+    kind: value
+    primitive: Integer
+
+  - id: orders_id
+    name: OrdersId
+    kind: value
+    primitive: Integer
+
+  # Promoted value types from the encoded-enum antipattern detection
+  - id: tier
+    name: Tier
+    kind: value
+    primitive: String
+    provenance:
+      promoted_from: PUBLIC.CUSTOMER.TIER
+      # promoted in response to encoded-enum-in-varchar antipattern
+
+  - id: order_status
+    name: OrderStatus
+    kind: value
+    primitive: String
+    provenance:
+      promoted_from: PUBLIC.ORDERS.STATUS
+      # promoted in response to encoded-enum-in-varchar antipattern
+
+fact_types:
+  - id: customer_has_name
+    reading: "{Customer} has name {String}"
+    roles:
+      - { object_type: customer, role_name: customer }
+      - { object_type: string, role_name: name }
+    constraints:
+      - type: uniqueness
+        roles: [customer]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: customer
+        source: explicit
+        status: confirmed
+
+  - id: customer_has_tier
+    reading: "{Customer} has tier {Tier}"
+    roles:
+      - { object_type: customer, role_name: customer }
+      - { object_type: tier, role_name: tier }
+    provenance:
+      origin: column
+      table: PUBLIC.CUSTOMER
+      column: TIER
+      warning: encoded-enum-in-varchar
+      warning_detail:
+        sample_distinct_count: 3
+        sample_size: 8
+        observed_values: ['BRONZE', 'SILVER', 'GOLD']
+      resolution:
+        action: promote_to_enum
+        decided_at: 9c
+        decided_by: user
+    constraints:
+      - type: uniqueness
+        roles: [customer]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: customer
+        source: explicit
+        status: confirmed
+        provenance: { table: PUBLIC.CUSTOMER, column: TIER, nullable: false }
+
+  - id: orders_placed_by_customer
+    reading: "{Orders} placed by {Customer}"
+    roles:
+      - { object_type: orders, role_name: orders }
+      - { object_type: customer, role_name: customer }
+    constraints:
+      - type: uniqueness
+        roles: [orders]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: orders
+        source: explicit
+        status: confirmed
+        provenance:
+          table: PUBLIC.ORDERS
+          column: CUSTOMER_ID
+          constraint_type: FK
+          fk: { references_table: PUBLIC.CUSTOMER, references_columns: [CUSTOMER_ID] }
+
+  - id: orders_has_status
+    reading: "{Orders} has status {OrderStatus}"
+    roles:
+      - { object_type: orders, role_name: orders }
+      - { object_type: order_status, role_name: status }
+    provenance:
+      origin: column
+      table: PUBLIC.ORDERS
+      column: STATUS
+      warning: encoded-enum-in-varchar
+      warning_detail:
+        sample_distinct_count: 5
+        sample_size: 10
+        observed_values: ['PENDING', 'PAID', 'SHIPPED', 'DELIVERED', 'CANCELLED']
+      resolution:
+        action: promote_to_enum
+        decided_at: 9c
+        decided_by: user
+    constraints:
+      - type: uniqueness
+        roles: [orders]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: orders
+        source: explicit
+        status: confirmed
+
+constraints:
+  # Sample-derived value enumerations. Status is `proposed` because sample sizes
+  # (8 and 10) are below the 1000-row threshold for confirmed promotion. The
+  # user confirmed both at Step 9b, lifting status to `confirmed`.
+  - type: value
+    object_type: tier
+    allowed: ['BRONZE', 'SILVER', 'GOLD']
+    source: sample
+    status: confirmed
+    rationale: "Sample distinct values from PUBLIC.CUSTOMER.TIER. User confirmed at Step 9b."
+    provenance:
+      sample_query: "SELECT DISTINCT TIER FROM PUBLIC.CUSTOMER WHERE TIER IS NOT NULL LIMIT 21"
+      sample_size: 8
+      saturation: true
+      observed_values: ['BRONZE', 'SILVER', 'GOLD']
+
+  - type: value
+    object_type: order_status
+    allowed: ['PENDING', 'PAID', 'SHIPPED', 'DELIVERED', 'CANCELLED']
+    source: sample
+    status: confirmed
+    rationale: "Sample distinct values from PUBLIC.ORDERS.STATUS. User confirmed at Step 9b."
+    provenance:
+      sample_query: "SELECT DISTINCT STATUS FROM PUBLIC.ORDERS WHERE STATUS IS NOT NULL LIMIT 21"
+      sample_size: 10
+      saturation: true
+      observed_values: ['PENDING', 'PAID', 'SHIPPED', 'DELIVERED', 'CANCELLED']
+
+rejected_proposals: []

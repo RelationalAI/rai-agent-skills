@@ -1,0 +1,182 @@
+{
+  "$schema_note": "Eval-case definitions for rai-orm-from-schema, v0.1. Format is intentionally simple — Claude reads this in-session, runs each case against the skill, and compares the output. Phase 4 stretch goal S6 promotes this to a Python-driven runner.",
+  "version": 1,
+  "v0_1_pass_bar": "E1 must pass on Northwind + TPC-H + synthetic; E2 coverage targets met per category per schema; E3 and E4 pass on all synthetic test cases; E5 pass with at least one stakeholder.",
+  "cases": [
+    {
+      "id": "E1-northwind",
+      "type": "reference-solution-match",
+      "description": "Run the SRP against Northwind DDL; diff output against the reviewed reference solution.",
+      "fixture": "fixtures/northwind/schema.sql",
+      "fixture_setup": "bash fixtures/northwind/fetch.sh",
+      "input_kind": "ddl-file",
+      "dialect": "postgres",
+      "expected": "expected/northwind.orm.yaml",
+      "pass_criteria": [
+        "Object types match by name (modulo case): all 14 entity types + the OrderDetail objectified entity present.",
+        "Fact types match by structural shape: roles in same order; reading wording may differ.",
+        "Explicit-source constraints match exactly in type, target, and provenance.",
+        "Inferred constraints judged against the correctness rubric (see PLAN.md / Activity 1 / Constraint correctness rubric).",
+        "Antipattern flags surfaced for: denormalized address on customers/employees/orders.ship_*; ambiguous junctions on order_details, employee_territories, customer_customer_demo; boolean-encoded products.discontinued; self-FK ring on employees.reports_to."
+      ],
+      "equivalence_rules": [
+        "declaration order ignored",
+        "pure formatting differences ignored",
+        "reading wording can differ; semantic role-set must match"
+      ]
+    },
+    {
+      "id": "E1-tpc_h",
+      "type": "reference-solution-match",
+      "description": "Run the SRP against TPC-H DDL (with the spec-derived PK/FK augmentation); diff output against the reviewed reference solution.",
+      "fixture": "fixtures/tpc_h/schema.sql",
+      "fixture_setup": "bash fixtures/tpc_h/fetch.sh",
+      "input_kind": "ddl-file",
+      "dialect": "postgres",
+      "expected": "expected/tpc_h.orm.yaml",
+      "pass_criteria": [
+        "All 8 base entity types + 2 objectified entities (PartSupp, LineItem) present.",
+        "Composite PKs on PARTSUPP and LINEITEM emitted as external UCs preferred=true.",
+        "Composite FK from LINEITEM → PARTSUPP modelled as single binary fact type with composite-fk warning.",
+        "ZERO antipattern flags. TPC-H is the clean-baseline benchmark — false-positive antipatterns are a hard-fail.",
+        "Common-sense range proposals (Money/Count library entries) emitted; account-balance proposals correctly rejected."
+      ]
+    },
+    {
+      "id": "E1-synthetic",
+      "type": "reference-solution-match",
+      "description": "Run the SRP against the hand-built synthetic schema; diff output against the reviewed reference solution.",
+      "fixture": "fixtures/synthetic/schema.sql",
+      "input_kind": "ddl-file",
+      "dialect": "postgres",
+      "expected": "expected/synthetic.orm.yaml",
+      "pass_criteria": [
+        "All 21 object types present (including the 3 TYPE-column subtypes derived from PRODUCT.TYPE).",
+        "Subtype-partition constraint emitted with exclusive=true, exhaustive=true; product partition correctly identifies the three side tables.",
+        "All 6 encoded-enum antipatterns flagged: ORDERS.STATUS, SHIPMENT_EVENT.EVENT_TYPE, RETURN_REQUEST.REASON, PAYMENT.METHOD, CUSTOMER.TIER, PRODUCT.TYPE.",
+        "Both ambiguous-junction antipatterns surfaced: ORDER_ITEM_TAG (no extras → pure m:n default) and ORDER_PROMOTION (with extras → objectified default).",
+        "Common-sense ring constraints proposed for PRODUCT_CATEGORY parent (acyclic + asymmetric + irreflexive) and INVENTORY_TRANSFER from/to (irreflexive).",
+        "LLM-inferred subset constraint proposed for RETURN_REQUEST → DELIVERED orders, with rationale_world_fact present.",
+        "Common-sense temporal value-comparison constraints proposed for ORDERS placed/shipped/delivered and PROMOTION_CODE valid_from/valid_to."
+      ]
+    },
+    {
+      "id": "E2-coverage",
+      "type": "constraint-coverage",
+      "description": "Count constraints by source category per schema; verify each category meets its expected target.",
+      "applies_to": ["E1-northwind", "E1-tpc_h", "E1-synthetic"],
+      "targets_by_input_type": {
+        "ddl-file": {
+          "explicit": "≥ 80% of expected count (PKs, FKs, NOT NULLs, UNIQUEs)",
+          "sample": "0% (DDL-only inputs skip Step 5)",
+          "common-sense": "≥ 60% of expected count (library hits + ring patterns)",
+          "llm-inferred": "≥ 1 proposal per schema if applicable, with rationale_world_fact populated",
+          "user-supplied": "0% (the eval is non-interactive)"
+        },
+        "sql": {
+          "explicit": "≥ 80% of expected count",
+          "sample": "≥ 50% of expected count (live data probing for value enums + ranges)",
+          "common-sense": "≥ 60% of expected count",
+          "llm-inferred": "≥ 1 proposal per schema if applicable",
+          "user-supplied": "0%"
+        },
+        "csv": {
+          "explicit": "0% (CSV has no DDL)",
+          "sample": "≥ 80% of expected count (type inference + value enum + range from data)",
+          "common-sense": "≥ 60% of expected count",
+          "llm-inferred": "≥ 1 proposal if applicable",
+          "user-supplied": "0%"
+        }
+      },
+      "pass_criteria": [
+        "Per-category counts within tolerance for the input kind in use",
+        "Hard-fail if any input produces 0 explicit-source constraints when DDL is present"
+      ]
+    },
+    {
+      "id": "E3-degradation",
+      "type": "degradation-behavior",
+      "description": "Run the SRP with one column hidden from the schema; output must reflect the absence (correct partial model + flagged ambiguity), not silently invent.",
+      "test_variants": [
+        {
+          "id": "E3-northwind-hide-employees-reports_to",
+          "fixture": "fixtures/northwind/schema.sql",
+          "modification": "Remove the `reports_to` column from `employees` and the corresponding ALTER TABLE FK statement before running the SRP.",
+          "expected_behavior": "Self-referential ring fact type employee_reports_to_manager NOT emitted; no ring constraints proposed. The Employee entity stays valid; no fabricated relationship."
+        },
+        {
+          "id": "E3-synthetic-hide-product-type",
+          "fixture": "fixtures/synthetic/schema.sql",
+          "modification": "Remove the `TYPE` column from `PRODUCT` before running the SRP.",
+          "expected_behavior": "TYPE-column subtype split NOT detected. PhysicalProduct/DigitalProduct/SubscriptionProduct subtypes NOT emitted. The three *_PRODUCT_DETAILS tables become regular entity types referencing Product with a `provenance.warning: dangling-side-table` flag rather than subtype rules."
+        },
+        {
+          "id": "E3-synthetic-hide-orders-status",
+          "fixture": "fixtures/synthetic/schema.sql",
+          "modification": "Remove the `STATUS` column from `ORDERS` before running the SRP.",
+          "expected_behavior": "encoded-enum-in-varchar antipattern NOT flagged on ORDERS. The fact type orders_has_status NOT emitted. The OrderStatus value type NOT emitted. Subset constraint RETURN_REQUEST → DELIVERED orders NOT proposed (target column absent)."
+        }
+      ],
+      "pass_criteria": [
+        "Each variant produces a partial model with no fabricated entities, fact types, or constraints around the removed column.",
+        "The SRP does not silently fail or crash; missing-column scenarios surface as `provenance.warning` flags or are simply absent (without inventing replacements)."
+      ]
+    },
+    {
+      "id": "E4-antipattern-detection",
+      "type": "antipattern-detection",
+      "description": "Synthetic fixtures with planted antipatterns; output must flag each.",
+      "test_variants": [
+        {
+          "id": "E4-denormalized-address",
+          "expected_flag": "denormalized-address",
+          "fixture": "fixtures/synthetic/schema.sql",
+          "expected_targets": ["customer", "warehouse"],
+          "pass": "Both targets carry `provenance.warning: denormalized-address` with matched_columns listed."
+        },
+        {
+          "id": "E4-encoded-enum",
+          "expected_flag": "encoded-enum-in-varchar",
+          "fixture": "fixtures/synthetic/schema.sql",
+          "expected_targets_count": 6,
+          "expected_targets": [
+            "CUSTOMER.TIER",
+            "PRODUCT.TYPE",
+            "ORDERS.STATUS",
+            "SHIPMENT_EVENT.EVENT_TYPE",
+            "RETURN_REQUEST.REASON",
+            "PAYMENT.METHOD"
+          ],
+          "pass": "All 6 columns flagged; sample-derived `allowed:` value lists match the data."
+        },
+        {
+          "id": "E4-ambiguous-junction",
+          "fixture": "fixtures/synthetic/schema.sql",
+          "expected_targets": [
+            { "table": "ORDER_ITEM_TAG", "flag": "ambiguous-junction-no-extras", "default": "pure_m_n" },
+            { "table": "ORDER_PROMOTION", "flag": "ambiguous-junction-with-extras", "default": "objectified" }
+          ],
+          "pass": "Both flagged with the corresponding default resolution."
+        },
+        {
+          "id": "E4-type-column-subtype",
+          "expected_flag": "type-column-subtype",
+          "fixture": "fixtures/synthetic/schema.sql",
+          "expected_target": "PRODUCT.TYPE",
+          "pass": "Subtypes Car, Truck, Motorcycle (or similar) emitted with `extends=[Product]`; subtype-partition constraint emitted with exclusive=true, exhaustive=true; flag links to the three side tables."
+        },
+        {
+          "id": "E4-tpc_h-clean-baseline",
+          "fixture": "fixtures/tpc_h/schema.sql",
+          "expected_flag_count": 0,
+          "pass": "Zero antipattern flags. The composite-fk informational marker on LINEITEM→PARTSUPP is permitted (it's not an antipattern; it's a structural note)."
+        }
+      ]
+    }
+  ],
+  "running_evals": {
+    "manual_methodology": "Claude runs the SRP on each fixture in-session, writes outputs to evals/results/<YYYY-MM-DD>/<schema>/{output.orm.yaml, output.py, output.verbalization.txt, diff.md}, then produces a per-case verdict by comparing against the expected file and the pass criteria.",
+    "diff_format": "diff.md per run records: (1) E1 structural diff (entity/fact-type set differences), (2) E2 source-category counts vs targets, (3) E3 degradation per variant, (4) E4 antipattern verdict per code, (5) overall pass/fail.",
+    "automation_status": "v0.1: manual. Phase 4 stretch goal S6 (eval runner) automates this if N grows."
+  }
+}

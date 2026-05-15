@@ -1,0 +1,140 @@
+# examples/objectification_in_enrollment.orm.yaml
+# Outcome of the dialogue in objectification_in_enrollment.dialogue.md.
+# Shows the canonical objectification pattern: Student-enrolled-in-Course becomes
+# an Enrolment entity with composite (Student, Course) identity.
+
+version: 1
+
+source:
+  kind: text-conversation
+  session_id: enrollment_objectification_demo
+  started_at: "2026-05-14T12:00:00Z"
+  confidence: standard
+  mode: guided
+
+object_types:
+  - id: student
+    name: Student
+    kind: entity
+    reference: { mode: popular, value_type: student_id }
+    provenance: { origin: csdp-step-1, csdp_step: 1, dialogue_turn: 3 }
+
+  - id: course
+    name: Course
+    kind: entity
+    reference: { mode: popular, value_type: course_id }
+    provenance: { origin: csdp-step-1, csdp_step: 1, dialogue_turn: 3 }
+
+  - id: enrolment
+    name: Enrolment
+    kind: entity
+    reference: { mode: external }
+    # NOTE: `independent` (the Halpin `!` marker on object types) stays at default `false`
+    # because Enrolment must always play its identity roles (enrolment_for_student + enrolment_for_course).
+    # The Halpin `!` on the *objectification itself* (i.e., the objectified entity may exist before
+    # additional attributes like grade are populated) is captured separately as
+    # `objectification_independent: true` on the underlying fact type `student_enrolled_in_course`.
+    provenance:
+      origin: csdp-step-1-objectification
+      csdp_step: 1
+      dialogue_turn: 9
+      user_quote: "We treat enrollment as its own thing."
+      rationale: "Objectified from Student-enrolled-in-Course because the relationship has its own attributes (grade, occurred-on)."
+
+  - id: student_id
+    name: StudentId
+    kind: value
+    primitive: Integer
+
+  - id: course_id
+    name: CourseId
+    kind: value
+    primitive: Integer
+
+  - id: grade
+    name: Grade
+    kind: value
+    primitive: String
+
+fact_types:
+  # Underlying binary that's objectified
+  - id: student_enrolled_in_course
+    reading: "{Student} enrolled in {Course}"
+    roles: [{ object_type: student, role_name: student }, { object_type: course, role_name: course }]
+    objectified_as: enrolment
+    objectification_independent: true
+    provenance: { csdp_step: 1, dialogue_turn: 9 }
+
+  # Reference-bearing fact types on the objectification
+  - id: enrolment_for_student
+    reading: "{Enrolment} for {Student}"
+    roles: [{ object_type: enrolment, role_name: enrolment }, { object_type: student, role_name: student }]
+    constraints:
+      - { type: uniqueness, roles: [enrolment], source: explicit, status: confirmed, provenance: { csdp_step: 4, dialogue_turn: 19 } }
+      - { type: mandatory, role: enrolment, source: explicit, status: confirmed }
+
+  - id: enrolment_for_course
+    reading: "{Enrolment} for {Course}"
+    roles: [{ object_type: enrolment, role_name: enrolment }, { object_type: course, role_name: course }]
+    constraints:
+      - { type: uniqueness, roles: [enrolment], source: explicit, status: confirmed, provenance: { csdp_step: 4, dialogue_turn: 20 } }
+      - { type: mandatory, role: enrolment, source: explicit, status: confirmed }
+
+  # Attribute fact types on the objectification
+  - id: enrolment_has_grade
+    reading: "{Enrolment} has grade {Grade}"
+    roles: [{ object_type: enrolment, role_name: enrolment }, { object_type: grade, role_name: grade }]
+    constraints:
+      - { type: uniqueness, roles: [enrolment], source: explicit, status: confirmed }
+      # Note: enrolment_has_grade is intentionally NOT mandatory — grade is set during the course, not at enrollment time.
+
+  - id: enrolment_occurred_on
+    reading: "{Enrolment} occurred on {Date}"
+    roles: [{ object_type: enrolment, role_name: enrolment }, { object_type: date, role_name: occurredOn }]
+    constraints:
+      - { type: uniqueness, roles: [enrolment], source: explicit, status: confirmed }
+      - { type: mandatory, role: enrolment, source: explicit, status: confirmed }
+
+constraints:
+  # External UC: composite (Student, Course) identifies the Enrolment objectification
+  - type: uniqueness
+    scope: external
+    role_refs:
+      - { fact_type: enrolment_for_student, role: student }
+      - { fact_type: enrolment_for_course, role: course }
+    preferred: true
+    source: explicit
+    status: confirmed
+    rationale: "Composite identifier (Student, Course) — user stated each Student can only enroll in a given Course once per term."
+    provenance:
+      csdp_step: 4
+      dialogue_turn: 21
+      user_quote: "A Student can only enroll in a given Course once per term."
+      halpin_reference: "ORM 2 Graphical Notation — External Uniqueness (composite identifier on objectified fact type)"
+
+  # Grade value enum
+  - type: value
+    object_type: grade
+    allowed: ['A', 'B', 'C', 'D', 'F', 'I', 'W']
+    source: explicit
+    status: confirmed
+    rationale: "Standard A–F grading with Incomplete and Withdraw codes."
+    provenance:
+      csdp_step: 6
+      dialogue_turn: 35
+      user_quote: "Use the standard A-F + I (incomplete) + W (withdrawn)."
+
+  # Date lower bound
+  - type: value
+    object_type: date
+    role_ref: { fact_type: enrolment_occurred_on, role: occurredOn }
+    range: { min: "1955-01-01", min_inclusive: true }
+    source: user-supplied
+    status: confirmed
+    rationale: "Institution was founded in 1955; no enrolments predate that."
+    provenance:
+      csdp_step: 6
+      dialogue_turn: 38
+      user_quote: "We were founded in 1955. Use 1955-01-01."
+
+rejected_proposals: []

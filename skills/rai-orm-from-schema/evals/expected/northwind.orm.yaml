@@ -1,0 +1,946 @@
+# =============================================================================
+# Reference solution for evals/fixtures/northwind/schema.sql
+#
+# Drafted under the Phase 1.3 authorship plan. See the synthetic.orm.yaml header
+# for the full review-protocol context.
+#
+# Northwind characteristics:
+#   - 14 tables; all have PKs.
+#   - Denormalized address on `customers`, `employees`, and `orders.ship_*`.
+#   - Self-FK ring on `employees.reports_to` (manager hierarchy).
+#   - Three junction tables: `order_details` (composite PK + extras → objectified),
+#     `employee_territories` (composite all-FK no extras → pure m:n),
+#     `customer_customer_demo` (composite all-FK no extras → pure m:n).
+#   - `products.discontinued` is INTEGER but values restricted to {0, 1} →
+#     boolean-encoded antipattern candidate.
+#   - No CHECK constraints, no encoded-enum VARCHARs, no TYPE-column subtypes.
+# =============================================================================
+
+version: 1
+
+source:
+  kind: ddl-file
+  dialect: postgres
+  scope: { schema: PUBLIC, tables: ["*"] }
+  introspected_at: "2026-05-04T18:00:00Z"
+  confidence: standard
+  mode: guided
+
+# =============================================================================
+# Object types
+# =============================================================================
+object_types:
+  # ---- Entity types lifted from tables with single-column PK ----
+  - id: category
+    name: Category
+    kind: entity
+    reference: { mode: popular, value_type: category_id }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.categories
+      pk_column: category_id
+      halpin_reference: "ORM 2 Graphical Notation — Object Types & Reference Modes (popular)"
+
+  - id: customer
+    name: Customer
+    kind: entity
+    reference: { mode: general, value_type: customer_code }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.customers
+      pk_column: customer_id
+      halpin_reference: "ORM 2 Graphical Notation — Object Types & Reference Modes (general; Northwind uses a 5-char code as the PK)"
+      warning: denormalized-address
+      warning_detail:
+        matched_columns: [address, city, region, postal_code, country]
+        severity: high
+      resolution:
+        action: keep_as_is
+        decided_at: 9c
+        decided_by: user
+
+  - id: customer_demographic
+    name: CustomerDemographic
+    kind: entity
+    reference: { mode: general, value_type: customer_type_id }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.customer_demographics
+      pk_column: customer_type_id
+      halpin_reference: "ORM 2 Graphical Notation — Object Types & Reference Modes"
+
+  - id: employee
+    name: Employee
+    kind: entity
+    reference: { mode: popular, value_type: employee_id }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.employees
+      pk_column: employee_id
+      halpin_reference: "ORM 2 Graphical Notation — Object Types & Reference Modes"
+      warning: denormalized-address
+      warning_detail:
+        matched_columns: [address, city, region, postal_code, country]
+        severity: high
+      resolution:
+        action: keep_as_is
+        decided_at: 9c
+        decided_by: user
+
+  - id: orders
+    name: Orders
+    kind: entity
+    reference: { mode: popular, value_type: order_id }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.orders
+      pk_column: order_id
+      halpin_reference: "ORM 2 Graphical Notation — Object Types & Reference Modes"
+      warning: denormalized-address
+      warning_detail:
+        matched_columns: [ship_address, ship_city, ship_region, ship_postal_code, ship_country]
+        severity: high
+        note: "shipping-address columns are a second denormalized address per order"
+      resolution:
+        action: keep_as_is
+        decided_at: 9c
+        decided_by: user
+
+  - id: product
+    name: Product
+    kind: entity
+    reference: { mode: popular, value_type: product_id }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.products
+      pk_column: product_id
+      halpin_reference: "ORM 2 Graphical Notation — Object Types & Reference Modes"
+
+  - id: region
+    name: Region
+    kind: entity
+    reference: { mode: popular, value_type: region_id }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.region
+      pk_column: region_id
+      halpin_reference: "ORM 2 Graphical Notation — Object Types & Reference Modes"
+
+  - id: shipper
+    name: Shipper
+    kind: entity
+    reference: { mode: popular, value_type: shipper_id }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.shippers
+      pk_column: shipper_id
+      halpin_reference: "ORM 2 Graphical Notation — Object Types & Reference Modes"
+
+  - id: supplier
+    name: Supplier
+    kind: entity
+    reference: { mode: popular, value_type: supplier_id }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.suppliers
+      pk_column: supplier_id
+      halpin_reference: "ORM 2 Graphical Notation — Object Types & Reference Modes"
+
+  - id: territory
+    name: Territory
+    kind: entity
+    reference: { mode: general, value_type: territory_id }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.territories
+      pk_column: territory_id
+      halpin_reference: "ORM 2 Graphical Notation — Object Types & Reference Modes (general; territory_id is a string code)"
+
+  - id: us_state
+    name: UsState
+    kind: entity
+    reference: { mode: popular, value_type: state_id }
+    provenance:
+      origin: table-with-pk
+      table: PUBLIC.us_states
+      pk_column: state_id
+      halpin_reference: "ORM 2 Graphical Notation — Object Types & Reference Modes"
+
+  # ---- Entity types from junction tables ----
+  - id: order_detail
+    name: OrderDetail
+    kind: entity
+    reference: { mode: external }
+    provenance:
+      origin: junction-table
+      table: PUBLIC.order_details
+      warning: ambiguous-junction-with-extras
+      warning_detail:
+        matched_columns: [order_id, product_id]
+        extra_columns: [unit_price, quantity, discount]
+      resolution:
+        action: objectified                   # default per antipattern catalog
+        decided_at: 9c
+        decided_by: user
+      halpin_reference: "ORM 2 Graphical Notation — Objectification (junction with extras)"
+
+  # ---- Value types ----
+  - id: category_id
+    name: CategoryId
+    kind: value
+    primitive: Integer
+  - id: customer_code
+    name: CustomerCode
+    kind: value
+    primitive: String
+  - id: customer_type_id
+    name: CustomerTypeId
+    kind: value
+    primitive: String
+  - id: employee_id
+    name: EmployeeId
+    kind: value
+    primitive: Integer
+  - id: order_id
+    name: OrderId
+    kind: value
+    primitive: Integer
+  - id: product_id
+    name: ProductId
+    kind: value
+    primitive: Integer
+  - id: region_id
+    name: RegionId
+    kind: value
+    primitive: Integer
+  - id: shipper_id
+    name: ShipperId
+    kind: value
+    primitive: Integer
+  - id: supplier_id
+    name: SupplierId
+    kind: value
+    primitive: Integer
+  - id: territory_id
+    name: TerritoryId
+    kind: value
+    primitive: String
+  - id: state_id
+    name: StateId
+    kind: value
+    primitive: Integer
+
+  # Binary primitive (added in v0.1 to model bytea / image / blob columns)
+  - id: binary_blob
+    name: BinaryBlob
+    kind: value
+    primitive: Binary
+
+# =============================================================================
+# Fact types
+# =============================================================================
+fact_types:
+  # ---- Category ----
+  - id: category_has_name
+    reading: "{Category} has name {String}"
+    roles: [{ object_type: category, role_name: category }, { object_type: string, role_name: name }]
+    constraints:
+      - type: uniqueness
+        roles: [category]
+        source: explicit
+        status: confirmed
+      - { type: mandatory, role: category, source: explicit, status: confirmed, provenance: { table: PUBLIC.categories, column: category_name, nullable: false } }
+
+  - id: category_description
+    reading: "{Category} has description {String}"
+    roles: [{ object_type: category, role_name: category }, { object_type: string, role_name: description }]
+    constraints:
+      - type: uniqueness
+        roles: [category]
+        source: explicit
+        status: confirmed
+      # description nullable
+
+  - id: category_picture
+    reading: "{Category} has picture {BinaryBlob}"
+    roles: [{ object_type: category, role_name: category }, { object_type: binary_blob, role_name: picture }]
+    constraints: [{ type: uniqueness, roles: [category], source: explicit, status: confirmed }]
+    # categories.picture is nullable bytea; the Binary primitive (added in v0.1) covers blob columns.
+
+  # ---- Customer ----
+  # company_name is NOT NULL; rest of customer columns nullable.
+  - id: customer_has_company_name
+    reading: "{Customer} has company-name {String}"
+    roles: [{ object_type: customer, role_name: customer }, { object_type: string, role_name: companyName }]
+    constraints:
+      - type: uniqueness
+        roles: [customer]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: customer
+        source: explicit
+        status: confirmed
+        provenance: { table: PUBLIC.customers, column: company_name, nullable: false }
+
+  # Optional customer fields (contact_name, contact_title, address, city, region,
+  # postal_code, country, phone, fax) — same structural pattern: uniqueness on the
+  # customer role only, no mandatory (column nullable). Listed below in compact form.
+  - id: customer_has_contact_name
+    reading: "{Customer} has contact-name {String}"
+    roles: [{ object_type: customer, role_name: customer }, { object_type: string, role_name: contactName }]
+    constraints: [{ type: uniqueness, roles: [customer], source: explicit, status: confirmed }]
+  - id: customer_has_contact_title
+    reading: "{Customer} has contact-title {String}"
+    roles: [{ object_type: customer, role_name: customer }, { object_type: string, role_name: contactTitle }]
+    constraints: [{ type: uniqueness, roles: [customer], source: explicit, status: confirmed }]
+  - id: customer_has_address
+    reading: "{Customer} has address {String}"
+    roles: [{ object_type: customer, role_name: customer }, { object_type: string, role_name: address }]
+    constraints: [{ type: uniqueness, roles: [customer], source: explicit, status: confirmed }]
+  - id: customer_has_city
+    reading: "{Customer} has city {String}"
+    roles: [{ object_type: customer, role_name: customer }, { object_type: string, role_name: city }]
+    constraints: [{ type: uniqueness, roles: [customer], source: explicit, status: confirmed }]
+  - id: customer_has_region
+    reading: "{Customer} has region {String}"
+    roles: [{ object_type: customer, role_name: customer }, { object_type: string, role_name: region }]
+    constraints: [{ type: uniqueness, roles: [customer], source: explicit, status: confirmed }]
+  - id: customer_has_postal_code
+    reading: "{Customer} has postal-code {String}"
+    roles: [{ object_type: customer, role_name: customer }, { object_type: string, role_name: postalCode }]
+    constraints: [{ type: uniqueness, roles: [customer], source: explicit, status: confirmed }]
+  - id: customer_has_country
+    reading: "{Customer} has country {String}"
+    roles: [{ object_type: customer, role_name: customer }, { object_type: string, role_name: country }]
+    constraints: [{ type: uniqueness, roles: [customer], source: explicit, status: confirmed }]
+  - id: customer_has_phone
+    reading: "{Customer} has phone {String}"
+    roles: [{ object_type: customer, role_name: customer }, { object_type: string, role_name: phone }]
+    constraints: [{ type: uniqueness, roles: [customer], source: explicit, status: confirmed }]
+  - id: customer_has_fax
+    reading: "{Customer} has fax {String}"
+    roles: [{ object_type: customer, role_name: customer }, { object_type: string, role_name: fax }]
+    constraints: [{ type: uniqueness, roles: [customer], source: explicit, status: confirmed }]
+
+  # ---- CustomerDemographic ----
+  - id: customer_demographic_description
+    reading: "{CustomerDemographic} has description {String}"
+    roles: [{ object_type: customer_demographic, role_name: demographic }, { object_type: string, role_name: description }]
+    constraints: [{ type: uniqueness, roles: [demographic], source: explicit, status: confirmed }]
+
+  # ---- Employee (significant; full expansion) ----
+  - id: employee_has_last_name
+    reading: "{Employee} has last-name {String}"
+    roles: [{ object_type: employee, role_name: employee }, { object_type: string, role_name: lastName }]
+    constraints:
+      - { type: uniqueness, roles: [employee], source: explicit, status: confirmed }
+      - { type: mandatory, role: employee, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.employees, column: last_name, nullable: false } }
+
+  - id: employee_has_first_name
+    reading: "{Employee} has first-name {String}"
+    roles: [{ object_type: employee, role_name: employee }, { object_type: string, role_name: firstName }]
+    constraints:
+      - { type: uniqueness, roles: [employee], source: explicit, status: confirmed }
+      - { type: mandatory, role: employee, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.employees, column: first_name, nullable: false } }
+
+  # Title, courtesy, dates, address fields — most nullable. Compact form.
+  - id: employee_has_title
+    reading: "{Employee} has title {String}"
+    roles: [{ object_type: employee, role_name: employee }, { object_type: string, role_name: title }]
+    constraints: [{ type: uniqueness, roles: [employee], source: explicit, status: confirmed }]
+  - id: employee_has_title_of_courtesy
+    reading: "{Employee} has title-of-courtesy {String}"
+    roles: [{ object_type: employee, role_name: employee }, { object_type: string, role_name: titleOfCourtesy }]
+    constraints: [{ type: uniqueness, roles: [employee], source: explicit, status: confirmed }]
+  - id: employee_birth_date
+    reading: "{Employee} was born on {Date}"
+    roles: [{ object_type: employee, role_name: employee }, { object_type: date, role_name: birthDate }]
+    constraints: [{ type: uniqueness, roles: [employee], source: explicit, status: confirmed }]
+  - id: employee_hire_date
+    reading: "{Employee} was hired on {Date}"
+    roles: [{ object_type: employee, role_name: employee }, { object_type: date, role_name: hireDate }]
+    constraints: [{ type: uniqueness, roles: [employee], source: explicit, status: confirmed }]
+  - id: employee_has_address
+    reading: "{Employee} has address {String}"
+    roles: [{ object_type: employee, role_name: employee }, { object_type: string, role_name: address }]
+    constraints: [{ type: uniqueness, roles: [employee], source: explicit, status: confirmed }]
+  - id: employee_has_city
+    reading: "{Employee} has city {String}"
+    roles: [{ object_type: employee, role_name: employee }, { object_type: string, role_name: city }]
+    constraints: [{ type: uniqueness, roles: [employee], source: explicit, status: confirmed }]
+  - id: employee_has_region
+    reading: "{Employee} has region {String}"
+    roles: [{ object_type: employee, role_name: employee }, { object_type: string, role_name: region }]
+    constraints: [{ type: uniqueness, roles: [employee], source: explicit, status: confirmed }]
+  - id: employee_has_postal_code
+    reading: "{Employee} has postal-code {String}"
+    roles: [{ object_type: employee, role_name: employee }, { object_type: string, role_name: postalCode }]
+    constraints: [{ type: uniqueness, roles: [employee], source: explicit, status: confirmed }]
+  - id: employee_has_country
+    reading: "{Employee} has country {String}"
+    roles: [{ object_type: employee, role_name: employee }, { object_type: string, role_name: country }]
+    constraints: [{ type: uniqueness, roles: [employee], source: explicit, status: confirmed }]
+  - id: employee_has_home_phone
+    reading: "{Employee} has home-phone {String}"
+    roles: [{ object_type: employee, role_name: employee }, { object_type: string, role_name: homePhone }]
+    constraints: [{ type: uniqueness, roles: [employee], source: explicit, status: confirmed }]
+  - id: employee_has_extension
+    reading: "{Employee} has extension {String}"
+    roles: [{ object_type: employee, role_name: employee }, { object_type: string, role_name: extension }]
+    constraints: [{ type: uniqueness, roles: [employee], source: explicit, status: confirmed }]
+  - id: employee_has_notes
+    reading: "{Employee} has notes {String}"
+    roles: [{ object_type: employee, role_name: employee }, { object_type: string, role_name: notes }]
+    constraints: [{ type: uniqueness, roles: [employee], source: explicit, status: confirmed }]
+  - id: employee_has_photo_path
+    reading: "{Employee} has photo-path {String}"
+    roles: [{ object_type: employee, role_name: employee }, { object_type: string, role_name: photoPath }]
+    constraints: [{ type: uniqueness, roles: [employee], source: explicit, status: confirmed }]
+  - id: employee_has_photo
+    reading: "{Employee} has photo {BinaryBlob}"
+    roles: [{ object_type: employee, role_name: employee }, { object_type: binary_blob, role_name: photo }]
+    constraints: [{ type: uniqueness, roles: [employee], source: explicit, status: confirmed }]
+    # employees.photo is nullable bytea; modelled as Binary primitive.
+
+  # Self-referential: employee reports to manager (both roles on Employee)
+  - id: employee_reports_to_manager
+    reading: "{Employee} reports to {Employee}"
+    roles: [{ object_type: employee, role_name: employee }, { object_type: employee, role_name: manager }]
+    constraints:
+      - type: uniqueness
+        roles: [employee]
+        source: explicit
+        status: confirmed
+        provenance:
+          table: PUBLIC.employees
+          column: reports_to
+          constraint_type: FK
+          halpin_reference: "ORM 2 Graphical Notation — Internal UC (functional self-reference: each employee has at most one manager)"
+      # reports_to is nullable → no mandatory.
+      - type: ring
+        variant: acyclic
+        source: common-sense
+        status: proposed
+        modality: alethic
+        rationale: "Self-referential 'reports_to'/'manages' relation. Universal management convention: hierarchies are acyclic."
+        provenance:
+          library_entry: ring-reports-to
+          matched_pattern: "self-referential binary fact type with reports_to/manages role names"
+          assumptions: ["Hierarchical management; circular reporting disallowed."]
+          halpin_reference: "ORM 2 Graphical Notation — Ring Constraints (acyclic glyph)"
+      - type: ring
+        variant: asymmetric
+        source: common-sense
+        status: proposed
+        modality: alethic
+        provenance: { library_entry: ring-reports-to }
+      - type: ring
+        variant: irreflexive
+        source: common-sense
+        status: proposed
+        modality: alethic
+        provenance: { library_entry: ring-reports-to }
+
+  # ---- Orders ----
+  - id: orders_placed_by_customer
+    reading: "{Orders} placed by {Customer}"
+    roles: [{ object_type: orders, role_name: orders }, { object_type: customer, role_name: customer }]
+    constraints:
+      - type: uniqueness
+        roles: [orders]
+        source: explicit
+        status: confirmed
+      # customer_id is NULLABLE in Northwind orders → no mandatory.
+
+  - id: orders_handled_by_employee
+    reading: "{Orders} handled by {Employee}"
+    roles: [{ object_type: orders, role_name: orders }, { object_type: employee, role_name: employee }]
+    constraints:
+      - type: uniqueness
+        roles: [orders]
+        source: explicit
+        status: confirmed
+      # employee_id is nullable → no mandatory.
+
+  - id: orders_shipped_via
+    reading: "{Orders} shipped via {Shipper}"
+    roles: [{ object_type: orders, role_name: orders }, { object_type: shipper, role_name: shipper }]
+    constraints:
+      - type: uniqueness
+        roles: [orders]
+        source: explicit
+        status: confirmed
+
+  - id: orders_order_date
+    reading: "{Orders} ordered on {Date}"
+    roles: [{ object_type: orders, role_name: orders }, { object_type: date, role_name: orderDate }]
+    constraints: [{ type: uniqueness, roles: [orders], source: explicit, status: confirmed }]
+
+  - id: orders_required_date
+    reading: "{Orders} required by {Date}"
+    roles: [{ object_type: orders, role_name: orders }, { object_type: date, role_name: requiredDate }]
+    constraints: [{ type: uniqueness, roles: [orders], source: explicit, status: confirmed }]
+
+  - id: orders_shipped_date
+    reading: "{Orders} shipped on {Date}"
+    roles: [{ object_type: orders, role_name: orders }, { object_type: date, role_name: shippedDate }]
+    constraints: [{ type: uniqueness, roles: [orders], source: explicit, status: confirmed }]
+
+  - id: orders_freight
+    reading: "{Orders} has freight {Float}"
+    roles: [{ object_type: orders, role_name: orders }, { object_type: float, role_name: freight }]
+    constraints: [{ type: uniqueness, roles: [orders], source: explicit, status: confirmed }]
+
+  # Shipping-address fields (denormalized) — same pattern as customer.
+  - id: orders_ship_name
+    reading: "{Orders} ships to name {String}"
+    roles: [{ object_type: orders, role_name: orders }, { object_type: string, role_name: shipName }]
+    constraints: [{ type: uniqueness, roles: [orders], source: explicit, status: confirmed }]
+  - id: orders_ship_address
+    reading: "{Orders} ships to address {String}"
+    roles: [{ object_type: orders, role_name: orders }, { object_type: string, role_name: shipAddress }]
+    constraints: [{ type: uniqueness, roles: [orders], source: explicit, status: confirmed }]
+  - id: orders_ship_city
+    reading: "{Orders} ships to city {String}"
+    roles: [{ object_type: orders, role_name: orders }, { object_type: string, role_name: shipCity }]
+    constraints: [{ type: uniqueness, roles: [orders], source: explicit, status: confirmed }]
+  - id: orders_ship_region
+    reading: "{Orders} ships to region {String}"
+    roles: [{ object_type: orders, role_name: orders }, { object_type: string, role_name: shipRegion }]
+    constraints: [{ type: uniqueness, roles: [orders], source: explicit, status: confirmed }]
+  - id: orders_ship_postal_code
+    reading: "{Orders} ships to postal-code {String}"
+    roles: [{ object_type: orders, role_name: orders }, { object_type: string, role_name: shipPostalCode }]
+    constraints: [{ type: uniqueness, roles: [orders], source: explicit, status: confirmed }]
+  - id: orders_ship_country
+    reading: "{Orders} ships to country {String}"
+    roles: [{ object_type: orders, role_name: orders }, { object_type: string, role_name: shipCountry }]
+    constraints: [{ type: uniqueness, roles: [orders], source: explicit, status: confirmed }]
+
+  # ---- Product ----
+  - id: product_has_name
+    reading: "{Product} has name {String}"
+    roles: [{ object_type: product, role_name: product }, { object_type: string, role_name: productName }]
+    constraints:
+      - { type: uniqueness, roles: [product], source: explicit, status: confirmed }
+      - { type: mandatory, role: product, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.products, column: product_name, nullable: false } }
+
+  - id: product_supplied_by
+    reading: "{Product} supplied by {Supplier}"
+    roles: [{ object_type: product, role_name: product }, { object_type: supplier, role_name: supplier }]
+    constraints: [{ type: uniqueness, roles: [product], source: explicit, status: confirmed }]
+    # supplier_id nullable.
+
+  - id: product_in_category
+    reading: "{Product} is in {Category}"
+    roles: [{ object_type: product, role_name: product }, { object_type: category, role_name: category }]
+    constraints: [{ type: uniqueness, roles: [product], source: explicit, status: confirmed }]
+
+  - id: product_quantity_per_unit
+    reading: "{Product} has quantity-per-unit {String}"
+    roles: [{ object_type: product, role_name: product }, { object_type: string, role_name: quantityPerUnit }]
+    constraints: [{ type: uniqueness, roles: [product], source: explicit, status: confirmed }]
+
+  - id: product_unit_price
+    reading: "{Product} has unit-price {Float}"
+    roles: [{ object_type: product, role_name: product }, { object_type: float, role_name: unitPrice }]
+    constraints: [{ type: uniqueness, roles: [product], source: explicit, status: confirmed }]
+
+  - id: product_units_in_stock
+    reading: "{Product} has units-in-stock {Integer}"
+    roles: [{ object_type: product, role_name: product }, { object_type: integer, role_name: unitsInStock }]
+    constraints: [{ type: uniqueness, roles: [product], source: explicit, status: confirmed }]
+
+  - id: product_units_on_order
+    reading: "{Product} has units-on-order {Integer}"
+    roles: [{ object_type: product, role_name: product }, { object_type: integer, role_name: unitsOnOrder }]
+    constraints: [{ type: uniqueness, roles: [product], source: explicit, status: confirmed }]
+
+  - id: product_reorder_level
+    reading: "{Product} has reorder-level {Integer}"
+    roles: [{ object_type: product, role_name: product }, { object_type: integer, role_name: reorderLevel }]
+    constraints: [{ type: uniqueness, roles: [product], source: explicit, status: confirmed }]
+
+  # discontinued is INTEGER NOT NULL but Northwind data only ever has 0 or 1 →
+  # boolean-encoded antipattern candidate (Step 7 flag).
+  - id: product_is_discontinued
+    reading: "{Product} is discontinued {Boolean}"
+    roles: [{ object_type: product, role_name: product }, { object_type: boolean, role_name: isDiscontinued }]
+    provenance:
+      origin: column
+      table: PUBLIC.products
+      column: discontinued
+      warning: boolean-encoded-varchar           # antipattern code (uses same code for INTEGER 0/1 case)
+      warning_detail:
+        sample_distinct_count: 2
+        sample_size: 77
+        observed_values: [0, 1]
+        original_type: INTEGER
+      resolution:
+        action: promote_to_boolean
+        decided_at: 9c
+        decided_by: user
+    constraints:
+      - { type: uniqueness, roles: [product], source: explicit, status: confirmed }
+      - { type: mandatory, role: product, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.products, column: discontinued, nullable: false } }
+
+  # ---- Region ----
+  - id: region_description
+    reading: "{Region} has description {String}"
+    roles: [{ object_type: region, role_name: region }, { object_type: string, role_name: regionDescription }]
+    constraints:
+      - { type: uniqueness, roles: [region], source: explicit, status: confirmed }
+      - { type: mandatory, role: region, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.region, column: region_description, nullable: false } }
+
+  # ---- Shipper ----
+  - id: shipper_company_name
+    reading: "{Shipper} has company-name {String}"
+    roles: [{ object_type: shipper, role_name: shipper }, { object_type: string, role_name: companyName }]
+    constraints:
+      - { type: uniqueness, roles: [shipper], source: explicit, status: confirmed }
+      - { type: mandatory, role: shipper, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.shippers, column: company_name, nullable: false } }
+  - id: shipper_phone
+    reading: "{Shipper} has phone {String}"
+    roles: [{ object_type: shipper, role_name: shipper }, { object_type: string, role_name: phone }]
+    constraints: [{ type: uniqueness, roles: [shipper], source: explicit, status: confirmed }]
+
+  # ---- Supplier (similar to Customer — many nullable address fields) ----
+  - id: supplier_company_name
+    reading: "{Supplier} has company-name {String}"
+    roles: [{ object_type: supplier, role_name: supplier }, { object_type: string, role_name: companyName }]
+    constraints:
+      - { type: uniqueness, roles: [supplier], source: explicit, status: confirmed }
+      - { type: mandatory, role: supplier, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.suppliers, column: company_name, nullable: false } }
+
+  # All other supplier columns are nullable; same uniqueness-only pattern.
+  # (contact_name, contact_title, address, city, region, postal_code, country,
+  #  phone, fax, homepage)
+  - id: supplier_contact_name
+    reading: "{Supplier} has contact-name {String}"
+    roles: [{ object_type: supplier, role_name: supplier }, { object_type: string, role_name: contactName }]
+    constraints: [{ type: uniqueness, roles: [supplier], source: explicit, status: confirmed }]
+  - id: supplier_contact_title
+    reading: "{Supplier} has contact-title {String}"
+    roles: [{ object_type: supplier, role_name: supplier }, { object_type: string, role_name: contactTitle }]
+    constraints: [{ type: uniqueness, roles: [supplier], source: explicit, status: confirmed }]
+  - id: supplier_address
+    reading: "{Supplier} has address {String}"
+    roles: [{ object_type: supplier, role_name: supplier }, { object_type: string, role_name: address }]
+    constraints: [{ type: uniqueness, roles: [supplier], source: explicit, status: confirmed }]
+  - id: supplier_city
+    reading: "{Supplier} has city {String}"
+    roles: [{ object_type: supplier, role_name: supplier }, { object_type: string, role_name: city }]
+    constraints: [{ type: uniqueness, roles: [supplier], source: explicit, status: confirmed }]
+  - id: supplier_region
+    reading: "{Supplier} has region {String}"
+    roles: [{ object_type: supplier, role_name: supplier }, { object_type: string, role_name: region }]
+    constraints: [{ type: uniqueness, roles: [supplier], source: explicit, status: confirmed }]
+  - id: supplier_postal_code
+    reading: "{Supplier} has postal-code {String}"
+    roles: [{ object_type: supplier, role_name: supplier }, { object_type: string, role_name: postalCode }]
+    constraints: [{ type: uniqueness, roles: [supplier], source: explicit, status: confirmed }]
+  - id: supplier_country
+    reading: "{Supplier} has country {String}"
+    roles: [{ object_type: supplier, role_name: supplier }, { object_type: string, role_name: country }]
+    constraints: [{ type: uniqueness, roles: [supplier], source: explicit, status: confirmed }]
+  - id: supplier_phone
+    reading: "{Supplier} has phone {String}"
+    roles: [{ object_type: supplier, role_name: supplier }, { object_type: string, role_name: phone }]
+    constraints: [{ type: uniqueness, roles: [supplier], source: explicit, status: confirmed }]
+  - id: supplier_fax
+    reading: "{Supplier} has fax {String}"
+    roles: [{ object_type: supplier, role_name: supplier }, { object_type: string, role_name: fax }]
+    constraints: [{ type: uniqueness, roles: [supplier], source: explicit, status: confirmed }]
+  - id: supplier_homepage
+    reading: "{Supplier} has homepage {String}"
+    roles: [{ object_type: supplier, role_name: supplier }, { object_type: string, role_name: homepage }]
+    constraints: [{ type: uniqueness, roles: [supplier], source: explicit, status: confirmed }]
+
+  # ---- Territory ----
+  - id: territory_description
+    reading: "{Territory} has description {String}"
+    roles: [{ object_type: territory, role_name: territory }, { object_type: string, role_name: territoryDescription }]
+    constraints:
+      - { type: uniqueness, roles: [territory], source: explicit, status: confirmed }
+      - { type: mandatory, role: territory, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.territories, column: territory_description, nullable: false } }
+
+  - id: territory_in_region
+    reading: "{Territory} is in {Region}"
+    roles: [{ object_type: territory, role_name: territory }, { object_type: region, role_name: region }]
+    constraints:
+      - { type: uniqueness, roles: [territory], source: explicit, status: confirmed }
+      - { type: mandatory, role: territory, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.territories, column: region_id, constraint_type: FK } }
+
+  # ---- UsState ----
+  - id: us_state_name
+    reading: "{UsState} has name {String}"
+    roles: [{ object_type: us_state, role_name: state }, { object_type: string, role_name: stateName }]
+    constraints: [{ type: uniqueness, roles: [state], source: explicit, status: confirmed }]
+  - id: us_state_abbreviation
+    reading: "{UsState} has abbreviation {String}"
+    roles: [{ object_type: us_state, role_name: state }, { object_type: string, role_name: stateAbbr }]
+    constraints: [{ type: uniqueness, roles: [state], source: explicit, status: confirmed }]
+  - id: us_state_in_region
+    reading: "{UsState} in {String}"
+    roles: [{ object_type: us_state, role_name: state }, { object_type: string, role_name: stateRegion }]
+    constraints: [{ type: uniqueness, roles: [state], source: explicit, status: confirmed }]
+
+  # ---- OrderDetail (objectified — composite PK with extras) ----
+  - id: order_detail_for_orders
+    reading: "{OrderDetail} for {Orders}"
+    roles: [{ object_type: order_detail, role_name: orderDetail }, { object_type: orders, role_name: orders }]
+    constraints:
+      - { type: mandatory, role: orderDetail, source: explicit, status: confirmed }
+
+  - id: order_detail_for_product
+    reading: "{OrderDetail} for {Product}"
+    roles: [{ object_type: order_detail, role_name: orderDetail }, { object_type: product, role_name: product }]
+    constraints:
+      - { type: mandatory, role: orderDetail, source: explicit, status: confirmed }
+
+  - id: order_detail_unit_price
+    reading: "{OrderDetail} has unit-price {Float}"
+    roles: [{ object_type: order_detail, role_name: orderDetail }, { object_type: float, role_name: unitPrice }]
+    constraints:
+      - { type: uniqueness, roles: [orderDetail], source: explicit, status: confirmed }
+      - { type: mandatory, role: orderDetail, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.order_details, column: unit_price, nullable: false } }
+
+  - id: order_detail_quantity
+    reading: "{OrderDetail} has quantity {Integer}"
+    roles: [{ object_type: order_detail, role_name: orderDetail }, { object_type: integer, role_name: quantity }]
+    constraints:
+      - { type: uniqueness, roles: [orderDetail], source: explicit, status: confirmed }
+      - { type: mandatory, role: orderDetail, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.order_details, column: quantity, nullable: false } }
+
+  - id: order_detail_discount
+    reading: "{OrderDetail} has discount {Float}"
+    roles: [{ object_type: order_detail, role_name: orderDetail }, { object_type: float, role_name: discount }]
+    constraints:
+      - { type: uniqueness, roles: [orderDetail], source: explicit, status: confirmed }
+      - { type: mandatory, role: orderDetail, source: explicit, status: confirmed,
+          provenance: { table: PUBLIC.order_details, column: discount, nullable: false } }
+
+  # ---- Pure-m:n junctions (no objectification entity) ----
+
+  # employee_territories — composite all-FK PK, no extras → pure m:n
+  - id: employee_assigned_to_territory
+    reading: "{Employee} assigned to {Territory}"
+    roles: [{ object_type: employee, role_name: employee }, { object_type: territory, role_name: territory }]
+    provenance:
+      origin: junction-table
+      table: PUBLIC.employee_territories
+      warning: ambiguous-junction-no-extras
+      resolution:
+        action: pure_m_n
+        decided_at: 9c
+        decided_by: user
+    constraints:
+      - type: uniqueness
+        roles: [employee, territory]
+        preferred: true
+        source: explicit
+        status: confirmed
+        provenance:
+          table: PUBLIC.employee_territories
+          columns: [employee_id, territory_id]
+          constraint_type: PK
+          halpin_reference: "ORM 2 Graphical Notation — Internal UC (m:n spanning UC)"
+      - { type: mandatory, role: employee, source: explicit, status: confirmed }
+      - { type: mandatory, role: territory, source: explicit, status: confirmed }
+
+  # customer_customer_demo — composite all-FK PK, no extras → pure m:n
+  - id: customer_classified_as
+    reading: "{Customer} classified as {CustomerDemographic}"
+    roles: [{ object_type: customer, role_name: customer }, { object_type: customer_demographic, role_name: demographic }]
+    provenance:
+      origin: junction-table
+      table: PUBLIC.customer_customer_demo
+      warning: ambiguous-junction-no-extras
+      resolution:
+        action: pure_m_n
+        decided_at: 9c
+        decided_by: user
+    constraints:
+      - type: uniqueness
+        roles: [customer, demographic]
+        preferred: true
+        source: explicit
+        status: confirmed
+        provenance:
+          table: PUBLIC.customer_customer_demo
+          columns: [customer_id, customer_type_id]
+          constraint_type: PK
+      - { type: mandatory, role: customer, source: explicit, status: confirmed }
+      - { type: mandatory, role: demographic, source: explicit, status: confirmed }
+
+# =============================================================================
+# Top-level constraints
+# =============================================================================
+constraints:
+  # ---- External UC for OrderDetail (composite PK identifies the objectification) ----
+  - type: uniqueness
+    scope: external
+    role_refs:
+      - { fact_type: order_detail_for_orders, role: orders }
+      - { fact_type: order_detail_for_product, role: product }
+    preferred: true
+    source: explicit
+    status: confirmed
+    rationale: "Composite PK (order_id, product_id) on PUBLIC.order_details — OrderDetail's preferred reference scheme."
+    provenance:
+      table: PUBLIC.order_details
+      columns: [order_id, product_id]
+      constraint_type: PK
+      halpin_reference: "ORM 2 Graphical Notation — External Uniqueness"
+
+  # ---- Common-sense library proposals ----
+
+  # Customer.email: Northwind doesn't have a discrete email column — phone/fax only.
+  # No email-uniqueness proposal applies.
+
+  # Numeric ranges (sample-derived, but no live data probe at the YAML layer; common-sense library suffices)
+  - type: value
+    object_type: float
+    role_ref: { fact_type: orders_freight, role: freight }
+    range: { min: 0, min_inclusive: true }
+    source: common-sense
+    status: proposed
+    modality: alethic
+    rationale: "Freight charges are non-negative — Money library entry."
+    provenance: { library_entry: money-positive, assumptions: ["Single-currency."] }
+
+  - type: value
+    object_type: float
+    role_ref: { fact_type: product_unit_price, role: unitPrice }
+    range: { min: 0, min_inclusive: true }
+    source: common-sense
+    status: proposed
+    modality: alethic
+    rationale: "Product unit prices are non-negative — Money library entry."
+    provenance: { library_entry: money-positive }
+
+  - type: value
+    object_type: integer
+    role_ref: { fact_type: product_units_in_stock, role: unitsInStock }
+    range: { min: 0, min_inclusive: true }
+    source: common-sense
+    status: proposed
+    modality: alethic
+    rationale: "Stock counts are non-negative — Count library entry."
+    provenance: { library_entry: count-non-negative }
+
+  - type: value
+    object_type: integer
+    role_ref: { fact_type: product_units_on_order, role: unitsOnOrder }
+    range: { min: 0, min_inclusive: true }
+    source: common-sense
+    status: proposed
+    modality: alethic
+    provenance: { library_entry: count-non-negative }
+
+  - type: value
+    object_type: integer
+    role_ref: { fact_type: product_reorder_level, role: reorderLevel }
+    range: { min: 0, min_inclusive: true }
+    source: common-sense
+    status: proposed
+    modality: alethic
+    provenance: { library_entry: count-non-negative }
+
+  - type: value
+    object_type: float
+    role_ref: { fact_type: order_detail_unit_price, role: unitPrice }
+    range: { min: 0, min_inclusive: true }
+    source: common-sense
+    status: proposed
+    modality: alethic
+    provenance: { library_entry: money-positive }
+
+  - type: value
+    object_type: integer
+    role_ref: { fact_type: order_detail_quantity, role: quantity }
+    range: { min: 1, min_inclusive: true }
+    source: common-sense
+    status: proposed
+    modality: alethic
+    rationale: "Order-line quantities start at 1."
+    provenance: { library_entry: count-non-negative }
+
+  - type: value
+    object_type: float
+    role_ref: { fact_type: order_detail_discount, role: discount }
+    range: { min: 0, max: 1, min_inclusive: true, max_inclusive: true }
+    source: common-sense
+    status: proposed
+    modality: alethic
+    rationale: "Discount is a 0..1 fractional value."
+    provenance: { library_entry: discount-fraction }
+
+  # ---- Common-sense temporal constraints on Orders lifecycle ----
+  - type: value-comparison
+    operator: "<="
+    role_a: { fact_type: orders_order_date, role: orderDate }
+    role_b: { fact_type: orders_required_date, role: requiredDate }
+    source: common-sense
+    status: proposed
+    modality: alethic
+    rationale: "Required-by date is no earlier than order date."
+    provenance:
+      library_entry: temporal-validity-interval
+      halpin_reference: "ORM 2 Graphical Notation — Value-Comparison Constraints (≤)"
+
+  - type: value-comparison
+    operator: "<="
+    role_a: { fact_type: orders_order_date, role: orderDate }
+    role_b: { fact_type: orders_shipped_date, role: shippedDate }
+    source: common-sense
+    status: proposed
+    modality: alethic
+    rationale: "Orders are shipped no earlier than placed."
+    provenance:
+      library_entry: temporal-lifecycle-placed-shipped
+      halpin_reference: "ORM 2 Graphical Notation — Value-Comparison Constraints (≤)"
+
+  # ---- Common-sense: employee birth_date <= hire_date ----
+  - type: value-comparison
+    operator: "<="
+    role_a: { fact_type: employee_birth_date, role: birthDate }
+    role_b: { fact_type: employee_hire_date, role: hireDate }
+    source: common-sense
+    status: proposed
+    modality: alethic
+    rationale: "Employees are born before they are hired."
+    provenance:
+      library_entry: temporal-lifecycle-birth-hire
+      halpin_reference: "ORM 2 Graphical Notation — Value-Comparison Constraints"
+
+  # ---- LLM-inferred: orders.shipped_date populated only when employee+shipper assigned ----
+  # Plausible domain inference but speculative; flagged for user review.
+  - type: subset
+    subset_role_seq:
+      - { fact_type: orders_shipped_date, role: orders }
+    superset_role_seq:
+      - { fact_type: orders_shipped_via, role: orders }
+    source: llm-inferred
+    status: proposed
+    modality: alethic
+    rationale: "An order's shipped_date is set only when a shipper has been assigned (Step 6c, surfaced at Step 6d for review)."
+    provenance:
+      llm_prompt_id: shipped-date-requires-shipper
+      rationale_world_fact: "Shipping requires a carrier; without a Shipper, an order cannot be marked shipped."
+      reviewed_at_step_6d: true
+      halpin_reference: "ORM 2 Graphical Notation — Set-Comparison Constraints (subset)"
+
+rejected_proposals: []

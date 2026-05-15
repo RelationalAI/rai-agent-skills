@@ -1,0 +1,208 @@
+# examples/junction_objectification.orm.yaml
+# Recovered ORM model for junction_objectification.sql.
+# Demonstrates Step 7 antipattern resolution for the two junction shapes:
+#   - STUDENT_INTERESTED_IN → pure m:n binary (no objectification entity)
+#   - ENROLMENT → objectified entity (carries its own attributes)
+# Both decisions follow the catalog defaults (see references/antipattern-catalog.md);
+# Step 9c confirms.
+
+version: 1
+
+source:
+  kind: ddl-file
+  dialect: postgres
+  scope: { schema: PUBLIC, tables: ["*"] }
+  introspected_at: "2026-05-04T15:10:00Z"
+  confidence: standard
+  mode: guided
+
+object_types:
+  - id: student
+    name: Student
+    kind: entity
+    reference: { mode: popular, value_type: student_id }
+    provenance: { origin: table-with-pk, table: PUBLIC.STUDENT, pk_column: STUDENT_ID }
+
+  - id: course
+    name: Course
+    kind: entity
+    reference: { mode: popular, value_type: course_id }
+    provenance: { origin: table-with-pk, table: PUBLIC.COURSE, pk_column: COURSE_ID }
+
+  # Objectified entity for ENROLMENT — has its own attributes (ENROLLED_AT, GRADE)
+  - id: enrolment
+    name: Enrolment
+    kind: entity
+    reference: { mode: external }
+    provenance:
+      origin: junction-table
+      table: PUBLIC.ENROLMENT
+      warning: ambiguous-junction-with-extras
+      warning_detail:
+        matched_columns: [STUDENT_ID, COURSE_ID]
+        extra_columns: [ENROLLED_AT, GRADE]
+        severity: low                         # default resolution applied (objectified)
+      resolution:
+        action: objectified                   # default; user confirmed at Step 9c
+        decided_at: 9c
+        decided_by: user
+
+  - id: student_id
+    name: StudentId
+    kind: value
+    primitive: Integer
+
+  - id: course_id
+    name: CourseId
+    kind: value
+    primitive: Integer
+
+  - id: grade
+    name: Grade
+    kind: value
+    primitive: String
+
+fact_types:
+  - id: student_has_name
+    reading: "{Student} has name {String}"
+    roles:
+      - { object_type: student, role_name: student }
+      - { object_type: string, role_name: name }
+    constraints:
+      - type: uniqueness
+        roles: [student]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: student
+        source: explicit
+        status: confirmed
+
+  - id: course_has_title
+    reading: "{Course} has title {String}"
+    roles:
+      - { object_type: course, role_name: course }
+      - { object_type: string, role_name: title }
+    constraints:
+      - type: uniqueness
+        roles: [course]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: course
+        source: explicit
+        status: confirmed
+
+  # ---- Pure m:n binary (no objectification entity) ----
+  - id: student_interested_in_course
+    reading: "{Student} interested in {Course}"
+    roles:
+      - { object_type: student, role_name: student }
+      - { object_type: course, role_name: course }
+    provenance:
+      origin: junction-table
+      table: PUBLIC.STUDENT_INTERESTED_IN
+      warning: ambiguous-junction-no-extras
+      resolution:
+        action: pure_m_n                     # default; user confirmed at Step 9c
+        decided_at: 9c
+        decided_by: user
+    constraints:
+      - type: uniqueness
+        roles: [student, course]
+        preferred: true
+        source: explicit
+        status: confirmed
+        provenance:
+          table: PUBLIC.STUDENT_INTERESTED_IN
+          columns: [STUDENT_ID, COURSE_ID]
+          constraint_type: PK
+      - type: mandatory
+        role: student
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: course
+        source: explicit
+        status: confirmed
+
+  # ---- Objectified binary — underlying fact types for the Enrolment objectification ----
+  - id: enrolment_for_student
+    reading: "{Enrolment} for {Student}"
+    roles:
+      - { object_type: enrolment, role_name: enrolment }
+      - { object_type: student, role_name: student }
+    constraints:
+      - type: mandatory
+        role: enrolment
+        source: explicit
+        status: confirmed
+
+  - id: enrolment_for_course
+    reading: "{Enrolment} for {Course}"
+    roles:
+      - { object_type: enrolment, role_name: enrolment }
+      - { object_type: course, role_name: course }
+    constraints:
+      - type: mandatory
+        role: enrolment
+        source: explicit
+        status: confirmed
+
+  # ---- Attributes of the objectification ----
+  - id: enrolment_enrolled_at
+    reading: "{Enrolment} was enrolled at {DateTime}"
+    roles:
+      - { object_type: enrolment, role_name: enrolment }
+      - { object_type: datetime, role_name: enrolledAt }
+    constraints:
+      - type: uniqueness
+        roles: [enrolment]
+        source: explicit
+        status: confirmed
+      - type: mandatory
+        role: enrolment
+        source: explicit
+        status: confirmed
+        provenance: { table: PUBLIC.ENROLMENT, column: ENROLLED_AT, nullable: false }
+
+  - id: enrolment_has_grade
+    reading: "{Enrolment} has grade {Grade}"
+    roles:
+      - { object_type: enrolment, role_name: enrolment }
+      - { object_type: grade, role_name: grade }
+    constraints:
+      - type: uniqueness
+        roles: [enrolment]
+        source: explicit
+        status: confirmed
+      # Note: grade is nullable in DDL → no mandatory constraint.
+
+constraints:
+  # External UC for the Enrolment objectification — composite identity (Student, Course)
+  - type: uniqueness
+    scope: external
+    role_refs:
+      - { fact_type: enrolment_for_student, role: student }
+      - { fact_type: enrolment_for_course, role: course }
+    preferred: true
+    source: explicit
+    status: confirmed
+    rationale: "Composite PK (STUDENT_ID, COURSE_ID) on PUBLIC.ENROLMENT — Enrolment's preferred reference scheme."
+    provenance:
+      table: PUBLIC.ENROLMENT
+      columns: [STUDENT_ID, COURSE_ID]
+      constraint_type: PK
+
+  - type: value
+    object_type: grade
+    allowed: ['A', 'B', 'C', 'D', 'F', 'I', 'W']
+    source: explicit
+    status: confirmed
+    provenance:
+      table: PUBLIC.ENROLMENT
+      column: GRADE
+      constraint_type: CHECK
+      check_expression: "GRADE IN ('A','B','C','D','F','I','W')"
+
+rejected_proposals: []

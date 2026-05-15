@@ -1,0 +1,343 @@
+# Reference solution for evals/fixtures/synthetic_good_user/dialogue.md
+# Drafted under the Phase 1.3 authorship plan. Constraints carry provenance with
+# csdp_step + dialogue_turn + user_quote where applicable, mirroring the schema
+# skill's reference-solution protocol.
+
+version: 1
+
+source:
+  kind: text-conversation
+  session_id: synthetic_good_user
+  started_at: "2026-05-14T14:00:00Z"
+  confidence: standard
+  mode: guided
+
+object_types:
+  - id: conference
+    name: Conference
+    kind: entity
+    reference: { mode: external }
+    provenance:
+      origin: csdp-step-1-composite
+      csdp_step: 1
+      dialogue_turn: 3
+      user_quote: "We run 'DataConf' every year. So name alone isn't unique. Composite identifier."
+
+  - id: track
+    name: Track
+    kind: entity
+    reference: { mode: external }
+    provenance:
+      origin: csdp-step-1-composite
+      csdp_step: 1
+      dialogue_turn: 3
+      user_quote: "Track names repeat across conferences."
+
+  - id: talk
+    name: Talk
+    kind: entity
+    reference: { mode: external }
+    provenance:
+      origin: csdp-step-1-composite
+      csdp_step: 1
+      dialogue_turn: 3
+      user_quote: "Talk names are unique within a track but can repeat across tracks."
+
+  - id: speaker
+    name: Speaker
+    kind: entity
+    reference: { mode: general, value_type: email }
+    provenance:
+      origin: csdp-step-1
+      csdp_step: 1
+      dialogue_turn: 4
+      user_quote: "Each speaker has a unique email — we use email as the de-facto unique identifier."
+
+  - id: conference_name
+    name: ConferenceName
+    kind: value
+    primitive: String
+
+  - id: year
+    name: Year
+    kind: value
+    primitive: Integer
+
+  - id: track_name
+    name: TrackName
+    kind: value
+    primitive: String
+
+  - id: talk_name
+    name: TalkName
+    kind: value
+    primitive: String
+
+  - id: email
+    name: Email
+    kind: value
+    primitive: String
+
+  - id: full_name
+    name: FullName
+    kind: value
+    primitive: String
+
+  - id: talk_type
+    name: TalkType
+    kind: value
+    primitive: String
+    provenance:
+      origin: csdp-step-6-replaces-rejected-subtype
+      rationale: "Replaces a rejected Keynote vs Regular subtype split (rejected at Step 6 because the distinction is attribute-based, not role-based)."
+
+fact_types:
+  - id: conference_has_name
+    reading: "{Conference} has name {ConferenceName}"
+    roles: [{ object_type: conference, role_name: conference }, { object_type: conference_name, role_name: name }]
+    constraints:
+      - { type: uniqueness, roles: [conference], source: explicit, status: confirmed }
+      - { type: mandatory, role: conference, source: explicit, status: confirmed }
+
+  - id: conference_has_year
+    reading: "{Conference} has year {Year}"
+    roles: [{ object_type: conference, role_name: conference }, { object_type: year, role_name: year }]
+    constraints:
+      - { type: uniqueness, roles: [conference], source: explicit, status: confirmed }
+      - { type: mandatory, role: conference, source: explicit, status: confirmed }
+
+  - id: track_in_conference
+    reading: "{Track} in {Conference}"
+    roles: [{ object_type: track, role_name: track }, { object_type: conference, role_name: conference }]
+    constraints:
+      - { type: uniqueness, roles: [track], source: explicit, status: confirmed }
+      - { type: mandatory, role: track, source: explicit, status: confirmed }
+
+  - id: track_has_name
+    reading: "{Track} has name {TrackName}"
+    roles: [{ object_type: track, role_name: track }, { object_type: track_name, role_name: name }]
+    constraints:
+      - { type: uniqueness, roles: [track], source: explicit, status: confirmed }
+      - { type: mandatory, role: track, source: explicit, status: confirmed }
+
+  - id: talk_in_track
+    reading: "{Talk} in {Track}"
+    roles: [{ object_type: talk, role_name: talk }, { object_type: track, role_name: track }]
+    constraints:
+      - { type: uniqueness, roles: [talk], source: explicit, status: confirmed }
+      - { type: mandatory, role: talk, source: explicit, status: confirmed }
+
+  - id: talk_has_name
+    reading: "{Talk} has name {TalkName}"
+    roles: [{ object_type: talk, role_name: talk }, { object_type: talk_name, role_name: name }]
+    constraints:
+      - { type: uniqueness, roles: [talk], source: explicit, status: confirmed }
+      - { type: mandatory, role: talk, source: explicit, status: confirmed }
+
+  - id: talk_at_position
+    reading: "{Talk} at position {Integer}"
+    roles: [{ object_type: talk, role_name: talk }, { object_type: integer, role_name: position }]
+    constraints:
+      - { type: uniqueness, roles: [talk], source: explicit, status: confirmed }
+      - { type: mandatory, role: talk, source: explicit, status: confirmed }
+
+  - id: talk_given_by_speaker
+    reading: "{Talk} given by {Speaker}"
+    roles: [{ object_type: talk, role_name: talk }, { object_type: speaker, role_name: speaker }]
+    constraints:
+      - { type: uniqueness, roles: [talk], source: explicit, status: confirmed }
+      - { type: mandatory, role: talk, source: explicit, status: confirmed }
+
+  - id: talk_has_talk_type
+    reading: "{Talk} has type {TalkType}"
+    roles: [{ object_type: talk, role_name: talk }, { object_type: talk_type, role_name: type }]
+    constraints:
+      - { type: uniqueness, roles: [talk], source: explicit, status: confirmed }
+      - { type: mandatory, role: talk, source: explicit, status: confirmed }
+
+  - id: talk_has_duration
+    reading: "{Talk} has duration {Integer}"
+    roles: [{ object_type: talk, role_name: talk }, { object_type: integer, role_name: durationMinutes }]
+    constraints:
+      - { type: uniqueness, roles: [talk], source: explicit, status: confirmed }
+      - { type: mandatory, role: talk, source: explicit, status: confirmed }
+
+  - id: speaker_has_email
+    reading: "{Speaker} has email {Email}"
+    roles: [{ object_type: speaker, role_name: speaker }, { object_type: email, role_name: email }]
+    constraints:
+      - { type: uniqueness, roles: [speaker], preferred: true, source: explicit, status: confirmed }
+      - { type: uniqueness, roles: [email], source: explicit, status: confirmed }
+      - { type: mandatory, role: speaker, source: explicit, status: confirmed }
+
+  - id: speaker_has_full_name
+    reading: "{Speaker} has full name {FullName}"
+    roles: [{ object_type: speaker, role_name: speaker }, { object_type: full_name, role_name: fullName }]
+    constraints:
+      - { type: uniqueness, roles: [speaker], source: explicit, status: confirmed }
+      - { type: mandatory, role: speaker, source: explicit, status: confirmed }
+
+constraints:
+  # External UCs for the three composite-identifier entities
+  - type: uniqueness
+    scope: external
+    role_refs:
+      - { fact_type: conference_has_name, role: name }
+      - { fact_type: conference_has_year, role: year }
+    preferred: true
+    source: explicit
+    status: confirmed
+    rationale: "Composite identifier (name, year) for Conference. User stated the same conference name runs every year."
+    provenance:
+      csdp_step: 1
+      dialogue_turn: 3
+      user_quote: "We run 'DataConf' every year."
+      halpin_reference: "ORM 2 Graphical Notation — External Uniqueness"
+
+  - type: uniqueness
+    scope: external
+    role_refs:
+      - { fact_type: track_in_conference, role: conference }
+      - { fact_type: track_has_name, role: name }
+    preferred: true
+    source: explicit
+    status: confirmed
+    rationale: "Composite identifier (Conference, name) for Track."
+    provenance:
+      csdp_step: 1
+      dialogue_turn: 3
+      user_quote: "Track names repeat across conferences."
+
+  - type: uniqueness
+    scope: external
+    role_refs:
+      - { fact_type: talk_in_track, role: track }
+      - { fact_type: talk_has_name, role: name }
+    preferred: true
+    source: explicit
+    status: confirmed
+    rationale: "Composite identifier (Track, name) for Talk."
+    provenance:
+      csdp_step: 1
+      dialogue_turn: 3
+      user_quote: "Talk names are unique within a track."
+
+  # Value constraints from library + user-supplied
+  - type: value
+    object_type: integer
+    role_ref: { fact_type: talk_at_position, role: position }
+    range: { min: 1, min_inclusive: true }
+    source: common-sense
+    status: confirmed
+    rationale: "Slot positions start at 1."
+    provenance:
+      library_entry: count-non-negative
+      csdp_step: 6
+      dialogue_turn: 9
+      user_quote: "Slot 0 wouldn't exist."
+
+  - type: value
+    object_type: year
+    range: { min: 1900, max: 2100, min_inclusive: true, max_inclusive: true }
+    source: common-sense
+    status: confirmed
+    rationale: "Standard contemporary-year range; user kept broad bounds to allow historic conference cataloging."
+    provenance:
+      library_entry: year-range
+      csdp_step: 6
+      dialogue_turn: 9
+
+  - type: textual
+    expression: "Email must be a valid email address."
+    formal_language: natural
+    source: common-sense
+    status: confirmed
+    rationale: "Standard email-format validation from library."
+    provenance:
+      library_entry: email-format
+      csdp_step: 6
+      dialogue_turn: 9
+
+  - type: value
+    object_type: talk_type
+    allowed: ['Regular', 'Keynote']
+    source: user-supplied
+    status: confirmed
+    rationale: "User-confirmed enum; replaces the rejected Keynote subtype proposal."
+    provenance:
+      csdp_step: 6
+      dialogue_turn: 10
+      user_quote: "Use a TalkType value enum + a deontic policy for the keynote visibility rule."
+
+  # User-supplied alethic frequency constraint
+  - type: frequency
+    scope: external
+    role_refs:
+      - { fact_type: talk_in_track, role: track }
+      - { fact_type: track_in_conference, role: conference }
+    bound: { max: 50 }
+    source: user-supplied
+    status: confirmed
+    modality: alethic
+    rationale: "Hard cap: at most 50 Talks per Conference (across all tracks)."
+    provenance:
+      csdp_step: 7
+      dialogue_turn: 11
+      user_quote: "Each conference shouldn't have more than 50 talks (we cap our schedule)."
+
+  # Deontic policy: keynote visibility
+  - type: textual
+    expression: "Keynote talks should be listed first in the conference's display ordering."
+    formal_language: natural
+    source: user-supplied
+    status: confirmed
+    modality: deontic
+    rationale: "Display-policy soft rule; not enforced structurally."
+    provenance:
+      csdp_step: 7
+      dialogue_turn: 11
+      user_quote: "Add the keynote-visibility rule. ... We don't enforce it strictly."
+
+  # Deontic policy: talk duration
+  - type: value
+    object_type: integer
+    role_ref: { fact_type: talk_has_duration, role: durationMinutes }
+    range: { max: 60, max_inclusive: true }
+    source: user-supplied
+    status: confirmed
+    modality: deontic
+    rationale: "Talks should not exceed 60 minutes; panels may exceed by policy exception."
+    provenance:
+      csdp_step: 7
+      dialogue_turn: 11
+      user_quote: "Talks should not exceed 60 minutes (that's a soft policy — we sometimes allow longer panels)."
+
+rejected_proposals:
+  # LLM proposal rejected at Step 7b
+  - type: uniqueness
+    scope: external
+    role_refs:
+      - { fact_type: talk_given_by_speaker, role: speaker }
+      - { fact_type: talk_in_track, role: track }
+    source: llm-inferred
+    rationale: "A Speaker can give at most 1 Talk per Track."
+    rejection_reason: "Counter-example: speakers often give multiple talks in a single track (sessions, panels, etc.). User-rejected at Step 7b."
+    rejected_at: "2026-05-14"
+    provenance:
+      llm_prompt_id: speaker-track-uniqueness-heuristic
+      reviewed_at_step_6d: true
+      csdp_step: 7
+      dialogue_turn: 11
+      user_quote: "Reject — speakers often give multiple talks in a single track."
+
+  # Subtype proposal rejected at Step 6 due to Halpin role-based criterion
+  - type: subtype-partition
+    supertype: talk
+    subtypes: ["keynote_talk (proposed)", "regular_talk (proposed)"]
+    source: user-supplied
+    rejection_reason: "Halpin role-based criterion: Keynote vs Regular Talk has no role difference (both have position, speaker, duration). The distinction is attribute-based — replaced with TalkType value enum + deontic display policy."
+    rejected_at: "2026-05-14"
+    provenance:
+      csdp_step: 6
+      dialogue_turn: 10
+      user_quote: "Both have a position. Both have a speaker. Keynotes have a special 'is_keynote' flag. So... no role differences, just a flag."
