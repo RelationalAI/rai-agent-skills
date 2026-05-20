@@ -27,6 +27,7 @@ gnn = GNN(
     device="cuda",
     n_epochs=20,
     lr=0.005,
+    seed=42,
 )
 gnn.fit()
 

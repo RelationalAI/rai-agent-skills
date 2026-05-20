@@ -29,6 +29,7 @@ gnn = GNN(
     head_layers=2,
     num_negative=20,
     label_smoothing=True,
+    seed=42,
 )
 gnn.fit()
 

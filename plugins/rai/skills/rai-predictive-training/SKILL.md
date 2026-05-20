@@ -39,7 +39,7 @@ gnn = GNN(
     graph=gnn_graph, property_transformer=pt,
     train=Train, validation=Val,
     task_type="binary_classification", eval_metric="roc_auc",
-    has_time_column=True, device="cuda", n_epochs=5,
+    has_time_column=True, device="cuda", n_epochs=5, seed=42,
 )
 gnn.fit()
 User.predictions = gnn.predictions(domain=Test)
@@ -108,7 +108,7 @@ gnn = GNN(
     task_type="binary_classification",
     eval_metric="roc_auc",
     has_time_column=True,
-    device="cuda", n_epochs=5, lr=0.005,
+    device="cuda", n_epochs=5, lr=0.005, seed=42,
 )
 gnn.fit()
 ```
@@ -123,7 +123,7 @@ gnn = GNN(
     task_type="repeated_link_prediction",
     eval_metric="link_prediction_precision@5",
     has_time_column=True,
-    device="cuda", n_epochs=5, lr=0.005,
+    device="cuda", n_epochs=5, lr=0.005, seed=42,
     head_layers=2, num_negative=20, label_smoothing=True,
 )
 gnn.fit()
@@ -149,7 +149,7 @@ User.link_predictions  = gnn_c.predictions(domain=TestC)
 Hyperparameters can also be passed as a dictionary:
 
 ```python
-train_config = {"device": "cuda", "n_epochs": 10, "lr": 0.001, "train_batch_size": 512}
+train_config = {"device": "cuda", "n_epochs": 10, "lr": 0.001, "train_batch_size": 512, "seed": 42}
 gnn = GNN(exp_database="DB", exp_schema="EXPERIMENTS", ..., **train_config)
 gnn.fit()
 ```
@@ -444,12 +444,12 @@ Same as above, replacing the registry key params with `model_run_id="<run_id>"`.
 | Include | Omit |
 |---------|------|
 | `exp_database`, `exp_schema` | `database`, `schema` (now optional) |
-| `graph`, `property_transformer` | `train`, `validation` |
-| `source_concept` (required) | `eval_metric` |
-| `task_type` (required) | hyperparameters (`device`, `n_epochs`, etc.) |
-| `has_time_column=True` (if model was trained with time column) | |
+| `source_concept` (required) | `train`, `validation` |
+| `task_type` (required) | `eval_metric` |
+| `has_time_column=True` (if model was trained with time column) | hyperparameters (`device`, `n_epochs`, etc.) |
 | `target_concept` (required for link prediction only) | |
 | model identifier (registry key or run ID) | |
+| `graph`, `property_transformer` (optional — defaults to the training graph and auto-inferred transformer; pass them to rebuild the GNN tables, e.g. when scoring a different test domain) | |
 
 ### Train-Register-Load Workflow
 
@@ -461,7 +461,7 @@ gnn = GNN(
     graph=gnn_graph, property_transformer=pt,
     train=Train, validation=Val,
     task_type="binary_classification", eval_metric="roc_auc",
-    has_time_column=True, device="cuda", n_epochs=5,
+    has_time_column=True, device="cuda", n_epochs=5, seed=42,
 )
 gnn.fit()
 gnn.register_model(

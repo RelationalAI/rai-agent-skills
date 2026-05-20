@@ -24,6 +24,7 @@ gnn = GNN(
     has_time_column=True,
     device="cuda",
     n_epochs=5,
+    seed=42,
 )
 gnn.fit()
 

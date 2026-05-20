@@ -18,7 +18,7 @@ gnn = GNN(
     train=Train, validation=Val,
     task_type="binary_classification", eval_metric="roc_auc",
     has_time_column=True,
-    device="cuda", n_epochs=5,
+    device="cuda", n_epochs=5, seed=42,
 )
 gnn.fit()
 
