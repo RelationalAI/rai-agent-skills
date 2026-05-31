@@ -25,6 +25,17 @@ ontologies and advanced reasoners by generating and executing PyRel code**. They
 - Generating PyRel enables the agent to create the RelationalAI ontology, extend it with reasoners, and use its outputs.
 - By executing PyRel, the agent can then query the ontology to answer questions, resolve issues, or help with setup.
 
+## Prerequisites
+
+**Requires `relationalai` (PyRel) v1.5+**
+
+The RelationalAI Native App for Snowflake must be installed in your account by an administrator.
+
+- Request access [here](https://app.snowflake.com/marketplace/listing/GZTYZOOIX8H/relationalai-relationalai).
+- See the [RAI Native App docs](https://docs.relational.ai/manage/install) for details.
+
+The `rai_developer` role is needed to execute PyRel programs.
+
 ## Quickstart
 
 **Easiest:** point your coding agent at this repo and paste the prompt below.
@@ -85,17 +96,6 @@ Invoke the skills using the `/rai-` command.
 | 11 | [rai-prescriptive-results-interpretation](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-prescriptive-results-interpretation) | Reasoning | Post-solve — solution extraction, status codes, quality, sensitivity |
 | 12 | [rai-cortex-integration](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-cortex-integration) | Operations | Deploy RAI models as Snowflake Cortex Agents |
 | 13 | [rai-health](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-health) | Operations | Diagnose engine performance — memory, CPU, demand metrics, remediation |
-
-## Prerequisites
-
-**Requires `relationalai` (PyRel) v1.2.0+**
-
-The RelationalAI Native App for Snowflake must be installed in your account by an administrator.
-
-- Request access [here](https://app.snowflake.com/marketplace/listing/GZTYZOOIX8H/relationalai-relationalai).
-- See the [RAI Native App docs](https://docs.relational.ai/manage/install) for details.
-
-The `rai_developer` role is needed to execute PyRel programs.
 
 ## Detailed install guides
 
