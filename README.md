@@ -25,6 +25,37 @@ ontologies and advanced reasoners by generating and executing PyRel code**. They
 - Generating PyRel enables the agent to create the RelationalAI ontology, extend it with reasoners, and use its outputs.
 - By executing PyRel, the agent can then query the ontology to answer questions, resolve issues, or help with setup.
 
+## Prerequisites
+
+**Requires `relationalai` (PyRel) v1.5+**
+
+The RelationalAI Native App for Snowflake must be installed in your account by an administrator.
+
+- Request access [here](https://app.snowflake.com/marketplace/listing/GZTYZOOIX8H/relationalai-relationalai).
+- See the [RAI Native App docs](https://docs.relational.ai/manage/install) for details.
+
+The `rai_developer` role is needed to execute PyRel programs.
+
+## What's included
+
+Invoke the skills using the `/rai-` command.
+
+| # | Skill | Area | Description |
+|:--|:------|:-----|:---------------------------------------------------------------------|
+| 1 | [rai-setup](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-setup) | Setup | First-time install, Snowflake connection, and all configuration — `raiconfig.yaml`, authentication, model, reasoners, engines |
+| 2 | [rai-pyrel-coding](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-pyrel-coding) | Development | Language syntax — imports, types, concepts, properties, data loading |
+| 3 | [rai-build-starter-ontology](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-build-starter-ontology) | Ontology | Build a first ontology from Snowflake tables or local data |
+| 4 | [rai-ontology-design](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-ontology-design) | Ontology | Domain modeling — concepts, relationships, data mapping, enrichment |
+| 5 | [rai-rules-authoring](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-rules-authoring) | Ontology | Business rules as PyRel derived properties — validation, classification, alerting |
+| 6 | [rai-querying](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-querying) | Reasoning | Query construction — aggregation, filtering, joins, ordering, export |
+| 7 | [rai-discovery](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-discovery) | Reasoning | Surface answerable questions, classify by reasoner type, route to workflow |
+| 8 | [rai-graph-analysis](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-graph-analysis) | Reasoning | Graph algorithms — centrality, community detection, reachability, similarity |
+| 9 | [rai-prescriptive-problem-formulation](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-prescriptive-problem-formulation) | Reasoning | Formulate optimization — decision variables, constraints, objectives |
+| 10 | [rai-prescriptive-solver-management](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-prescriptive-solver-management) | Reasoning | Solver lifecycle — selection, creation, execution, diagnostics |
+| 11 | [rai-prescriptive-results-interpretation](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-prescriptive-results-interpretation) | Reasoning | Post-solve — solution extraction, status codes, quality, sensitivity |
+| 12 | [rai-cortex-integration](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-cortex-integration) | Operations | Deploy RAI models as Snowflake Cortex Agents |
+| 13 | [rai-health](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-health) | Operations | Diagnose engine performance — memory, CPU, demand metrics, remediation |
+
 ## Quickstart
 
 **Easiest:** point your coding agent at this repo and paste the prompt below.
@@ -65,37 +96,6 @@ For channels with documented admin paths. Rows here complement — not replace �
 | **Claude Code** (managed / enforced) | Deploy `enabledPlugins` (force-enable) and/or `strictKnownMarketplaces` (allowlist) in OS-level `managed-settings.json`                                | Plugins force-enabled org-wide; users cannot disable                               |
 | **Cursor** (Teams/Enterprise)        | Dashboard → Settings → Plugins → Team Marketplaces → **Import**, paste this repo's URL                                                                 | Teammates see **rai** in their Plugins panel; re-import from dashboard to update    |
 | **VS Code / Copilot** (workspace)    | Commit `extraKnownMarketplaces` (and optionally `enabledPlugins`) to `.github/copilot/settings.json` — or reuse `.claude/settings.json` above to cover both channels | VS Code surfaces a notification on first chat message; teammates browse via `@agentPlugins @recommended` in Extensions |
-
-## What's included
-
-Invoke the skills using the `/rai-` command.
-
-| # | Skill | Area | Description |
-|:--|:------|:-----|:---------------------------------------------------------------------|
-| 1 | [rai-setup](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-setup) | Setup | First-time install, Snowflake connection, and all configuration — `raiconfig.yaml`, authentication, model, reasoners, engines |
-| 2 | [rai-pyrel-coding](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-pyrel-coding) | Development | Language syntax — imports, types, concepts, properties, data loading |
-| 3 | [rai-build-starter-ontology](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-build-starter-ontology) | Ontology | Build a first ontology from Snowflake tables or local data |
-| 4 | [rai-ontology-design](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-ontology-design) | Ontology | Domain modeling — concepts, relationships, data mapping, enrichment |
-| 5 | [rai-rules-authoring](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-rules-authoring) | Ontology | Business rules as PyRel derived properties — validation, classification, alerting |
-| 6 | [rai-querying](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-querying) | Reasoning | Query construction — aggregation, filtering, joins, ordering, export |
-| 7 | [rai-discovery](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-discovery) | Reasoning | Surface answerable questions, classify by reasoner type, route to workflow |
-| 8 | [rai-graph-analysis](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-graph-analysis) | Reasoning | Graph algorithms — centrality, community detection, reachability, similarity |
-| 9 | [rai-prescriptive-problem-formulation](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-prescriptive-problem-formulation) | Reasoning | Formulate optimization — decision variables, constraints, objectives |
-| 10 | [rai-prescriptive-solver-management](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-prescriptive-solver-management) | Reasoning | Solver lifecycle — selection, creation, execution, diagnostics |
-| 11 | [rai-prescriptive-results-interpretation](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-prescriptive-results-interpretation) | Reasoning | Post-solve — solution extraction, status codes, quality, sensitivity |
-| 12 | [rai-cortex-integration](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-cortex-integration) | Operations | Deploy RAI models as Snowflake Cortex Agents |
-| 13 | [rai-health](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-health) | Operations | Diagnose engine performance — memory, CPU, demand metrics, remediation |
-
-## Prerequisites
-
-**Requires `relationalai` (PyRel) v1.2.0+**
-
-The RelationalAI Native App for Snowflake must be installed in your account by an administrator.
-
-- Request access [here](https://app.snowflake.com/marketplace/listing/GZTYZOOIX8H/relationalai-relationalai).
-- See the [RAI Native App docs](https://docs.relational.ai/manage/install) for details.
-
-The `rai_developer` role is needed to execute PyRel programs.
 
 ## Detailed install guides
 
