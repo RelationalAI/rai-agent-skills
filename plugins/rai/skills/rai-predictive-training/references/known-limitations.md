@@ -55,7 +55,7 @@ model.define(Train(Sale, TrainTable.unit_sales)).where(...)
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| Re-run reports `model_run_id` from a much-earlier job; prediction hangs at "Step 2/4: Preparing model for prediction" | `gnn.fit()` is a silent no-op when `self.train_job` exists and isn't `FAILED` (`estimator.py:483-490`); `predictions()` then resolves the previous `job_id` (`job_manager.py:132-146`) | Re-instantiate `GNN(...)` on every retry. Bumping `Model("...")` is **not** the right fix — that's the workaround for the cache footgun above |
+| Re-run reports `model_run_id` from a much-earlier job; prediction hangs at "Step 2/4: Preparing model for prediction" | `gnn.fit()` is a silent no-op when `self.train_job` already exists and isn't `FAILED`; `predictions()` then resolves the previous `job_id` | Re-instantiate `GNN(...)` on every retry. Bumping `Model("...")` is **not** the right fix — that's the workaround for the cache footgun above |
 
 ---
 
@@ -63,7 +63,15 @@ model.define(Train(Sale, TrainTable.unit_sales)).where(...)
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `gnn.fit()` polling for an unreasonable amount of time | `JobMonitor._wait_for_completion` (`job_manager.py:332-340`) polls every 5s with no timeout/retry-cap | Kill the client manually. Recover via the QUEUED runbook, re-instantiate `GNN(...)`, resubmit |
+| `gnn.fit()` polling for an unreasonable amount of time | `JobMonitor._wait_for_completion` polls every 5s with no timeout/retry-cap | Kill the client manually. Recover via the QUEUED runbook, re-instantiate `GNN(...)`, resubmit |
+
+---
+
+## `RuntimeError: dictionary changed size during iteration` during `gnn.fit()`
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `RuntimeError: dictionary changed size during iteration` raised mid-`fit()` when a concept that participates in the GNN graph also carries `model.Relationship` cross-pointers | The predictive reasoner iterates `concept._relationships` without a defensive copy while lazy relationship registration mutates the dict mid-loop | Define cross-concept references on GNN-graph concepts as FK **properties** (joined via `==` in edge definitions) instead of `model.Relationship`. The edges still resolve as property-equality conditions and never trigger the relationship walk |
 
 ---
 

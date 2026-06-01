@@ -42,7 +42,7 @@ reasoners:
 
 data:
   wait_for_stream_sync: true           # wait for streams before queries (default true)
-  data_freshness_mins: 5               # allow queries if data is within N mins (default unset = must be fully synced; max 30240 = 3 weeks)
+  data_freshness_mins: 5               # allow queries if data is within N mins (default unset = must be fully synced; max 30240 = 3 weeks). In write→read chains (stage N writes a Snowflake table stage N+1 reads), use 0 to force a graph-index rebuild after each upstream write — otherwise the downstream read can be served from the cached pre-write state
   query_timeout_mins: 10               # client-side timeout (default unset = no timeout)
   ensure_change_tracking: false        # auto-enable change tracking on tables read (default false; requires OWNERSHIP)
   check_column_types: true             # validate column types on load (default true)

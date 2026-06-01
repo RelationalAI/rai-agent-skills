@@ -58,4 +58,4 @@ See the `data:` block in [raiconfig-yaml.md](raiconfig-yaml.md) for the full fie
 **Cautions:**
 - `check_column_types: false` speeds up loading but silently allows type mismatches — keep `true` in CI.
 - `ensure_change_tracking: true` modifies tables (requires OWNERSHIP) — leave `false` unless you intend this side effect.
-- `data_freshness_mins` unset means queries wait until streams are fully synced; setting a value trades freshness for latency.
+- `data_freshness_mins` unset means queries wait until streams are fully synced; setting a value trades freshness for latency. In chained workflows where stage N writes a Snowflake table that stage N+1 reads, the downstream stage's graph-index cache may be served from before the upstream write if the freshness window hasn't elapsed — set `data_freshness_mins: 0` to force a rebuild after each upstream write.

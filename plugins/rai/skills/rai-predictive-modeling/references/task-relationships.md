@@ -9,10 +9,10 @@ Relationships encode the task structure using a template string with three parts
 
 | Task Type | Train/Val template | Test template |
 |-----------|-------------------|---------------|
-| classification | `f"{Source} has {Any:label}"` (add `at {Any:ts}` if task table has time column) | `f"{Source}"` (add `at {Any:ts}` if task table has time column) |
-| regression | `f"{Source} has {Any:value}"` (add `at {Any:ts}` if task table has time column) | `f"{Source}"` (add `at {Any:ts}` if task table has time column) |
-| link_prediction | `f"{Source} has {Target}"` (add `at {Any:ts}` if task table has time column) | `f"{Source}"` (add `at {Any:ts}` if task table has time column) |
-| repeated_link_prediction | `f"{Source} has {Target}"` (add `at {Any:ts}` if task table has time column) | `f"{Source}"` (add `at {Any:ts}` if task table has time column) |
+| `binary_classification`, `multiclass_classification`, `multilabel_classification` | `f"{Source} has {Any:label}"` (add `at {Any:ts}` if task table has time column) | `f"{Source}"` (add `at {Any:ts}` if task table has time column) |
+| `regression` | `f"{Source} has {Any:value}"` (add `at {Any:ts}` if task table has time column) | `f"{Source}"` (add `at {Any:ts}` if task table has time column) |
+| `link_prediction` | `f"{Source} has {Target}"` (add `at {Any:ts}` if task table has time column) | `f"{Source}"` (add `at {Any:ts}` if task table has time column) |
+| `repeated_link_prediction` | `f"{Source} has {Target}"` (add `at {Any:ts}` if task table has time column) | `f"{Source}"` (add `at {Any:ts}` if task table has time column) |
 
 ## Node Classification (with time)
 

@@ -39,7 +39,7 @@ gnn = GNN(
     graph=gnn_graph, property_transformer=pt,
     train=Train, validation=Val,
     task_type="binary_classification", eval_metric="roc_auc",
-    has_time_column=True, device="cuda", n_epochs=5, seed=42,
+    has_time_column=True, device="cuda", seed=42,
 )
 gnn.fit()
 User.predictions = gnn.predictions(domain=Test)
@@ -60,9 +60,9 @@ User.predictions = gnn.predictions(domain=Test)
 
 | Task Type | Attributes |
 |-----------|-----------|
-| classification | `.probs`, `.predicted_labels` |
-| regression | `.predicted_value` |
-| link prediction | `.rank`, `.scores`, `.predicted_<target>` |
+| `binary_classification`, `multiclass_classification`, `multilabel_classification` | `.probs`, `.predicted_labels` |
+| `regression` | `.predicted_value` |
+| `link_prediction`, `repeated_link_prediction` | `.rank`, `.scores`, `.predicted_<target>` |
 
 ---
 
@@ -85,8 +85,8 @@ User.predictions = gnn.predictions(domain=Test)
 | `property_transformer` | None | PropertyTransformer instance (omit for auto-inference) |
 | `has_time_column` | False | Set `True` if the task table contains a time column. See § Triple-coupling rule below. |
 | `dataset_alias` | None | Custom alias for the dataset |
-| `stream_logs` | True | Stream training logs to console. Set `False` if log streaming is slow or unreliable — training continues server-side regardless |
-| `parallel_reasoners_init` | True | Initialize reasoners in parallel at construction time |
+
+Operational flags (`stream_logs`, `parallel_reasoners_init`, `use_current_time`, `test_batch_size`) are documented in [references/hyperparameters.md](references/hyperparameters.md) § GNN constructor operational flags.
 
 ### Triple-coupling rule for `has_time_column`
 
@@ -108,7 +108,8 @@ gnn = GNN(
     task_type="binary_classification",
     eval_metric="roc_auc",
     has_time_column=True,
-    device="cuda", n_epochs=5, lr=0.005, seed=42,
+    device="cuda", seed=42,
+    # Sweep n_epochs/lr from defaults (10 / 0.001) if learning is flat
 )
 gnn.fit()
 ```
@@ -123,8 +124,9 @@ gnn = GNN(
     task_type="repeated_link_prediction",
     eval_metric="link_prediction_precision@5",
     has_time_column=True,
-    device="cuda", n_epochs=5, lr=0.005, seed=42,
-    head_layers=2, num_negative=20, label_smoothing=True,
+    device="cuda", seed=42,
+    head_layers=2,           # deeper head helps rank quality (default 1)
+    label_smoothing=True,    # skill recommends True for link prediction (library default False)
 )
 gnn.fit()
 ```
@@ -160,12 +162,14 @@ gnn.fit()
 
 ## Common Hyperparameters
 
+The full hyperparameter reference (every `TrainerConfig` field, library defaults, and typical-override examples) lives in [references/hyperparameters.md](references/hyperparameters.md). The most common knobs and their library defaults:
+
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `device` | `"cuda"` | `"cuda"` (GPU) or `"cpu"` |
-| `n_epochs` | 5 | Number of training epochs |
-| `lr` | 0.005 | Learning rate |
-| `train_batch_size` | 256 | Training batch size |
+| `n_epochs` | 10 | Number of training epochs |
+| `lr` | 0.001 | Learning rate |
+| `train_batch_size` | 128 | Training batch size |
 
 For link prediction, also consider: `head_layers=2`, `num_negative=20`, `label_smoothing=True`.
 

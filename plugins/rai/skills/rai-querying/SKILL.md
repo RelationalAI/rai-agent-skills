@@ -210,7 +210,27 @@ model.where(Shipment.supplier(Site), Shipment.destination(Site)).select(
 
 When a query touches multiple relationships through a shared concept and the numbers feel high, suspect this first.
 
-### 5. String-equality filter on a value the data doesn't have → empty result, no error
+### 5. `.per(FK_property)` cartesian-inflates when the bare Concept is bound elsewhere
+
+A Concept-typed FK property (`Order.customer`) introduces an anonymous Customer iterator, separate from the bare `Customer` bound by `where(Order.customer(Customer))`. Aggregating with `.per(Order.customer)` while selecting `Customer.name` cartesian-multiplies rows.
+
+```python
+# WRONG — .per(Order.customer) doesn't unify with bound Customer in select.
+model.where(Order.customer(Customer)).select(
+    Customer.name.alias("customer"),
+    aggs.sum(Order.amount).per(Order.customer).alias("total"),
+).to_df()
+
+# CORRECT — bare Concept as both select and .per() key.
+model.where(Order.customer(Customer)).select(
+    Customer.name.alias("customer"),
+    aggs.sum(Order.amount).per(Customer).alias("total"),
+).to_df()
+```
+
+Looks like missing `distinct()` (corruption #2) but `distinct()` won't fix it.
+
+### 6. String-equality filter on a value the data doesn't have → empty result, no error
 
 The user's question is phrased in their vocabulary; the data uses whatever spelling and casing the source system stored. `Order.status == "Active"` returns zero rows if the column actually holds `"ACTIVE"` or `"active_orders"`. Stack two or three of these silent mismatches in one query and the join collapses to nothing, with no error — the agent then assumes the join itself is broken and divide-and-conquers for many turns.
 
@@ -348,7 +368,7 @@ model.select(aggs.count(Customer).alias("at_risk")).where(
 
 ## Debugging Queries
 
-**Wrong values?** Check silent corruptions #1–4 above. Order of suspicion: missing alias → missing distinct → dot-chain binding → cartesian inflation.
+**Wrong values?** Check silent corruptions #1–5 above. Order of suspicion: missing alias → missing distinct → dot-chain binding → cartesian inflation (multi-relationship or `.per(FK_property)`).
 
 **Empty DataFrame?** Triage in this order — the join itself is rarely the cause:
 
@@ -385,6 +405,7 @@ One-liner gotchas that don't justify a Silent Corruption prose treatment but wil
 | `Property.exists()` raises `RAIException` | `Concept.prop.exists()` — `Cannot access relationships on core concept 'Float'` | Use ref binding: `r = Float.ref(); model.where(Concept.prop(r)).select(r.alias("v"))` |
 | `.where()` on a bare Concept fails | `Site.where(...)` doesn't work | `.where()` lives on the model, aggregations, constraints, or definitions — not on bare concepts |
 | Mixing bare select with `distinct()` | `select(X.name, distinct(X.cat))` — runtime error | Wrap ALL columns in `distinct()` or none |
+| Integer aggregate (`aggs.count`, `aggs.sum` of Integer) returned as `Int128Array` — pandas reductions fail | `df["n"].sum()` / `df["n"].iloc[0]` / `df.groupby(...).sum()` raise `TypeError: 'Int128Array' with dtype Int128 does not support reduction 'sum'` (or surface as `KeyError`/wrong values via `.iloc[]`) | First check whether `to_df()` is even needed — if the value feeds another RAI query or derived property, compose inline (see Query Basics § default reflex). If pandas is the final consumer, cast immediately: `df["n"] = df["n"].astype(int)` |
 
 ---
 

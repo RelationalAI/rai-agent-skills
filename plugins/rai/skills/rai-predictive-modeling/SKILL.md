@@ -194,16 +194,7 @@ Relationships encode the task structure using a template string with three parts
 - **"at" clause** = timestamp field (required if the task table contains a time column, otherwise omit)
 - **"has" clause** = label (classification/regression) or target concept (link prediction)
 
-### Relationship Arity Rules
-
-| Task Type | Train/Val template | Test template |
-|-----------|-------------------|---------------|
-| classification | `f"{Source} has {Any:label}"` (add `at {Any:ts}` if task table has time column) | `f"{Source}"` (add `at {Any:ts}` if task table has time column) |
-| regression | `f"{Source} has {Any:value}"` (add `at {Any:ts}` if task table has time column) | `f"{Source}"` (add `at {Any:ts}` if task table has time column) |
-| link_prediction | `f"{Source} has {Target}"` (add `at {Any:ts}` if task table has time column) | `f"{Source}"` (add `at {Any:ts}` if task table has time column) |
-| repeated_link_prediction | `f"{Source} has {Target}"` (add `at {Any:ts}` if task table has time column) | `f"{Source}"` (add `at {Any:ts}` if task table has time column) |
-
-For full code examples of all task type patterns, see [references/task-relationships.md](references/task-relationships.md).
+For per-task-type Relationship Arity Rules and full code examples, see [references/task-relationships.md](references/task-relationships.md).
 
 ---
 
@@ -339,6 +330,7 @@ For the full feature type reference including drop patterns, see [references/pro
 | Train/Val/Test Relationships have different schemas | Test omits the label but also changes concept or timestamp structure | Train, Val, and Test must share the same concept and timestamp structure — only the label/target is omitted in Test |
 | Link prediction join key or target column is `VARIANT` in task table | Task table stores target IDs as an array instead of one row per pair | Run `DESCRIBE TABLE` on all three split tables before writing task relationships; see `references/task-relationships.md` § Link Prediction — Task Table Format Requirements (VARIANT check) for the joined-vs-non-joined branch and the `LATERAL FLATTEN` recipe |
 | Graph topology is only same-entity temporal-lag edges (no heterogeneous edges across concept types) | The GNN's value is message-passing across different entity kinds; lag-only chains carry no signal beyond what shifted/lag features in a tabular model already capture | Add heterogeneous edges across concept types, or re-scope as time-series/tabular regression outside RAI (optionally loaded as `pre_computed` for downstream reasoners) |
+| `model.data(df)` raises `KeyError: 0` | Type inference does a label-based lookup `df[col][0]`, which fails when the DataFrame index doesn't include 0 (typical after `df.iloc[N:M]` or `df.sample()` slicing for train/val/test splits) | Call `.reset_index(drop=True)` on every sliced split before `model.data()`: `m.data(val_df.reset_index(drop=True))` |
 
 ---
 

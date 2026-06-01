@@ -164,7 +164,14 @@ df = model.select(
 - **Continuous variables:** Filter with `> 1e-6` to remove near-zero solver noise
 - **Scalar extraction:** `problem.solve_info().objective_value` for single values (no query needed)
 - **Always alias:** Use `.alias()` on every output column for clean DataFrames
-- **Int128 handling:** RAI may return `Int128Array` (nullable). Cast with `.astype(float)` before filtering or `.groupby().agg()`.
+- **Int128 handling:** Integer aggregates (`aggs.count`, `aggs.sum` over Integer) and integer-typed solver columns return as nullable `Int128Array` — pandas reductions raise `TypeError` without a cast. Inline the cast at extraction time, not later:
+  ```python
+  df = model.select(
+      Route.name.alias("route"),
+      aggs.count(Trip).per(Route).alias("trips"),   # Integer aggregate → Int128Array
+  ).to_df()
+  df["trips"] = df["trips"].astype("int64")   # Cast before .sum() / .groupby().agg() / .iloc[]
+  ```
 
 For per-pattern variations (multiple solutions, iterative solving, scenario/parametric extraction, full `Variable.values()` back-pointer naming rules with table of examples, silent-failure warnings, and Snowflake table export), see [references/solution-extraction-details.md](references/solution-extraction-details.md).
 
