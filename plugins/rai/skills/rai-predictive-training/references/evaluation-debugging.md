@@ -99,8 +99,8 @@ No single number describes quality. Before trusting predictions, look at:
   Pattern (warn-not-block — keeps the pipeline running while flagging suspicious output):
 
   ```python
-  df = select(Source.id, Source.predictions.<attr>).where(Source.predictions).to_df()
-  col = df["<attr>"]
+  df = select(Source.id, Source.predictions.predicted_value).where(Source.predictions).to_df()
+  col = df["predicted_value"]
   if col.isna().any() or (col < 0).any():       # adjust bounds per task type
       print(f"WARNING: {Source.__name__} predictions contain NaN or out-of-range values")
   ```

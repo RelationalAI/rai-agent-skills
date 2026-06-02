@@ -48,7 +48,7 @@ All four grants are required. Then pass the same database and schema to the GNN 
 gnn = GNN(
     exp_database="<YOUR_DB>",
     exp_schema="<YOUR_SCHEMA>",
-    ...
+    # ... other args (graph=, property_transformer=, train=, validation=, task_type=)
 )
 ```
 
@@ -272,7 +272,7 @@ The `integer` parameter is a distinct type from `continuous` -- use it for whole
 pt = PropertyTransformer(
     integer=[Review.num_votes, Standing.position],
     continuous=[Review.rating, Result.points],
-    ...
+    # ... other feature lists
 )
 ```
 
@@ -300,7 +300,7 @@ model.define(Source.pagerank(graph_algo_result))
 # Include as a continuous (or category) feature
 pt = PropertyTransformer(
     continuous=[Source.pagerank, ...],
-    ...
+    # ... other feature lists
 )
 ```
 
