@@ -1,4 +1,11 @@
 <!-- TOC -->
+- [Native Marginals (LP/QP Duals)](#native-marginals-lpqp-duals)
+  - [Reading marginals off the returned objects](#reading-marginals-off-the-returned-objects)
+  - [Shadow price economics](#shadow-price-economics)
+  - [Reduced cost & complementary slackness](#reduced-cost--complementary-slackness)
+  - [Basis status](#basis-status)
+  - [Strong-duality reconstruction](#strong-duality-reconstruction)
+  - [Sign convention & scope limits](#sign-convention--scope-limits)
 - [Sensitivity Analysis](#sensitivity-analysis)
   - [What-If Framing for Stakeholders](#what-if-framing-for-stakeholders)
   - [Which Parameters to Vary](#which-parameters-to-vary)
@@ -15,9 +22,67 @@
   - [Key Metrics](#key-metrics)
 <!-- /TOC -->
 
+## Native Marginals (LP/QP Duals)
+
+`solve(sensitivity=True)` populates LP/QP **dual** information directly on the objects `solve_for()` and `satisfy()` return. These are *exact* marginals at the optimum — read them like any other attribute (`.name`), single-valued, joined to their entity by the back-pointer key. **LP/QP only**: a MIP returns empty marginals and fires a warning (an integer program has no meaningful duals); interior-point solvers (Ipopt) populate `reduced_cost` / `shadow_price` but **not** `basis_status`. There is **no coefficient or RHS ranging** — a marginal is the rate at the optimum, not the interval over which that rate holds.
+
+### Reading marginals off the returned objects
+
+```python
+# A continuous variable per Activity, a resource-capacity constraint family named per Resource:
+acts = problem.solve_for(Activity.level, name=Activity.name, lower=0)
+cap = problem.satisfy(model.require(usage <= Resource.capacity), name=["cap", Resource.name])
+problem.solve("highs", sensitivity=True)
+
+model.select(acts.activity.name, acts.reduced_cost, acts.basis_status).inspect()
+model.select(cap.resource.name, cap.resource.capacity, cap.shadow_price).inspect()
+```
+
+The **key-join idiom** — `cap.resource` is the constraint's entity back-pointer — pairs each marginal with the entity it grounds, so you never parse the constraint's name string. It depends on each constraint-family instance being named distinctly at formulation time (`name=["cap", Resource.name]`); see `rai-prescriptive-problem-formulation/references/constraint-formulation.md`.
+
+### Shadow price economics
+
+`con.shadow_price` is ∂(objective) / ∂(constraint RHS) — what one more unit of the constraint's right-hand side is worth at the optimum.
+
+- A constraint with **slack** (not binding) has `shadow_price == 0` — *always*. Loosening a constraint that isn't binding changes nothing.
+- A **binding** constraint **usually** has a non-zero shadow price, but **not always**: under degeneracy a binding constraint can price at zero. Don't encode "binding ⇒ non-zero shadow price" as a law.
+
+### Reduced cost & complementary slackness
+
+`var.reduced_cost` is the objective marginal on the variable's bound. Complementary slackness links it to whether the variable is in use, but **only some directions are safe to assert**:
+
+- **Always true:** `in use (strictly between bounds) ⇒ reduced_cost ≈ 0`, and `reduced_cost > 0 ⇒ the variable sits at a bound (unused)`.
+- **Not always true:** the converse `unused ⇒ reduced_cost > 0` holds **only under a unique optimum**. Under alternate optima / degeneracy an unused option can have `reduced_cost ≈ 0`.
+
+> **Caveat — the complementary-slackness converse is unsafe.** When turning these into integrity constraints, assert only the two always-true directions above. A model with a unique optimum may let you assert `unused ⇒ reduced_cost > 0`, but treat that as the special case, not the rule — a copied IC will fail on a degenerate model where an unused option is priced at zero.
+
+### Basis status
+
+`var.basis_status` / `con.basis_status` report the MOI basis (`"BASIC"`, `"NONBASIC_AT_LOWER"`, `"NONBASIC_AT_UPPER"`, …) — which variables / constraints define the current vertex. **Absent for interior-point solvers (Ipopt)**, which don't maintain a simplex basis; use `reduced_cost` / `shadow_price` for marginals there, or pick a simplex solver if you specifically need the basis.
+
+### Strong-duality reconstruction
+
+At an LP optimum the objective equals the sum of each binding constraint's `shadow_price × RHS` — you can reconstruct (and sanity-check) the objective relationally by summing the priced RHS through the key:
+
+```python
+# Σ shadow_price × RHS over the constraint family, joined by the entity key:
+model.select(aggs.sum(cap.shadow_price * cap.resource.capacity)).inspect()
+```
+
+> **Caveat — reconstruction needs a Float RHS.** This works when the RHS property is `Float`. A `Float` `shadow_price` multiplied by an **Integer** RHS can trip a typer mismatch (`Number(38,0)` vs `Float`). Treat the reconstruction as illustrative for Float-RHS models; for Integer-RHS data, keep integrity constraints additive / threshold-only rather than multiplying price × integer RHS.
+
+### Sign convention & scope limits
+
+- **Sign follows the objective sense** (min vs. max), uniform across `≤` / `≥` / `=` constraints — don't infer the sign from the constraint's direction or from which bound is active.
+- **Local & first-order:** marginals describe the rate at the current optimum only. There is no ranging, so they don't tell you how far a change preserves the rate — past a basis change the marginal itself changes.
+- **Degeneracy:** at a degenerate optimum duals need not be unique; two valid solves can report different (equally correct) marginals.
+- For finite changes, structural shifts, or MIP models, use the scenario / what-if methods below instead — duals can't capture them.
+
+---
+
 ## Sensitivity Analysis
 
-For implementation patterns (Scenario Concept for parameter variations, Loop + `where=[]` for entity exclusion), see `rai-prescriptive-problem-formulation/references/scenario-analysis.md`. This reference focuses on **interpretation** of scenario results — comparison tables, critical-parameter identification, and Pareto frontier explanation.
+For implementation patterns (Scenario Concept for parameter variations, Loop + `where=[]` for entity exclusion), see `rai-prescriptive-problem-formulation/references/scenario-analysis.md`. This reference focuses on **interpretation** of scenario results — comparison tables, critical-parameter identification, and Pareto frontier explanation. For *exact marginals at the optimum* (LP/QP duals), see Native Marginals above.
 
 ### What-If Framing for Stakeholders
 

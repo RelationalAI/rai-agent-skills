@@ -69,7 +69,7 @@ Branch by status:
 | Status | What it means | Diagnostic move |
 |---|---|---|
 | `OPTIMAL` / `LOCALLY_SOLVED` | Solver claims a solution | If values look right, run `verify`. If suspicious (all-zero, concentrated, dominated), suspect a missing forcing constraint, an unbound coefficient, or a per-entity constraint that grounded for fewer entities than expected — display each constraint and objective ref |
-| `INFEASIBLE` | No feasible point | Walk `problem.constraints` with targeted display; identify the binding conflict; rebuild Problem omitting or relaxing the offender (see [fix-generation-guidelines.md](fix-generation-guidelines.md) > Infeasible Solution) |
+| `INFEASIBLE` | No feasible point | Localize with `solve(conflict=True)` (IIS) — one solve returns the minimal conflicting subset of constraints / bounds; then rebuild the Problem omitting or relaxing a member (see below and [fix-generation-guidelines.md](fix-generation-guidelines.md) > Infeasible Solution). Manual constraint-walking is the fallback when the solver reports `NOT_SUPPORTED` |
 | `TIME_LIMIT` / `ITERATION_LIMIT` | Solver gave up | Distinct from formulation bug — see `rai-prescriptive-solver-management` |
 | Status unset / `error` non-empty | Solver rejected the model | Read `si.error`; common causes are unsupported expression types, type mismatches, solver-specific syntax limits. If `si.error` is also empty, the formulation failed before the solver received it — check stderr for `ModelWarning` or `RAIException`. |
 
@@ -98,7 +98,18 @@ Pass the original fragments (the values you handed to `model.require`) — not t
 
 ## INFEASIBLE: localizing the conflict
 
-When `si.termination_status == "INFEASIBLE"`, walk the constraints and inspect their grounded forms:
+When `si.termination_status == "INFEASIBLE"`, the first move is `solve(conflict=True)` — one solve returns the **conflict (IIS)**: a minimal subset of constraints and variable bounds that cannot all hold. It needs no objective and works on MIP. Read the members joined to their entity by key:
+
+```python
+problem.solve("highs", conflict=True)
+si = problem.solve_info()
+if si.conflict_status == "CONFLICT_FOUND":
+    model.select(floor.region.name, floor.region.demand).where(floor.in_conflict).inspect()
+```
+
+The IIS is a subset to inspect or relax — **not necessarily a single offending `satisfy()`**. Relaxing one member restores feasibility for *that* conflict; if other independent conflicts remain the model is still infeasible, so **re-solve to confirm**. For the full membership / `conflict_status` reading, see `rai-prescriptive-results-interpretation/references/conflict-analysis.md`.
+
+**Fallback — manual constraint-walking** (when `conflict_status` is `NOT_SUPPORTED` on the chosen solver, or `FAILED`): walk the constraints and inspect their grounded forms:
 
 ```python
 for c in problem.constraints:

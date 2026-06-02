@@ -11,6 +11,7 @@
 - [Constraint Modeling Patterns](#constraint-modeling-patterns)
   - [Balance constraints](#balance-constraints)
   - [Concept-variable matching in constraints](#concept-variable-matching-in-constraints)
+  - [Naming constraint families for post-solve readback](#naming-constraint-families-for-post-solve-readback)
   - [Capacity limits and binary activation (big-M)](#capacity-limits-and-binary-activation-big-m)
   - [Historical comparison / tolerance band constraints](#historical-comparison--tolerance-band-constraints)
   - [Proportional / fair-share constraints](#proportional--fair-share-constraints)
@@ -359,6 +360,27 @@ problem.satisfy(model.require(sum(DecisionConcept.x_assigned).per(BaseConcept) >
 ```
 
 **To link to base model entities**, navigate via relationships defined on the decision concept (e.g., `DecisionConcept.entity_a`, `DecisionConcept.entity_b`), not by referencing the variable on the base concept.
+
+### Naming constraint families for post-solve readback
+
+A **constraint family** is one logical constraint instantiated per entity — a capacity limit per Resource, a coverage floor per Shift, a nutrient bound per Nutrient. How you *name* each instance at formulation time determines whether you can read its post-solve marginal (`shadow_price`) or conflict membership (`in_conflict`) back **paired with the entity it grounds**.
+
+`satisfy()` returns a `ProblemConstraint` that carries an **entity back-pointer** — `con.<entity>` — mirroring the variable back-pointer on `solve_for()`. That back-pointer is what joins a marginal or IIS flag to entity data by key (`cap.resource.capacity`) instead of parsing a constraint name string. But it only distinguishes instances if each instance is **named distinctly**:
+
+```python
+# Name each family instance with the entity key so the back-pointer is per-instance:
+cap = problem.satisfy(
+    model.require(usage <= Resource.capacity), name=["cap", Resource.name]
+)
+problem.solve("highs", sensitivity=True)
+
+# The marginal now reads back joined to its Resource:
+model.select(cap.resource.name, cap.resource.capacity, cap.shadow_price).inspect()
+```
+
+A **shared or absent name** leaves the instances indistinguishable — the back-pointer can't tell them apart, so a marginal or conflict flag can't be paired with its entity. Use a stable key from the grounding entity (`Entity.name` or `Entity.id`) — the same `name=["cap", Entity.id]` form Rule 6 (Constraint Join Patterns) recommends for `problem.display()` readability.
+
+This is the formulation-time bridge for the post-solve readback patterns in `rai-prescriptive-results-interpretation` (Sensitivity & conflict attributes, plus its sensitivity-analysis.md and conflict-analysis.md references).
 
 ### Capacity limits and binary activation (big-M)
 

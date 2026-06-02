@@ -1,6 +1,6 @@
 ---
 name: rai-prescriptive-solver-management
-description: Covers solver lifecycle including problem type classification, solver selection and creation, global constraints, pre-solve validation, solve execution, and solver-level diagnostics. Use when configuring or running optimization solvers, not for interpreting post-solve results.
+description: Covers solver lifecycle including problem type classification, solver selection and creation, global constraints, pre-solve validation, solve execution (including requesting sensitivity and conflict / IIS diagnostics), and solver-level diagnostics. Use when configuring or running optimization solvers, not for interpreting post-solve results (see rai-prescriptive-results-interpretation).
 ---
 
 # Solver Management
@@ -269,6 +269,8 @@ For prescriptive-context compile errors (entity reference passed as scalar, zero
 
 Status interpretation and prose-level diagnosis live in `rai-prescriptive-results-interpretation` > Status Interpretation (the natural reading order is status → diagnose → fix). The structured diagnostic codes that map status to fix-action types — `unbounded_variable`, `missing_upper_bound`, `penalty_structure`, `constraint_conflict`, `capacity_mismatch` — live here in [diagnostic-taxonomy.md](references/diagnostic-taxonomy.md), since they're a solver-side classification used to drive automated fix routing.
 
+For an infeasible model, `solve(conflict=True)` is the structured first-line localizer — one solve returns the minimal conflicting subset (IIS) of constraints and variable bounds, replacing manual bisection (the `constraint_conflict` code maps to its `in_conflict` membership). Read the membership and act on `conflict_status` per `rai-prescriptive-results-interpretation` > Sensitivity & conflict attributes (and its conflict-analysis.md reference).
+
 For `si.error` and `print_format=` semantics, see Solve Execution and the solve-info table below in this skill. For solver-log patterns and numerical-error categorization, see [numerical-and-mip.md](references/numerical-and-mip.md).
 
 ---
@@ -315,6 +317,8 @@ These parameters are solver-independent and work with any solver:
 | `log_to_console` | bool | Stream solver logs to the console during solve |
 | `print_only` | bool | Print the solver model without actually solving |
 | `print_format` | str | Request text representation: `"moi"`, `"latex"`, `"mof"`, `"lp"`, `"mps"`, `"nl"` |
+| `sensitivity` | bool | Populate post-solve duals (`reduced_cost`, `shadow_price`, `basis_status`). LP/QP only; requires an objective; not with `solution_limit` or `print_only` |
+| `conflict` | bool | Populate a conflict / IIS diagnosis for an infeasible model (`con.in_conflict`, `var.*_in_conflict`, `solve_info().conflict_status`). No objective required; not with `print_only` |
 
 ```python
 # Solver-independent options (portable across all solvers)
@@ -326,6 +330,17 @@ problem.solve("minizinc", solution_limit=10)          # Multiple solutions
 problem.solve("highs", print_format="lp", print_only=True)
 print(problem.solve_info().printed_model)  # Access the text representation
 ```
+
+**`sensitivity` and `conflict` preconditions.** `sensitivity=True` returns the optimal solution *and* its duals in one solve — it needs an objective, is LP/QP only (a MIP returns empty duals and fires a warning; interior-point solvers like Ipopt populate marginals but no `basis_status`), and is incompatible with `solution_limit` and `print_only`. `conflict=True` needs **no** objective (it works on pure-feasibility models and on MIP) and is incompatible with `print_only`. Request either on the solve whose results you'll read — they're solve options, not post-processing steps.
+
+```python
+# Duals (LP/QP, needs an objective):
+problem.solve("highs", sensitivity=True)
+# Conflict / IIS for an infeasible model (no objective required):
+problem.solve("highs", conflict=True)
+```
+
+Read the populated attributes per `rai-prescriptive-results-interpretation` > Sensitivity & conflict attributes; which solvers yield duals / basis / IIS is in [solver-parameters.md](references/solver-parameters.md).
 
 Solver-specific parameters (HiGHS, Gurobi, Ipopt kwargs), tuning guidance, cloud pipeline details, re-solve behavior, warm starting, and scenario analysis patterns are in [solver-parameters.md](references/solver-parameters.md).
 

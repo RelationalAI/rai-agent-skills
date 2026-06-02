@@ -104,7 +104,11 @@ The root cause is **over-constraining** — conflicting or too-tight constraints
 
 **RELAXATION-FIRST APPROACH:**
 This formulation was built with comprehensive constraint selection but the solver found NO feasible solution.
-The constraints are mutually contradictory or over-restrictive. Before adding anything, identify which constraint to relax or drop by walking each constraint's grounded form:
+The constraints are mutually contradictory or over-restrictive. Before adding anything, localize what to relax or drop.
+
+**Localize with `solve(conflict=True)` first.** One solve returns the conflict (IIS): a minimal subset of constraints and variable bounds that can't all hold, read via `in_conflict` and joined to the entity by key. It points at the members to relax — though not necessarily a single offending `satisfy()`, and relaxing one may leave other independent conflicts, so re-solve to confirm. See `rai-prescriptive-results-interpretation/references/conflict-analysis.md`.
+
+**Fallback** (solver reports `conflict_status == "NOT_SUPPORTED"` / `FAILED`) — walk each constraint's grounded form:
 
 ```python
 for c in problem.constraints:

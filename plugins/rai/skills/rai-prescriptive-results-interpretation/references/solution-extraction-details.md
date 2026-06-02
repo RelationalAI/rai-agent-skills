@@ -3,6 +3,7 @@
 ## Table of Contents
 - [Querying Solution Values — Full Patterns](#querying-solution-values--full-patterns)
 - [Variable.values() Back-Pointer Naming Rule](#variablevalues-back-pointer-naming-rule)
+- [Constraint Back-Pointer Access (marginals & conflict membership)](#constraint-back-pointer-access-marginals--conflict-membership)
 - [Silent-Failure Warnings](#silent-failure-warnings)
 - [Exporting Solution Results to Tables](#exporting-solution-results-to-tables)
 - [Multiple Solutions](#multiple-solutions)
@@ -85,6 +86,28 @@ Each **non-value** field in the Property's format string becomes a back-pointer 
 | `f"{Float:x}"` | none — call `var.values(sol_idx, val)` directly | `x` |
 
 The lowercased type name is the type name converted to lowercase **as-is** — no underscores or snake_case conversion. `MachinePeriod` becomes `machineperiod`, not `machine_period`.
+
+---
+
+## Constraint Back-Pointer Access (marginals & conflict membership)
+
+`satisfy()` returns a `ProblemConstraint` — a Concept, like the `ProblemVariable` from `solve_for()`. When you request `sensitivity=True` or `conflict=True`, the marginal and membership attributes read **straight off it**, single-valued (no `sol_index`):
+
+- `con.shadow_price`, `con.basis_status` — populated by `sensitivity=True`
+- `con.in_conflict` — populated by `conflict=True`
+
+It also carries an **entity back-pointer** to the entity it grounds, mirroring the variable back-pointer. That lets a marginal or conflict flag **join to entity data by key** (`con.entity.prop`) instead of parsing the constraint's name string. The back-pointer attribute name follows the **same rule as variables** above — the explicit `name=` part if present, otherwise the lowercased type name.
+
+```python
+# Constraint family: one capacity limit per Resource, each instance named distinctly:
+cap = problem.satisfy(model.require(usage <= Resource.capacity), name=["cap", Resource.name])
+problem.solve("highs", sensitivity=True)
+
+# The entity back-pointer (cap.resource) joins the marginal to its entity by key:
+model.select(cap.resource.name, cap.resource.capacity, cap.shadow_price).inspect()
+```
+
+**Per-instance naming is required for families.** A constraint **family** — one logical constraint instantiated per entity (a capacity limit per Resource, a coverage floor per Shift) — only exposes a usable per-instance back-pointer if **each instance is named distinctly** at formulation time (`name=["cap", Resource.name]`). A shared or absent name leaves the instances indistinguishable, so the marginal / conflict flag can't be paired with its entity. The authoritative formulation idiom lives in `rai-prescriptive-problem-formulation/references/constraint-formulation.md`.
 
 ---
 

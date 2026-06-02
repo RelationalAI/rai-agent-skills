@@ -1,6 +1,6 @@
 ---
 name: rai-prescriptive-problem-formulation
-description: Formulates optimization problems from ontology models covering decision variables, constraints, objectives, and common patterns. Use when building, reviewing, or debugging a formulation.
+description: Formulates optimization problems from ontology models covering decision variables, constraints, objectives, and common patterns. Use when building, reviewing, debugging, or relaxing an over-constrained formulation to resolve a reported conflict / IIS — not for interpreting or diagnosing solve results, marginals, or conflicts themselves (see rai-prescriptive-results-interpretation).
 ---
 
 # Problem Formulation
