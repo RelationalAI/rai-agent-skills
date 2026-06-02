@@ -21,6 +21,7 @@
     "longDescription": "Use RelationalAI skills in Codex for ontology design, PyRel authoring, querying, graph analysis, optimization, and Cortex integration.",
     "developerName": "RelationalAI",
     "category": "Coding",
+    "logo": "./assets/logo.png",
     "capabilities": [
       "Interactive",
       "Write"
