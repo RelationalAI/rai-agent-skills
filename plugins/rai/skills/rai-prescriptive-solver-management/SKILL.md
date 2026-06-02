@@ -245,14 +245,14 @@ See [formulation-display.md](references/formulation-display.md) for display outp
 
 ## Pre-Solve Validation
 
-Run five checks before calling `problem.solve()`: (1) entity population — `problem.num_variables() > 0`; (2) constraint population — `problem.num_constraints() > 0` with at least one forcing constraint; (3) objective — exactly one `minimize`/`maximize`; (4) data integrity — no nulls, no negatives in costs/capacities, total capacity >= total demand; (5) formulation structure via `problem.display()`.
+Run five checks before calling `problem.solve()`: (1) entity population — `problem.num_variables() > 0`; (2) constraint population — `problem.num_constraints() > 0` with at least one forcing constraint; (3) objective — exactly one `minimize`/`maximize` for an optimization (or `sensitivity=True`) solve, **zero** for a pure feasibility / CSP / `conflict=True` solve; (4) data integrity — no nulls, no negatives in costs/capacities, total capacity >= total demand; (5) formulation structure via `problem.display()`.
 
 ```python
 # Minimum pre-solve checklist
 problem.display()
 model.require(problem.num_variables() > 0)
 model.require(problem.num_constraints() > 0)
-model.require(problem.num_min_objectives() + problem.num_max_objectives() == 1)
+model.require(problem.num_min_objectives() + problem.num_max_objectives() == 1)  # optimization/sensitivity; use == 0 for feasibility/CSP/conflict
 ```
 
 See [pre-solve-validation.md](references/pre-solve-validation.md) for full checks, diagnostic queries, and data integrity patterns.

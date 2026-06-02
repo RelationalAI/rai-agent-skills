@@ -105,7 +105,7 @@ Before solving, verify the formulation looks correct:
 
 1. **Variable count** -- does `problem.num_variables()` match expected? Missing variables often indicate `where=` conditions that filter too aggressively.
 2. **Constraint count** -- does `problem.num_constraints()` match expected? Fewer constraints may mean `model.require()` or `problem.satisfy()` calls produced empty constraint sets — typically a `.where()` that matches nothing.
-3. **Objective count** -- exactly one `problem.minimize()` or `problem.maximize()` call per Problem.
+3. **Objective count** -- exactly one `problem.minimize()` or `problem.maximize()` call for an optimization (or `sensitivity=True`) Problem; **zero** for a pure feasibility / CSP / `conflict=True` Problem.
 4. **Display inspection** -- `problem.display()` shows the mathematical formulation. Look for variables that appear disconnected from the objective.
 
 ## Problem-Type Verification
@@ -130,7 +130,7 @@ n_c   = model.select(problem.num_constraints()).to_df().iloc[0, 0]
 n_min = model.select(problem.num_min_objectives()).to_df().iloc[0, 0]
 n_max = model.select(problem.num_max_objectives()).to_df().iloc[0, 0]
 assert n_v == len(model.select(Project).to_df()), "variable count off"
-assert n_min + n_max == 1, f"expected exactly one objective, got {n_min + n_max}"
+assert n_min + n_max == 1, f"expected exactly one objective, got {n_min + n_max}"  # optimization/sensitivity; feasibility/CSP/conflict expect 0
 ```
 
 `num_constraints()` is the global count; it won't tell you *which* constraint is short. To localize, capture each `satisfy()` return value and check **per-constraint cardinality**:
