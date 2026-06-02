@@ -51,7 +51,7 @@ The **key-join idiom** — `cap.resource` is the constraint's entity back-pointe
 
 `var.reduced_cost` is the objective marginal on the variable's bound. Complementary slackness links it to whether the variable is in use, but **only some directions are safe to assert**:
 
-- **Always true:** `in use (strictly between its bounds) ⇒ reduced_cost ≈ 0`, and `reduced_cost ≠ 0 ⇒ the variable sits at one of its bounds`. For the common case of a non-negative variable at a zero lower bound, `reduced_cost > 0 ⇒ unused` (the shorthand the pitfall rows use).
+- **Always true:** `in use (strictly between its bounds) ⇒ reduced_cost ≈ 0`, and `reduced_cost ≠ 0 ⇒ the variable sits at one of its bounds`. For the common case of **minimizing** with a non-negative variable at a zero lower bound, `reduced_cost > 0 ⇒ unused` (the shorthand the pitfall rows use); when **maximizing** the sign flips — there an unused option at its lower bound prices `reduced_cost < 0`.
 - **Not always true:** the converse `unused ⇒ reduced_cost > 0` holds **only under a unique optimum**. Under alternate optima / degeneracy an unused option can have `reduced_cost ≈ 0`.
 
 > **Caveat — the complementary-slackness converse is unsafe.** When turning these into integrity constraints, assert only the two always-true directions above. A model with a unique optimum may let you assert `unused ⇒ reduced_cost > 0`, but treat that as the special case, not the rule — a copied IC will fail on a degenerate model where an unused option is priced at zero.

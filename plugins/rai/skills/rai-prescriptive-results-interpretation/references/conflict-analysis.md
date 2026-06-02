@@ -39,12 +39,12 @@ problem.solve("highs", conflict=True)
 
 Conflict membership is exposed as **bare predicates** on the objects `satisfy()` and `solve_for()` already return. Use them directly in `where(...)`:
 
-| Predicate | True when |
+| Predicate | True when (a *lead* — collapses `IN_CONFLICT` + `MAYBE_IN_CONFLICT`; see caveat below) |
 |---|---|
-| `con.in_conflict` | the constraint is in the IIS |
-| `var.lower_in_conflict` | the variable's lower bound is in the IIS |
-| `var.upper_in_conflict` | the variable's upper bound is in the IIS |
-| `var.integrality_in_conflict` | the variable's integrality requirement is in the IIS |
+| `con.in_conflict` | the solver flags the constraint as conflicting |
+| `var.lower_in_conflict` | the solver flags the variable's lower bound as conflicting |
+| `var.upper_in_conflict` | the solver flags the variable's upper bound as conflicting |
+| `var.integrality_in_conflict` | the solver flags the variable's integrality requirement as conflicting |
 
 ```python
 # Which constraints are in the conflict:

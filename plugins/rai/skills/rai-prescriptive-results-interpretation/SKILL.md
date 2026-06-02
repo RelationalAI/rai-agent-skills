@@ -197,7 +197,7 @@ For per-pattern variations (multiple solutions, iterative solving, scenario/para
 |---|---|---|
 | `var.reduced_cost` | Float | Reduced cost (Gurobi RC convention). **Sign follows the objective sense, not which bound is active** — don't infer it from the bound. Empty for MIP. |
 | `var.basis_status` | String | MOI VariableBasisStatus (`"BASIC"`, `"NONBASIC_AT_LOWER"`, …). Absent for interior-point (Ipopt). |
-| `var.lower_in_conflict` / `var.upper_in_conflict` / `var.integrality_in_conflict` | predicate | True if that bound / integrality is in the conflict (IIS). Use bare: `where(var.lower_in_conflict)`. |
+| `var.lower_in_conflict` / `var.upper_in_conflict` / `var.integrality_in_conflict` | predicate | True if the solver flagged that bound / integrality as conflicting — a *lead*, not proof (collapses `IN_CONFLICT` + `MAYBE_IN_CONFLICT`; for integrality Gurobi only ever reports the "maybe"). Use bare: `where(var.lower_in_conflict)`. |
 
 **Constraint attributes** (off the `satisfy()` return):
 
@@ -205,7 +205,7 @@ For per-pattern variations (multiple solutions, iterative solving, scenario/para
 |---|---|---|
 | `con.shadow_price` | Float | ∂obj/∂RHS (Gurobi Pi). Empty for MIP. |
 | `con.basis_status` | String | MOI ConstraintBasisStatus. Absent for interior-point. |
-| `con.in_conflict` | predicate | True if the constraint is in the conflict (IIS). Use bare: `where(con.in_conflict)`. |
+| `con.in_conflict` | predicate | True if the solver flagged the constraint as conflicting — a *lead*, not proof (collapses `IN_CONFLICT` + `MAYBE_IN_CONFLICT`). Use bare: `where(con.in_conflict)`. |
 
 ```python
 food_vars = problem.solve_for(Food.amount, name=Food.name, lower=0)
@@ -540,9 +540,9 @@ For parameter sweep patterns, scenario comparison tables, and Pareto frontier co
 | Marginal reads empty (`reduced_cost` / `shadow_price`) on an LP/QP | `sensitivity=True` was not requested on that solve — marginals are a solve *option*, not post-processing | Request it on the solve whose results you interpret: `problem.solve("highs", sensitivity=True)`. Set the flag on the solve; don't re-solve a plain Problem to "add" duals |
 | Marginal still empty on a `sensitivity=True` solve | The model is a MIP — integer models have no duals (a warning fires) | Reason from scenarios / binding-constraint identification; duals are LP/QP-only |
 | Empty `basis_status` | Interior-point solver (Ipopt) reports no simplex basis | Expected; use `reduced_cost` / `shadow_price` for marginals, or a simplex solver if you need a basis |
-| `conflict=True` confused with `sensitivity=True` | `conflict=True` populates `in_conflict` predicates, **not** marginals; `sensitivity=True` populates marginals, **not** conflict flags | Request the one matching the question. An always-False `in_conflict` means `conflict=True` wasn't set; empty marginals mean `sensitivity=True` wasn't set |
+| `conflict=True` confused with `sensitivity=True` | `conflict=True` populates `in_conflict` predicates, **not** marginals; `sensitivity=True` populates marginals, **not** conflict flags | Request the one matching the question. Confirm which ran from `si.conflict` / `si.sensitivity` (and `si.conflict_status`), not by inferring from the flags — an always-False `in_conflict` can equally mean `NO_CONFLICT_EXISTS`, `NOT_SUPPORTED` / `FAILED`, or just "not in this (non-unique) IIS" |
 | Misreading the dual sign from the constraint direction | `reduced_cost` / `shadow_price` signs follow the **objective sense**, uniform across `≤` / `≥` / `=` | Interpret sign by min vs. max, not by which bound is active or the constraint's direction |
-| Asserting `reduced_cost > 0` for every *unused* option | The converse `unused ⇒ reduced_cost > 0` holds only under a **unique** optimum; under alternate optima / degeneracy an unused option can have `reduced_cost ≈ 0` | Assert only the always-true directions: `in use ⇒ reduced_cost ≈ 0` and `reduced_cost > 0 ⇒ unused`. See [references/sensitivity-analysis.md](references/sensitivity-analysis.md) |
+| Asserting `reduced_cost > 0` for every *unused* option | The converse `unused ⇒ reduced_cost > 0` holds only under a **unique** optimum; under alternate optima / degeneracy an unused option can have `reduced_cost ≈ 0` | Assert only the always-true directions: `in use ⇒ reduced_cost ≈ 0` and `reduced_cost ≠ 0 ⇒ at a bound` (the `reduced_cost > 0 ⇒ unused` shorthand assumes **minimizing** — maximizing flips the sign). See [references/sensitivity-analysis.md](references/sensitivity-analysis.md) |
 | `solve(sensitivity=True)` on a satisfaction model (no objective) → `ValueError` | Duals are objective marginals; there's nothing to differentiate without an objective | Use `conflict=True` for objectiveless / feasibility models — it needs **no** objective (the asymmetry that's easy to miss) |
 | `integrality_in_conflict == False` read as proof a variable isn't involved | The IIS is one minimal subset and isn't unique — `False` means only "not in this subset," not "uninvolved"; other conflicts may exist (and a `True` flag may be only a "maybe," since the predicates collapse `IN_CONFLICT` and `MAYBE_IN_CONFLICT`) | Treat only `True` as a lead; confirm non-involvement by relaxing and re-solving, not from a `False` flag |
 | Constraint **family** with a shared or absent name → can't join a marginal / IIS flag to its entity | All instances share one name, so the entity back-pointer can't tell them apart | Name each instance distinctly at formulation time, e.g. `satisfy(..., name=["min", Entity.name])`, and read via the entity back-pointer. Full idiom: `rai-prescriptive-problem-formulation/references/constraint-formulation.md` |
