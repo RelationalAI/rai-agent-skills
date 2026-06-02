@@ -75,7 +75,7 @@ This depends on each constraint-family instance being named distinctly at formul
 
 | `conflict_status` | Meaning | Action |
 |---|---|---|
-| `"CONFLICT_FOUND"` | A minimal conflicting subset of candidates exists — constraints and/or variable-bound flags | Inspect the members; relax / omit / soften one. Relaxing one member resolves **that** subset; if other independent conflicts remain the model can still be infeasible, so **re-solve to confirm**. |
+| `"CONFLICT_FOUND"` | A minimal conflicting subset of candidates exists — constraints and/or variable-bound flags | Inspect the members; each is a *candidate* (the flags are leads), so relax / omit / soften one and **re-solve to confirm** — relaxing a true member clears *that* subset, but other independent conflicts may remain. |
 | `"NO_CONFLICT_EXISTS"` | The model is feasible (or feasibility wasn't the blocker) | No conflict to read; revisit the termination status. |
 | `"NOT_SUPPORTED"` | The chosen solver can't produce an IIS | Fall back to **bisection** (rebuild omitting one `satisfy(...)` at a time), or switch to a solver that supports conflicts. |
 | `"FAILED"` | The conflict computation itself errored | Read `solve_info().conflict_message` for the solver's reason. |

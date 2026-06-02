@@ -107,7 +107,7 @@ if si.conflict_status == "CONFLICT_FOUND":
     model.select(floor.region.name, floor.region.demand).where(floor.in_conflict).inspect()
 ```
 
-The IIS is a subset to inspect or relax — **not necessarily a single offending `satisfy()`**. Relaxing one member restores feasibility for *that* conflict; if other independent conflicts remain the model is still infeasible, so **re-solve to confirm**. For the full membership / `conflict_status` reading, see `rai-prescriptive-results-interpretation/references/conflict-analysis.md`.
+The IIS is a subset to inspect or relax — **not necessarily a single offending `satisfy()`**. Each flagged member is a *candidate* (the flags are leads), so relax one and **re-solve to confirm** — relaxing a true member restores feasibility for *that* conflict, but other independent conflicts may remain. For the full membership / `conflict_status` reading, see `rai-prescriptive-results-interpretation/references/conflict-analysis.md`.
 
 **Fallback — manual constraint-walking** (when `conflict_status` is `NOT_SUPPORTED` on the chosen solver, or `FAILED`): walk the constraints and inspect their grounded forms:
 

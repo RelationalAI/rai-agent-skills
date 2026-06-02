@@ -64,7 +64,8 @@ if si.conflict_status == "CONFLICT_FOUND":
         acts.activity.max_output.alias("max_output"),
     ).where(acts.upper_in_conflict).inspect()
 
-    # Relaxing one member resolves THIS conflict; re-solve to confirm no others remain.
+    # Flagged members are leads (IN_CONFLICT/MAYBE collapsed) — relax a candidate,
+    # then re-solve to confirm THIS conflict cleared and no others remain.
 elif si.conflict_status == "NOT_SUPPORTED":
     print(
         "solver has no IIS support — fall back to bisection (omit one satisfy at a time)"
