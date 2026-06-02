@@ -9,7 +9,7 @@ When diagnosing infeasibility or unboundedness, classify root causes using these
 | `unbounded_variable` | DUAL_INFEASIBLE | A variable can grow without limit, driving objective to infinity |
 | `missing_upper_bound` | DUAL_INFEASIBLE | Variable has no upper bound and objective incentivizes increasing it |
 | `penalty_structure` | DUAL_INFEASIBLE | Penalty term can go negative (e.g., `100 * (demand - fulfilled)` when fulfilled > demand) |
-| `constraint_conflict` | INFEASIBLE | Two or more constraints cannot be satisfied simultaneously — `solve(conflict=True)` localizes the minimal conflicting subset as `in_conflict` membership |
+| `constraint_conflict` | INFEASIBLE | Two or more constraints cannot be satisfied simultaneously — `solve(conflict=True)` localizes the minimal conflicting subset as `con.in_conflict` / `var.*_in_conflict` membership |
 | `capacity_mismatch` | INFEASIBLE | Total demand exceeds total capacity — no feasible allocation exists |
 
 ## Fix Action Types
@@ -24,4 +24,4 @@ When diagnosing infeasibility or unboundedness, classify root causes using these
 ## Status-Specific Fix Direction
 
 - **DUAL_INFEASIBLE (unbounded):** Add bounds and constraints to LIMIT unbounded variables
-- **INFEASIBLE:** First localize the offender with `solve(conflict=True)` — the IIS is the minimal conflicting subset of constraints / bounds, read via `in_conflict` and joined to the entity by key (see `rai-prescriptive-results-interpretation/references/conflict-analysis.md`). Then omit or relax those members to WIDEN the feasible region (since Problem is append-only, "omit" means rebuild the Problem without the offending `satisfy(...)`); re-solve to confirm — independent conflicts may remain. Bisection is the fallback when the solver reports `conflict_status == "NOT_SUPPORTED"`.
+- **INFEASIBLE:** First localize the offender with `solve(conflict=True)` — the IIS is the minimal conflicting subset of constraints / bounds, read via `con.in_conflict` and `var.*_in_conflict` and joined to the entity by key (see `rai-prescriptive-results-interpretation/references/conflict-analysis.md`). Then WIDEN the feasible region by acting on the flagged members — omit/relax a flagged constraint (since Problem is append-only, "omit" means rebuilding without the offending `satisfy(...)`), or widen a flagged variable bound/type; re-solve to confirm — independent conflicts may remain. Bisection is the fallback when the solver reports `conflict_status == "NOT_SUPPORTED"`.

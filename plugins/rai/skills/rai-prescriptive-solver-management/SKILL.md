@@ -269,7 +269,7 @@ For prescriptive-context compile errors (entity reference passed as scalar, zero
 
 Status interpretation and prose-level diagnosis live in `rai-prescriptive-results-interpretation` > Status Interpretation (the natural reading order is status → diagnose → fix). The structured diagnostic codes that map status to fix-action types — `unbounded_variable`, `missing_upper_bound`, `penalty_structure`, `constraint_conflict`, `capacity_mismatch` — live here in [diagnostic-taxonomy.md](references/diagnostic-taxonomy.md), since they're a solver-side classification used to drive automated fix routing.
 
-For an infeasible model, `solve(conflict=True)` is the structured first-line localizer — one solve returns the minimal conflicting subset (IIS) of constraints and variable bounds, replacing manual bisection (the `constraint_conflict` code maps to its `in_conflict` membership). Read the membership and act on `conflict_status` per `rai-prescriptive-results-interpretation` > Sensitivity & conflict attributes (and its conflict-analysis.md reference).
+For an infeasible model, `solve(conflict=True)` is the structured first-line localizer — one solve returns the minimal conflicting subset (IIS) of constraints and variable bounds, replacing manual bisection (the `constraint_conflict` code maps to its `in_conflict` / `*_in_conflict` membership). Read the membership and act on `conflict_status` per `rai-prescriptive-results-interpretation` > Sensitivity & conflict attributes (and its conflict-analysis.md reference).
 
 For `si.error` and `print_format=` semantics, see Solve Execution and the solve-info table below in this skill. For solver-log patterns and numerical-error categorization, see [numerical-and-mip.md](references/numerical-and-mip.md).
 

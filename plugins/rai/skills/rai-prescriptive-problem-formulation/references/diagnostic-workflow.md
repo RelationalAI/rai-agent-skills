@@ -123,7 +123,7 @@ What to look for:
 - A `.per()` group with no rows on one side but a non-zero requirement on the other (`>= demand` for a sink with no inbound lanes)
 - Two soft-looking constraints that are jointly infeasible only at a specific entity slice
 
-After identifying the offender, rebuild the `Problem` omitting or relaxing the conflicting `satisfy(...)` — `Problem` accumulates and has no removal API. See [fix-generation-guidelines.md](fix-generation-guidelines.md) > Infeasible Solution.
+After identifying the offender, rebuild the `Problem` omitting or relaxing the conflicting `satisfy(...)` (or widen a flagged variable bound/type if `var.*_in_conflict` is the member) — `Problem` accumulates and has no removal API. See [fix-generation-guidelines.md](fix-generation-guidelines.md) > Infeasible Solution.
 
 ---
 

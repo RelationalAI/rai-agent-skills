@@ -562,7 +562,7 @@ Use this after every solve to ensure result quality:
 - [ ] Binding constraints align with known bottlenecks?
 - [ ] Results are stable to minor parameter perturbations?
 
-**If checks fail:** Trivial solution (all zeros) → add forcing constraints first. Infeasible → localize with `solve(conflict=True)` (IIS), then relax or omit the conflicting `satisfy(...)` calls it flags (bisection as the fallback when IIS is unsupported). See `rai-prescriptive-problem-formulation/references/fix-generation-guidelines.md` for fix strategies.
+**If checks fail:** Trivial solution (all zeros) → add forcing constraints first. Infeasible → localize with `solve(conflict=True)` (IIS), then act on the flagged members — relax/omit a flagged `satisfy(...)` constraint (`con.in_conflict`) or widen a flagged variable bound/type (`var.*_in_conflict`); bisection is the fallback when IIS is unsupported. See `rai-prescriptive-problem-formulation/references/fix-generation-guidelines.md` for fix strategies.
 
 ---
 
