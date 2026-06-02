@@ -378,7 +378,7 @@ problem.solve("highs", sensitivity=True)
 model.select(cap.resource.name, cap.resource.capacity, cap.shadow_price).inspect()
 ```
 
-A **shared or absent name** leaves the instances indistinguishable — the back-pointer can't tell them apart, so a marginal or conflict flag can't be paired with its entity. Use a stable key from the grounding entity (`Entity.name` or `Entity.id`) — the same `name=["cap", Entity.id]` form Rule 6 (Constraint Join Patterns) recommends for `problem.display()` readability.
+A **shared or absent name** leaves the instances indistinguishable — the back-pointer can't tell them apart, so a marginal or conflict flag can't be paired with its entity. Use a stable key from the grounding entity (`Entity.name` or `Entity.id`) — the same `name=["cap", Entity.id]` form recommended under Constraint Join Patterns for `problem.display()` readability.
 
 This is the formulation-time bridge for the post-solve readback patterns in `rai-prescriptive-results-interpretation` (Sensitivity & conflict attributes, plus its sensitivity-analysis.md and conflict-analysis.md references).
 

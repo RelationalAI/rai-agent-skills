@@ -182,7 +182,7 @@ For per-pattern variations (multiple solutions, iterative solving, scenario/para
 
 ### Sensitivity & conflict attributes
 
-`solve(sensitivity=True)` and `solve(conflict=True)` populate extra attributes on the objects `solve_for()` and `satisfy()` already return. Read them **straight off those objects** — like `.name` or `.lower`, not through a separate API. Each is **single-valued** (no `sol_index` axis, unlike `Variable.values()`) and joins to its entity through the **back-pointer key**, never by parsing a constraint's name string. Request the flags on the solve itself — see `rai-prescriptive-solver-management` > solve parameters for the request side; this is the read side. `sensitivity=True` needs an objective (it returns duals at the optimum); `conflict=True` needs **no** objective (it diagnoses an infeasible model).
+`solve(sensitivity=True)` and `solve(conflict=True)` populate extra attributes on the objects `solve_for()` and `satisfy()` already return. Read them **straight off those objects** — like `.name` or `.lower`, not through a separate API. Each is **single-valued** (no `sol_index` axis, unlike `Variable.values()`) and joins to its entity through the **back-pointer key**, never by parsing a constraint's name string. Request the flags on the solve itself — see `rai-prescriptive-solver-management` > First-class solve parameters for the request side; this is the read side. `sensitivity=True` needs an objective (it returns duals at the optimum); `conflict=True` needs **no** objective (it diagnoses an infeasible model).
 
 **Marginals are single-valued — don't confuse their shape with the indexed solution accessor:**
 
@@ -208,8 +208,9 @@ For per-pattern variations (multiple solutions, iterative solving, scenario/para
 | `con.in_conflict` | predicate | True if the constraint is in the conflict (IIS). Use bare: `where(con.in_conflict)`. |
 
 ```python
-# intake = sum(qty * Food.amount).where(Food.contains(Nutrient, qty)).per(Nutrient)
 food_vars = problem.solve_for(Food.amount, name=Food.name, lower=0)
+qty = Float.ref()
+intake = sum(qty * Food.amount).where(Food.contains(Nutrient, qty)).per(Nutrient)
 floor = problem.satisfy(model.require(intake >= Nutrient.min), name=["min", Nutrient.name])
 problem.solve("highs", sensitivity=True)
 
@@ -249,12 +250,13 @@ No solution satisfies all constraints simultaneously. The problem as stated is i
 
 **Diagnosis steps:**
 
-First, **localize with `solve(conflict=True)`** — one solve returns the conflict (IIS): a *minimal* set of constraints and variable bounds that cannot all hold together. Read membership as a bare predicate, joined to the grounding entity by key, instead of guessing:
+First, **localize with `solve(conflict=True)`** — when the solver supports it, one solve returns the conflict (IIS): a *minimal* set of constraints and variable bounds that cannot all hold together. Read membership as a bare predicate, joined to the grounding entity by key, instead of guessing:
 
 ```python
 problem.solve("highs", conflict=True)
 si = problem.solve_info()
 if si.conflict_status == "CONFLICT_FOUND":
+    # coverage = a per-Shift satisfy(...) family; coverage.shift is its entity back-pointer
     model.select(coverage.shift.name, coverage.shift.min_coverage).where(coverage.in_conflict).inspect()
 ```
 
@@ -542,7 +544,7 @@ For parameter sweep patterns, scenario comparison tables, and Pareto frontier co
 | Misreading the dual sign from the constraint direction | `reduced_cost` / `shadow_price` signs follow the **objective sense**, uniform across `≤` / `≥` / `=` | Interpret sign by min vs. max, not by which bound is active or the constraint's direction |
 | Asserting `reduced_cost > 0` for every *unused* option | The converse `unused ⇒ reduced_cost > 0` holds only under a **unique** optimum; under alternate optima / degeneracy an unused option can have `reduced_cost ≈ 0` | Assert only the always-true directions: `in use ⇒ reduced_cost ≈ 0` and `reduced_cost > 0 ⇒ unused`. See [references/sensitivity-analysis.md](references/sensitivity-analysis.md) |
 | `solve(sensitivity=True)` on a satisfaction model (no objective) → `ValueError` | Duals are objective marginals; there's nothing to differentiate without an objective | Use `conflict=True` for objectiveless / feasibility models — it needs **no** objective (the asymmetry that's easy to miss) |
-| `integrality_in_conflict == False` read as proof a variable isn't involved | Conflict membership collapses `IN_CONFLICT` and `MAYBE_IN_CONFLICT`, so `False` often means "maybe," not "exonerated" | Treat only `True` as definite; don't infer non-involvement from `False` |
+| `integrality_in_conflict == False` read as proof a variable isn't involved | The IIS is one minimal subset and isn't unique — `False` means only "not in this subset," not "uninvolved"; other conflicts may exist (and a `True` flag may be only a "maybe," since the predicates collapse `IN_CONFLICT` and `MAYBE_IN_CONFLICT`) | Treat only `True` as a lead; confirm non-involvement by relaxing and re-solving, not from a `False` flag |
 | Constraint **family** with a shared or absent name → can't join a marginal / IIS flag to its entity | All instances share one name, so the entity back-pointer can't tell them apart | Name each instance distinctly at formulation time, e.g. `satisfy(..., name=["min", Entity.name])`, and read via the entity back-pointer. Full idiom: `rai-prescriptive-problem-formulation/references/constraint-formulation.md` |
 
 For additional pitfalls (numerical instability, degenerate solutions, wrong aggregation scope, missing/null data) — distinct from the silent-bug rows above — see [references/common-pitfalls.md](references/common-pitfalls.md).

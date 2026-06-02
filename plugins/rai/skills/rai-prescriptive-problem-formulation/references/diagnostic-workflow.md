@@ -98,7 +98,7 @@ Pass the original fragments (the values you handed to `model.require`) — not t
 
 ## INFEASIBLE: localizing the conflict
 
-When `si.termination_status == "INFEASIBLE"`, the first move is `solve(conflict=True)` — one solve returns the **conflict (IIS)**: a minimal subset of constraints and variable bounds that cannot all hold. It needs no objective and works on MIP. Read the members joined to their entity by key:
+When `si.termination_status == "INFEASIBLE"`, the first move is `solve(conflict=True)` — when the solver supports it, one solve returns the **conflict (IIS)**: a minimal subset of constraints and variable bounds that cannot all hold. It needs no objective and works on MIP. Read the members joined to their entity by key:
 
 ```python
 problem.solve("highs", conflict=True)

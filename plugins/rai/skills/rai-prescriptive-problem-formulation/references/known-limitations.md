@@ -31,7 +31,7 @@ When solving multiple scenarios in a loop (e.g., varying parameters, what-if ana
 results = []
 for scenario in scenarios:
     problem = Problem(model, Float)               # fresh Problem each iteration
-    var = problem.solve_for(Entity.x_var, populate=False, ...)
+    var = problem.solve_for(Entity.x_var, populate=False)   # plus name=/bounds as needed
     problem.satisfy(...)
     problem.minimize(...)
     problem.solve(solver, ...)

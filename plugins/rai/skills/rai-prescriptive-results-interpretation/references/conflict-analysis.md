@@ -17,7 +17,7 @@ This reference covers reading an infeasibility **conflict** (an Irreducible Infe
 
 An IIS is a **minimal** set of constraints and variable bounds that cannot all hold simultaneously — minimal in that removing any one member makes that subset satisfiable. It localizes *why* a model is infeasible without your having to guess.
 
-The pre-IIS approach was **bisection**: rebuild the Problem omitting one `satisfy(...)` call at a time and re-solve, narrowing down the offender across N solves. `solve(conflict=True)` replaces that N-solve search with **one solve** that returns the conflicting subset directly. Keep bisection only as the fallback when the solver can't produce an IIS (see `NOT_SUPPORTED` below).
+`solve(conflict=True)` returns the conflicting subset in a **single solve**. The fallback — when the solver can't produce an IIS (see `NOT_SUPPORTED` below) — is **bisection**: rebuild the Problem omitting one `satisfy(...)` call at a time and re-solve, narrowing down the offender across N solves.
 
 ### Requesting it: the asymmetry vs. sensitivity
 
@@ -84,12 +84,12 @@ The conflict is a subset of *candidates*, which may mix constraints and variable
 
 ### The MAYBE_IN_CONFLICT collapse caveat
 
-The solver distinguishes `IN_CONFLICT` from `MAYBE_IN_CONFLICT`, but the membership predicates **collapse both into `True`**. The consequence runs one direction:
+The solver distinguishes `IN_CONFLICT` from `MAYBE_IN_CONFLICT`, but the membership predicates **collapse both into `True`**. Two consequences:
 
-- `in_conflict == True` (or `*_in_conflict == True`) means "in the conflict, possibly only as a maybe."
-- `integrality_in_conflict == False` does **not** prove the variable's integrality is uninvolved — `False` can simply mean the solver didn't mark it, not that it's exonerated.
+- A `True` flag (`in_conflict`, `*_in_conflict`) may be only a *maybe* — the tool couldn't rule the member out, not necessarily that it's a definite part of the conflict.
+- A `False` flag does **not** prove the constraint or bound is uninvolved in the infeasibility. The conflict is *one* minimal subset, and an IIS is not unique — a different valid IIS, or an independent conflict elsewhere, could involve a member this one left out.
 
-So treat only `True` as actionable, and never read a `False` flag as a clean bill of health — this matters most for `integrality_in_conflict`.
+So treat only `True` as a lead to act on, and never read a `False` flag as a clean bill of health — confirm non-involvement by relaxing a member and re-solving, not by reading flags. This matters most for `integrality_in_conflict`.
 
 ### Example / idiom guardrail
 

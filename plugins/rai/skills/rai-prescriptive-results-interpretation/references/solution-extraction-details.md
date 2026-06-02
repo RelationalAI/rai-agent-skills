@@ -96,7 +96,7 @@ The lowercased type name is the type name converted to lowercase **as-is** — n
 - `con.shadow_price`, `con.basis_status` — populated by `sensitivity=True`
 - `con.in_conflict` — populated by `conflict=True`
 
-It also carries an **entity back-pointer** to the entity it grounds, mirroring the variable back-pointer. That lets a marginal or conflict flag **join to entity data by key** (`con.entity.prop`) instead of parsing the constraint's name string. The back-pointer attribute name follows the **same rule as variables** above — the explicit `name=` part if present, otherwise the lowercased type name.
+It also carries an **entity back-pointer** to the entity it grounds, mirroring the variable back-pointer. That lets a marginal or conflict flag **join to entity data by key** (`con.entity.prop`) instead of parsing the constraint's name string. The back-pointer attribute is the **lowercased grounding-entity type** — `cap.resource` for a constraint grounded on `Resource`, not the `name=` display label (`"cap"`). The `name=` kwarg only sets the constraint's display name and keeps family instances distinct; it does not name the back-pointer.
 
 ```python
 # Constraint family: one capacity limit per Resource, each instance named distinctly:

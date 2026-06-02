@@ -51,7 +51,7 @@ The **key-join idiom** — `cap.resource` is the constraint's entity back-pointe
 
 `var.reduced_cost` is the objective marginal on the variable's bound. Complementary slackness links it to whether the variable is in use, but **only some directions are safe to assert**:
 
-- **Always true:** `in use (strictly between bounds) ⇒ reduced_cost ≈ 0`, and `reduced_cost > 0 ⇒ the variable sits at a bound (unused)`.
+- **Always true:** `in use (strictly between its bounds) ⇒ reduced_cost ≈ 0`, and `reduced_cost ≠ 0 ⇒ the variable sits at one of its bounds`. For the common case of a non-negative variable at a zero lower bound, `reduced_cost > 0 ⇒ unused` (the shorthand the pitfall rows use).
 - **Not always true:** the converse `unused ⇒ reduced_cost > 0` holds **only under a unique optimum**. Under alternate optima / degeneracy an unused option can have `reduced_cost ≈ 0`.
 
 > **Caveat — the complementary-slackness converse is unsafe.** When turning these into integrity constraints, assert only the two always-true directions above. A model with a unique optimum may let you assert `unused ⇒ reduced_cost > 0`, but treat that as the special case, not the rule — a copied IC will fail on a degenerate model where an unused option is priced at zero.
@@ -62,11 +62,11 @@ The **key-join idiom** — `cap.resource` is the constraint's entity back-pointe
 
 ### Strong-duality reconstruction
 
-At an LP optimum the objective equals the sum of each binding constraint's `shadow_price × RHS` — you can reconstruct (and sanity-check) the objective relationally by summing the priced RHS through the key:
+At an LP optimum, the *constraint* contribution to the objective is `Σ shadow_price × RHS` over the binding constraints (variable-bound duals — i.e. reduced costs on bounds — and any objective constant aside). When a model's duality is carried entirely by these constraints, you can reconstruct (and cross-check) the objective relationally by summing the priced RHS through the key:
 
 ```python
 # Σ shadow_price × RHS over the constraint family, joined by the entity key:
-model.select(aggs.sum(cap.shadow_price * cap.resource.capacity)).inspect()
+model.select(sum(cap.shadow_price * cap.resource.capacity)).inspect()
 ```
 
 > **Caveat — reconstruction needs a Float RHS.** This works when the RHS property is `Float`. A `Float` `shadow_price` multiplied by an **Integer** RHS can trip a typer mismatch (`Number(38,0)` vs `Float`). Treat the reconstruction as illustrative for Float-RHS models; for Integer-RHS data, keep integrity constraints additive / threshold-only rather than multiplying price × integer RHS.
