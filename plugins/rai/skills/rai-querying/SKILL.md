@@ -11,6 +11,18 @@ For solver formulation, see `rai-prescriptive-problem-formulation`.
 
 ---
 
+## Before you write any query
+
+A few seconds of grounding prevents the most common multi-turn failure loops:
+
+1. **Match your task to a known shape** — the [Recipe Card](#recipe-card) below covers the common 80%; the [Examples](#examples) table points to fuller patterns.
+2. **Confirm the surface against the real model** — run `inspect.schema(model)` to verify concept and property names and types (see [inspect-module.md](references/inspect-module.md)). Your recall of a model's surface drifts; check it rather than guessing.
+3. **For a relationship with multiple fields** (one relationship packing several positional typed fields), run `inspect.fields(Concept.relationship)` first — the prose words in the reading string are *not* field names. Then access them per [joins-and-export.md § Multi-Argument Relationships](references/joins-and-export.md#multi-argument-relationships) (labeled value fields by name; unlabeled by integer position; entity links via raw source columns).
+
+Then write and execute — don't guess syntax from memory.
+
+---
+
 ## Recipe Card
 
 The 80% of queries fit one of these shapes. Copy, adapt the concept names, alias every column.
@@ -334,6 +346,8 @@ model.where(Edge.source == Alt.source, Alt.cost < Edge.cost).select(
 ).to_df()
 ```
 
+**Relationship packing multiple typed fields?** See [joins-and-export.md § Multi-Argument Relationships](references/joins-and-export.md#multi-argument-relationships) — `inspect.fields()` first, then name / integer-position / raw-column access.
+
 For multi-hop join patterns, lambda helpers, parameterized query functions, and Snowflake export (`Table.into().exec()`), see [joins-and-export.md](references/joins-and-export.md).
 
 ---
@@ -378,6 +392,8 @@ model.select(aggs.count(Customer).alias("at_risk")).where(
 
 **`ValidationError: Unused variable`?** A concept ref is reused across independent aggregation contexts. Use separate named refs: `Customer.ref("t1")`, `Customer.ref("t2")`.
 
+**Relationship with multiple fields and unsure of the names, types, or order?** Run `inspect.fields(Concept.relationship)` first — the reading-string prose words are *not* field names (only `{Type:label}` creates a name). Labeled value fields: index by name `rel["field"]` (works in `select` and `where`). Unlabeled fields: index by integer position. Entity-typed fields (`{Business}`, `{Site}`): the relationship API silently returns 0 rows / NaN — bind via raw source columns instead. Keyword binding never works. See [joins-and-export.md](references/joins-and-export.md#multi-argument-relationships).
+
 **Inspect:** `print(expr)` shows the AST without executing (works for relationships, aggregates, where-clauses). `Shipment.supplier.inspect()` executes and prints the result DataFrame.
 
 **Re-ground after long sessions or `/compact`:** drift makes "I remember `Customer` has a `tier` property" the kind of confidently-wrong recall that ruins queries. Use `inspect.schema(model)` to verify before authoring. See [inspect-module.md](references/inspect-module.md). If `inspect.schema()` is unavailable in your installed version, see [model-introspection.md](references/model-introspection.md) for the `model.concepts/relationships` fallback.
@@ -388,7 +404,7 @@ model.select(aggs.count(Customer).alias("at_risk")).where(
 
 | Pattern | File |
 |---|---|
-| Aggregation queries — basic select, grouped agg, multi-hop join | [examples/aggregation_queries.py](examples/aggregation_queries.py) |
+| Aggregation queries — basic select, grouped agg, multi-hop join, multi-argument relationship binding | [examples/aggregation_queries.py](examples/aggregation_queries.py) |
 | Computed properties — datetime, segmentation, argmax tiebreaker | [examples/datetime_argmax_segmentation.py](examples/datetime_argmax_segmentation.py) |
 | `inspect.schema()` summary | [examples/inspect_schema_summary.py](examples/inspect_schema_summary.py) |
 | `inspect.fields()` unpack | [examples/inspect_fields_unpack.py](examples/inspect_fields_unpack.py) |
@@ -406,6 +422,7 @@ One-liner gotchas that don't justify a Silent Corruption prose treatment but wil
 | `.where()` on a bare Concept fails | `Site.where(...)` doesn't work | `.where()` lives on the model, aggregations, constraints, or definitions — not on bare concepts |
 | Mixing bare select with `distinct()` | `select(X.name, distinct(X.cat))` — runtime error | Wrap ALL columns in `distinct()` or none |
 | Integer aggregate (`aggs.count`, `aggs.sum` of Integer) returned as `Int128Array` — pandas reductions fail | `df["n"].sum()` / `df["n"].iloc[0]` / `df.groupby(...).sum()` raise `TypeError: 'Int128Array' with dtype Int128 does not support reduction 'sum'` (or surface as `KeyError`/wrong values via `.iloc[]`) | First check whether `to_df()` is even needed — if the value feeds another RAI query or derived property, compose inline (see Query Basics § default reflex). If pandas is the final consumer, cast immediately: `df["n"] = df["n"].astype(int)` |
+| Multi-argument relationship returns wrong/zero rows or `KeyError`/`RAIException` | Guessing field access: keyword args (never works), a wrong integer index, or positional/index binding of an *entity* field (silently 0 rows / NaN) | `inspect.fields(rel)` first. Labeled value field → `rel["name"]`; unlabeled → `rel[i]` by position; entity link → bind via raw source column (`concept.id == table.fk`). See [joins-and-export.md](references/joins-and-export.md#multi-argument-relationships) |
 
 ---
 

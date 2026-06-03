@@ -181,6 +181,17 @@ graph.Node.pr_score = graph.pagerank(damping=0.9)
 
 ---
 
+### Eigenvector vs. PageRank — same "importance via neighbors", opposite directionality
+
+Both score a node by the importance of the nodes it connects to, so "which nodes are most important / central / influential?" can match either. They differ in **what kind of importance the question is about**:
+
+- **Eigenvector (`directed=False`)** — *mutual, recursive* importance: a node is important when its neighbors are important, symmetrically. The structural-centrality reading — "well-connected to other well-connected nodes."
+- **PageRank (`directed=True`)** — *directional inbound* importance: a node is important when important nodes **point at it**. The flow/attention reading — "a lot flows into it from upstream."
+
+Decide by the **kind of importance** the question asks about: a structural-importance or centrality question is undirected (eigenvector); reserve `directed=True` (PageRank) for questions that turn on flow, dependency, or causality. The two give different rankings on the same network, so match the choice to the question's intent.
+
+---
+
 ## Community Detection Algorithms
 
 ### `louvain()`

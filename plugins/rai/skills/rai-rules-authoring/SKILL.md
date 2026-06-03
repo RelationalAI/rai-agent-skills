@@ -1,6 +1,6 @@
 ---
 name: rai-rules-authoring
-description: Converts natural language business rules into PyRel derived properties. Covers validation, classification, derivation, alerting, and reconciliation patterns. Use for business logic, flags, subtypes, segmentation, or compliance rules. Must run before rai-querying if the task involves creating new derived properties — rai-querying cannot create derived properties.
+description: Converts natural language business rules into PyRel derived properties — validation, classification, derivation, alerting, and reconciliation. Use whenever a task assigns each entity a new tier, segment, score, or flag, or derives a new property; author it here as a derived property, then query it with rai-querying.
 ---
 
 # Rules Authoring
@@ -112,6 +112,8 @@ Additional extraction hints:
 
 **Disambiguation:** If the NL rule produces a boolean yes/no answer, it is validation or alerting. If it assigns
 a category from a fixed set, it is classification. If it computes a numeric value, it is derivation.
+
+**Classification produces one row per matching entity — the count is set by the data, not the question.** "Derive the high-value customers" or "classify customers whose spend exceeds $10K" yields *every* qualifying entity, however many that is. A bounded request ("the **top 5** by spend", "the **3 largest**") is a ranking *query* that runs **after** classification (see `rai-querying`), not part of the rule. Don't cap the rule's output to match an expected row count — encode the membership condition and let the data determine cardinality.
 
 **Never compute the rule output in pandas.** All rule types — including classification tiers and derived scores — must be encoded as `model.Concept()`, `model.Relationship()`, or `model.Property()` with `model.where().define()` or `model.define()`. Pandas is only for formatting the final query result.
 

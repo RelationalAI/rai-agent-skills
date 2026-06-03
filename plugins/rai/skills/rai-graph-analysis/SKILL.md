@@ -1,6 +1,6 @@
 ---
 name: rai-graph-analysis
-description: Graph algorithm selection and execution on PyRel v1 models. Covers graph construction from ontology patterns, algorithm families (centrality, community, reachability, distance, similarity, components), parameter tuning, result extraction, and downstream use. Use when building or running graph analyses on RAI models.
+description: Graph algorithm selection and execution on PyRel v1 models — construction from ontology patterns, parameter tuning, and result extraction. Use for questions about a network's structure — centrality and importance, community detection, connectivity and components, reachability and dependencies, shortest paths and distance, and node similarity.
 ---
 
 # Graph Analysis
@@ -11,7 +11,6 @@ description: Graph algorithm selection and execution on PyRel v1 models. Covers 
 - [Quick Reference](#quick-reference)
 - [Graph Analysis Workflow](#graph-analysis-workflow)
 - [Graph Construction from Ontology](#graph-construction-from-ontology)
-- [Algorithm Selection](#algorithm-selection)
 - [Parameter Guidance](#parameter-guidance)
 - [Domain Constraints](#domain-constraints)
 - [Result Extraction and Binding](#result-extraction-and-binding)
@@ -121,7 +120,7 @@ graph = Graph(
 
 ### Algorithm cheat sheet
 
-> **Compatibility constraints in this section are non-exhaustive.** For any algorithm you plan to call, load [algorithm-selection.md](references/algorithm-selection.md) and confirm its compatibility row before writing the `Graph(...)` constructor. The Pre-flight table at the end of [Algorithm Selection](#algorithm-selection) below summarizes the most common gotchas, but is also non-exhaustive.
+> **Compatibility constraints in this section are non-exhaustive.** For any algorithm you plan to call, load [algorithm-selection.md](references/algorithm-selection.md) and confirm its compatibility row before writing the `Graph(...)` constructor. The Pre-flight table in [Step 7](#step-7-select-algorithm) summarizes the most common gotchas, but is also non-exhaustive.
 
 | Family | Methods | Output Shape | Typical Use |
 |--------|---------|-------------|-------------|
@@ -138,7 +137,7 @@ graph = Graph(
 
 **Bridge edges (single points of failure on the edge side) have no named primitive — express them as WCC with per-edge ablation, in RAI.** `betweenness_centrality()` is *not* a substitute: it scores nodes on a relative scale and does not answer "would removing this edge disconnect the graph." See [Bridge edges in algorithm-selection.md](references/algorithm-selection.md#bridge-edges-no-named-primitive) for the recipe.
 
-For compatibility constraints (directed/weighted limits per algorithm), see Algorithm Selection below.
+For compatibility constraints (directed/weighted limits per algorithm), see Step 7.
 
 ---
 
@@ -212,42 +211,59 @@ See [graph-construction.md](references/graph-construction.md) for detailed patte
 
 ### Step 7: Select Algorithm
 
-Match the question to the algorithm family:
+Start from the question, not the algorithm name. **First check whether the question reduces to an aggregation** — per-entity counts and one-hop group-bys ("how many sources per target?", "which targets have only one predecessor?") run as `aggs.count(distinct(...)).per(target)` with no Graph constructor needed. Reserve graph reasoners for multi-hop traversal, partitioning, and centrality.
 
-| Question Type | Algorithm Family | Key Consideration |
-|--------------|-----------------|-------------------|
-| "Who/what is most important/influential?" | Centrality | Choose variant by importance type (see below) |
-| "What natural groups exist?" | Community | Requires undirected for Louvain; infomap handles directed |
-| "Is the network fragmented?" | Components | WCC for undirected; SCC future |
-| "What are all transitive dependencies? / What depends on X? / What does X affect?" | Reachability | `reachable()` |
-| "How far apart are X and Y?" | Distance | Supports weighted (non-negative) |
-| "Which entities are most similar?" | Similarity | Based on shared neighborhoods |
-| "How tightly connected are local regions?" | Clustering | Triangle-based metrics |
+| Question Type | Algorithm Family | Default Choice |
+|--------------|-----------------|----------------|
+| "Who/what is most important?" (directed graph) | Centrality | `pagerank()` (inbound flow) |
+| "Who/what is most important?" (undirected graph) | Centrality | `eigenvector_centrality()` (mutual importance) |
+| "Which nodes are bottlenecks?" | Centrality | `betweenness_centrality()` (bridge nodes) |
+| "What natural groups exist?" | Community | `louvain()` (undirected) or `infomap()` (directed) |
+| "Is the network fragmented?" | Components | `weakly_connected_component()` |
+| "Which **edges** are single points of failure (bridges)?" | Components | No named primitive — WCC with per-edge ablation. See [algorithm-selection.md](references/algorithm-selection.md#bridge-edges-no-named-primitive) |
+| "What are all transitive dependencies?" | Reachability | `reachable()` |
+| "What depends on X? / What does X affect?" | Reachability | `reachable()` |
+| "How far apart are X and Y?" | Distance | `distance()` — supports weighted (non-negative) |
+| "Which entities are most similar?" | Similarity | `jaccard_similarity()` |
+| "How tightly connected locally?" | Clustering | `local_clustering_coefficient()` — **requires undirected** |
 
-**Centrality variant selection** — start from the **structural test**, not vague semantic labels:
+Within the **Centrality** family, pick the variant by the **structural test**:
 
-- **Eigenvector** — undirected mutual importance: a node ranks high when its undirected neighbors do. Requires `directed=False`. Use on symmetric / co-occurrence / similarity-style graphs.
+- **Eigenvector** — undirected mutual importance: a node ranks high when its undirected neighbors do. Requires `directed=False`. Use for structural-importance / centrality questions (symmetric, co-occurrence, similarity graphs). See [eigenvector vs. PageRank](references/algorithm-selection.md#eigenvector-vs-pagerank--same-importance-via-neighbors-opposite-directionality).
 - **Betweenness** — bottleneck identification: nodes that sit on many shortest paths. Best for: "which nodes are critical connectors / single points of failure?" Requires `weighted=False`.
-- **PageRank** — directed inbound flow: importance accumulates along incoming edges. **Default for any directed graph** where the question is about which nodes receive the most flow or attention.
+- **PageRank** — directed inbound flow: importance accumulates along incoming edges. **Default for any directed graph** where the question explicitly turns on which nodes receive the most flow or attention.
 - **Degree** — local connectivity: count of direct connections. Best for: "which nodes have the most direct relationships?"
 
 **One algorithm per question.** Pick the single algorithm that matches the structural test above. Don't combine multiple centrality measures into a "composite criticality score" — the resulting ranking has no clean interpretation, depends on arbitrary normalization choices, and typically reorders results vs. any one of its inputs. If the question genuinely requires multiple lenses, run them as separate columns in the output, but rank by one and explain why.
 
-When choosing between algorithm variants within a family, or needing parameter details, output shape, or compatibility specifics, see [algorithm-selection.md](references/algorithm-selection.md).
+**Pre-flight compatibility check.** Before Step 8, confirm the chosen algorithm fits the graph's directed/weighted settings:
+
+| Algorithm | Cannot use with |
+|-----------|----------------|
+| `betweenness_centrality()` | `weighted=True` |
+| `eigenvector_centrality()` | `directed=True` (use `pagerank()` for directed) |
+| `louvain()` | `directed=True` (use `infomap()` for directed) |
+| `local_clustering_coefficient()` | `directed=True` (requires undirected) |
+| `diameter_range()` | `directed=True` or `weighted=True` (requires undirected, unweighted) |
+
+- `pagerank()` / `reachable()` work on undirected but are most meaningful on directed.
+- `louvain()`, `infomap()`, `label_propagation()` are **non-deterministic** — report ranges or structural assertions, not exact values.
+
+For per-algorithm deep dives (parameters, output shapes, interpretation, compatibility matrix), see [algorithm-selection.md](references/algorithm-selection.md) and confirm the row for any algorithm you call.
 
 ### Step 8: Configure, Execute, and Bind Results
 
 Canonical assign → bind → query skeleton:
 
 ```python
-graph = Graph(model, directed=True, weighted=True, node_concept=MyConcept, aggregator="sum")
+graph = Graph(model, directed=False, weighted=True, node_concept=MyConcept, aggregator="sum")  # match flags to the algorithm (Step 7 pre-flight): eigenvector needs directed=False
 model.define(graph.Edge.new(src=..., dst=..., weight=...))                  # define edges
 graph.Node.score = graph.eigenvector_centrality()                           # execute — substitute any algorithm
 model.where(graph.Node == MyConcept).define(MyConcept.score(graph.Node.score))  # bind back
 model.select(MyConcept.id, MyConcept.score).to_df()                         # query
 ```
 
-For the `directed` / `weighted` / `aggregator` decisions, see [Parameter Guidance](#parameter-guidance). For the full assign → bind → query walkthrough and per-algorithm extraction, see [Result Extraction and Binding](#result-extraction-and-binding) and [result-extraction.md](references/result-extraction.md).
+For the `directed` / `weighted` / `aggregator` decisions, see [Parameter Guidance](#parameter-guidance). Expensive algorithms (`reachable`, `jaccard_similarity`, `distance`, `triangle`, …) require explicit domain constraints (`of=`/`from_=`/`to=`/`between=`/`full=True`) to run — see [Domain Constraints](#domain-constraints). For the full assign → bind → query walkthrough and per-algorithm extraction, see [Result Extraction and Binding](#result-extraction-and-binding) and [result-extraction.md](references/result-extraction.md).
 
 ---
 
@@ -295,45 +311,6 @@ model.where(
 **Filtered edges:** restrict via `.where(t.amount >= 100.0).define(graph.Edge.new(src=t.payer, dst=t.payee))`.
 
 For detailed patterns (multi-intermediary, hierarchy, self-referencing, multi-graph, weight construction, validation), see [graph-construction.md](references/graph-construction.md). Graph algorithms and prescriptive optimization coexist on the same `Model` — use domain concepts directly as `node_concept` (no mirror concepts or separate models needed).
-
----
-
-## Algorithm Selection
-
-Start from the question, not the algorithm name. **First check whether the question reduces to an aggregation** — per-entity counts and one-hop group-bys ("how many sources per target?", "which targets have only one predecessor?") run as `aggs.count(distinct(...)).per(target)` with no Graph constructor needed. Reserve graph reasoners for multi-hop traversal, partitioning, and centrality.
-
-| Question Type | Algorithm Family | Default Choice |
-|--------------|-----------------|----------------|
-| "Who/what is most important?" (directed graph) | Centrality | `pagerank()` (inbound flow) |
-| "Who/what is most important?" (undirected graph) | Centrality | `eigenvector_centrality()` (mutual importance) |
-| "Which nodes are bottlenecks?" | Centrality | `betweenness_centrality()` (bridge nodes) |
-| "What natural groups exist?" | Community | `louvain()` (undirected) or `infomap()` (directed) |
-| "Is the network fragmented?" | Components | `weakly_connected_component()` |
-| "Which **edges** are single points of failure (bridges)?" | Components | No named primitive — WCC with per-edge ablation. See [algorithm-selection.md](references/algorithm-selection.md#bridge-edges-no-named-primitive) |
-| "What are all transitive dependencies?" | Reachability | `reachable()` |
-| "What depends on X? / What does X affect?" | Reachability | `reachable()` |
-| "How far apart are X and Y?" | Distance | `distance()` — supports weighted (non-negative) |
-| "Which entities are most similar?" | Similarity | `jaccard_similarity()` |
-| "How tightly connected locally?" | Clustering | `local_clustering_coefficient()` — **requires undirected** |
-
-**Key constraints:**
-- `louvain()` requires `directed=False`
-- `local_clustering_coefficient()` requires `directed=False`
-- `pagerank()` works on undirected but is most meaningful on directed
-- `reachable()` works on both directed and undirected, but is most meaningful on directed
-- `louvain()`, `infomap()`, and `label_propagation()` are **non-deterministic** — community assignments, counts, and sizes may vary between runs on the same data. Report results as ranges or structural assertions, not exact values.
-
-**Pre-flight compatibility check:** Before proceeding to Step 8, verify your chosen algorithm is compatible with your graph's directed/weighted settings.
-
-| Algorithm | Cannot use with |
-|-----------|----------------|
-| `betweenness_centrality()` | `weighted=True` |
-| `eigenvector_centrality()` | `directed=True` (use `pagerank()` for directed) |
-| `louvain()` | `directed=True` (use `infomap()` for directed) |
-| `local_clustering_coefficient()` | `directed=True` (requires undirected) |
-| `diameter_range()` | `directed=True` or `weighted=True` (requires undirected, unweighted) |
-
-This table is non-exhaustive. For per-algorithm deep dives (parameters, output shapes, interpretation, compatibility matrix), see [algorithm-selection.md](references/algorithm-selection.md) and confirm the row for any algorithm you plan to call.
 
 ---
 
@@ -450,6 +427,7 @@ model.where(Site.centrality_score < 0.1).define(Site.is_at_risk())
 |---------|-------|-----|
 | `louvain()` fails on directed graph | Louvain requires undirected | Set `directed=False` or use `infomap()` for directed |
 | Empty graph (no edges) | Edge definition doesn't match data — wrong relationship or join path | Verify edge source/destination properties exist and have data; query edge count before running algorithms |
+| 0 edges from a multi-argument relationship | Endpoints bound from a relationship packing several positional fields, with the slots in the wrong order — the binding matches no rows | Confirm the field order with `inspect.fields(rel)` before binding, and check `graph.num_edges().inspect()` immediately after defining edges. Binding endpoints from raw source columns (`node.id == table.col`) is a reliable fallback when the field order is ambiguous |
 | `Int128Array` errors in pandas or `model.data()` | Community detection IDs (Louvain, Infomap) are always Int128 — incompatible with pandas ops and `model.data()` type inference | Cast: `df["col"] = df["col"].astype(int)` before pandas operations and before passing to `model.data()`. WCC is different — its output is a Node, not an integer: via shorthand the column arrives as string hashes (`.astype(str)`), via direct-query `comp_ref.id` it inherits the node's identifier type — Int128 when `identify_by={"id": Integer}` (cast with `.astype(int)`), a plain string column otherwise. See [result-extraction.md](references/result-extraction.md#int128array-from-rai) |
 | Duplicate/self-loop edges | Missing guard in co-occurrence pattern | Add `left.id < right.id` to `.where()` clause |
 | `aggregator` missing | Weighted graph with multi-edges requires aggregator for parallel edges | Add `aggregator="sum"` — but only when multi-edges are expected (see [Aggregator guidance](#graph-constructor-aggregator-parameter-guidance)) |

@@ -1,6 +1,6 @@
 ---
 name: rai-predictive-training
-description: Configure and train GNN models, generate predictions, evaluate results, and manage trained models. Use after building the data model with `rai-predictive-modeling`, when ready to run training, evaluate, or manage GNN models. Not for concepts, data loading, edges, or feature configuration (see `rai-predictive-modeling`).
+description: Configure and train graph neural network (GNN) models, generate predictions, evaluate results, and manage trained models. Use when ready to train, generate predictions, evaluate, or manage models; for concepts, data loading, edges, and feature configuration, see `rai-predictive-modeling`.
 ---
 
 # Predictive Training

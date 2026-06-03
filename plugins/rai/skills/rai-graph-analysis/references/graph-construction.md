@@ -289,6 +289,28 @@ model.where(
 )
 ```
 
+**Exclude a specific node (offline / what-if analysis):** to simulate a single node going
+offline and re-run an algorithm on the remaining network, exclude that node from **both**
+endpoints of every edge. The node is dropped along with all edges that touched it.
+
+```python
+# Rebuild the graph as if node OFFLINE_ID were removed
+OFFLINE_ID = "..."  # the id of the node to take offline
+op = Operation.ref()
+model.where(
+    op.source_site(n1 := Site.ref()),
+    op.output_site(n2 := Site.ref()),
+    n1.id != OFFLINE_ID,
+    n2.id != OFFLINE_ID,
+).define(
+    graph.Edge.new(src=n1, dst=n2, weight=op.shipment_count)
+)
+```
+
+Use a fresh `Graph(...)` instance per scenario so the baseline and the what-if graph stay
+separate (see [Multi-Graph from Same Ontology](#multi-graph-from-same-ontology)). To exclude
+a *set* of nodes, swap the `!=` checks for `model.not_(n1.id.in_([...]))`.
+
 ---
 
 ## Multi-Graph from Same Ontology

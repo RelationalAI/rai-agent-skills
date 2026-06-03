@@ -3,6 +3,7 @@
 # .where() filters rows; .to_df() materializes as pandas DataFrame.
 
 from relationalai.semantics import Float, Integer, Model, String, distinct
+from relationalai.semantics import inspect
 from relationalai.semantics.std import aggregates as aggs
 
 model = Model("aggregation_queries")
@@ -23,6 +24,14 @@ Business = model.Concept("Business", identify_by={"id": String})
 Business.name = model.Property(f"{Business} has {String:name}")
 Business.reliability_score = model.Property(f"{Business} has {Float:reliability_score}")
 Shipment.supplier = model.Property(f"{Shipment} supplied by {Business:supplier}")
+
+# Multi-argument relationship: one relationship packs several positional typed fields
+# (common in ontologies generated from wide source tables). The f-string declares the
+# fields in order: days_late, then fiscal_quarter. (Named distinctly from the
+# Shipment.delay_days property above so the two surfaces don't read as the same thing.)
+Shipment.lifecycle = model.Relationship(
+    f"{Shipment} lifecycle has {Integer:days_late} in {String:fiscal_quarter}"
+)
 
 
 # --- Query 1: Simple select with filter ---
@@ -80,4 +89,44 @@ def site_to_site_flows():
     ).where(
         Shipment.origin(Origin),
         Shipment.destination(Dest),
+    ).to_df()
+
+
+# --- Query 5: Multi-argument relationship — discover, bind, select, aggregate ---
+def delays_per_quarter():
+    """Total delay per fiscal quarter, reading both fields off one packed relationship.
+
+    Shipment.lifecycle packs days_late + fiscal_quarter on a single relationship.
+    Bind its fields positionally with refs in where() to join/filter on them; the
+    owner (Shipment) is implicit and the order matches the f-string declaration.
+    """
+    # inspect.fields(Shipment.lifecycle) returns the fields in declaration order, so
+    # you never have to guess names or positions:
+    #   (Shipment.lifecycle[days_late], Shipment.lifecycle[fiscal_quarter])
+    print("fields:", inspect.fields(Shipment.lifecycle))
+
+    days_late = Integer.ref()
+    quarter = String.ref()
+    # distinct() required: grouping key is a property value (fiscal_quarter), not an entity
+    return model.select(
+        distinct(
+            quarter.alias("fiscal_quarter"),
+            aggs.sum(days_late).per(quarter).alias("total_delay"),
+        )
+    ).where(
+        Shipment.lifecycle(days_late, quarter),
+        days_late > 0,
+    ).to_df()
+
+
+# --- Query 6: Select a single packed field by name (no binding needed) ---
+def shipment_delays():
+    """List each shipment's delay by indexing the packed field by NAME.
+
+    When you only need to read one field of a multi-argument relationship (not join
+    or filter on it), index it by field name — no ref binding required.
+    """
+    return model.select(
+        Shipment.id.alias("shipment_id"),
+        Shipment.lifecycle["days_late"].alias("days_late"),
     ).to_df()

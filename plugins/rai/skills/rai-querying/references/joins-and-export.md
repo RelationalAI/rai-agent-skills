@@ -1,5 +1,6 @@
 <!-- TOC -->
 - [Multi-Concept Joins](#multi-concept-joins)
+- [Multi-Argument Relationships](#multi-argument-relationships)
 - [Reusable Query Fragments](#reusable-query-fragments)
   - [Lambda helpers](#lambda-helpers)
   - [Named refs for independent aggregation contexts](#named-refs-for-independent-aggregation-contexts)
@@ -96,6 +97,71 @@ model.select(Employee.nr, Asset.id).where(
 ```
 
 **Why:** `Employee.uses.id` is compiled as a `Chain` that creates a fresh lookup for `uses`, independent of the `Employee.uses(Asset)` application in `where`. To get the filtered entity's properties, reference the bound concept variable (`Asset.id`) or chain through the application (`Employee.uses(Asset).id`).
+
+---
+
+## Multi-Argument Relationships
+
+A single `model.Relationship` can pack several positional typed fields, not just one. These are common in ontologies generated from wide source tables (modeler / PyrelQB exports), where many columns of one row land on one relationship:
+
+```python
+# Value fields, each given an explicit name with {Type:label}
+Shipment.lifecycle = model.Relationship(
+    f"{Shipment} has {Float:delay_days} in {String:fiscal_quarter}"
+)
+# Entity fields with NO explicit label — the prose words are not names
+Shipment.trading_parties = model.Relationship(
+    f"{Shipment} has supplier {Business} and customer {Business}"
+)
+```
+
+**Always run `inspect.fields()` first — the reading-string prose words are NOT field names.** A field is named only when the f-string gives it an explicit `{Type:label}`. `{Business}` with the word "supplier" nearby has *no* name; its field is auto-named from the type:
+
+```python
+from relationalai.semantics import inspect
+inspect.fields(Shipment.lifecycle)          # (Shipment.lifecycle[delay_days], Shipment.lifecycle[fiscal_quarter])
+inspect.fields(Shipment.trading_parties)    # ([shipment], [business], [business_2])  — NOT supplier/customer
+```
+
+Access depends on whether the field is **labeled** and whether it holds a **value** or an **entity**.
+
+**Labeled value fields → index by name (works in `select()` AND `where()`):**
+
+```python
+model.where(
+    Shipment.lifecycle["fiscal_quarter"] == "Q4-2024",   # name-index filters fine
+    Shipment.lifecycle["delay_days"] > 0.0,
+).select(
+    Shipment.id.alias("shipment_id"),
+    Shipment.lifecycle["delay_days"].alias("delay_days"),
+).to_df()
+```
+
+A wrong name fails loudly (`KeyError` listing the valid field names), so this is self-correcting. Positional ref-binding (`Shipment.lifecycle(D, Q)` with `D=Float.ref()`, `Q=String.ref()`) is an equivalent path for value fields.
+
+**Unlabeled fields → index by integer position** (the engine directs you here: *"access it by concept type or index"*). Read the right index from `inspect.fields()` — guessing is what makes `[6]` bind the wrong field:
+
+```python
+# fields: [0] shipment(owner)  [1] business(supplier)  [2] business_2(customer)
+Shipment.trading_parties[1]   # the supplier-side Business
+```
+
+**Entity fields → bind via raw source columns, not the relationship.** This is the load-bearing rule for modeler-generated ontologies. For a field that holds an *entity* (a `{Business}`, `{Site}`, …), the relationship API is unreliable: positional ref-binding silently returns **0 rows**, and an index chain like `rel[1].id` returns **NaN** once combined with other filters. Bind the entity from the backing table's foreign-key column instead — the same fallback used for graph edges in `rai-graph-analysis`:
+
+```python
+ship = Sources.<schema>.shipment            # the backing Table
+supplier = Business.ref()
+model.where(
+    supplier.id == ship.supplier_business_id,        # entity link via raw FK column
+    ship.fiscal_quarter == "Q4-2024",                # filter raw columns directly
+    ship.delay_days > 0.0,
+).select(
+    supplier.id.alias("supplier_id"),
+    aggs.count(ship.id).per(supplier).alias("delayed_shipments"),  # group by the bound concept
+).to_df()
+```
+
+**Keyword binding never works** — `Shipment.lifecycle(delay_days=D)` raises `RAIException [Too few args]`; field names are not keyword arguments.
 
 ---
 

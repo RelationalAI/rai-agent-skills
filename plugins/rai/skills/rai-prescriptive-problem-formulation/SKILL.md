@@ -1,6 +1,6 @@
 ---
 name: rai-prescriptive-problem-formulation
-description: Formulates optimization problems from ontology models covering decision variables, constraints, objectives, and common patterns. Use when building, reviewing, or debugging a formulation.
+description: Formulates optimization and constraint satisfaction problems from ontology models — decision variables, constraints, objectives, and common patterns. Use for optimization and constraint-satisfaction tasks — building, reviewing, or debugging the formulation; then solve it with rai-prescriptive-solver-management and interpret the solution with rai-prescriptive-results-interpretation.
 ---
 
 # Problem Formulation
@@ -113,29 +113,33 @@ Catches two silent-failure modes that account for most prescriptive errors:
 1. **Hallucinated surface** — `Customer.tier` in a constraint when the real property is `Customer.category`. Solver happily runs on wrong variables and returns nonsense.
 2. **Wrong-type inference** — using an `Integer` property as if it were `Float` (or vice versa) when the type now propagates from `TableSchema`. Silent coercion masks incorrect bound derivation.
 
+**Reuse upstream derived surface.** If rai-rules-authoring or rai-graph-analysis ran earlier in the same session, the subtypes and properties they wrote back (classification subtypes, centrality scores, derived flags) are already in the model — they show up in `inspect.schema(model)`. Reference them directly in `solve_for` / `satisfy` / `minimize` / `maximize` rather than re-deriving their logic in the formulation. See [examples/chained_rules_prescriptive.py](examples/chained_rules_prescriptive.py).
+
 **Confirm modeled dimensions.** If the problem spans periods/scenarios/categories, that dimension must exist in the ontology — as a Concept (`Week`, `Period`, `Scenario`) or as an `Integer` reference scoped via `std.common.range()` — before Step 3. Constraints over the dimension are then a single declarative expression that quantifies automatically. **Never** plan to iterate over the dimension in Python or enumerate its values by hand; both bypass the engine. See `rai-ontology-design` if enrichment is needed.
 
 **When to skip:** this step is cheap but not free. Skip on small greenfield models or one-shot formulations where the model fits in a single code block you just wrote.
 
 ### Step 2: Define Variables
 What decisions are being made? What can the solver control?
-- Start with the base model context — examine concepts, properties, relationships (Variable Context Integration)
-- Identify the primary decision entity first, then auxiliary/aggregation variables (Variable Principles)
-- Choose variable types (continuous/integer/binary) and set bounds from data (Advanced Variable Patterns)
+- Start with the base model context — examine concepts, properties, relationships
+- Identify the primary decision entity first, then auxiliary/aggregation variables
+- Choose variable types (continuous/integer/binary) and set bounds from data
 - For minimize objectives, include a slack/unmet variable to avoid infeasibility
+
+See [variable-formulation.md](references/variable-formulation.md) for context integration, variable principles, and advanced patterns (types, bounds, entity creation, slack, parametric/time-indexed).
 
 ### Step 3: Define Constraints
 What rules must the solution satisfy?
-- Start with model structure + user goals (Constraint Context Integration)
+- Start with model structure + user goals
 - For multi-period or recurrence patterns (inventory balance, sequencing, cumulative state), use declarative quantification: `Concept.ref()` adjacency joins (`w_prev.num == w.num - 1`) or `where=[t == std.common.range(start, stop)]` — single `satisfy()` call grounds across all periods. See [constraint-formulation.md](references/constraint-formulation.md) > Temporal recurrence and [examples/multi_period_flow_conservation.py](examples/multi_period_flow_conservation.py).
 - Add forcing constraints first — these prevent trivial zero solutions for minimize objectives
 - Add capacity/resource constraints from data properties
 - Add flow conservation if the model has network structure
-- Derive parameters from data ranges, not arbitrary values (Parameter Derivation from Data)
+- Derive parameters from data ranges, not arbitrary values
 
 ### Step 4: Define Objective(s)
 What are we optimizing?
-- Start with user's stated goal — map business language to minimize/maximize (Objective Context Integration)
+- Start with user's stated goal — map business language to minimize/maximize. See [objective-formulation.md](references/objective-formulation.md) for direction, multi-component objectives, and penalty terms
 - Reference defined variables and data properties in the expression
 - Check for trivial solution risk: "If all variables = 0, are all constraints satisfied?" If yes, Step 3 needs a forcing constraint.
 - **Competing objectives?** If the formulation has a penalty term bundling two concerns (cost + penalty×slack), or a constraint that represents a competing goal (return ≥ threshold), consider whether the user wants to explore the tradeoff rather than fix a single point. See [multi-objective-formulation.md](references/multi-objective-formulation.md) for the epsilon constraint approach.
@@ -197,9 +201,7 @@ if len(model.select(cap_constr).to_df()) != len(model.select(Entity).to_df()):
 
 For the full pattern (drill-in with `display(cap_constr, limit=10)` before raising, multi-Concept counts, and the per-failure-mode lookup) see [diagnostic-workflow.md](references/diagnostic-workflow.md) and [rai-prescriptive-solver-management/references/pre-solve-validation.md](../rai-prescriptive-solver-management/references/pre-solve-validation.md).
 
-Together, (a)–(d) are the downstream complement to Step 1's base-ontology grounding: Step 1 verifies the *inputs* to formulation exist; Step 5 verifies the *outputs* registered correctly, bound to data, weighted by populated coefficients, and grounded on the right number of groupings.
-
-For runtime grounding inspection (does each constraint disaggregate as intended? does the objective expand with non-zero coefficients?) use targeted `problem.display(ref)` — see Step 6.
+Together, (a)–(d) are the downstream complement to Step 1's base-ontology grounding: Step 1 verifies the *inputs* to formulation exist; Step 5 verifies the *outputs* registered correctly, bound to data, weighted by populated coefficients, and grounded on the right number of groupings. For runtime grounding inspection of each constraint and the objective, use targeted `problem.display(ref)` — see Step 6.
 
 When the formulation fails to generate or compile (before a solve is even attempted), look up the root cause in the unified failure taxonomy at `rai-prescriptive-results-interpretation/references/failure-taxonomy.md` (`generates` and `compiles` levels).
 
@@ -233,8 +235,6 @@ Is the formulation complete — including constraints the user couldn't articula
 - Repeat until the user accepts or feasibility pressure forces prioritization
 
 Steps 1-6 produce the best formulation you can build from what the user has told you. Step 7 discovers what they couldn't tell you until they saw a concrete result. Most real-world formulations require at least one pass through Step 7.
-
-For detailed patterns for each step, see [variable-formulation.md](references/variable-formulation.md), [constraint-formulation.md](references/constraint-formulation.md), and [objective-formulation.md](references/objective-formulation.md).
 
 ---
 
@@ -378,23 +378,13 @@ If you suggest MULTIPLE cross-product/junction concepts, coordinate them as foll
 - Unbounded solutions (no coupling between flows)
 - Inconsistent solutions (flows don't balance)
 
-This is often unintended, but not always wrong — the user may intentionally leave variables unlinked. Flag it as something to verify, not as an error.
-
-**RECOMMENDED in rationale for multi-concept suggestions:**
-- State how concepts relate to each other
-- Identify shared base entities
-- Note what type of linking constraint may be needed
+This is often unintended, but not always wrong — the user may intentionally leave variables unlinked. Flag it as something to verify, not as an error. (Each pattern above names the linking note to record in the rationale.)
 
 ---
 
 ## Formulation Simplification
 
-Users often propose formulations that seem natural from a business perspective but create unnecessary complexity. Key simplification heuristics:
-- Static parameters over dynamic calculations
-- Objective terms for goals; constraints for hard requirements
-- Group-level constraints over pairwise/granular combinations
-
-For detailed heuristics, examples, and the over-specification recognition table, see [formulation-simplification.md](references/formulation-simplification.md).
+Users often propose formulations that seem natural from a business perspective but create unnecessary complexity. The Step 6 "Simplify once correct" heuristics apply; for detailed heuristics, examples, and the over-specification recognition table, see [formulation-simplification.md](references/formulation-simplification.md).
 
 ---
 

@@ -18,11 +18,14 @@ description: Covers PyRel v1 language syntax — imports, type system, concepts,
 - Looking up data loading patterns (CSV, Snowflake, FK resolution)
 - Understanding expression rules (`.where()` targets, `.per()` grouping, operators)
 
-**When NOT to use:**
-- RAI domain modeling decisions (when to create a concept vs property, gap classification) — see `rai-ontology-design`
+**When NOT to use:** This is general-syntax support. Any **reasoner-specific** task routes to its reasoner skill — when the task is to query, classify, optimize, analyze a graph, or train a model, load that skill (it owns the patterns and pitfalls), not this one.
+
 - Query construction (select, aggregation, filtering, joins) — see `rai-querying`
-- Business-rule authoring via derived properties (validation, classification, alerting) — see `rai-rules-authoring`
+- Business-rule authoring via derived properties (validation, classification, segmentation, alerting) — see `rai-rules-authoring`
 - Optimization formulation (decision variables, constraints, objectives) — see `rai-prescriptive-problem-formulation`
+- Graph analysis (centrality, community, reachability, paths, impact/"what's affected if X fails") — see `rai-graph-analysis`
+- GNN / predictive modeling and training (features, edges, training, evaluation) — see `rai-predictive-modeling`, `rai-predictive-training`
+- RAI domain modeling decisions (when to create a concept vs property, gap classification) — see `rai-ontology-design`
 - Connection and config setup — see `rai-setup`
 
 **Overview:** Reference skill. Key lookup areas: Imports, Model Patterns, Type System, Concepts/Properties/Relationships, Data Loading, References and Aliasing, Standard Library (math/strings/dates), Expression Rules.
