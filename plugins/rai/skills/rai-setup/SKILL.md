@@ -1,6 +1,6 @@
 ---
 name: rai-setup
-description: Setup and configuration for RelationalAI — first-time install walkthrough and all raiconfig.yaml tuning. Use when installing RAI, connecting to Snowflake, or editing raiconfig.yaml. Not for writing PyRel model code (see rai-pyrel-coding) or solver usage and diagnostics (see rai-prescriptive-solver-management).
+description: Setup and configuration for RelationalAI — first-time install walkthrough and all raiconfig.yaml tuning. Use when installing RAI, connecting to Snowflake, running RAI locally on DuckDB for development, or editing raiconfig.yaml. Not for writing PyRel model code (see rai-pyrel-coding) or solver usage and diagnostics (see rai-prescriptive-solver-management).
 ---
 
 # RelationalAI Setup & Configuration
@@ -14,6 +14,7 @@ Covers the [relationalai Python package](https://pypi.org/project/relationalai) 
 
 **When to use:**
 - First-time setup: install `relationalai`, connect to Snowflake, run a starter program
+- Running RAI locally on DuckDB for development, prototyping, or demos (no Snowflake)
 - Creating or editing `raiconfig.yaml`
 - Choosing or troubleshooting an authentication method
 - Tuning reasoner engines, sizes, solver settings
@@ -33,7 +34,7 @@ Covers the [relationalai Python package](https://pypi.org/project/relationalai) 
 
 Requires Python 3.10+ and `relationalai>=1.2.0`.
 
-The RelationalAI Native App for Snowflake must be installed in your account by an administrator — request access [here](https://app.snowflake.com/marketplace/listing/GZTYZOOIX8H/relationalai-relationalai); see the [Native App docs](https://docs.relational.ai/manage/install).
+The RelationalAI Native App for Snowflake must be installed in your account by an administrator — request access [here](https://app.snowflake.com/marketplace/listing/GZTYZOOIX8H/relationalai-relationalai); see the [Native App docs](https://docs.relational.ai/manage/install). (Not required for local DuckDB development — see [Local Development with DuckDB](#local-development-with-duckdb-no-snowflake) below.)
 
 The `rai_developer` role is the standard role for running PyRel programs. Custom Snowflake roles also work if granted the `rai_user` application role — see [User Access](https://docs.relational.ai/manage/user-access).
 
@@ -122,6 +123,65 @@ Offer a small sample program using inline data. Ask the user for a domain or use
 
 ---
 
+## Local Development with DuckDB (no Snowflake)
+
+For development, prototyping, and demos, PyRel runs entirely against a local DuckDB database — no Snowflake account or Native App required. The data layer and the logic-family reasoners execute locally; only the engine-backed reasoners still need the cloud service.
+
+| Capability | Local DuckDB | Needs Snowflake / RAI cloud |
+|---|:---:|:---:|
+| Data loading, querying (select / filter / join / aggregate) | ✓ | |
+| Logic & rules (derived properties, classification, recursion, reconciliation) | ✓ | |
+| Graph (centrality, community, reachability, components, similarity) | ✓ | |
+| Optimization solve (`problem.solve()`) | | ✓ — external solver service |
+| Predictive GNN training (`gnn.fit()`) | | ✓ — Snowflake `CREATE EXPERIMENT`/`CREATE MODEL` |
+
+Rule of thumb: relational and recursive-logic reasoning runs locally; anything that hands off to a specialized engine (solver, GNN trainer) needs the cloud service.
+
+**Config — four keys unlock the local path:**
+
+```python
+from relationalai.config import Config, DuckDBConnection
+from relationalai.semantics import Model
+
+config = Config(
+    connections={"local": DuckDBConnection(path=":memory:")},  # or a file path, e.g. "./dev.duckdb"
+    default_connection="local",
+    install_mode=True,                                # routes to the DuckDB-aware executor
+    model={"schema": "main", "auto_install": True},   # install schema + materialize before queries
+)
+model = Model("my_model", config=config)
+```
+
+Equivalent `raiconfig.yaml`:
+
+```yaml
+default_connection: local
+install_mode: true
+connections:
+  local:
+    type: duckdb
+    path: ":memory:"        # or a file, e.g. ./dev.duckdb
+model:
+  schema: main
+  auto_install: true
+```
+
+**Loading data:** seed the DuckDB session directly, then reference tables by their **3-part FQN** (`<database>.<schema>.<table>` — in-memory DuckDB defaults to `memory.main`):
+
+```python
+session = config.get_connection(DuckDBConnection).get_session()
+session.execute("CREATE TABLE employees (id INTEGER, name VARCHAR, dept VARCHAR)")
+session.execute("INSERT INTO employees VALUES (1, 'Ada', 'Engineering')")
+
+employees = model.Table("memory.main.employees")   # 3-part FQN required
+```
+
+From here the model is authored exactly as against Snowflake — see `rai-pyrel-coding` for concepts, properties, and `define()`.
+
+> **Experimental.** Local DuckDB execution relies on install-mode, which the package currently flags as experimental. Use it for local development and demos; confirm the support stance with the RelationalAI team before relying on it in customer-facing work.
+
+---
+
 ## Reference files
 
 Load the reference when the trigger fires — don't read them all upfront.
@@ -151,6 +211,9 @@ Load the reference when the trigger fires — don't read them all upfront.
 | Engine not provisioned | Reasoner config references a size unavailable on account | Check `reasoners.*.size` matches available sizes for your platform |
 | Unicode errors on Windows (`UnicodeEncodeError`) | Windows console defaults to a non-UTF-8 encoding | Set `PYTHONIOENCODING=utf-8`. PowerShell: `$env:PYTHONIOENCODING = "utf-8"`; cmd: `set PYTHONIOENCODING=utf-8` |
 | `rai` CLI fails on PowerShell | Execution policy blocks scripts | User runs `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned` |
+| (DuckDB) `Expected a fully-qualified table name with 3 parts` | DuckDB tables need `database.schema.table` | Reference in-memory tables as `memory.main.<table>` |
+| (DuckDB) Query falls back to the Snowflake path, or reads an empty/missing model relation | `install_mode` / `auto_install` not set | Set `install_mode: true` and `model.auto_install: true` (or run `rai models install` before querying) |
+| (DuckDB) `Configuration must specify a non-empty schema name` | No install schema for model relations | Set `model.schema` (e.g. `main`) |
 
 ---
 
