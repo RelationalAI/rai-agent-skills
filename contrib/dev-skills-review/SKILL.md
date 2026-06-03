@@ -56,6 +56,7 @@ The ultimate quality gate. Everything below serves this — if an agent can't di
 - [ ] Explicit instructions with specific decision criteria — no "use your judgment"
 - [ ] Every major rule explains WHY (runtime error, trivial solution, etc.)
 - [ ] Positive framing: state what to do, not just what to avoid
+- [ ] **Description triggers on the problem class, affirmatively**: the WHEN-clause names the intent/problem-type in positive terms (e.g. "node classification, regression, link prediction"; "optimization and constraint-satisfaction tasks") and routes onward with positive pointers ("then query with `rai-querying`"). Prefer this over negative-only framing ("even if they don't say X", "Not for Y"); keep a negative boundary only where needed to prevent overlap with an adjacent skill.
 - [ ] CRITICAL/MUST reserved for genuine compile/runtime failures only (not section headers)
 - [ ] Each piece of guidance stated once in one authoritative location
 - [ ] **No hardcoded domain enumerations**: no domain-specific laundry lists in prose or pattern definitions ("price ticks, sensor readings, KPIs…"). State the heuristic or shape distinction principled so the agent adapts to the user's data. One concise illustrative phrase is fine; a list is not.
@@ -80,6 +81,7 @@ The ultimate quality gate. Everything below serves this — if an agent can't di
 
 - [ ] **Validation loops**: for tasks with verifiable output, skill instructs the agent to validate its own work before moving on (run validator → fix → re-validate)
 - [ ] **Reference load triggers are specific**: references say *when* to load (e.g., "if the API returns non-200") — not generic "see references/ for details"
+- [ ] **In-context reference links at point of need**: each workflow step / decision point links the reference file it depends on *right there* — not only in a trailing catch-all or the Reference Files table. Cross-references are live markdown links: a bare section-name parenthetical (e.g. "(Advanced Variable Patterns)") with no link is a dead end — make it `[…](file.md)` or cut it.
 - [ ] **Pattern matches task shape**: output-format templates when the agent must produce a specific structure; explicit checklists for multi-step workflows with dependencies; plan-validate-execute for batch/destructive operations; bundled scripts for logic the agent would otherwise reinvent each run
 
 ---
