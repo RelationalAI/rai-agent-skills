@@ -140,10 +140,10 @@ Rule of thumb: relational and recursive-logic reasoning runs locally; anything t
 **Config — four keys unlock the local path:**
 
 ```python
-from relationalai.config import Config, DuckDBConnection
+from relationalai.config import create_config, DuckDBConnection
 from relationalai.semantics import Model
 
-config = Config(
+config = create_config(
     connections={"local": DuckDBConnection(path=":memory:")},  # or a file path, e.g. "./dev.duckdb"
     default_connection="local",
     install_mode=True,                                # routes to the DuckDB-aware executor
