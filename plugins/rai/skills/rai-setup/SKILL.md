@@ -125,17 +125,18 @@ Offer a small sample program using inline data. Ask the user for a domain or use
 
 ## Local Development with DuckDB (no Snowflake)
 
-For development, prototyping, and demos, PyRel runs entirely against a local DuckDB database — no Snowflake account or Native App required. The data layer and the logic-family reasoners execute locally; only the engine-backed reasoners still need the cloud service.
+For development, prototyping, and demos, PyRel runs against a local DuckDB database — no Snowflake account or Native App required — for data loading, querying, and rules/logic reasoning. Graph analysis is only partially local; optimization and GNN are not.
 
 | Capability | Local DuckDB | Needs Snowflake / RAI cloud |
 |---|:---:|:---:|
 | Data loading, querying (select / filter / join / aggregate) | ✓ | |
 | Logic & rules (derived properties, classification, recursion, reconciliation) | ✓ | |
-| Graph (centrality, community, reachability, components, similarity) | ✓ | |
+| Graph — counts, degree, undirected WCC | ✓ | |
+| Graph — reachability, directed WCC, PageRank / eigenvector centrality | | ✓ — recursive-install limits / engine-backed |
 | Optimization solve (`problem.solve()`) | | ✓ — external solver service |
 | Predictive GNN training (`gnn.fit()`) | | ✓ — Snowflake `CREATE EXPERIMENT`/`CREATE MODEL` |
 
-Rule of thumb: relational and recursive-logic reasoning runs locally; anything that hands off to a specialized engine (solver, GNN trainer) needs the cloud service.
+Rule of thumb: querying and rules run fully locally. Graph support on DuckDB is **partial and experimental** — simple metrics (counts, degree) and undirected WCC run locally, but recursive traversal (reachability, directed WCC) and iterative centrality (PageRank) need the cloud engine. For full graph analysis, optimization, or GNN, use Snowflake.
 
 **Config — four keys unlock the local path:**
 
