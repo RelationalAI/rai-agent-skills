@@ -1,0 +1,67 @@
+# Requirements: {{PROJECT_NAME}}
+
+Scoped requirements for the schema-input ORM 2 recovery project. Locked at `/gsd:new-project`; revisit only if the input schema fundamentally changes.
+
+---
+
+## R1 — Input contract
+
+**R1.1** The input is a single artifact: `{{INPUT_PATH}}`. Treated as authoritative; we do not infer schema content beyond what this file contains.
+
+**R1.2** Supported input dialects: PostgreSQL, MySQL, SQLite, SQL Server, Snowflake, Oracle, ANSI SQL DDL. The dialect is locked at `/gsd:new-project` and recorded in `CONTEXT.md`.
+
+**R1.3** If the input is an introspection JSON (not raw DDL), it must conform to the schema dump format documented in `rai-orm-from-schema/references/input-formats.md`. If it's CSV-only (no schema), use the column-typing heuristics in that same reference.
+
+## R2 — Output contract
+
+**R2.1** Phases 1–4 incrementally extend a single `model.orm.yaml` conforming to `rai-orm-from-schema/references/representation-format.md`. Every constraint carries the `source:` provenance tag.
+
+**R2.2** Phase 4 emits `model.verbalization.txt` — one CNL sentence per fact type and constraint, Halpin style.
+
+**R2.3** Phase 5 emits `model.py` — PyRel source. Class names match `model.orm.yaml` `object_types[].name` (PascalCase). Method/property names use snake_case.
+
+**R2.4** Every emitted artifact validates against its respective spec before `/gsd:ship` accepts it. The verifier (`rai-orm-verifier`) is the authority.
+
+## R3 — Constraint inference rules (locked defaults)
+
+These rules govern what the executor does without re-asking each phase. Override at `/gsd:new-project` if your domain differs.
+
+| DDL feature | ORM 2 mapping | Default modality |
+|---|---|---|
+| `PRIMARY KEY` | Preferred uniqueness constraint on the FK→entity fact types | alethic |
+| `FOREIGN KEY` | Binary fact type from referencing entity to referenced entity | alethic |
+| `UNIQUE` (non-PK) | Uniqueness constraint on the relevant fact type(s) | alethic |
+| `NOT NULL` | Mandatory role | alethic |
+| `CHECK` | Value constraint (if range/enum-like) or ring constraint (if pattern fits) | alethic |
+| Composite PK | External-identifier scheme on the entity type | alethic |
+| Junction table (only FKs in PK) | Objectified fact type | alethic |
+
+**Modality default:** All explicit-source (DDL-derived) constraints are `alethic` ("must"). Inferred constraints (common-sense, llm-inferred) default to `alethic` unless the user opted into `Ask per constraint` at project init.
+
+## R4 — Antipattern handling
+
+The skill catalog (`rai-orm-from-schema/references/antipattern-catalog.md`) flags suspicious patterns. Default behavior:
+
+- **Detected antipattern:** Annotate the YAML with `warning:` and propose a resolution.
+- **Proposed resolution:** Apply by default. The user reviews at Phase 4 (verify) and can reject.
+- **Hard antipatterns** (e.g. relations with no candidate key): Block `/gsd:ship` until resolved.
+
+## R5 — LLM-tier inference (Step 6d)
+
+**R5.1** Common-sense library lookups (Step 6a-c) run by default — they are deterministic and audited.
+
+**R5.2** LLM-tier inference (Step 6d) is gated by the project-init flag `enable_llm_tier`. When enabled, each LLM-proposed constraint is annotated with `source: llm-inferred` and `provenance.rationale_world_fact` (a short sentence justifying the proposal). It surfaces inline during `/gsd:execute-phase 3`.
+
+**R5.3** LLM-tier proposals enter the YAML at `status: proposed`. They become `confirmed` only after the user accepts them at Phase 4.
+
+## R6 — Verification gates
+
+Each phase's `/gsd:verify-work` invokes `rai-orm-verifier`. The phase is shippable only when the verifier emits `## Verification Complete`. Specifically:
+
+- Phase 1 must pass format-spec rules 1–13.
+- Phase 2 must pass rules 1–16 + 24.
+- Phase 3 must pass all 27 rules.
+- Phase 4 must pass all 27 rules + a verbalization-parity check.
+- Phase 5 must pass all 27 rules + PyRel parse + name agreement.
+
+E1 diff (against a reference solution) is run when one exists at `evals/expected/{{PROJECT_NAME}}.orm.yaml`. When absent, the verifier reports E1 as `skipped`, not failed.

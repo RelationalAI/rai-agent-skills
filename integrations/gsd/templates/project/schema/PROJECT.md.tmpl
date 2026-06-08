@@ -1,0 +1,54 @@
+# Project: {{PROJECT_NAME}}
+
+**Vision:** Recover an ORM 2 conceptual model from an existing relational schema, then translate it to PyRel.
+
+**Input:** `{{INPUT_BASENAME}}` (relational schema — DDL, introspection dump, or CSV bundle)
+
+**Methodology:** {{METHODOLOGY}}
+
+**Bootstrapped:** {{DATE}}
+
+---
+
+## What "done" looks like
+
+A successful project produces three artifacts at the project root:
+
+| Artifact | Source | What it is |
+|---|---|---|
+| `model.orm.yaml` | Phases 1–3 | The conceptual ORM 2 model: object types, fact types, constraints, source provenance |
+| `model.verbalization.txt` | Phase 4 | Halpin-style Controlled Natural Language verbalization of every fact type and constraint |
+| `model.py` | Phase 5 | PyRel translation of the YAML, ready to load into RAI |
+
+The `model.orm.yaml` is the source of truth. Verbalization and PyRel are derived from it.
+
+---
+
+## The skill behind this project
+
+This project uses the `rai-orm-from-schema` skill (the SRP — Schema Recovery Procedure). The skill is loaded automatically when Claude Code starts in this directory. The phase plans (`.planning/phases/0N-*/PLAN.md`) tell the executor subagent which SRP steps to run per phase.
+
+If the skill is missing, install it:
+
+```bash
+git clone -b an-orm-skill https://github.com/RelationalAI/rai-agent-skills ~/rai-skills
+ln -s ~/rai-skills/skills/rai-orm-from-schema ~/.claude/skills/rai-orm-from-schema
+```
+
+---
+
+## Scope boundary
+
+- This project covers **recovery of an explicit data model** from an existing schema. It is not a greenfield modeling project — for that, use the text-flow (`bootstrap.sh --text`) which invokes the CSDP.
+- This project does not refactor or migrate the underlying SQL schema. The output is a conceptual model that *describes* the schema; downstream systems decide what to do with it.
+- This project does not include data migration, query rewriting, or runtime testing of PyRel against live data. Those are downstream.
+
+---
+
+## Stakeholders
+
+| Role | Responsibility |
+|---|---|
+| Modeler (you) | Authors `/gsd:*` commands, reviews verbalizations, accepts/rejects proposed constraints. |
+| Domain expert (optional) | Consulted at Phase 4 when the verifier surfaces ambiguous constraints. |
+| Downstream consumer | Reads the final `model.py` and integrates into their RAI workload. |

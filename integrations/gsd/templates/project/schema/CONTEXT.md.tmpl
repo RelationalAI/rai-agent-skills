@@ -1,0 +1,61 @@
+# Context: {{PROJECT_NAME}}
+
+Locked decisions for this project. Set at `/gsd:new-project`; revisit only on a deliberate reset.
+
+`/gsd:new-project` is responsible for confirming or filling in any `<TBD>` values below by asking the user at project init. Once locked, downstream phases read these values without re-asking.
+
+---
+
+## Halpin posture
+
+This project uses Halpin's Object-Role Modeling (ORM 2) — fact-based, attribute-free conceptual modeling. The implications encoded into every phase:
+
+- **No attributes.** Schema columns that look like attributes are modeled as binary fact types with named roles.
+- **Verbalization first-class.** Every constraint must verbalize as a natural sentence (Phase 4 enforces this).
+- **Populate before you constrain.** Where a sample population is available (live SQL probe), it is evidence; without it, constraints are conjectures and labeled `proposed`.
+- **Modality matters.** Every constraint carries an `alethic` (must) or `deontic` (should) label.
+
+---
+
+## Project-level locked decisions
+
+| Decision | Value | Used by |
+|---|---|---|
+| Target PyRel dialect | `<TBD: Snowflake | Postgres | dialect-agnostic>` | Phase 5 (translate) |
+| Default modality for inferred constraints | `<TBD: alethic | ask-per-constraint>` | Phase 3 (infer) |
+| LLM-tier inference (Step 6d) | `<TBD: enabled | disabled>` | Phase 3 (infer) |
+| Antipattern auto-resolution | `<TBD: apply | propose-only>` | Phase 3 (infer) |
+| Commit emitted YAML to git after each phase | `<TBD: yes | no>` | Every phase's `/gsd:ship` |
+
+---
+
+## Terminology preferences
+
+Use these consistently across all emitted artifacts (YAML, verbalization, PyRel). Locked at project init.
+
+| Concept | Preferred term | Avoid |
+|---|---|---|
+| Entity instance | "instance" | "row", "record", "tuple" |
+| Fact-type instance | "fact" | "row" (when discussing a fact-type extension) |
+| Uniqueness constraint | "uniqueness" or "UC" | "key constraint" |
+| Mandatory role | "mandatory" | "required", "not null" (in conceptual discussion) |
+| Subtype | "subtype" | "subclass", "subentity" |
+
+The skill's reference files use these terms. If you override here, you accept that downstream verbalizations may read differently from the skill's examples.
+
+---
+
+## Domain-specific terminology (optional)
+
+If the schema uses domain-specific names (e.g. "Customer" for what would generically be "Party"), record them here so verbalizations match the user's vocabulary:
+
+```
+<TBD: leave blank for synthetic schemas; populate during /gsd:new-project for production schemas>
+```
+
+---
+
+## What lives elsewhere
+
+- **Lift rules** (PK → UC, NOT NULL → mandatory, etc.) live in REQUIREMENTS.md §R3. Edit there, not here.
+- **Per-phase decisions** (e.g. "accept this specific LLM-inferred constraint") get recorded in the phase's own `SUMMARY.md`, not in this file. CONTEXT.md is project-scope only.

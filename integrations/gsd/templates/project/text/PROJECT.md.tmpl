@@ -1,0 +1,56 @@
+# Project: {{PROJECT_NAME}}
+
+**Vision:** Build an ORM 2 conceptual model from a natural-language description of a domain, in dialogue with a domain expert, then translate it to PyRel.
+
+**Input:** `{{INPUT_BASENAME}}` (text — domain description, interview notes, requirements doc, or to-be-collected)
+
+**Methodology:** {{METHODOLOGY}}
+
+**Bootstrapped:** {{DATE}}
+
+---
+
+## What "done" looks like
+
+A successful project produces three artifacts at the project root:
+
+| Artifact | Source | What it is |
+|---|---|---|
+| `model.orm.yaml` | Phases 1–3 | The conceptual ORM 2 model: object types, fact types, constraints, source provenance |
+| `model.verbalization.txt` | Phase 4 | Halpin-style Controlled Natural Language verbalization of every fact type and constraint |
+| `model.py` | Phase 5 | PyRel translation of the YAML, ready to load into RAI |
+
+The `model.orm.yaml` is the source of truth. Verbalization and PyRel are derived from it.
+
+---
+
+## The skill behind this project
+
+This project uses the `rai-orm-from-text` skill, which implements Halpin's CSDP (Conceptual Schema Design Procedure). The skill is loaded automatically when Claude Code starts in this directory.
+
+CSDP is **dialogue-driven**. Each phase's `/gsd:discuss-phase` step is where you (acting as modeler) and the domain expert verbalize examples, confirm uniqueness, and label subtypes. Without that dialogue, the methodology has no input.
+
+If the skill is missing, install it:
+
+```bash
+git clone -b an-orm-skill https://github.com/RelationalAI/rai-agent-skills ~/rai-skills
+ln -s ~/rai-skills/skills/rai-orm-from-text ~/.claude/skills/rai-orm-from-text
+```
+
+---
+
+## Scope boundary
+
+- This project covers **greenfield conceptual modeling** from a domain description. If you have an existing relational schema, use the schema flow (`bootstrap.sh --schema`) which invokes the SRP — it's faster and more deterministic for that input.
+- This project produces a conceptual model + PyRel translation. It does **not** include database deployment, query optimization, or runtime testing against data — those are downstream.
+- The quality of the output is bounded by the quality of the dialogue. Sparse or contradictory expert input produces sparse or contradictory models.
+
+---
+
+## Stakeholders
+
+| Role | Responsibility |
+|---|---|
+| Modeler (you) | Authors `/gsd:*` commands, drives the dialogue, transcribes expert answers into PLAN.md / CONTEXT.md. |
+| Domain expert | Provides elementary facts, confirms uniqueness, labels subtypes, accepts/rejects LLM-tier proposals. **Required at every Discuss step.** |
+| Downstream consumer | Reads the final `model.py` and integrates into their RAI workload. |

@@ -1,0 +1,58 @@
+# Roadmap: {{PROJECT_NAME}}
+
+**Methodology:** {{METHODOLOGY}}
+**Per-phase verbs:** {{VERBS_PER_PHASE}}
+**Discuss note:** {{DISCUSS_NOTE}}
+
+---
+
+## Phases
+
+The project runs as **5 phases**, each driven by GSD's `/gsd:discuss-phase` → `/gsd:plan-phase` → `/gsd:execute-phase` → `/gsd:verify-work` → `/gsd:ship` loop.
+
+| # | Name | CSDP step(s) | Outcome |
+|---|---|---|---|
+| 1 | elementary-facts | Step 1 (verbalize + populate) | Locked vocabulary + sample fact instances confirmed with the expert |
+| 2 | fact-types | Steps 2–3 (draw + combine + derive) | YAML: candidate object types + binary fact types + populations |
+| 3 | constraints | Steps 4–6 (uniqueness + mandatory + value + subtyping) | YAML extended with constraints; library + LLM proposals confirmed |
+| 4 | verify | Step 7 (final review + modality labelling) | Verbalization shown; alethic/deontic labels applied; verifier runs |
+| 5 | translate | Step 8 (PyRel emission) | Final `model.py` |
+
+---
+
+## Status
+
+| # | Name | Status | Verbs run | Phase folder |
+|---|---|---|---|---|
+| 1 | elementary-facts | not-started | — | `.planning/phases/01-elementary-facts/` |
+| 2 | fact-types | not-started | — | `.planning/phases/02-fact-types/` |
+| 3 | constraints | not-started | — | `.planning/phases/03-constraints/` |
+| 4 | verify | not-started | — | `.planning/phases/04-verify/` |
+| 5 | translate | not-started | — | `.planning/phases/05-translate/` |
+
+Update the **Status** column after each `/gsd:ship N` (shipped → archived).
+
+---
+
+## Why per-phase Discuss is essential
+
+CSDP is dialogue-driven. Three phases have a Discuss step that is *the methodology itself*, not a checkpoint:
+
+- **Phase 1 (Step 1):** "verbalize elementary facts with the expert." Without dialogue, there's no input.
+- **Phase 2 (Step 2):** populate fact types from real examples the expert supplies.
+- **Phase 3 (Steps 4 and 6):** confirm uniqueness ("Is email unique per person?"), confirm subtypes ("Is Manager a kind of Employee?"). These cannot be inferred from text alone.
+
+Phase 4 (verify) also benefits from dialogue (alethic/deontic labelling), and phase 5 (translate) does not — translation is mechanical from the locked YAML.
+
+The schema-flow (`bootstrap.sh --schema`) skips Discuss because its inputs are deterministic. This asymmetry is intentional and documented in the integration's README.
+
+---
+
+## Next
+
+```bash
+claude
+> /gsd:new-project
+```
+
+`/gsd:new-project` reads PROJECT.md / REQUIREMENTS.md / ROADMAP.md / CONTEXT.md, asks for the initial domain framing (if `{{INPUT_PATH}}` is empty or sparse), and prints the next step (typically `/gsd:discuss-phase 1`).

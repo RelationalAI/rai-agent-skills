@@ -1,0 +1,52 @@
+# Roadmap: {{PROJECT_NAME}}
+
+**Methodology:** {{METHODOLOGY}}
+**Per-phase verbs:** {{VERBS_PER_PHASE}}
+**Discuss note:** {{DISCUSS_NOTE}}
+
+---
+
+## Phases
+
+The project runs as **5 phases**, each driven by GSD's `/gsd:plan-phase` → `/gsd:execute-phase` → `/gsd:verify-work` → `/gsd:ship` loop.
+
+| # | Name | SRP step(s) | Outcome |
+|---|---|---|---|
+| 1 | discover | Steps 1–3 | `model.orm.yaml` skeleton: object types + binary fact types from FKs. No constraints yet. |
+| 2 | lift-explicit | Step 4 | YAML extended with explicit-source constraints (UC, mandatory, value) lifted from DDL. |
+| 3 | infer | Steps 5–7 | YAML extended with sample / common-sense / llm-inferred constraints. Antipatterns flagged. |
+| 4 | verify | Steps 8–9 | Verbalization emitted. User confirms LLM proposals. Verifier runs 27 rules + E1 diff. |
+| 5 | translate | Step 10 | `model.py` (PyRel) emitted. |
+
+---
+
+## Status
+
+| # | Name | Status | Verbs run | Phase folder |
+|---|---|---|---|---|
+| 1 | discover | not-started | — | `.planning/phases/01-discover/` |
+| 2 | lift-explicit | not-started | — | `.planning/phases/02-lift-explicit/` |
+| 3 | infer | not-started | — | `.planning/phases/03-infer/` |
+| 4 | verify | not-started | — | `.planning/phases/04-verify/` |
+| 5 | translate | not-started | — | `.planning/phases/05-translate/` |
+
+Update the **Status** column after each `/gsd:ship N` (shipped → archived).
+
+---
+
+## Why no per-phase Discuss?
+
+The Schema Recovery Procedure is deterministic once the project-level defaults in `CONTEXT.md` are locked. Each phase's constraint-handling decisions follow mechanically from those defaults (e.g., NOT NULL → mandatory, PK → preferred UC). There is nothing per-phase to debate — every phase runs `plan → execute → verify → ship`.
+
+The text-flow (`bootstrap.sh --text`) keeps the full five verbs because CSDP is dialogue-driven; that asymmetry is documented in the integration's README.
+
+---
+
+## Next
+
+```bash
+claude
+> /gsd:new-project
+```
+
+`/gsd:new-project` reads PROJECT.md / REQUIREMENTS.md / ROADMAP.md / CONTEXT.md, confirms the locked decisions, and prints the next step (typically `/gsd:plan-phase 1`).

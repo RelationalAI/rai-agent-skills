@@ -1,0 +1,55 @@
+# Requirements: {{PROJECT_NAME}}
+
+Scoped requirements for the text-input ORM 2 conceptual-modeling project. Locked at `/gsd:new-project`; revisit only on a deliberate reset.
+
+---
+
+## R1 — Input contract
+
+**R1.1** The input is a natural-language description of the domain. Initial source: `{{INPUT_PATH}}` (may be empty — text-flow can start from zero and collect dialogue from scratch). The description is enriched over time by transcribed Discuss-phase dialogue.
+
+**R1.2** Dialogue is the primary input modality. Each phase's `/gsd:discuss-phase` produces material that the subsequent `/gsd:plan-phase` and `/gsd:execute-phase` consume.
+
+**R1.3** The domain expert must be available — synchronously or via asynchronous Q&A — at every Discuss step. If they are not, the corresponding phase blocks until they are.
+
+## R2 — Output contract
+
+**R2.1** Phases 1–4 incrementally extend a single `model.orm.yaml` conforming to `rai-orm-from-text/references/representation-format.md`. Every constraint carries the `source:` provenance tag.
+
+**R2.2** Phase 4 emits `model.verbalization.txt` — one CNL sentence per fact type and constraint, Halpin style.
+
+**R2.3** Phase 5 emits `model.py` — PyRel source. Class names match `model.orm.yaml` `object_types[].name` (PascalCase). Method/property names use snake_case.
+
+**R2.4** Every emitted artifact validates against its respective spec before `/gsd:ship` accepts it. The verifier (`rai-orm-verifier`) is the authority.
+
+## R3 — CSDP step bindings
+
+The CSDP step → phase binding for this project:
+
+| Phase | CSDP step(s) | What the Discuss step elicits |
+|---|---|---|
+| 1 — elementary-facts | Step 1 | Concrete example facts from the expert; verbalization parity check ("Is this how you'd say it?") |
+| 2 — fact-types | Steps 2–3 | Confirm population for each candidate fact type; merge redundant types; identify derivations |
+| 3 — constraints | Steps 4–6 | Per-fact-type: which role(s) unique? Which mandatory? Value/range limits? Subtype partitions? Ring patterns? |
+| 4 — verify | Step 7 | Walk the full verbalization with the expert. Label each constraint alethic or deontic. |
+| 5 — translate | Step 8 | (No expert dialogue.) PyRel emission. |
+
+## R4 — Modality (alethic vs deontic)
+
+**R4.1** The CSDP labels modality late (Step 7 / Phase 4). Up to that point, constraints are treated as alethic-by-default with the expectation that the expert may downgrade some to deontic at verify.
+
+**R4.2** A constraint labeled `deontic` is enforced as a soft rule in PyRel translation (violations log a warning); `alethic` constraints are hard (violations are errors).
+
+## R5 — LLM-tier inference (Step 6d)
+
+**R5.1** Common-sense library lookups run by default — they propose constraints from a deterministic catalog.
+
+**R5.2** LLM-tier inference (Step 6d) is gated by `enable_llm_tier`. When enabled, LLM-proposed constraints surface inline during `/gsd:execute-phase 3` and the modeler must explicitly accept each one to advance.
+
+**R5.3** Every LLM-tier proposal records `provenance.rationale_world_fact` — a short sentence justifying the proposal. This is what the expert reads at Phase 4 when deciding.
+
+## R6 — Verification gates
+
+Each phase's `/gsd:verify-work` invokes `rai-orm-verifier`. The phase is shippable only when the verifier emits `## Verification Complete`. Same gating as the schema flow (see schema REQUIREMENTS.md if you need a side-by-side reference).
+
+E1 diff (against a reference solution) is run when one exists at `evals/expected/{{PROJECT_NAME}}.orm.yaml`. When absent, the verifier reports E1 as `skipped`, not failed.

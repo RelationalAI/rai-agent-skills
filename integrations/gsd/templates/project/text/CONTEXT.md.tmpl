@@ -1,0 +1,68 @@
+# Context: {{PROJECT_NAME}}
+
+Locked decisions for this project. Set at `/gsd:new-project`; revisit only on a deliberate reset.
+
+`/gsd:new-project` is responsible for confirming or filling in any `<TBD>` values below by asking the user at project init. Once locked, downstream phases read these values without re-asking.
+
+---
+
+## Halpin posture
+
+This project uses Halpin's Object-Role Modeling (ORM 2) and his Conceptual Schema Design Procedure (CSDP) — fact-based, attribute-free conceptual modeling driven by dialogue with a domain expert. The implications encoded into every phase:
+
+- **No attributes.** Every property is a binary fact type with named roles.
+- **Verbalization first-class.** Every constraint must verbalize as a natural sentence; the expert reviews these at Phase 4.
+- **Populate before you constrain.** Phase 2 requires real example populations from the expert — sample populations are evidence, constraints are conjectures.
+- **Modality late.** Modality (alethic / deontic) is labeled at Phase 4, not assumed.
+
+---
+
+## Project-level locked decisions
+
+| Decision | Value | Used by |
+|---|---|---|
+| Target PyRel dialect | `<TBD: Snowflake | Postgres | dialect-agnostic>` | Phase 5 (translate) |
+| Default modality before Step 7 review | `<TBD: alethic | deontic | ask-per-constraint>` | Phases 1–3 |
+| LLM-tier inference (Step 6d) | `<TBD: enabled | disabled>` | Phase 3 (constraints) |
+| Domain expert mode | `<TBD: synchronous | async-Q&A>` | Every `/gsd:discuss-phase` |
+| Commit emitted YAML to git after each phase | `<TBD: yes | no>` | Every phase's `/gsd:ship` |
+
+---
+
+## Domain vocabulary
+
+Critical for the text flow. Locked at project init from the input document and refined at Phase 1's Discuss step. Downstream phases use this vocabulary verbatim — verbalizations read in the expert's words, not the modeler's.
+
+```
+<TBD: populate during /gsd:new-project from {{INPUT_BASENAME}} or first Discuss step>
+```
+
+Examples of entries you'd record here:
+
+- "We say *customer*, not *party* or *account*."
+- "A *line item* is a row of an order, never a *product instance*."
+- "We say *ship* and *deliver* — they're different actions."
+
+If the expert uses two terms for the same concept, pick one and record the other under "Avoid."
+
+---
+
+## Terminology preferences (ORM 2 modeling vocabulary)
+
+For the modeling vocabulary itself (separate from the domain vocabulary above):
+
+| Concept | Preferred term | Avoid |
+|---|---|---|
+| Entity instance | "instance" | "row", "record" |
+| Fact-type instance | "fact" | "tuple" |
+| Uniqueness constraint | "uniqueness" or "UC" | "key constraint" |
+| Mandatory role | "mandatory" | "required", "must-have" |
+| Subtype | "subtype" | "subclass" |
+
+---
+
+## What lives elsewhere
+
+- **CSDP step bindings** (which CSDP step runs in which phase) live in REQUIREMENTS.md §R3.
+- **Per-phase decisions** (e.g. "expert confirmed Order:Customer is N:1") get recorded in the phase's own `SUMMARY.md`, not here. CONTEXT.md is project-scope only.
+- **Domain expert dialogue transcripts** live in `.planning/phases/0N-*/DIALOGUE.md` (created by the Discuss step). CONTEXT.md only records the *locked outcomes* of dialogue, not the dialogue itself.
