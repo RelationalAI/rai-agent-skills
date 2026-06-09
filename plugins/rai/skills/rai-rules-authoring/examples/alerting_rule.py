@@ -32,7 +32,7 @@ model.define(
     t.priority(ticket_source.PRIORITY),
 )
 model.where(ticket_source.RESOLVED == True).define(
-    Ticket.filter_by(id=ticket_source.ID).resolved()
+    Ticket.lookup(id=ticket_source.ID).resolved()
 )
 
 # --- Alerting Rule: SLA breach detection ---

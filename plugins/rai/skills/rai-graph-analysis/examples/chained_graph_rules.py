@@ -49,7 +49,7 @@ user_data = model.data([
 model.define(
     User.new(
         user_data.to_schema(exclude=["address_id"]),
-        address=Address.filter_by(id=user_data.address_id),
+        address=Address.lookup(id=user_data.address_id),
     )
 )
 

@@ -14,7 +14,7 @@ from relationalai.semantics.reasoners.predictive import GNN
 
 # -- Train GNN ---------------------------------------------------------------
 # Regression typically needs more epochs than classification. Start with 20-50;
-# 5 (the classification default) is a smoke test and usually plateaus at the mean.
+# a low n_epochs like 5 is a smoke test and usually plateaus at the mean.
 gnn = GNN(
     exp_database="DB", exp_schema="EXPERIMENTS",
     graph=gnn_graph,

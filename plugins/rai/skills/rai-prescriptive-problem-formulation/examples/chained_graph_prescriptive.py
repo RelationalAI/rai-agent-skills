@@ -55,8 +55,8 @@ model.define(
     Route.new(
         id=route_data.id,
         volume=route_data.volume,
-        origin=Site.filter_by(id=route_data.origin_id),
-        destination=Site.filter_by(id=route_data.dest_id),
+        origin=Site.lookup(id=route_data.origin_id),
+        destination=Site.lookup(id=route_data.dest_id),
     )
 )
 

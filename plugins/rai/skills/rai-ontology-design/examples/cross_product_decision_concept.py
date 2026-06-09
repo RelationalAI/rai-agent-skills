@@ -58,7 +58,7 @@ model.define(Technician.new(technicians_data.to_schema()))
 Qualification = model.Concept("Qualification",
     identify_by={"technician_id": String, "machine_type": String})
 Qualification.technician = model.Relationship(
-    f"{Qualification} for {Technician}", short_name="qualification_technician")
+    f"{Qualification} for {Technician}")
 model.define(Qualification.new(
     technician_id=qual_data.technician_id,
     machine_type=qual_data.machine_type,

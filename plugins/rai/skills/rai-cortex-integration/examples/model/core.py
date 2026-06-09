@@ -26,20 +26,21 @@ model.define(Customer.new(id=customer_source.id))
 # ref scheme
 Order = model.Concept("Order", identify_by={"id": rai.Integer})
 model.define(Order.new(id=order_source.id))
-order = model.where(Order.filter_by(id=order_source.id))
+o = Order.ref()
+order = model.where(o.lookup(id=order_source.id))
 
 # -> Customer
 Order.customer = model.Property(f"{Order} was placed by {Customer}")
 Customer.order = Order.customer.alt(f"{Customer} placed {Order}")
 order.define(
-    Order.customer(
-        Customer.filter_by(id=order_source.customer_id)))
+    o.customer(
+        Customer.lookup(id=order_source.customer_id)))
 
 # facts
 Order.price = model.Property(f"{Order} had total price {rai.Float}")
 order.define(
-    Order.price(order_source.total))
+    o.price(order_source.total))
 Order.cogs = model.Property(f"{Order} had total cost of goods sold {rai.Float}")
 order.define(
-    Order.cogs(order_source.cogs))
+    o.cogs(order_source.cogs))
 

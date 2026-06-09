@@ -48,8 +48,8 @@ model.define(
     Operation.new(
         id=op_data.id,
         shipment_count=op_data.shipment_count,
-        source_site=Site.filter_by(id=op_data.source_id),
-        output_site=Site.filter_by(id=op_data.dest_id),
+        source_site=Site.lookup(id=op_data.source_id),
+        output_site=Site.lookup(id=op_data.dest_id),
     )
 )
 

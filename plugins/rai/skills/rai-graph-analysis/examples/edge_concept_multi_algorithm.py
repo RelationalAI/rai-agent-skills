@@ -52,8 +52,8 @@ conn_data = model.data([
 f_from, f_to = Facility.ref("from_facility"), Facility.ref("to_facility")
 model.define(
     Connection.new(
-        from_facility=f_from.filter_by(id=conn_data.from_id),
-        to_facility=f_to.filter_by(id=conn_data.to_id),
+        from_facility=f_from.lookup(id=conn_data.from_id),
+        to_facility=f_to.lookup(id=conn_data.to_id),
         volume=conn_data.volume,
         reliability=conn_data.reliability,
         distance=conn_data.distance,

@@ -55,9 +55,9 @@ if n_grounded != n_entities:
 ### 3. Objective population — is the objective meaningful?
 
 **What to check:**
-- Exactly one `problem.minimize()` or `problem.maximize()` call
+- Exactly one `problem.minimize()` or `problem.maximize()` call **for an optimization or `sensitivity=True` solve** — a pure feasibility / CSP solve correctly has **zero**. `conflict=True` is objective-agnostic: it needs no objective, but tolerates one, so you can diagnose an infeasible *optimization* model without dropping its objective
 - Objective expression references at least one decision variable (not just data properties)
-- `problem.num_min_objectives() + problem.num_max_objectives() == 1`
+- `problem.num_min_objectives() + problem.num_max_objectives() == 1` (optimization/sensitivity; `== 0` for pure feasibility/CSP; `conflict=True` allows either)
 
 ### 4. Data integrity — garbage in, garbage out
 
@@ -101,7 +101,7 @@ Use `problem.display()` output as the final structural check before solving. See
 problem.display()
 model.require(problem.num_variables() > 0)
 model.require(problem.num_constraints() > 0)
-model.require(problem.num_min_objectives() + problem.num_max_objectives() == 1)
+model.require(problem.num_min_objectives() + problem.num_max_objectives() == 1)  # optimization/sensitivity; use == 0 for pure feasibility/CSP (conflict=True allows either)
 # Problem-specific: adjust counts to match your formulation
 # model.require(problem.num_variables() == expected_var_count)
 # model.require(problem.num_constraints() >= expected_constraint_count)

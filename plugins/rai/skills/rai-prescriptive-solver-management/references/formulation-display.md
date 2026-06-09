@@ -32,7 +32,7 @@ Use `problem.display()` to verify the formulation looks correct before calling `
 # Example: diet problem verification
 problem.display()
 model.require(problem.num_variables() > 0)
-model.require(problem.num_min_objectives() == 1)
+model.require(problem.num_min_objectives() == 1)  # diet is a minimization; pure feasibility/CSP would expect 0
 model.require(problem.num_constraints() > 0)
 ```
 
@@ -85,7 +85,7 @@ The display output is the primary diagnostic tool — it shows the **materialize
 
 | Observed | Likely cause | What to check |
 |----------|-------------|---------------|
-| 0 objectives | `problem.minimize()` / `problem.maximize()` not called, or expression evaluated to empty | Verify objective references at least one decision variable property |
+| 0 objectives on an optimization (or `sensitivity=True`) Problem | `problem.minimize()` / `problem.maximize()` not called, or expression evaluated to empty | Verify objective references at least one decision variable property. A pure feasibility / CSP Problem correctly shows 0 — not a defect (`conflict=True` allows either) |
 | Objective expression references no variables | Expression uses only data properties, not `solve_for`-registered properties | Cross-check property names in objective against registered variables |
 
 **Expression inspection:** Read the symbolic expressions in the Constraints section to verify:
@@ -105,7 +105,7 @@ Before solving, verify the formulation looks correct:
 
 1. **Variable count** -- does `problem.num_variables()` match expected? Missing variables often indicate `where=` conditions that filter too aggressively.
 2. **Constraint count** -- does `problem.num_constraints()` match expected? Fewer constraints may mean `model.require()` or `problem.satisfy()` calls produced empty constraint sets — typically a `.where()` that matches nothing.
-3. **Objective count** -- exactly one `problem.minimize()` or `problem.maximize()` call per Problem.
+3. **Objective count** -- exactly one `problem.minimize()` or `problem.maximize()` call for an optimization (or `sensitivity=True`) Problem; **zero** for a pure feasibility / CSP Problem. `conflict=True` is objective-agnostic — it needs none, but tolerates the objective of an infeasible optimization model you're diagnosing.
 4. **Display inspection** -- `problem.display()` shows the mathematical formulation. Look for variables that appear disconnected from the objective.
 
 ## Problem-Type Verification
@@ -130,7 +130,7 @@ n_c   = model.select(problem.num_constraints()).to_df().iloc[0, 0]
 n_min = model.select(problem.num_min_objectives()).to_df().iloc[0, 0]
 n_max = model.select(problem.num_max_objectives()).to_df().iloc[0, 0]
 assert n_v == len(model.select(Project).to_df()), "variable count off"
-assert n_min + n_max == 1, f"expected exactly one objective, got {n_min + n_max}"
+assert n_min + n_max == 1, f"expected exactly one objective, got {n_min + n_max}"  # optimization/sensitivity; pure feasibility/CSP expect 0 (conflict=True allows either)
 ```
 
 `num_constraints()` is the global count; it won't tell you *which* constraint is short. To localize, capture each `satisfy()` return value and check **per-constraint cardinality**:
@@ -224,6 +224,8 @@ Use `print_only=True` to inspect the formulation without actually solving. Works
 ## Re-solving the Same Problem
 
 The same `Problem` instance can be solved multiple times. Constraints accumulate (cannot be removed). Each `solve()` call produces fresh results — previous results are properly replaced.
+
+**One result schema per `Problem` — the diagnostic-flag exception.** A plain solve and a diagnostic solve (`sensitivity=True` / `conflict=True`) use different result schemas, and a `Problem` is locked to whichever its first solve used: re-solving under the other schema raises a `ValueError` (fail-fast, before the job is submitted) in **either** direction. Within the diagnostic schema, a re-solve may *add* a family — `sensitivity=True` then `sensitivity=True, conflict=True` is fine — but may never **drop** one already loaded (`sensitivity=True` then `conflict=True` alone raises: the dropped family's stale rows can't be cleared). To change regime, re-run the formulation to build a fresh `Problem`.
 
 ```python
 # First solve

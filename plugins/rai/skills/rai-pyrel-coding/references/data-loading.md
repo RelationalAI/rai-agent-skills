@@ -86,15 +86,15 @@ model.define(Product.new(model.data(read_csv("products.csv")).to_schema()))
 model.define(Product.new(model.data(product_rows).to_schema()))
 ```
 
-#### Separate binding with `filter_by`
+#### Separate binding with `lookup`
 
 Bind properties independently of entity creation. Used by modeler exports and when columns are nullable (missing values won't prevent entity creation).
 
 ```python
 src = model.Table("DB.SCHEMA.CUSTOMERS")
 model.define(Customer.new(id=src.C_CUSTKEY))
-model.define(Customer.filter_by(id=src.C_CUSTKEY).name(src.C_NAME))
-model.define(Customer.filter_by(id=src.C_CUSTKEY).credit_limit(src.C_ACCTBAL))
+model.define(Customer.lookup(id=src.C_CUSTKEY).name(src.C_NAME))
+model.define(Customer.lookup(id=src.C_CUSTKEY).credit_limit(src.C_ACCTBAL))
 ```
 
 ---
@@ -105,14 +105,14 @@ Entity references connect one concept to another via `model.Relationship()`. The
 
 #### Inline FK in `.new()`
 
-Bind the FK as a keyword argument to `.new()` using `filter_by()` on the target concept.
+Bind the FK as a keyword argument to `.new()` using `lookup()` on the target concept.
 
 ```python
 src = model.Table("DB.SCHEMA.NATIONS")
 model.define(Nation.new(
     id=src.N_NATIONKEY,
     name=src.N_NAME,
-    region=Region.filter_by(id=src.N_REGIONKEY),
+    region=Region.lookup(id=src.N_REGIONKEY),
 ))
 ```
 
@@ -125,33 +125,35 @@ order_data = model.data(order_rows)
 model.define(
     Order.new(
         order_data.to_schema(exclude=["customer_id", "product_id"]),
-        customer=Customer.filter_by(id=order_data.customer_id),
-        product=Product.filter_by(id=order_data.product_id),
+        customer=Customer.lookup(id=order_data.customer_id),
+        product=Product.lookup(id=order_data.product_id),
     )
 )
 ```
 
-#### Chained `filter_by`
+#### Chained `lookup`
 
 Resolve both source and target entities from the same data source. No separate `where()` needed.
 
 ```python
 src = model.Table("DB.SCHEMA.ORDERS")
 model.define(
-    Order.filter_by(id=src.ORDER_ID)
-    .ordered_by(Customer.filter_by(id=src.CUSTOMER_ID))
+    Order.lookup(id=src.ORDER_ID)
+    .ordered_by(Customer.lookup(id=src.CUSTOMER_ID))
 )
 ```
 
-#### Separate `define().where()` with `filter_by`
+#### Separate `define().where()` with `lookup`
 
-Bind FK in a standalone statement. Useful when the relationship is optional or populated from a different source than the entity.
+Bind FK in a standalone statement. Useful when the relationship is optional or populated from a different source than the entity. Because `lookup()` returns a fresh reference, bind the entity once to a `ref()` and reuse it across the `define()` and `where()` clauses. Two separate `lookup()` calls with the same key produce *independent* references the engine won't unify — in a split `define()`/`where()` they bind different rows, so share one `ref()`.
 
 ```python
 src = model.Table("DB.SCHEMA.CUSTOMERS")
-model.define(Customer.region(Region)).where(
-    Customer.filter_by(id=src.C_CUSTKEY),
-    Region.filter_by(id=src.C_REGIONKEY),
+c = Customer.ref()
+r = Region.ref()
+model.define(c.region(r)).where(
+    c.lookup(id=src.C_CUSTKEY),
+    r.lookup(id=src.C_REGIONKEY),
 )
 ```
 
@@ -201,10 +203,11 @@ Boolean columns map to unary Relationships or entity subtypes, not boolean Prope
 #### Unary flag from boolean source column
 
 ```python
+o = Order.ref()
 model.where(
-    Order.filter_by(id=order_src.ORDER_ID),
+    o.lookup(id=order_src.ORDER_ID),
     order_src.IS_DRINK_ORDER == True,
-).define(Order.is_drink_order())
+).define(o.is_drink_order())
 ```
 
 #### Unary flag from string/enum comparison
@@ -230,10 +233,11 @@ Use when the boolean distinguishes a meaningful domain category that carries its
 ```python
 EnterpriseCustomer = model.Concept("EnterpriseCustomer", extends=[Customer])
 
+c = Customer.ref()
 model.where(
-    Customer.filter_by(id=customer_src.C_CUSTKEY),
+    c.lookup(id=customer_src.C_CUSTKEY),
     customer_src.C_IS_ENTERPRISE == True,
-).define(EnterpriseCustomer(Customer))
+).define(EnterpriseCustomer(c))
 ```
 
 ---
@@ -311,8 +315,8 @@ To make columns optional, bind them separately:
 ```python
 # Entity created even if NAME or COMMENT is null
 model.define(Region.new(id=src.R_REGIONKEY))
-model.define(Region.filter_by(id=src.R_REGIONKEY).name(src.R_NAME))
-model.define(Region.filter_by(id=src.R_REGIONKEY).comment(src.R_COMMENT))
+model.define(Region.lookup(id=src.R_REGIONKEY).name(src.R_NAME))
+model.define(Region.lookup(id=src.R_REGIONKEY).comment(src.R_COMMENT))
 ```
 
 ---
@@ -346,12 +350,12 @@ d = model.data(read_csv("business.csv")[["ID", "NAME", "RELIABILITY_SCORE"]])
 
 ```python
 # BROKEN — second define clobbers site from first
-model.define(b := Business.new(id=d["ID"], site=Site.filter_by(id=d["SITE_ID"])), ...)
+model.define(b := Business.new(id=d["ID"], site=Site.lookup(id=d["SITE_ID"])), ...)
 model.define(Business.new(model.data(subset[["id","score"]]).to_schema()))
 
 # CORRECT — load all properties per batch in one define
 model.define(
-    b := Business.new(id=d["ID"], site=Site.filter_by(id=d["SITE_ID"])),
+    b := Business.new(id=d["ID"], site=Site.lookup(id=d["SITE_ID"])),
     b.name(d["NAME"]), b.score(d["SCORE"]),
 )
 ```

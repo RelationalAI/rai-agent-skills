@@ -89,7 +89,7 @@ task_data = model.data(
 model.define(Task.new(task_data.to_schema()))
 
 # Availability matrix: which workers can work which tasks
-# Slot has FK relationships to Worker and Task, resolved via filter_by
+# Slot has FK relationships to Worker and Task, resolved via lookup
 slot_data = model.data(
     [
         {"worker_id": 1, "task_id": 1, "available": 1},
@@ -110,8 +110,8 @@ model.define(
     Slot.new(
         worker_id=slot_data.worker_id,
         task_id=slot_data.task_id,
-        worker=Worker.filter_by(id=slot_data.worker_id),
-        task=Task.filter_by(id=slot_data.task_id),
+        worker=Worker.lookup(id=slot_data.worker_id),
+        task=Task.lookup(id=slot_data.task_id),
         available=slot_data.available,
     )
 )

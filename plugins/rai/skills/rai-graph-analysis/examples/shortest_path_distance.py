@@ -47,8 +47,8 @@ model.define(
     Route.new(
         id=route_data.id,
         cost=route_data.cost,
-        origin=City.filter_by(id=route_data.orig_id),
-        destination=City.filter_by(id=route_data.dest_id),
+        origin=City.lookup(id=route_data.orig_id),
+        destination=City.lookup(id=route_data.dest_id),
     )
 )
 

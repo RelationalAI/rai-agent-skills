@@ -1,10 +1,12 @@
 ---
 name: rai-prescriptive-results-interpretation
-description: Interprets optimization solver output including solution extraction, status codes, quality assessment, result explanation, and sensitivity analysis. Use when analyzing solve results or communicating optimization outcomes.
+description: Interprets optimization solver output including solution extraction, status codes, quality assessment, result explanation, sensitivity analysis (shadow prices, reduced costs, basis status), and infeasibility diagnosis (conflict / IIS). Use when analyzing solve results, reading dual or marginal values, diagnosing why a model is infeasible, or communicating optimization outcomes — not solver configuration (see rai-prescriptive-solver-management) or formulation changes (see rai-prescriptive-problem-formulation).
 ---
 
 # Solution Interpretation
 <!-- v1-STABLE -->
+
+> **Requires `relationalai>=1.11.0`.** Sensitivity analysis (shadow prices, reduced costs, basis status) and conflict / IIS diagnosis depend on the dual-bearing solver; earlier versions reject `solve("highs", sensitivity=True)` and omit the dual fields (`sensitivity`, `dual_status`, …) on `solve_info()`. See `rai-setup`.
 
 ## Summary
 
@@ -102,9 +104,13 @@ After `problem.solve()`, result attributes are available via two interfaces:
 | `si.objective_value` | `float` / `int` | Optimal objective value |
 | `si.solve_time_sec` | `float` | Wall-clock solve time in seconds |
 | `si.num_points` | `int` | Number of solutions returned |
-| `si.error` | `tuple` | Error message (if solve failed) |
 | `si.solver_version` | `str` | Version of the solver used |
 | `si.printed_model` | `str` | Solver model text (if `print_format=` was set) |
+| `si.sensitivity` | `bool` | Whether this solve requested duals (`sensitivity=True`) |
+| `si.conflict` | `bool` | Whether this solve requested a conflict / IIS (`conflict=True`) |
+| `si.conflict_status` | `str` / `None` | `"CONFLICT_FOUND"` / `"NO_CONFLICT_EXISTS"` / `"NOT_SUPPORTED"` / `"FAILED"`; `None` unless `conflict=True` |
+| `si.error` | `tuple[str, ...]` | Solver's reason(s) when a solve errored — including a `FAILED` conflict, whose reason rides this shared channel (there is no `conflict_message` field); empty tuple otherwise |
+| `si.ancillary` | `Mapping[str, str]` | Solver solution-quality metrics (gap, objective / dual bound, iteration / node counts, raw status); schema-less — discover keys via `si.display()` / `.items()`, read with `.get(key)` (string values, parse as needed) |
 
 ```python
 problem.solve("highs", time_limit_sec=60)
@@ -175,6 +181,51 @@ df = model.select(
 
 For per-pattern variations (multiple solutions, iterative solving, scenario/parametric extraction, full `Variable.values()` back-pointer naming rules with table of examples, silent-failure warnings, and Snowflake table export), see [references/solution-extraction-details.md](references/solution-extraction-details.md).
 
+### Sensitivity & conflict attributes
+
+Together these flags make a solve *interrogable*. Use `sensitivity=True` to learn, at the optimum, what each constraint is worth and how close each unused option is to entering the plan; use `conflict=True` to learn why an infeasible model has no plan. Each result reads back joined to the entity it describes.
+
+`solve(sensitivity=True)` and `solve(conflict=True)` populate extra attributes on the objects `solve_for()` and `satisfy()` already return. Read them **straight off those objects** — like `.name` or `.lower`, not through a separate API. Each is **single-valued** (no `sol_index` axis, unlike `Variable.values()`) and joins to its entity through the **back-pointer key**, never by parsing a constraint's name string. Request the flags on the solve itself — see `rai-prescriptive-solver-management` > First-class solve parameters for the request side; this is the read side. `sensitivity=True` needs an objective (it returns duals at the optimum); `conflict=True` needs **no** objective (it diagnoses an infeasible model).
+
+**Marginals are single-valued — don't confuse their shape with the indexed solution accessor:**
+
+| Accessor | Shape | Read like |
+|---|---|---|
+| `var.reduced_cost` / `con.shadow_price` | single-valued (no `sol_index`) | `.name` / `.lower` — `model.select(var.reduced_cost)` |
+| `var.values(k, ref)` | indexed (needs a `sol_index` `k` + a value `ref`) | `where(var.values(k, ref))` (the multi-solution accessor) |
+
+**Variable attributes** (off the `solve_for()` return):
+
+| Attribute | Type | Meaning |
+|---|---|---|
+| `var.reduced_cost` | Float | Reduced cost (Gurobi RC convention). **Sign depends on the objective sense *and* which bound is active** — under minimize, nonbasic at lower prices `≥ 0`, at upper `≤ 0`; under maximize both flip. Empty for MIP. |
+| `var.basis_status` | String | MOI VariableBasisStatus (`"BASIC"`, `"NONBASIC_AT_LOWER"`, …). Absent for interior-point (Ipopt). |
+| `var.lower_in_conflict` / `var.upper_in_conflict` / `var.integrality_in_conflict` | predicate | True if the solver flagged that bound / integrality as conflicting — a *lead*, not proof (collapses `IN_CONFLICT` + `MAYBE_IN_CONFLICT`; for integrality Gurobi only ever reports the "maybe"). Use bare: `where(var.lower_in_conflict)`. |
+
+**Constraint attributes** (off the `satisfy()` return):
+
+| Attribute | Type | Meaning |
+|---|---|---|
+| `con.shadow_price` | Float | ∂obj/∂RHS (Gurobi Pi). Empty for MIP. |
+| `con.basis_status` | String | MOI ConstraintBasisStatus. Absent for interior-point. |
+| `con.in_conflict` | predicate | True if the solver flagged the constraint as conflicting — a *lead*, not proof (collapses `IN_CONFLICT` + `MAYBE_IN_CONFLICT`). Use bare: `where(con.in_conflict)`. |
+
+```python
+food_vars = problem.solve_for(Food.amount, name=Food.name, lower=0)
+qty = Float.ref()
+intake = sum(qty * Food.amount).where(Food.contains(Nutrient, qty)).per(Nutrient)
+floor = problem.satisfy(model.require(intake >= Nutrient.min), keyed_by={"nutrient": Nutrient})
+problem.minimize(sum(Food.cost * Food.amount))   # sensitivity=True needs an objective — duals are read at the optimum
+problem.solve("highs", sensitivity=True)
+
+# Marginals read straight off the returned objects (like .name) and join to entity
+# data through the back-pointer key — never by parsing the constraint name string:
+model.select(food_vars.food.name, food_vars.reduced_cost, food_vars.basis_status).inspect()
+model.select(floor.nutrient.name, floor.nutrient.min, floor.shadow_price).inspect()
+```
+
+Reading a marginal or conflict flag **by entity** (`floor.nutrient`) requires the constraint's grounding key to be **declared** at formulation time — `satisfy(..., keyed_by={"nutrient": Nutrient})`; constraints expose no back-pointer without it (a variable's, like `food_vars.food`, is automatic). For the full `keyed_by` idiom — multi-entity keys, scalar keys, the key-uniqueness rule — see `rai-prescriptive-problem-formulation/references/constraint-formulation.md`. For the dual economics and conflict (IIS) reading in depth, see [references/sensitivity-analysis.md](references/sensitivity-analysis.md) and [references/conflict-analysis.md](references/conflict-analysis.md).
+
 ### Post-solve constraint verification
 
 `problem.verify(*fragments)` temporarily installs constraint ICs, triggers a query to evaluate them, and removes them. Useful for checking that the solver's solution satisfies constraints — particularly for exact solvers (HiGHS MIP, MiniZinc):
@@ -202,10 +253,26 @@ The solver found the best possible solution within its tolerance settings (typic
 No solution satisfies all constraints simultaneously. The problem as stated is impossible.
 
 **Diagnosis steps:**
-1. Check demand vs. capacity: does total demand exceed total supply/capacity?
-2. Look for contradictory constraints (e.g., x >= 10 AND x <= 5).
-3. Check bound consistency: any variable with lower_bound > upper_bound?
-4. Bisect: rebuild the Problem with one `problem.satisfy(...)` call removed at a time and re-solve. The constraint whose removal makes the problem feasible is the binding conflict. (Problem accumulates `satisfy` calls — there's no in-place `remove_constraint` API; build a fresh Problem each iteration.)
+
+First, **localize with `solve(conflict=True)`** — when the solver supports it, one solve returns the conflict (IIS): a *minimal* set of constraints and variable bounds that cannot all hold together. Read membership as a bare predicate, joined to the grounding entity by key, instead of guessing:
+
+```python
+# A Problem already solved plain can't add conflict=True on a re-solve (one result
+# schema per Problem) — request it upfront, or rebuild the Problem for this run.
+problem.solve("highs", conflict=True)
+si = problem.solve_info()
+if si.conflict_status == "CONFLICT_FOUND":
+    # coverage = a per-Shift satisfy(..., keyed_by={"shift": Shift}) family; coverage.shift is its declared back-pointer
+    model.select(coverage.shift.name, coverage.shift.min_coverage).where(coverage.in_conflict).inspect()
+```
+
+Each flagged member is a *candidate* (the flags are leads), so relax one and re-solve to confirm — relaxing a true member clears *this* conflict, but other independent conflicts may remain. `conflict=True` needs no objective and works on MIP. See [references/conflict-analysis.md](references/conflict-analysis.md).
+
+If `conflict_status` is `NO_CONFLICT_EXISTS`, the conflict solve found the model *feasible* — the earlier `INFEASIBLE` came from a different formulation or data state; re-check what changed between the two solves. If it is `NOT_SUPPORTED` (solver without IIS) or `FAILED` (read `si.error`), fall back to manual checks:
+1. Demand vs. capacity: does total demand exceed total supply / capacity?
+2. Contradictory constraints (e.g., `x >= 10` and `x <= 5`).
+3. Bound consistency: any variable with `lower_bound > upper_bound`?
+4. Bisect: rebuild the Problem with one `problem.satisfy(...)` call removed at a time and re-solve. The constraint whose removal restores feasibility is the binding conflict. (Problem accumulates `satisfy` calls — there's no in-place `remove_constraint` API; build a fresh Problem each iteration.)
 
 **What to tell users:** "The requirements as stated cannot all be satisfied simultaneously. The most likely conflict is [specific conflict]. Options: relax [constraint], increase [capacity], or allow unmet demand with a penalty."
 **Next steps:** Identify the binding conflict, present trade-off options, add slack/penalty variables. A common and valuable path is moving the conflicting hard constraint to the objective with a penalty — feasibility restoration through softening is often more useful than pure diagnosis.
@@ -223,7 +290,7 @@ The objective can improve infinitely — the solver can keep making the solution
 **Next steps:** Add missing bounds or constraints, verify objective direction and coefficient signs.
 
 ### Feasible (MIP)
-For MIP problems, HiGHS may return `"Feasible"` instead of `"OPTIMAL"` when a solution is found but optimality is not proven within the default MIP gap tolerance. Treat `"Feasible"` the same as `"TIME_LIMIT"` for gap interpretation below; check the solver log for the realized gap.
+For MIP problems, HiGHS may return `"Feasible"` instead of `"OPTIMAL"` when a solution is found but optimality is not proven within the default MIP gap tolerance. Treat `"Feasible"` the same as `"TIME_LIMIT"` for gap interpretation below; read the realized gap from `si.ancillary` if present (see Time Limit below), or the solver log otherwise.
 
 ### Time Limit
 The solver found a feasible solution but could not prove it is optimal within the time allowed.
@@ -232,6 +299,8 @@ The solver found a feasible solution but could not prove it is optimal within th
 - Gap < 1%: Solution is very close to optimal; usually acceptable.
 - Gap 1-5%: Solution is good but there may be modest room for improvement.
 - Gap > 10%: Solution quality is uncertain; consider increasing time limit or simplifying the model.
+
+Read the realized gap programmatically from `si.ancillary` when present — it's a schema-less `Mapping[str, str]`, so discover the key first (`si.display()` or iterate `si.ancillary.items()`) and read with `.get(key)`, never `si.ancillary[key]` (a hardcoded key risks `KeyError` across solvers). Fall back to the solver log if no gap-style key is present.
 
 **What to tell users:** "The solver found a solution within [X%] of the best possible. [If gap is small: This is likely very close to optimal.] [If gap is large: More time or a simpler model could improve this.]"
 **Next steps:** For large gaps, increase time limit, tighten Big-M values, add symmetry-breaking constraints, or simplify the model.
@@ -242,7 +311,7 @@ A non-optimal termination status is information about the problem structure, not
 
 **INFEASIBLE as diagnostic tool:**
 - Intentionally solving with a proposed constraint set to test feasibility boundaries is a valid modeling technique. An infeasible result tells you the constraint set is too tight — which constraints to relax.
-- **Constraint bisection debugging:** Rebuild the Problem omitting one `satisfy(...)` call at a time and re-solve. The omitted constraint whose absence makes the problem feasible is the binding conflict. This is faster than manual inspection for large formulations. (Problem accumulates `satisfy` calls — there's no in-place removal; build a fresh Problem each iteration.)
+- **Localizing the conflict:** `solve(conflict=True)` returns the minimal conflicting subset (IIS) in one solve — the structured first-line tool (see Infeasible above and [references/conflict-analysis.md](references/conflict-analysis.md)). **Constraint bisection** is the fallback when the solver reports `NOT_SUPPORTED` / `FAILED`: rebuild the Problem omitting one `satisfy(...)` call — or relaxing one variable bound, since bounds alone can be the source — at a time and re-solve; the omitted member whose absence restores feasibility is the binding conflict. (Problem accumulates `satisfy` calls — there's no in-place removal; build a fresh Problem each iteration.)
 
 **TIME_LIMIT with acceptable gap:**
 - A 2% gap after 60 seconds may be perfectly good for operational use. The "optimal" solution is at most 2% better — often indistinguishable in business terms.
@@ -277,7 +346,7 @@ When the question is "does the property hold?" or "is there any configuration wh
 
 **Critical:** `num_points() == 0` does **not** prove the property holds — the solver may have crashed, hit a time limit, or produced zero solutions for any other reason. Always check the termination status first.
 
-For the full pattern (counterexample-IC-as-negation, verdict-gated extraction, witness reporting), see `rai-prescriptive-problem-formulation/references/csp-formulation.md` § 5 and `examples/audit_witness.py`.
+For the full pattern (counterexample-IC-as-negation, verdict-gated extraction, witness reporting), see `rai-prescriptive-problem-formulation/references/csp-formulation.md` § 5 and `rai-prescriptive-problem-formulation/examples/audit_witness.py`.
 
 ---
 
@@ -338,7 +407,7 @@ A solution is **trivial** when the solver technically found an optimum, but the 
 
 A **forcing constraint** is one that requires decision variables to take positive values. Without them, minimize objectives will produce all-zero solutions.
 
-**Diagnosis:** If the objective is minimize and the solution is all zeros, look for which requirements from the data should force positive activity, and verify those constraints exist and their joins match actual data. For common forcing constraint patterns and code examples, see `rai-prescriptive-problem-formulation/constraint-formulation.md` > Forcing Constraints.
+**Diagnosis:** If the objective is minimize and the solution is all zeros, look for which requirements from the data should force positive activity, and verify those constraints exist and their joins match actual data. For common forcing constraint patterns and code examples, see `rai-prescriptive-problem-formulation/references/constraint-formulation.md` > Forcing constraints.
 
 ### Reasonableness Checks
 
@@ -426,7 +495,7 @@ Decision makers need to understand not just what the solution recommends, but wh
 - **"Why was Y excluded?"** → Identify which constraint or cost makes Y suboptimal. "Entity C isn't used because its fixed cost exceeds the savings from proximity despite available capacity."
 - **"What's preventing Z?"** → Identify the binding constraint. "Site B can't produce more because its capacity constraint is binding at 500 units."
 
-Frame every explanation in terms the decision maker already knows — their entities, their resources, their constraints — not variable indices or solver internals. (Shadow prices / dual values are not yet exposed in PyRel v1; reason from binding-constraint identification and scenario deltas instead.)
+Frame every explanation in terms the decision maker already knows — their entities, their resources, their constraints — not variable indices or solver internals. For *why* a constraint binds or an option was excluded, `solve(sensitivity=True)` gives exact marginals on LP/QP models — a constraint's `shadow_price` (what one more unit of its RHS is worth) and a variable's `reduced_cost` (the objective marginal on its bound); see Sensitivity Analysis for the sign rules and the left-out-option intuition. For MIP models (no duals) or finite/structural changes, reason from binding-constraint identification and scenario deltas.
 
 ### Sensitivity Framing
 
@@ -439,13 +508,22 @@ Frame sensitivity results as conditional business statements:
 
 ## Sensitivity Analysis
 
+Two distinct tools answer "what changes if an assumption changes," and they don't substitute for each other:
+
+- **Exact marginals at the optimum** — `solve(sensitivity=True)` returns the LP/QP duals (`shadow_price`, `reduced_cost`, `basis_status`). These are *local, first-order* rates at the current optimum: the value of one more unit of a constraint's RHS, or the objective marginal on a variable's bound. LP/QP only (MIP has no duals), and there is **no** coefficient / RHS *ranging* — a marginal gives the rate, not the range over which it holds. For the dual economics, the key-join idiom, and the safe complementary-slackness directions, see [references/sensitivity-analysis.md](references/sensitivity-analysis.md).
+- **Finite / structural what-if** — scenario sweeps and Pareto frontiers (below) cover finite changes, MIP models, and structural shifts (adding or removing an entity, flipping a constraint) that duals can't capture.
+
+Duals give the instantaneous rate at today's optimum; scenarios give what actually happens after a non-infinitesimal change. Use marginals to *rank* what to perturb, then scenarios to *quantify* the result — duals don't replace scenarios.
+
+### Finite / structural what-if (scenarios & Pareto)
+
 Sensitivity analysis answers: "What happens if our assumptions change?" Present results as scenario comparison tables, not mathematical derivatives. Prioritize parameters that are uncertain (demand forecasts, cost estimates), controllable (budget limits, service level targets), or high-impact (small changes cause structural solution changes).
 
 Scenarios should be treated as a default post-solve step, not an optional advanced feature. After every solve, proactively suggest 1-2 scenario variations based on binding constraints and parameter sensitivity.
 
 **Strategic vs. operational context:** For strategic (one-time planning) decisions, Pareto frontiers showing the tradeoff surface are preferred — stakeholders choose from the frontier. For operational (recurring) decisions, weighted objectives with tunable weights are more practical — set once, run daily. Detect which context applies and frame scenario results accordingly.
 
-**Pareto frontier / efficient frontier results:** When results come from an epsilon constraint loop (bi-objective optimization), each point on the frontier is a complete, valid solution — no point is strictly better than another. Explain to the user: "Each point represents a different balance between your two goals. The knee is where further improvement in one goal starts costing significantly more in the other." For the full analysis structure (tradeoff table, marginal rate analysis, knee detection, allocation shifts, regime characterization) and how to present results as a menu of operating points, see [references/sensitivity-analysis.md](references/sensitivity-analysis.md).
+**Pareto frontier / efficient frontier results:** When results come from an epsilon constraint loop (bi-objective optimization), each point on the frontier is a complete, valid solution — no point is strictly better than another. Explain to the user: "Each point represents a different balance between your two goals. The knee is where further improvement in one goal starts costing significantly more in the other." For the full analysis structure (tradeoff table, marginal rate analysis, knee detection, allocation shifts, regime characterization) and how to present results as a menu of operating points, see [references/sensitivity-analysis.md](references/sensitivity-analysis.md). **If the sweep was dual-guided** (`sensitivity=True` on an LP/QP), the ε-bound's `shadow_price` is the *exact* tradeoff rate at each point (the frontier slope, no finite differencing), and you can validate the whole frontier relationally — non-dominance, monotone-dual convexity, slope-consistency — as integrity constraints; see the same reference's "The Scalarization Dual is the Frontier Geometry".
 
 Parameter types: **numeric** (range with step), **entity** (select/exclude specific entities), **categorical** (discrete named options). A parameter is **critical** if small changes cause different facilities/assets to be selected, >5% objective change per 10% parameter variation, or constraint status flips.
 
@@ -462,9 +540,19 @@ For parameter sweep patterns, scenario comparison tables, and Pareto frontier co
 | Infeasible: demand > capacity | Total demand exceeds supply | Add slack/penalty variables or relax demand constraints |
 | Silent: `problem.termination_status == "OPTIMAL"` (no parens) — always False | `termination_status` on the `Problem` object is a bound method, not a property; comparing a method to a string is never equal and the bug is silent | Read status Python-side: `problem.solve_info().termination_status == "OPTIMAL"` (no parens — `solve_info()` returns a dataclass-like value with a string field). Engine-side inside `model.require(...)`: `problem.termination_status() == "OPTIMAL"` (with parens — that's the engine-side Relationship) |
 | Silent: non-OPTIMAL result extraction returns empty DataFrame / None objective | Loop / scenario workflows extract `Variable.values()` or read `si.objective_value` without checking status first. Infeasible / time-limited solves produce an empty query and `None` objective, silently propagated into downstream code | Always guard: `if si.termination_status not in ("OPTIMAL", "LOCALLY_SOLVED"): continue` (or raise) before touching `si.objective_value` or the extraction query |
-| Multi-solution overclaim — treating `solution_limit=K` results as top-K-optimal, ranked, or diversity-maximized | MiniZinc returns up to K **distinct feasible** solutions; the set is neither ranked by objective nor maximally diverse | Document the semantics to consumers: up to K distinct feasible, no ordering guarantee. For "top-K by objective," resolve K times with the previous-best as a constraint. See `rai-prescriptive-problem-formulation/references/csp-formulation.md` § Multi-solution mode. |
+| Multi-solution overclaim — treating `solution_limit=K` results as top-K-optimal, ranked, or diversity-maximized | MiniZinc returns up to K **distinct feasible** solutions; the set is neither ranked by objective nor maximally diverse | Document the semantics to consumers: up to K distinct feasible, no ordering guarantee. For "top-K by objective," resolve K times with the previous-best as a constraint. See `rai-prescriptive-problem-formulation/references/csp-formulation.md` § 4. Multi-solution mode. |
 | Silent: `verify()` returns OK on solver-only-IC bodies (`implies`-bodied or `all_different`-bodied) even when the IC is violated | The verify engine cannot ground these wire-format constraint relations at check time, so it silently returns OK. Documented engine limitation, not a solver bug | Pick the regime that matches the constraint mix (`rai-prescriptive-problem-formulation/references/csp-formulation.md` § 6): mixed → call `verify()` + post-solve assertions on solver-only ICs; all-solver-only → skip `verify()` entirely; `populate=False` → skip `verify()` (no relational-layer values to ground) |
 | Audit misread: `num_points() == 0` interpreted as "property holds" | In status-aware audit problems, a zero `num_points` can result from a crash, time-limit, or any non-success status — NOT necessarily proof that the property holds | Always check `termination_status` first. Only `INFEASIBLE` proves the property holds. `TIME_LIMIT`, errors, and `LOCALLY_SOLVED` on a CSP are INCONCLUSIVE. See Audit / witness mode section above. |
+| Marginal reads empty (`reduced_cost` / `shadow_price`) on an LP/QP | `sensitivity=True` was not requested on that solve — marginals are a solve *option*, not post-processing | Request it on the solve whose results you interpret: `problem.solve("highs", sensitivity=True)`. Set the flag on the solve; re-solving a plain Problem to "add" duals raises a `ValueError` (one result schema per Problem) — rebuild a fresh Problem |
+| Marginal still empty on a `sensitivity=True` solve | The solve didn't reach an optimum (`INFEASIBLE` / `TIME_LIMIT` / failure → no duals to report), or the model is a MIP (integer models have no duals; a warning fires) | Check `si.termination_status` is `OPTIMAL` first; if it is and marginals are still empty, the model is integer — reason from scenarios / binding-constraint identification (duals are LP/QP-only) |
+| Empty `basis_status` | Interior-point solver (Ipopt) reports no simplex basis | Expected; use `reduced_cost` / `shadow_price` for marginals, or a simplex solver if you need a basis |
+| `conflict=True` confused with `sensitivity=True` | `conflict=True` populates `in_conflict` predicates, **not** marginals; `sensitivity=True` populates marginals, **not** conflict flags | Request the one matching the question. Confirm which ran from `si.conflict` / `si.sensitivity` (and `si.conflict_status`), not by inferring from the flags — an always-False `in_conflict` can equally mean `NO_CONFLICT_EXISTS`, `NOT_SUPPORTED` / `FAILED`, or just "not in this (non-unique) IIS" |
+| Assuming the dual sign comes from the objective sense alone | `shadow_price = ∂obj/∂RHS`: its sign is set by **objective sense × constraint direction** (under minimize a binding `≤` prices `≤ 0`, a binding `≥` prices `≥ 0`; under maximize both flip). `reduced_cost` follows its own rule — sign = objective sense **× which bound is active** (minimize: nonbasic-at-lower `≥ 0`, at-upper `≤ 0`; maximize flips) | Read each marginal's sign from the objective sense **and** its own geometry — constraint direction for `shadow_price`, active bound for `reduced_cost` — see `references/sensitivity-analysis.md` § Sign convention & scope limits |
+| Asserting `reduced_cost > 0` for every *unused* option | The converse `unused ⇒ reduced_cost > 0` holds only under a **unique** optimum; under alternate optima / degeneracy an unused option can have `reduced_cost ≈ 0` | Assert only the always-true directions: `in use ⇒ reduced_cost ≈ 0` and `reduced_cost ≠ 0 ⇒ at a bound` (the `reduced_cost > 0 ⇒ unused` shorthand assumes **minimizing** — maximizing flips the sign). See [references/sensitivity-analysis.md](references/sensitivity-analysis.md) |
+| `solve(sensitivity=True)` on an objectiveless (pure feasibility / CSP) model → `ValueError` | Duals are objective marginals; there's nothing to differentiate without an objective | Use `conflict=True` for pure feasibility / CSP models — it needs **no** objective (the asymmetry that's easy to miss) |
+| `integrality_in_conflict == False` read as proof a variable isn't involved | The IIS is one minimal subset and isn't unique — `False` means only "not in this subset," not "uninvolved"; other conflicts may exist (and a `True` flag may be only a "maybe," since the predicates collapse `IN_CONFLICT` and `MAYBE_IN_CONFLICT`) | Treat only `True` as a lead; confirm non-involvement by relaxing and re-solving, not from a `False` flag |
+| Constraint **family** without a declared key → can't join a marginal / IIS flag to its entity | Constraint back-pointers are declared, not inferred — without `keyed_by` the instances expose no entity back-pointer (`name=` is a display label only) | Declare the grounding key at formulation time, e.g. `satisfy(..., keyed_by={"nutrient": Nutrient})`, and read via the back-pointer (`con.nutrient`). Full idiom: `rai-prescriptive-problem-formulation/references/constraint-formulation.md` |
+| Solve fails with an `FDError` (functional-dependency violation) on a `keyed_by` constraint | The declared keys don't uniquely determine the instance — a family wider than its key, or two conjuncts of one `require(A, B)` sharing the same keys — so two constraint expressions collide on one identity | Add the missing key(s) so each instance is 1:1 with its key tuple, or split a multi-conjunct `require` into one `satisfy` per conjunct |
 
 For additional pitfalls (numerical instability, degenerate solutions, wrong aggregation scope, missing/null data) — distinct from the silent-bug rows above — see [references/common-pitfalls.md](references/common-pitfalls.md).
 
@@ -481,7 +569,7 @@ Use this after every solve to ensure result quality:
 - [ ] Binding constraints align with known bottlenecks?
 - [ ] Results are stable to minor parameter perturbations?
 
-**If checks fail:** Trivial solution (all zeros) → add forcing constraints first. Infeasible → relax constraints (or rebuild the Problem omitting a conflicting `satisfy(...)` call). See `rai-prescriptive-problem-formulation/references/fix-generation-guidelines.md` for fix strategies.
+**If checks fail:** Trivial solution (all zeros) → add forcing constraints first. Infeasible → localize with `solve(conflict=True)` (IIS) and act on the flagged members (see Infeasible above). See `rai-prescriptive-problem-formulation/references/fix-generation-guidelines.md` for fix strategies.
 
 ---
 
@@ -491,7 +579,10 @@ Use this after every solve to ensure result quality:
 |---|---|---|
 | Scenario Concept results | Results in ontology via `model.select(Scenario.name, ...)`, per-scenario aggregation, comparison queries | [examples/scenario_concept_extraction.py](examples/scenario_concept_extraction.py) |
 | Loop-based results | `Variable.values()`, `solve_info().display()`, status/objective access, scenario comparison table | [examples/loop_based_extraction.py](examples/loop_based_extraction.py) |
-| Pareto frontier analysis | Tradeoff table, marginal rates + knee detection, allocation shifts + regime detection, ASCII frontier visualization | [examples/pareto_frontier_analysis.py](examples/pareto_frontier_analysis.py) |
+| Pareto frontier analysis | Tradeoff table (secant **and** exact shadow-price columns side by side), marginal rates + knee detection, allocation shifts + regime detection, ASCII frontier visualization | [examples/pareto_frontier_analysis.py](examples/pareto_frontier_analysis.py) |
+| Frontier relational validation | Materialize swept points into a `FrontierPoint` concept; assert non-dominance, convexity (monotone dual), and slope-consistency (secant bracketed by consecutive duals) as **non-strict / margined** integrity constraints | [examples/frontier_relational_validation.py](examples/frontier_relational_validation.py) |
+| Marginals by key | Read `reduced_cost` / `shadow_price` / `basis_status` off the returned objects and join each to its entity via the `keyed_by` back-pointer | [examples/marginals_by_key_extraction.py](examples/marginals_by_key_extraction.py) |
+| IIS membership by key | `solve(conflict=True)` on an infeasible model; read `con.in_conflict` (+ a `var.*_in_conflict`) joined to the grounding entity, gated on `conflict_status` | [examples/iis_membership_extraction.py](examples/iis_membership_extraction.py) |
 
 ---
 
@@ -502,4 +593,5 @@ Use this after every solve to ensure result quality:
 | Solution extraction details | Query-pattern variations (`populate=True` vs `populate=False` — multiple solutions, iterative, scenario/parametric), `Variable.values()` back-pointer naming rules with examples table, silent-failure warnings, Snowflake export | [solution-extraction-details.md](references/solution-extraction-details.md) |
 | Failure taxonomy | Detailed root causes by solvability level and 5-step diagnosis protocol | [failure-taxonomy.md](references/failure-taxonomy.md) |
 | Common pitfalls | Additional result-interpretation pitfalls (numerical instability, degenerate solutions, aggregation scope, missing/null data, etc.) — distinct from the silent-bug rows in this SKILL | [common-pitfalls.md](references/common-pitfalls.md) |
-| Sensitivity analysis | Sensitivity analysis techniques and parameter sweeps | [sensitivity-analysis.md](references/sensitivity-analysis.md) |
+| Sensitivity analysis | Native LP/QP marginals (shadow prices, reduced costs, basis status) and the dual-economics / key-join idiom, plus finite scenario sweeps and Pareto frontiers | [sensitivity-analysis.md](references/sensitivity-analysis.md) |
+| Conflict (IIS) analysis | Reading an infeasibility conflict: `in_conflict` membership, `conflict_status` vocabulary and how to act on each value, joining the conflict to the entity by key | [conflict-analysis.md](references/conflict-analysis.md) |

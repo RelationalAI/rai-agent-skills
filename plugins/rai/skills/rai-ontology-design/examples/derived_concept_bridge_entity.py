@@ -1,7 +1,7 @@
 # NOTE: Includes ternary Property for PWL segments and derived Project concept —
 # design patterns beyond the starter build (see rai-build-starter-ontology examples).
 # Pattern: base model ontology with Sources class, Concepts, Properties, Relationships
-# Key ideas: Sources nested class for table bindings; filter_by resolves FKs; ternary
+# Key ideas: Sources nested class for table bindings; lookup resolves FKs; ternary
 # Property (PWL for Segment has Float); walrus := in entity creation; .alias() for inverse.
 
 from relationalai.semantics import Float, Integer, Model, String
@@ -35,17 +35,19 @@ model.define(Segment.new(sid=segments.segment))
 PWL = model.Concept("PWL", identify_by={"pwl_id": String})
 PWL.seg_len = model.Property(f"{PWL} for {Segment} has {Float:seg_len}")
 PWL.slope = model.Property(f"{PWL} for {Segment} has {Float:slope}")
-PWL.segment = model.Relationship(f"{PWL} has segment {Segment}", short_name="pwl_segment")
+PWL.segment = model.Relationship(f"{PWL} has segment {Segment}")
 model.define(PWL.new(pwl_id=segments.pwl_id))
 
 # Wire PWL segment data (ternary: PWL + Segment -> Float values)
+pwl = PWL.ref()
+segment = Segment.ref()
 model.define(
-    PWL.segment(Segment),
-    PWL.seg_len(Segment, segments.segment_length),
-    PWL.slope(Segment, segments.marginal_return),
+    pwl.segment(segment),
+    pwl.seg_len(segment, segments.segment_length),
+    pwl.slope(segment, segments.marginal_return),
 ).where(
-    PWL.filter_by(pwl_id=segments.pwl_id),
-    Segment.filter_by(sid=segments.segment),
+    pwl.lookup(pwl_id=segments.pwl_id),
+    segment.lookup(sid=segments.segment),
 )
 
 # --- Allocation: Properties + Relationships ---
@@ -53,13 +55,13 @@ Allocation = model.Concept("Allocation", identify_by={"pid": String})
 Allocation.min_budget = model.Property(f"{Allocation} has {Float:min_budget}")
 Allocation.max_budget = model.Property(f"{Allocation} has {Float:max_budget}")
 Allocation.channel = model.Relationship(
-    f"{Allocation} runs on {Channel}", short_name="allocation_channel")
+    f"{Allocation} runs on {Channel}")
 Allocation.project = model.Relationship(
-    f"{Allocation} belongs to {Project}", short_name="allocation_project")
+    f"{Allocation} belongs to {Project}")
 Allocation.country = model.Relationship(
-    f"{Allocation} is in {Country}", short_name="allocation_country")
+    f"{Allocation} is in {Country}")
 Allocation.pwl = model.Relationship(
-    f"{Allocation} has {PWL}", short_name="allocation_pwl")
+    f"{Allocation} has {PWL}")
 
 # Walrus := in entity creation with inline property binding
 model.define(
@@ -68,47 +70,58 @@ model.define(
     ap.max_budget(allocs.max_budget),
 )
 
-# FK resolution via filter_by
-model.define(Allocation.channel(Channel)).where(
-    Allocation.filter_by(pid=allocs.allocation_id),
-    Channel.filter_by(name=allocs.channel),
+# FK resolution via lookup
+allocation = Allocation.ref()
+channel = Channel.ref()
+model.define(allocation.channel(channel)).where(
+    allocation.lookup(pid=allocs.allocation_id),
+    channel.lookup(name=allocs.channel),
 )
-model.define(Allocation.project(Project)).where(
-    Allocation.filter_by(pid=allocs.allocation_id),
-    Project.filter_by(name=allocs.project),
+allocation = Allocation.ref()
+project = Project.ref()
+model.define(allocation.project(project)).where(
+    allocation.lookup(pid=allocs.allocation_id),
+    project.lookup(name=allocs.project),
 )
-model.define(Allocation.country(Country)).where(
-    Allocation.filter_by(pid=allocs.allocation_id),
-    Country.filter_by(name=allocs.country),
+allocation = Allocation.ref()
+country = Country.ref()
+model.define(allocation.country(country)).where(
+    allocation.lookup(pid=allocs.allocation_id),
+    country.lookup(name=allocs.country),
 )
-model.define(Allocation.pwl(PWL)).where(
-    Allocation.filter_by(pid=allocs.allocation_id),
-    PWL.filter_by(pwl_id=allocs.pwl_id),
+allocation = Allocation.ref()
+pwl = PWL.ref()
+model.define(allocation.pwl(pwl)).where(
+    allocation.lookup(pid=allocs.allocation_id),
+    pwl.lookup(pwl_id=allocs.pwl_id),
 )
 
 # --- Cross-concept: PiecewiseLinearSegment (bridges Allocation -> PWL -> Segment) ---
 PiecewiseLinearSegment = model.Concept("PiecewiseLinearSegment")
 PiecewiseLinearSegment.to_allocation = model.Relationship(
-    f"{PiecewiseLinearSegment} models {Allocation}", short_name="pls_allocation")
+    f"{PiecewiseLinearSegment} models {Allocation}")
 PiecewiseLinearSegment.segment = model.Relationship(
-    f"{PiecewiseLinearSegment} uses {Segment}", short_name="pls_segment")
+    f"{PiecewiseLinearSegment} uses {Segment}")
 PiecewiseLinearSegment.segment_length = model.Property(
     f"{PiecewiseLinearSegment} has {Float:segment_length}")
 PiecewiseLinearSegment.marginal_return = model.Property(
     f"{PiecewiseLinearSegment} has {Float:marginal_return}")
 
 # Entity creation via 3-way join: Allocation -> PWL -> Segment
+allocation = Allocation.ref()
+pwl = PWL.ref()
+segment = Segment.ref()
 model.define(
     PiecewiseLinearSegment.new(
-        to_allocation=Allocation,
-        segment=Segment,
+        to_allocation=allocation,
+        segment=segment,
         segment_length=segments.segment_length,
         marginal_return=segments.marginal_return,
     )
 ).where(
-    Allocation.pwl(PWL),
-    PWL.filter_by(pwl_id=segments.pwl_id),
-    Segment.filter_by(sid=segments.segment),
+    allocation.pwl(pwl),
+    pwl.lookup(pwl_id=segments.pwl_id),
+    segment.lookup(sid=segments.segment),
 )
 
 # Inverse relationship via .alias()

@@ -62,8 +62,8 @@ qual_data = model.data([
 model.define(
     Qualification.new(
         id=qual_data.id,
-        technician=Technician.filter_by(id=qual_data.technician_id),
-        machine=Machine.filter_by(id=qual_data.machine_id),
+        technician=Technician.lookup(id=qual_data.technician_id),
+        machine=Machine.lookup(id=qual_data.machine_id),
     )
 )
 

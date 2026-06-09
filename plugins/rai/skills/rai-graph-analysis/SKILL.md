@@ -382,7 +382,7 @@ Segment = model.Concept("Segment", identify_by={"id": Integer})
 model.define(Segment.new(id=graph.Node.community_label))
 Customer.segment = model.Property(f"{Customer} belongs to {Segment:segment}")
 model.where(graph.Node == Customer).define(
-    Customer.segment(Segment.filter_by(id=graph.Node.community_label))
+    Customer.segment(Segment.lookup(id=graph.Node.community_label))
 )
 ```
 

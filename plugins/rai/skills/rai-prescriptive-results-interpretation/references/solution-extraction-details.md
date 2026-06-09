@@ -3,6 +3,7 @@
 ## Table of Contents
 - [Querying Solution Values — Full Patterns](#querying-solution-values--full-patterns)
 - [Variable.values() Back-Pointer Naming Rule](#variablevalues-back-pointer-naming-rule)
+- [Constraint Back-Pointer Access (marginals & conflict membership)](#constraint-back-pointer-access-marginals--conflict-membership)
 - [Silent-Failure Warnings](#silent-failure-warnings)
 - [Exporting Solution Results to Tables](#exporting-solution-results-to-tables)
 - [Multiple Solutions](#multiple-solutions)
@@ -88,6 +89,33 @@ The lowercased type name is the type name converted to lowercase **as-is** — n
 
 ---
 
+## Constraint Back-Pointer Access (marginals & conflict membership)
+
+`satisfy()` returns a `ProblemConstraint` — a Concept, like the `ProblemVariable` from `solve_for()`. When you request `sensitivity=True` or `conflict=True`, the marginal and membership attributes read **straight off it**, single-valued (no `sol_index`):
+
+- `con.shadow_price`, `con.basis_status` — populated by `sensitivity=True`
+- `con.in_conflict` — populated by `conflict=True`
+
+It also carries an **entity back-pointer** for each grounding key declared via `keyed_by=` at `satisfy()` time, mirroring the variable back-pointer. That lets a marginal or conflict flag **join to entity data by key** (`con.entity.prop`) instead of parsing the constraint's name string. The back-pointer attribute is the **dict key you chose** in the declaration — `keyed_by={"resource": Resource}` reads back as `cap.resource` — not the `name=` display label (`"cap"`). The `name=` kwarg only sets the constraint's display name; it plays no part in the back-pointer.
+
+```python
+# Constraint family: one capacity limit per Resource, keyed by its Resource:
+cap = problem.satisfy(
+    model.require(usage <= Resource.capacity),
+    name=["cap", Resource.name],
+    keyed_by={"resource": Resource},
+)
+# ... an objective must already be set — duals are objective marginals:
+problem.solve("highs", sensitivity=True)
+
+# The entity back-pointer (cap.resource) joins the marginal to its entity by key:
+model.select(cap.resource.name, cap.resource.capacity, cap.shadow_price).inspect()
+```
+
+**`keyed_by` is required for reading families back by key.** A constraint **family** — one logical constraint instantiated per entity (a capacity limit per Resource, a coverage floor per Shift) — only exposes per-instance back-pointers if its grounding keys are **declared** at formulation time (`keyed_by={"resource": Resource}`); there is no automatic constraint back-pointer. Without the declaration, a marginal / conflict flag can't be paired with its entity. A family grounded over several entities takes several keys (one back-pointer each); a scalar grounding takes a value reference (`keyed_by={"i": X.i}`). The authoritative formulation idiom — including the key-uniqueness rule (a too-coarse key raises at solve) — lives in `rai-prescriptive-problem-formulation/references/constraint-formulation.md`.
+
+---
+
 ## Silent-Failure Warnings
 
 `ProblemVariable` is a Concept subclass, and Concepts return a `Chain` from `__getattr__` for unknown attribute names instead of raising. Three common mistakes all silently return a `Chain` and produce empty or garbage results (not an `AttributeError`):
@@ -163,7 +191,7 @@ Two distinct sizing rules apply, depending on the use case:
 
 1. **Human-comparison mode (3–10):** When the primary use is enabling human evaluation — like Google Maps showing a few route options — humans are not effective at comparing hundreds of alternatives. If there is an analytical way to compare solutions, that criterion belongs in the objective function, not in post-hoc filtering of a large set.
 
-2. **Audit / witness enumeration mode (above feasible-set size):** When the use is "find ALL configurations violating the property" or "enumerate every valid build" (CSP-style audit / witness), `solution_limit` must exceed the expected feasible-set size so the search terminates with `OPTIMAL` (= search exhausted) rather than `SOLUTION_LIMIT` (= stopped at K with more remaining). `SOLUTION_LIMIT` is a valid status for K-of-many enumeration but its order is solver-dependent — fine for sampling, problematic when downstream tests expect a deterministic full set. See `rai-prescriptive-problem-formulation/references/csp-formulation.md` § 4 and `examples/audit_witness.py`.
+2. **Audit / witness enumeration mode (above feasible-set size):** When the use is "find ALL configurations violating the property" or "enumerate every valid build" (CSP-style audit / witness), `solution_limit` must exceed the expected feasible-set size so the search terminates with `OPTIMAL` (= search exhausted) rather than `SOLUTION_LIMIT` (= stopped at K with more remaining). `SOLUTION_LIMIT` is a valid status for K-of-many enumeration but its order is solver-dependent — fine for sampling, problematic when downstream tests expect a deterministic full set. See `rai-prescriptive-problem-formulation/references/csp-formulation.md` § 4 and `rai-prescriptive-problem-formulation/examples/audit_witness.py`.
 
 Requesting very large solution counts (e.g., 100,000) is rarely appropriate in human-comparison mode. The few specialized cases where large solution sets make sense include audit / witness enumeration above, downstream simulation over candidate solutions, or feeding alternatives into a separate evaluation pipeline.
 

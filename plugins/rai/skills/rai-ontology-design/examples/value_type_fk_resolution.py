@@ -1,6 +1,6 @@
 # Pattern: value-type IDs + FK-resolved relationships + computed properties over child entities
 # Key ideas: value-type concepts (CustomerId, OrderId) extend primitives for type-safe
-# identity; FK navigation uses filter_by(id=source.COL); boolean source columns become
+# identity; FK navigation uses lookup(id=source.COL); boolean source columns become
 # unary Relationships with conditional .where(); computed metrics are defined as
 # expressions over child entities.
 # Best practices: Property for scalars and functional FKs; Relationship for multi-valued links.
@@ -41,37 +41,38 @@ Order.total = model.Property(f"{Order} has {Float:total}")
 
 # --- Relationships ---
 Order.ordered_by = model.Relationship(
-    f"{Order} ordered by {Customer}", short_name="order_ordered_by")
+    f"{Order} ordered by {Customer}")
 Customer.placed_order = model.Relationship(
-    f"{Customer} placed order {Order}", short_name="customer_placed_order")
+    f"{Customer} placed order {Order}")
 Order.is_drink_order = model.Relationship(f"{Order} is drink order")
 
 # --- Data Loading: Customer ---
 model.define(Customer.new(id=customer_source.CUSTOMER_ID))
 model.define(
-    Customer.filter_by(id=customer_source.CUSTOMER_ID).name(customer_source.CUSTOMER_NAME),
-    Customer.filter_by(id=customer_source.CUSTOMER_ID).lifetime_spend(customer_source.LIFETIME_SPEND),
+    Customer.lookup(id=customer_source.CUSTOMER_ID).name(customer_source.CUSTOMER_NAME),
+    Customer.lookup(id=customer_source.CUSTOMER_ID).lifetime_spend(customer_source.LIFETIME_SPEND),
 )
 
 # --- Data Loading: Order ---
 model.define(Order.new(id=order_source.ORDER_ID))
 model.define(
-    Order.filter_by(id=order_source.ORDER_ID).total(order_source.ORDER_TOTAL),
-    Order.filter_by(id=order_source.ORDER_ID).ordered_by(
-        Customer.filter_by(id=order_source.CUSTOMER_ID)),
+    Order.lookup(id=order_source.ORDER_ID).total(order_source.ORDER_TOTAL),
+    Order.lookup(id=order_source.ORDER_ID).ordered_by(
+        Customer.lookup(id=order_source.CUSTOMER_ID)),
 )
 
 # Inverse binding
 model.define(
-    Customer.filter_by(id=order_source.CUSTOMER_ID).placed_order(
-        Order.filter_by(id=order_source.ORDER_ID))
+    Customer.lookup(id=order_source.CUSTOMER_ID).placed_order(
+        Order.lookup(id=order_source.ORDER_ID))
 )
 
 # Boolean source column → unary Relationship with conditional .where()
+order = Order.ref()
 model.where(
-    Order.filter_by(id=order_source.ORDER_ID),
+    order.lookup(id=order_source.ORDER_ID),
     order_source.IS_DRINK_ORDER == True,
-).define(Order.is_drink_order())
+).define(order.is_drink_order())
 
 # --- Computed Properties ---
 
@@ -82,14 +83,14 @@ Product.cost = model.Property(f"{Product} has {Float:cost}")
 SupplyItem = model.Concept("SupplyItem", identify_by={"id": SupplyItemId})
 SupplyItem.cost = model.Property(f"{SupplyItem} has {Float:cost}")
 SupplyItem.composes_product = model.Relationship(
-    f"{SupplyItem} composes {Product}", short_name="supply_item_composes_product")
+    f"{SupplyItem} composes {Product}")
 
 model.define(SupplyItem.new(id=supply_source.ITEM_ID))
-supply_item = SupplyItem.filter_by(id=supply_source.ITEM_ID)
+supply_item = SupplyItem.lookup(id=supply_source.ITEM_ID)
 model.define(
     supply_item.cost(supply_source.ITEM_COST),
     supply_item.composes_product(
-        Product.filter_by(id=supply_source.PRODUCT_ID)),
+        Product.lookup(id=supply_source.PRODUCT_ID)),
 )
 
 # Aggregate over child entities

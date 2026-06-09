@@ -172,7 +172,7 @@ model.define(CustomerSegment.new(id=graph.Node.community_label))
 # Attach segment to customer via relationship
 Customer.segment = model.Relationship(f"{Customer} belongs to {CustomerSegment}")
 model.where(graph.Node == Customer).define(
-    Customer.segment(CustomerSegment.filter_by(id=graph.Node.community_label))
+    Customer.segment(CustomerSegment.lookup(id=graph.Node.community_label))
 )
 
 # Now you can query per-segment aggregates

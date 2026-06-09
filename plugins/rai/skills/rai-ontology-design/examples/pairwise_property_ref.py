@@ -3,7 +3,7 @@
 # Pattern: binary property + .ref() pairwise binding + junction concept
 # Key ideas: Concept.covar is a binary Property relating two instances of the same type;
 # Concept.ref() creates a second independent iterator for pairwise binding;
-# Junction concept connects two parent concepts; filter_by for FK resolution.
+# Junction concept connects two parent concepts; lookup for FK resolution.
 
 """Pattern: binary property with `.ref()` for pairwise self-join + junction concept for many-to-many."""
 from relationalai.semantics import Model, Date, DateTime, Float, Integer, String
@@ -105,7 +105,7 @@ model.define(Owner.new(
     account_type=src.ACCOUNT_TYPE,
     risk_score=src.RISK_SCORE,
     signup_date=src.SIGNUP_DATE,
-    address=Address.filter_by(id=src.ADDRESS_ID),
+    address=Address.lookup(id=src.ADDRESS_ID),
 ))
 
 # Account
@@ -115,7 +115,7 @@ model.define(Account.new(
     account_type=src.ACCOUNT_TYPE,
     balance=src.BALANCE,
     opened_date=src.OPENED_DATE,
-    owner=Owner.filter_by(id=src.OWNER_ID),
+    owner=Owner.lookup(id=src.OWNER_ID),
 ))
 
 # Transaction
@@ -126,11 +126,12 @@ model.define(Transaction.new(
     merchant=src.MERCHANT,
     category=src.CATEGORY,
     timestamp=src.TIMESTAMP,
-    owner=Owner.filter_by(id=src.OWNER_ID),
+    owner=Owner.lookup(id=src.OWNER_ID),
 ))
 # Unary relationship from boolean column (recommended over Boolean Property)
-model.define(Transaction.is_flagged()).where(
-    Transaction.filter_by(id=src.TRANSACTION_ID),
+transaction = Transaction.ref()
+model.define(transaction.is_flagged()).where(
+    transaction.lookup(id=src.TRANSACTION_ID),
     src.IS_FLAGGED == True,
 )
 
@@ -166,6 +167,6 @@ model.define(Allocation.new(
     quantity=src.QUANTITY,
     unit_price=src.UNIT_PRICE,
     acquired_date=src.ACQUIRED_DATE,
-    account=Account.filter_by(id=src.ACCOUNT_ID),
-    item=Item.filter_by(id=src.ITEM_ID),
+    account=Account.lookup(id=src.ACCOUNT_ID),
+    item=Item.lookup(id=src.ITEM_ID),
 ))

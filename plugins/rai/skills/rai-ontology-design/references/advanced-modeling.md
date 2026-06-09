@@ -187,18 +187,16 @@ Site.capacity = model.Property(f"{Site} has {Float:capacity}")
 Site.max_throughput = model.Property(f"{Site} has {Float:max_throughput}")
 ```
 
-**Multi-field Relationships with short_name (grouped fields):**
+**Multi-field Relationships (grouped fields):**
 
 When grouping related fields under one Relationship:
 
 ```python
 Site.location_details = model.Relationship(
-    f"{Site} is in {String:city}, {String:region}, {String:country}",
-    short_name="site_location_details"
+    f"{Site} is in {String:city}, {String:region}, {String:country}"
 )
 Site.capacity_info = model.Relationship(
-    f"{Site} has {Float:capacity} capacity and {Float:max_throughput} throughput",
-    short_name="site_capacity_info"
+    f"{Site} has {Float:capacity} capacity and {Float:max_throughput} throughput"
 )
 ```
 

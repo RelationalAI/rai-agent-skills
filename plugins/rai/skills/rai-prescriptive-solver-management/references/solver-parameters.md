@@ -1,6 +1,7 @@
 # Table of Contents
 
 - [Solver-Specific Parameters](#solver-specific-parameters)
+- [Diagnostics by Solver (duals, basis, conflict / IIS)](#diagnostics-by-solver-duals-basis-conflict--iis)
 - [Solve Pipeline](#solve-pipeline)
 - [Re-Solve Behavior](#re-solve-behavior-sdk--103)
 - [Warm Starting](#warm-starting)
@@ -79,13 +80,27 @@ Rough heuristics for estimating solve time based on problem size and type:
 - For 5,000+ variable MIPs, suggest 300–600s
 - If solver hits time limit with gap > 5%, suggest increasing limit or simplifying the formulation
 
+## Diagnostics by Solver (duals, basis, conflict / IIS)
+
+`sensitivity=True` and `conflict=True` (see SKILL.md > First-class solve parameters) depend on what the chosen backend can produce:
+
+| Capability | Available when | Not available when |
+|---|---|---|
+| Duals (`reduced_cost`, `shadow_price`) | LP / QP solve with an objective | MIP (integer models have no duals — empty + a warning) |
+| `basis_status` | Simplex-based solve (HiGHS, Gurobi) | Interior-point (Ipopt) — no simplex basis |
+| Conflict / IIS (`in_conflict`, `*_in_conflict`) | Solver supports a conflict / IIS routine | Unsupported solver → `solve_info().conflict_status == "NOT_SUPPORTED"` |
+
+- **MIP → no duals.** Request `sensitivity=True` only on LP/QP. On a MIP the marginal attributes come back empty and a warning fires; use scenario sweeps instead.
+- **Ipopt (interior-point) → no basis.** Marginals are populated, but `basis_status` is absent — there's no simplex vertex. Use a simplex solver (HiGHS, Gurobi) if you need the basis.
+- **IIS is solver-dependent.** When a backend can't compute a conflict, `conflict_status` is `"NOT_SUPPORTED"` (and `"FAILED"` carries a reason on the shared `error` channel — `solve_info().error`, a `tuple[str, ...]`); manual bisection is the fallback. Reading the populated attributes lives in `rai-prescriptive-results-interpretation` > Sensitivity & conflict attributes.
+
 ## Solve Pipeline
 
 Solving requires network connectivity — `problem.solve()` dispatches to the RAI solver service, which runs the selected backend (HiGHS, Gurobi, Ipopt, MiniZinc) and returns results. There is no local solver.
 
 ## Re-Solve Behavior (SDK >= 1.0.3)
 
-Re-solving the same `Problem` instance is safe. After adding more constraints / variables / objective terms, calling `problem.solve()` again re-runs the solver and updates variable values. If the second solve fails, previous results remain intact — no degraded state.
+Re-solving the same `Problem` instance is safe. After adding more constraints / variables / objective terms, calling `problem.solve()` again re-runs the solver and updates variable values. If the second solve fails, previous results remain intact — no degraded state. One exception: the diagnostic flags (`sensitivity=` / `conflict=`) pin the `Problem`'s result schema — plain and diagnostic solves can't mix on one instance, and a re-solve may add but never drop a requested family (each raises a `ValueError`). Build a fresh `Problem` to change regime; see [formulation-display.md](formulation-display.md) > Re-solving the Same Problem.
 
 ## Warm Starting
 

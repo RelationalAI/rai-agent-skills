@@ -68,9 +68,9 @@ Customer.segment = model.Property(f"{Customer} has {String:segment}")
 Customer.lifetime_value = model.Property(f"{Customer} has {Float:lifetime_value}")
 Customer.churn_risk_score = model.Property(f"{Customer} has {Float:churn_risk_score}")
 Customer.located_in = model.Relationship(
-    f"{Customer} located in {Location}", short_name="customer_located_in")
+    f"{Customer} located in {Location}")
 Location.has_customer = model.Relationship(
-    f"{Location} has customer {Customer}", short_name="location_has_customer")
+    f"{Location} has customer {Customer}")
 
 model.define(
     s := Customer.new(id=raw.customers.CUST_ID),
@@ -78,32 +78,39 @@ model.define(
     s.lifetime_value(raw.customers.LIFETIME_VALUE_USD),
     s.churn_risk_score(raw.customers.CHURN_RISK_SCORE),
 )
-model.define(Customer.located_in(Location)).where(
-    Customer.filter_by(id=raw.customers.CUST_ID),
-    Location.filter_by(id=raw.customers.POSTAL_CODE),
+customer = Customer.ref()
+location = Location.ref()
+model.define(customer.located_in(location)).where(
+    customer.lookup(id=raw.customers.CUST_ID),
+    location.lookup(id=raw.customers.POSTAL_CODE),
 )
-model.define(Location.has_customer(Customer)).where(
-    Location.filter_by(id=raw.customers.POSTAL_CODE),
-    Customer.filter_by(id=raw.customers.CUST_ID),
+location = Location.ref()
+customer = Customer.ref()
+model.define(location.has_customer(customer)).where(
+    location.lookup(id=raw.customers.POSTAL_CODE),
+    customer.lookup(id=raw.customers.CUST_ID),
 )
 
 # ── Contract (unary flag from boolean column) ─────────────────────
 Contract = model.Concept("Contract", identify_by={"id": String})
 Contract.monthly_rate = model.Property(f"{Contract} has {Float:monthly_rate}")
 Contract.for_customer = model.Relationship(
-    f"{Contract} for customer {Customer}", short_name="contract_for_customer")
+    f"{Contract} for customer {Customer}")
 Contract.is_auto_renew = model.Relationship(f"{Contract} is auto renew")
 
 model.define(
     c := Contract.new(id=raw.plans_contracts.CONTRACT_ID),
     c.monthly_rate(raw.plans_contracts.MONTHLY_RATE),
 )
-model.define(Contract.for_customer(Customer)).where(
-    Contract.filter_by(id=raw.plans_contracts.CONTRACT_ID),
-    Customer.filter_by(id=raw.plans_contracts.CUST_ID),
+contract = Contract.ref()
+customer = Customer.ref()
+model.define(contract.for_customer(customer)).where(
+    contract.lookup(id=raw.plans_contracts.CONTRACT_ID),
+    customer.lookup(id=raw.plans_contracts.CUST_ID),
 )
-model.define(Contract.is_auto_renew()).where(
-    Contract.filter_by(id=raw.plans_contracts.CONTRACT_ID),
+contract = Contract.ref()
+model.define(contract.is_auto_renew()).where(
+    contract.lookup(id=raw.plans_contracts.CONTRACT_ID),
     raw.plans_contracts.AUTO_RENEW == "True",
 )
 
@@ -111,15 +118,17 @@ model.define(Contract.is_auto_renew()).where(
 Facility = model.Concept("Facility", identify_by={"id": String})
 Facility.capacity_gbps = model.Property(f"{Facility} has {Integer:capacity_gbps}")
 Facility.located_in = model.Relationship(
-    f"{Facility} located in {Location}", short_name="facility_located_in")
+    f"{Facility} located in {Location}")
 
 model.define(
     ct := Facility.new(id=raw.facilities.FACILITY_ID),
     ct.capacity_gbps(raw.facilities.CAPACITY_GBPS),
 )
-model.define(Facility.located_in(Location)).where(
-    Facility.filter_by(id=raw.facilities.FACILITY_ID),
-    Location.filter_by(id=raw.facilities.POSTAL_CODE),
+facility = Facility.ref()
+location = Location.ref()
+model.define(facility.located_in(location)).where(
+    facility.lookup(id=raw.facilities.FACILITY_ID),
+    location.lookup(id=raw.facilities.POSTAL_CODE),
 )
 
 # ── Transaction (self-referential: source + target → Customer) ──
@@ -127,31 +136,36 @@ Transaction = model.Concept("Transaction", identify_by={"id": String})
 Transaction.duration_seconds = model.Property(
     f"{Transaction} has {Integer:duration_seconds}")
 Transaction.source = model.Relationship(
-    f"{Transaction} has source {Customer}", short_name="transaction_source")
+    f"{Transaction} has source {Customer}")
 Transaction.target = model.Relationship(
-    f"{Transaction} has target {Customer}", short_name="transaction_target")
+    f"{Transaction} has target {Customer}")
 Transaction.routed_through = model.Relationship(
-    f"{Transaction} routed through {Facility}", short_name="transaction_routed_through")
+    f"{Transaction} routed through {Facility}")
 Transaction.is_failed = model.Relationship(f"{Transaction} is failed")
 Customer.sent_transaction = model.Relationship(
-    f"{Customer} sent transaction {Transaction}", short_name="customer_sent_transaction")
+    f"{Customer} sent transaction {Transaction}")
 Customer.received_transaction = model.Relationship(
-    f"{Customer} received transaction {Transaction}", short_name="customer_received_transaction")
+    f"{Customer} received transaction {Transaction}")
 
 model.define(
     txn := Transaction.new(id=raw.transactions.TXN_ID),
     txn.duration_seconds(raw.transactions.DURATION_SECONDS),
 )
-model.define(Transaction.source(Customer)).where(
-    Transaction.filter_by(id=raw.transactions.TXN_ID),
-    Customer.filter_by(id=raw.transactions.SOURCE_CUST_ID),
+transaction = Transaction.ref()
+customer = Customer.ref()
+model.define(transaction.source(customer)).where(
+    transaction.lookup(id=raw.transactions.TXN_ID),
+    customer.lookup(id=raw.transactions.SOURCE_CUST_ID),
 )
-model.define(Transaction.target(Customer)).where(
-    Transaction.filter_by(id=raw.transactions.TXN_ID),
-    Customer.filter_by(id=raw.transactions.TARGET_CUST_ID),
+transaction = Transaction.ref()
+customer = Customer.ref()
+model.define(transaction.target(customer)).where(
+    transaction.lookup(id=raw.transactions.TXN_ID),
+    customer.lookup(id=raw.transactions.TARGET_CUST_ID),
 )
-model.define(Transaction.is_failed()).where(
-    Transaction.filter_by(id=raw.transactions.TXN_ID),
+transaction = Transaction.ref()
+model.define(transaction.is_failed()).where(
+    transaction.lookup(id=raw.transactions.TXN_ID),
     raw.transactions.STATUS == "FAILED",
 )
 
@@ -164,7 +178,8 @@ model.define(
     ne := Incident.new(id=raw.incidents.EVENT_ID),
     ne.severity(raw.incidents.SEVERITY),
 )
-model.define(Incident.is_outage()).where(
-    Incident.filter_by(id=raw.incidents.EVENT_ID),
+incident = Incident.ref()
+model.define(incident.is_outage()).where(
+    incident.lookup(id=raw.incidents.EVENT_ID),
     raw.incidents.EVENT_TYPE == "OUTAGE",
 )

@@ -27,14 +27,23 @@
 # "variables" = structured query df from Variable.values() for this point
 
 # --- Example data (from a tested epsilon constraint sweep) ---
+# "slope" = the epsilon-bound's shadow_price (sensitivity=True) — the EXACT tradeoff rate d(primary)/
+# d(secondary) at that point. On a convex frontier each secant (Δprimary/Δsecondary, computed below)
+# is bracketed by the two endpoints' exact slopes. A MIP returns no duals: omit "slope" and read the
+# secant instead.
 pareto_points = [
-    {"label": "min_primary", "primary": 18704.12, "secondary": 137.25},
-    {"label": "eps_1", "primary": 19906.79, "secondary": 147.71},
-    {"label": "eps_2", "primary": 23514.78, "secondary": 158.17},
-    {"label": "eps_3", "primary": 30698.48, "secondary": 168.63},
-    {"label": "eps_4", "primary": 44122.28, "secondary": 179.08},
-    {"label": "eps_5", "primary": 63889.45, "secondary": 189.54},
-    {"label": "max_secondary", "primary": 90000.00, "secondary": 200.00},
+    {"label": "min_primary", "primary": 18704.12, "secondary": 137.25, "slope": 80.0},
+    {"label": "eps_1", "primary": 19906.79, "secondary": 147.71, "slope": 180.0},
+    {"label": "eps_2", "primary": 23514.78, "secondary": 158.17, "slope": 500.0},
+    {"label": "eps_3", "primary": 30698.48, "secondary": 168.63, "slope": 950.0},
+    {"label": "eps_4", "primary": 44122.28, "secondary": 179.08, "slope": 1550.0},
+    {"label": "eps_5", "primary": 63889.45, "secondary": 189.54, "slope": 2150.0},
+    {
+        "label": "max_secondary",
+        "primary": 90000.00,
+        "secondary": 200.00,
+        "slope": 2700.0,
+    },
 ]
 primary_name = "Primary objective (minimize)"
 secondary_name = "Secondary objective (maximize)"
@@ -42,8 +51,12 @@ secondary_name = "Secondary objective (maximize)"
 # =============================================================================
 # 1. TRADEOFF TABLE: both objectives + marginal rate at each point
 # =============================================================================
-print(f"{'#':>3} {'Label':>10} {secondary_name:>16} {primary_name:>16} {'Marginal':>12}")
-print("-" * 62)
+# "Secant" = finite-difference Δprimary/Δsecondary between points; "Tradeoff λ" = the exact
+# shadow_price at the point (sensitivity=True). Showing both makes the secant-vs-tangent gap visible.
+print(
+    f"{'#':>3} {'Label':>10} {secondary_name:>16} {primary_name:>16} {'Secant':>12} {'Tradeoff λ':>12}"
+)
+print("-" * 76)
 
 marginal_rates = []
 for i, pt in enumerate(pareto_points):
@@ -55,19 +68,43 @@ for i, pt in enumerate(pareto_points):
         rate_str = f"{rate:.1f}"
     else:
         rate_str = "—"
-    print(f"{i + 1:>3} {pt['label']:>10} {pt['secondary']:>16.2f} {pt['primary']:>16.2f} {rate_str:>12}")
+    # Exact tradeoff rate = the eps-bound's shadow price; "n/a" for a MIP (no duals → use the secant).
+    slope = pt.get("slope")
+    slope_str = f"{slope:.1f}" if slope is not None else "n/a"
+    print(
+        f"{i + 1:>3} {pt['label']:>10} {pt['secondary']:>16.2f} {pt['primary']:>16.2f} {rate_str:>12} {slope_str:>12}"
+    )
 
 # =============================================================================
-# 2. KNEE DETECTION: where marginal rate RATIO jumps most
+# 2. KNEE DETECTION: where the tradeoff rate RATIO jumps most
 # =============================================================================
-# Knee is NOT where the absolute rate is highest (that's always the last point).
-# Knee is where the rate of change accelerates — rates[i+1] / rates[i] is maximized.
-# NOTE: This assumes marginal rates are increasing (typical for minimize-primary /
-# maximize-secondary). If rates are decreasing (e.g., maximize-primary / minimize-secondary),
-# invert the ratio: rates[i] / rates[i+1].
+# Knee is NOT where the absolute rate is highest (that's always the last point). It is the
+# last point BEFORE the rate accelerates most -- the largest ratio between consecutive rates,
+# marked at the point just before the jump ("cost jumps beyond this point").
+#
+# PREFER THE EXACT DUAL SEQUENCE when every point carries a shadow_price: the secant is only a
+# finite-difference approximation, so on a curved frontier its ratio peak can sit a point off
+# from the exact dual's. Driving the knee off the secant while the exact slope sits unused in
+# the data would contradict the dual-guided guidance (see sensitivity-analysis.md, "Knee from
+# the exact dual sequence"). Fall back to the secant only for a MIP, which returns no duals.
+# NOTE: both bases assume rates increase (minimize-primary / maximize-secondary); if they
+# decrease (maximize-primary / minimize-secondary), invert the ratio.
 knee_idx = None
-if len(marginal_rates) >= 2:
-    max_jump = 0
+max_jump = 0.0
+knee_basis = ""
+duals = [pt["slope"] for pt in pareto_points if pt.get("slope") is not None]
+if len(duals) == len(
+    pareto_points
+):  # every point carries an exact dual (LP/QP, not MIP)
+    knee_basis = "exact dual ratio"
+    # Ratio of consecutive shadow prices. Start at j=2 so the knee is an interior point (never
+    # the min-primary anchor at index 0); mark j-1, the point just before the largest jump.
+    for j in range(2, len(duals)):
+        if duals[j - 1] > 1e-9 and duals[j] / duals[j - 1] > max_jump:
+            max_jump, knee_idx = duals[j] / duals[j - 1], j - 1
+elif len(marginal_rates) >= 2:
+    knee_basis = "secant ratio"
+    # MIP fallback: finite-difference secants. marginal_rates[i] spans points (i, i+1).
     for i in range(len(marginal_rates) - 1):
         if marginal_rates[i] > 1e-6:
             jump = marginal_rates[i + 1] / marginal_rates[i]
@@ -77,15 +114,16 @@ if len(marginal_rates) >= 2:
             max_jump = jump
             knee_idx = i + 1
 
-    if knee_idx is not None:
-        knee_pt = pareto_points[knee_idx]
-        print(
-            f"\nKnee: Point {knee_idx + 1} ({knee_pt['label']}) — marginal cost jumps {max_jump:.1f}x beyond this point"
-        )
-        print(f"  {secondary_name}: {knee_pt['secondary']:.2f}")
-        print(f"  {primary_name}: {knee_pt['primary']:.2f}")
-    else:
-        print("\nKnee: not detected (flat frontier — marginal rates do not accelerate)")
+if knee_idx is not None:
+    knee_pt = pareto_points[knee_idx]
+    print(
+        f"\nKnee: Point {knee_idx + 1} ({knee_pt['label']}) — marginal cost jumps {max_jump:.1f}x "
+        f"beyond this point ({knee_basis})"
+    )
+    print(f"  {secondary_name}: {knee_pt['secondary']:.2f}")
+    print(f"  {primary_name}: {knee_pt['primary']:.2f}")
+else:
+    print("\nKnee: not detected (flat frontier — rates do not accelerate)")
 
 # =============================================================================
 # 3. ALLOCATION SHIFTS + REGIME DETECTION

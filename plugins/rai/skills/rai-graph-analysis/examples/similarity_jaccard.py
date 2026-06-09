@@ -70,8 +70,8 @@ purch_data = model.data([
 model.define(
     Purchase.new(
         id=purch_data.id,
-        customer=Customer.filter_by(id=purch_data.cust_id),
-        product=Product.filter_by(id=purch_data.prod_id),
+        customer=Customer.lookup(id=purch_data.cust_id),
+        product=Product.lookup(id=purch_data.prod_id),
     )
 )
 

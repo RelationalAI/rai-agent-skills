@@ -99,8 +99,8 @@ No single number describes quality. Before trusting predictions, look at:
   Pattern (warn-not-block — keeps the pipeline running while flagging suspicious output):
 
   ```python
-  df = select(Source.id, Source.predictions.<attr>).where(Source.predictions).to_df()
-  col = df["<attr>"]
+  df = select(Source.id, Source.predictions.predicted_value).where(Source.predictions).to_df()
+  col = df["predicted_value"]
   if col.isna().any() or (col < 0).any():       # adjust bounds per task type
       print(f"WARNING: {Source.__name__} predictions contain NaN or out-of-range values")
   ```
@@ -117,7 +117,7 @@ If results are significantly worse than expected, check these in order:
 
 ### Regression-specific sanity checks
 
-Regression typically needs **more epochs than classification** -- `n_epochs=5` (the quickstart default) is a smoke-test, not a training run. For a first real attempt, bump well above the default and let the loss trajectory (see "Reading the training loss" above) tell you when to stop -- if val-loss is still decreasing at the last epoch, you need more.
+Regression typically needs **more epochs than classification** -- `n_epochs=5` is a smoke-test, not a training run. For a first real attempt, bump well above the default of 10 and let the loss trajectory (see "Reading the training loss" above) tell you when to stop -- if val-loss is still decreasing at the last epoch, you need more.
 
 **Under-fitting checklist** (cheapest diagnostic first):
 

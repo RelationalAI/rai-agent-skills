@@ -14,13 +14,13 @@ Quick symptom→fix lookup. Load when SKILL.md § Known Limitations & Runtime Tr
 
 ```python
 # Before
-pt = PropertyTransformer(datetime=[Sale.date], time_col=[Sale.date], ...)
-gnn = GNN(has_time_column=True, ..., temporal_strategy="last")
+pt = PropertyTransformer(datetime=[Sale.date], time_col=[Sale.date])   # ... other features
+gnn = GNN(has_time_column=True, temporal_strategy="last")              # ... other args
 Train = Relationship(f"{Sale} at {Any:date} has {Any:value}")
 
 # After
-pt = PropertyTransformer(datetime=[Sale.date], ...)
-gnn = GNN(has_time_column=False, ...)
+pt = PropertyTransformer(datetime=[Sale.date])                         # ... other features
+gnn = GNN(has_time_column=False)                                       # ... other args
 Train = Relationship(f"{Sale} has {Any:value}")
 model.define(Train(Sale, TrainTable.unit_sales)).where(...)
 ```

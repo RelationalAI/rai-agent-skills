@@ -63,8 +63,8 @@ option_data = model.data(
 model.define(
     SupplyOption.new(
         option_data.to_schema(exclude=["supplier_id", "product_id"]),
-        supplier=Supplier.filter_by(id=option_data.supplier_id),
-        product=Product.filter_by(id=option_data.product_id),
+        supplier=Supplier.lookup(id=option_data.supplier_id),
+        product=Product.lookup(id=option_data.product_id),
     )
 )
 

@@ -19,7 +19,7 @@ List elements are joined with underscores. Use entity identifiers (IDs, names) i
 
 ## Re-Solve Behavior (SDK >= 1.0.3)
 
-Re-solving the same `Problem` instance is safe. Calling `problem.solve()` again re-runs the solver and updates variable values; if the second solve fails, previous results remain intact. The inline formulation pattern (fresh `Problem` per scenario loop iteration) is still useful for clean separation of scenarios, but is no longer required for error recovery.
+Re-solving the same `Problem` instance is safe. Calling `problem.solve()` again re-runs the solver and updates variable values; if the second solve fails, previous results remain intact. The inline formulation pattern (fresh `Problem` per scenario loop iteration) is still useful for clean separation of scenarios, but is no longer required for error recovery. One exception: the diagnostic flags (`sensitivity=` / `conflict=`) pin the `Problem`'s result schema — plain and diagnostic solves can't mix on one instance, and a re-solve may add but never drop a requested family (each raises a `ValueError`); build a fresh `Problem` to change regime. See `rai-prescriptive-solver-management/references/formulation-display.md` > Re-solving the Same Problem.
 
 **Multi-scenario re-solve pattern:**
 
@@ -31,7 +31,7 @@ When solving multiple scenarios in a loop (e.g., varying parameters, what-if ana
 results = []
 for scenario in scenarios:
     problem = Problem(model, Float)               # fresh Problem each iteration
-    var = problem.solve_for(Entity.x_var, populate=False, ...)
+    var = problem.solve_for(Entity.x_var, populate=False)   # plus name=/bounds as needed
     problem.satisfy(...)
     problem.minimize(...)
     problem.solve(solver, ...)
@@ -68,7 +68,7 @@ problem.satisfy(model.require(
 # CORRECT — pre-compute aggregation, load as flat property
 combos = pd.merge(entity_df, flow_df, how="left", on="entity_id")
 combos["inflow"] = combos.groupby("entity_id")["qty"].transform("sum").fillna(0)
-model.define(Entity.filter_by(id=entity_data.entity_id).inflow(entity_data.inflow))
+model.define(Entity.lookup(id=entity_data.entity_id).inflow(entity_data.inflow))
 problem.satisfy(model.require(Entity.supply >= Entity.inflow))
 ```
 

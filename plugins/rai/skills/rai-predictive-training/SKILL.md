@@ -137,9 +137,9 @@ gnn.fit()
 
 ```python
 shared = dict(graph=gnn_graph, property_transformer=pt)
-gnn_a  = GNN(**shared, train=TrainA, validation=ValA, task_type="regression", eval_metric="rmse", ...)
-gnn_b  = GNN(**shared, train=TrainB, validation=ValB, task_type="binary_classification", eval_metric="roc_auc", ...)
-gnn_c  = GNN(**shared, train=TrainC, validation=ValC, task_type="repeated_link_prediction", eval_metric="link_prediction_precision@5", ...)
+gnn_a  = GNN(**shared, train=TrainA, validation=ValA, task_type="regression", eval_metric="rmse")
+gnn_b  = GNN(**shared, train=TrainB, validation=ValB, task_type="binary_classification", eval_metric="roc_auc")
+gnn_c  = GNN(**shared, train=TrainC, validation=ValC, task_type="repeated_link_prediction", eval_metric="link_prediction_precision@5")
 for g in (gnn_a, gnn_b, gnn_c): g.fit()
 
 # Distinct attributes when a source concept hosts multiple predictions:
@@ -152,7 +152,8 @@ Hyperparameters can also be passed as a dictionary:
 
 ```python
 train_config = {"device": "cuda", "n_epochs": 10, "lr": 0.001, "train_batch_size": 512, "seed": 42}
-gnn = GNN(exp_database="DB", exp_schema="EXPERIMENTS", ..., **train_config)
+gnn = GNN(exp_database="DB", exp_schema="EXPERIMENTS", graph=gnn_graph, property_transformer=pt, **train_config)
+# train=, validation=, task_type= are still required (as in the calls above) — the dict carries only tuning params
 gnn.fit()
 ```
 

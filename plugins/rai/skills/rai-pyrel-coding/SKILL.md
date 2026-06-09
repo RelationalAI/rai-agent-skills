@@ -308,7 +308,7 @@ API reference for loading data into models. For strategy guidance (authoritative
 | `model.data(df)` | Wrap a pandas DataFrame for loading | — |
 | `.to_schema()` | Auto-map columns to matching Property names | `exclude=[]` |
 | `model.Table("DB.SCHEMA.TABLE")` | Reference a Snowflake table | Optional column schema dict |
-| `Concept.filter_by(prop=value)` | FK resolution — look up entity by property value; no match → no row | Returns matching entity or nothing |
+| `Concept.lookup(prop=value)` | FK resolution — look up entity by property value; no match → no row | Returns a fresh reference to the matching entity. Replaces the deprecated `filter_by` |
 | `Concept.to_identity(key=value)` | Strict identity lookup — exactly one match guaranteed; raises if not found | Use for lookups where missing is an error. See [data-loading.md](references/data-loading.md#entity-reference-binding-relationships-fks) |
 | `Concept.new(key=value)` | Create entity instances | Identity properties as kwargs |
 | `std.common.range(n)` | Generate integer range 0..n-1 | Also `range(start, end)` |
@@ -326,7 +326,7 @@ model.define(food := Food.new(name=food_data.name), food.cost(food_data.cost))
 
 ### Snowflake tables
 
-Snowflake table loading follows the same `model.Table("DB.SCHEMA.TABLE")` + `filter_by`/`model.define` pattern as CSV. For FK binding patterns, column casing/renaming, and `to_schema()` rules, see [data-loading.md](references/data-loading.md). For Sources-class organization and portable DB-as-constant source paths, see the `rai-build-starter-ontology` reference examples (Examples 1–6 and Example 8). For Snowflake auth and `raiconfig.yaml` setup, see `rai-setup`.
+Snowflake table loading follows the same `model.Table("DB.SCHEMA.TABLE")` + `lookup`/`model.define` pattern as CSV. For FK binding patterns, column casing/renaming, and `to_schema()` rules, see [data-loading.md](references/data-loading.md). For Sources-class organization and portable DB-as-constant source paths, see the `rai-build-starter-ontology` reference examples (Examples 1–6 and Example 8). For Snowflake auth and `raiconfig.yaml` setup, see `rai-setup`.
 
 ---
 
@@ -475,7 +475,7 @@ for limit in capacity_limits:
 
 # GOOD: Load limits as data, join declaratively
 limits = model.data(capacity_limits_df)
-model.define(Site.filter_by(id=limits.id).max_capacity(limits.cap))
+model.define(Site.lookup(id=limits.id).max_capacity(limits.cap))
 ```
 
 For detailed `.where()` targets, `.per()` scoping, and operator precedence rules, see [expression-rules.md](references/expression-rules.md).

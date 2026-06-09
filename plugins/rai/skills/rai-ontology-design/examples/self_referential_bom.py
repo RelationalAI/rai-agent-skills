@@ -73,19 +73,19 @@ model.define(Shipment.new(id=src.shipment.ID))
 
 # --- Multi-valued concept-to-concept associations (Relationship) ---
 Site.produces_sku = model.Relationship(
-    f"{Site} produces {StockKeepingUnit}", short_name="site_produces_sku")
+    f"{Site} produces {StockKeepingUnit}")
 Operation.transformation = model.Relationship(
-    f"{Operation} transforms at {Site}", short_name="operation_transformation")
+    f"{Operation} transforms at {Site}")
 Business.operates_site = model.Relationship(
-    f"{Business} operates {Site}", short_name="business_operates_site")
+    f"{Business} operates {Site}")
 # Self-referential: SKU → SKU for BOM assembly
 StockKeepingUnit.bom_components = model.Relationship(
     f"{StockKeepingUnit} requires {StockKeepingUnit} for assembly",
     short_name="bom_components")
 # BOM links to concepts
 BillOfMaterials.output_sku = model.Relationship(
-    f"{BillOfMaterials} outputs {StockKeepingUnit}", short_name="bom_output_sku")
+    f"{BillOfMaterials} outputs {StockKeepingUnit}")
 BillOfMaterials.input_sku = model.Relationship(
-    f"{BillOfMaterials} inputs {StockKeepingUnit}", short_name="bom_input_sku")
+    f"{BillOfMaterials} inputs {StockKeepingUnit}")
 BillOfMaterials.at_site = model.Relationship(
-    f"{BillOfMaterials} at {Site}", short_name="bom_at_site")
+    f"{BillOfMaterials} at {Site}")

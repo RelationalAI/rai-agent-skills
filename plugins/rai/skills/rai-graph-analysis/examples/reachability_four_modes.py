@@ -56,7 +56,7 @@ model.define(
         id=product_data.id,
         name=product_data.name,
         quantity=product_data.quantity,
-        facility=Facility.filter_by(id=product_data.facility_id),
+        facility=Facility.lookup(id=product_data.facility_id),
     )
 )
 
@@ -74,8 +74,8 @@ link_data = model.data([
 f_from, f_to = Facility.ref("from_facility"), Facility.ref("to_facility")
 model.define(
     SupplyLink.new(
-        from_facility=f_from.filter_by(id=link_data.src_id),
-        to_facility=f_to.filter_by(id=link_data.dst_id),
+        from_facility=f_from.lookup(id=link_data.src_id),
+        to_facility=f_to.lookup(id=link_data.dst_id),
     )
 )
 

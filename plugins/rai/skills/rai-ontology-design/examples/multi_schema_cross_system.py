@@ -141,66 +141,70 @@ SystemBIteration.state = model.Property(f"{SystemBIteration} has {String:state}"
 # ── Multi-valued concept-to-concept associations (Relationship) ─────────────────────
 # Cross-system linking (different identity systems)
 SystemAUser.system_b_user_mapping = model.Relationship(
-    f"{SystemAUser} links to {SystemBUser}", short_name="system_a_system_b_user_mapping")
+    f"{SystemAUser} links to {SystemBUser}")
 SystemAWorkItem.implements_task = model.Relationship(
-    f"{SystemAWorkItem} implements {SystemBTask}",
-    short_name="system_a_work_item_to_system_b_task")
+    f"{SystemAWorkItem} implements {SystemBTask}")
 
 # Within System A
 SystemAUser.created_work_item = model.Relationship(
-    f"{SystemAUser} created {SystemAWorkItem}", short_name="system_a_user_created_work_item")
+    f"{SystemAUser} created {SystemAWorkItem}")
 SystemAProject.contains_work_item = model.Relationship(
-    f"{SystemAProject} contains {SystemAWorkItem}", short_name="system_a_project_work_items")
+    f"{SystemAProject} contains {SystemAWorkItem}")
 SystemAWorkItem.contains_activity = model.Relationship(
-    f"{SystemAWorkItem} contains {SystemAActivity}", short_name="system_a_work_item_activities")
+    f"{SystemAWorkItem} contains {SystemAActivity}")
 SystemAUser.belongs_to_team = model.Relationship(
-    f"{SystemAUser} belongs to {SystemATeam}", short_name="system_a_team_membership")
+    f"{SystemAUser} belongs to {SystemATeam}")
 
 # Within System B
 SystemBEpic.contains_task = model.Relationship(
-    f"{SystemBEpic} contains {SystemBTask}", short_name="system_b_epic_contains_task")
+    f"{SystemBEpic} contains {SystemBTask}")
 SystemBTask.assigned_to = model.Relationship(
-    f"{SystemBTask} assigned to {SystemBUser}", short_name="system_b_task_assignment")
+    f"{SystemBTask} assigned to {SystemBUser}")
 SystemBTask.in_iteration = model.Relationship(
-    f"{SystemBTask} assigned to {SystemBIteration}", short_name="system_b_task_iteration_assignment")
+    f"{SystemBTask} assigned to {SystemBIteration}")
 SystemBTask.belongs_to_project = model.Relationship(
-    f"{SystemBTask} belongs to {SystemBProject}", short_name="system_b_task_project_membership")
+    f"{SystemBTask} belongs to {SystemBProject}")
 
 # ── Representative data bindings ─────────────────────────────────
 # Illustrative subset showing the three binding patterns used across this model:
-# (a) scalar property binding via filter_by + property call,
-# (b) within-system FK relationship via filter_by on both ends,
+# (a) scalar property binding via lookup + property call,
+# (b) within-system FK relationship via lookup on both ends,
 # (c) cross-system FK relationship via a shared business key (e.g., email).
 # The remaining concepts/properties follow the same patterns against their source tables.
 
 # (a) Scalar properties — System A user
 system_a_user = Sources.ops_db.system_a.user
 model.define(
-    SystemAUser.filter_by(id=system_a_user.id)
+    SystemAUser.lookup(id=system_a_user.id)
     .login(system_a_user.login)
 )
 model.define(
-    SystemAUser.filter_by(id=system_a_user.id)
+    SystemAUser.lookup(id=system_a_user.id)
     .name(system_a_user.name)
 )
-model.define(SystemAUser.is_site_admin()).where(
-    SystemAUser.filter_by(id=system_a_user.id),
+sa_user = SystemAUser.ref()
+model.define(sa_user.is_site_admin()).where(
+    sa_user.lookup(id=system_a_user.id),
     system_a_user.site_admin == True,
 )
 
 # (b) Within-system FK — work item belongs to project
 work_item = Sources.ops_db.system_a.work_item
-model.define(SystemAProject.contains_work_item(SystemAWorkItem)).where(
-    SystemAProject.filter_by(id=work_item.project_id),
-    SystemAWorkItem.filter_by(id=work_item.id),
+sa_project = SystemAProject.ref()
+sa_work_item = SystemAWorkItem.ref()
+model.define(sa_project.contains_work_item(sa_work_item)).where(
+    sa_project.lookup(id=work_item.project_id),
+    sa_work_item.lookup(id=work_item.id),
 )
 
 # (c) Cross-system FK — System A user linked to System B user via shared email
 # (email isn't an ID on either side, so join on the shared business key)
 system_a_user_email = system_a_user.email
 system_b_user = Sources.ops_db.system_b.user
-model.define(SystemAUser.system_b_user_mapping(SystemBUser)).where(
-    SystemAUser.filter_by(id=system_a_user.id),
-    SystemBUser.filter_by(id=system_b_user.id),
+sa_user = SystemAUser.ref()
+sb_user = SystemBUser.ref()
+model.define(sa_user.system_b_user_mapping(sb_user)).where(
+    sa_user.lookup(id=system_a_user.id),
+    sb_user.lookup(id=system_b_user.id),
     system_a_user_email == system_b_user.email,
 )

@@ -37,9 +37,11 @@ model.define(
     o := Order.new(id=order_source.ID),
     o.amount(order_source.AMOUNT),
 )
-model.define(Order.customer(Customer)).where(
-    Order.filter_by(id=order_source.ID),
-    Customer.filter_by(id=order_source.CUSTOMER_ID),
+o = Order.ref()
+c2 = Customer.ref()
+model.define(o.customer(c2)).where(
+    o.lookup(id=order_source.ID),
+    c2.lookup(id=order_source.CUSTOMER_ID),
 )
 
 # --- Validation Rule ---

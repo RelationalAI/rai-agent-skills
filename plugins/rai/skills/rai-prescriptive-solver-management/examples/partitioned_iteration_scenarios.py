@@ -37,7 +37,7 @@ product_data = model.data(
 model.define(
     Product.new(
         product_data.to_schema(),
-        factory=Factory.filter_by(name=product_data.factory_name),
+        factory=Factory.lookup(name=product_data.factory_name),
     )
 )
 

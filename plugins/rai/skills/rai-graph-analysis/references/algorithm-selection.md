@@ -450,7 +450,7 @@ graph = Graph(model, directed=True, weighted=False)
 # RIGHT — target Relationship is over graph.Node
 target = model.Relationship(f"target: {graph.Node}")
 n = graph.Node.ref()
-model.define(target(n)).where(n == ConceptA.filter_by(id=X))
+model.define(target(n)).where(n == ConceptA.lookup(id=X))
 
 downstream = graph.reachable(from_=target)
 ```

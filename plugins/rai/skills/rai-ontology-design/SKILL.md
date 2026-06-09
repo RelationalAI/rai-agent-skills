@@ -264,7 +264,7 @@ Enrollment.grade = model.Property(f"{Enrollment} has {Float:grade}")
 | Pattern | Summary | Reference |
 |---------|---------|-----------|
 | Reading string quality | ≤8 static words, precise verbs, max 3 fields, don't echo owner concept | [advanced-modeling.md](references/advanced-modeling.md) |
-| Property grouping | Group by topic; use `short_name` for programmatic relationship access | [advanced-modeling.md](references/advanced-modeling.md) |
+| Property grouping | Group related fields under one Relationship | [advanced-modeling.md](references/advanced-modeling.md) |
 | Inverse relationships | `.alt()` for concise inverse declaration | [advanced-modeling.md](references/advanced-modeling.md) |
 | Role naming | Named roles when same concept appears twice: `{Person:payer}` | [advanced-modeling.md](references/advanced-modeling.md) |
 | Same-type references | `.ref()` for relating two instances of the same type | [advanced-modeling.md](references/advanced-modeling.md) |
@@ -297,7 +297,7 @@ For guidance on producing a descriptive inventory of a model and classifying unm
 
 Always verify column types against `INFORMATION_SCHEMA.COLUMNS` before writing property declarations. A mismatch causes a `TyperError` at query time with no detail about which property failed. Let the schema dictate the type, not the column name.
 
-**Load data** using `model.define(C.new(id=TABLE.key))`, **bind properties and relationships** using `model.define(...).where(...)`. For complete data loading API reference (CSV, Snowflake, `filter_by`, `model.where`, required vs optional columns, boolean flags), see `rai-pyrel-coding` [data-loading.md](../rai-pyrel-coding/references/data-loading.md). For a minimal worked example, see [examples/value_type_fk_resolution.py](examples/value_type_fk_resolution.py).
+**Load data** using `model.define(C.new(id=TABLE.key))`, **bind properties and relationships** using `model.define(...).where(...)`. For complete data loading API reference (CSV, Snowflake, `lookup`, `model.where`, required vs optional columns, boolean flags), see `rai-pyrel-coding` [data-loading.md](../rai-pyrel-coding/references/data-loading.md). For a minimal worked example, see [examples/value_type_fk_resolution.py](examples/value_type_fk_resolution.py).
 
 **Key rules:**
 - `Property` for many-to-one (functional) associations. `Relationship` for many-to-many associations.
@@ -466,7 +466,7 @@ For detailed enrichment patterns, property vs relationship mapping, and source c
 
 | Pattern | Techniques Demonstrated | File |
 |---|---|---|
-| Value-type + FK resolution | Value-type concepts, FK resolution with filter_by, boolean flags as unary Relationships, computed aggregations | [examples/value_type_fk_resolution.py](examples/value_type_fk_resolution.py) |
+| Value-type + FK resolution | Value-type concepts, FK resolution with lookup, boolean flags as unary Relationships, computed aggregations | [examples/value_type_fk_resolution.py](examples/value_type_fk_resolution.py) |
 | Hierarchy + compound key | Geographic hierarchy chain, compound identity for junction concepts, derived metrics layered on base model | [examples/geographic_hierarchy_compound_key.py](examples/geographic_hierarchy_compound_key.py) |
 | Multi-level hierarchy | Multi-level location + time hierarchies, entity classification with mutually exclusive conditional rules | [examples/multi_level_hierarchy_segmentation.py](examples/multi_level_hierarchy_segmentation.py) |
 | Derived concept + bridge | Sources class, derived concepts from column values, bridge entity, `.alias()` for inverse | [examples/derived_concept_bridge_entity.py](examples/derived_concept_bridge_entity.py) |
@@ -475,7 +475,7 @@ For detailed enrichment patterns, property vs relationship mapping, and source c
 | Large-scale bidirectional | Large-scale (14 tables, 12+ concepts), unary flags, bidirectional inverses, self-referential source/target, walrus operator binding | [examples/large_scale_bidirectional.py](examples/large_scale_bidirectional.py) |
 | Multi-schema cross-system | Multi-schema sources (4 domains), individual Properties, boolean flags as unary Relationships, cross-system entity linking | [examples/multi_schema_cross_system.py](examples/multi_schema_cross_system.py) |
 | Pairwise property + ref | Binary/pairwise property, `.ref()` for same-type binding, junction concept for many-to-many | [examples/pairwise_property_ref.py](examples/pairwise_property_ref.py) |
-| Auxiliary schema enrichment | Auxiliary schema loading, composite key enrichment, filter_by for cross-schema binding | [examples/auxiliary_schema_enrichment.py](examples/auxiliary_schema_enrichment.py) |
+| Auxiliary schema enrichment | Auxiliary schema loading, composite key enrichment, lookup for cross-schema binding | [examples/auxiliary_schema_enrichment.py](examples/auxiliary_schema_enrichment.py) |
 
 ---
 

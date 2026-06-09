@@ -75,8 +75,8 @@ order_data = model.data([
 model.define(
     Order.new(
         order_data.to_schema(exclude=["customer_id", "product_id"]),
-        customer=Customer.filter_by(id=order_data.customer_id),
-        product=Product.filter_by(id=order_data.product_id),
+        customer=Customer.lookup(id=order_data.customer_id),
+        product=Product.lookup(id=order_data.product_id),
     )
 )
 
@@ -106,7 +106,7 @@ degree_centrality = graph.degree_centrality()
 model.define(CustomerSegment.new(id=graph.Node.community_label))
 
 model.where(graph.Node == Customer).define(
-    Customer.segment(CustomerSegment.filter_by(id=graph.Node.community_label))
+    Customer.segment(CustomerSegment.lookup(id=graph.Node.community_label))
 )
 
 # --- Query: customer-segment assignments with hub identification ---

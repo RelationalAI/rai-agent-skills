@@ -61,7 +61,7 @@ proj_data = model.data(
 model.define(
     Project.new(
         proj_data.to_schema(exclude=["site_id"]),
-        site=Site.filter_by(id=proj_data.site_id),
+        site=Site.lookup(id=proj_data.site_id),
     )
 )
 
@@ -72,7 +72,7 @@ inv_data = model.data(
 model.define(
     Investment.new(
         inv_data.to_schema(exclude=["site_id"]),
-        site=Site.filter_by(id=inv_data.site_id),
+        site=Site.lookup(id=inv_data.site_id),
     )
 )
 

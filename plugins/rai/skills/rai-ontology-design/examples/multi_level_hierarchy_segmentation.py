@@ -45,21 +45,21 @@ Country.name = model.Property(f"{Country} has {String:name}")
 Region = model.Concept("Region", identify_by={"id": RegionId})
 Region.name = model.Property(f"{Region} has {String:name}")
 Region.country = model.Relationship(
-    f"{Region} is in {Country}", short_name="region_country")
+    f"{Region} is in {Country}")
 
 City = model.Concept("City", identify_by={"id": CityId})
 City.name = model.Property(f"{City} has {String:name}")
 City.region = model.Relationship(
-    f"{City} is in {Region}", short_name="city_region")
+    f"{City} is in {Region}")
 
 Location = model.Concept("Location", identify_by={"id": LocationId})
 Location.city = model.Relationship(
-    f"{Location} is in {City}", short_name="location_city")
+    f"{Location} is in {City}")
 
 # Inline FK chain resolves the entire hierarchy during entity creation
 model.define(Location.new(
     id=location_source.LOCATION_ID,
-    city=City.filter_by(id=location_source.CITY_ID),
+    city=City.lookup(id=location_source.CITY_ID),
 ))
 
 # --- Product Hierarchy: Category → Product ---
@@ -71,14 +71,14 @@ Product.name = model.Property(f"{Product} has {String:name}")
 Product.price = model.Property(f"{Product} has {Float:price}")
 Product.cost = model.Property(f"{Product} has {Float:cost}")
 Product.category = model.Relationship(
-    f"{Product} belongs to {Category}", short_name="product_category")
+    f"{Product} belongs to {Category}")
 
 model.define(Product.new(
     id=product_source.PRODUCT_ID,
     name=product_source.PRODUCT_NAME,
     price=product_source.SALE_PRICE_USD,
     cost=product_source.COST_OF_GOODS_USD,
-    category=Category.filter_by(id=product_source.CATEGORY_ID),
+    category=Category.lookup(id=product_source.CATEGORY_ID),
 ))
 
 # --- Customer Segmentation ---
@@ -87,7 +87,7 @@ Customer.lifetime_spend = model.Property(f"{Customer} has {Float:lifetime_spend}
 
 model.define(Customer.new(id=customer_source.CUSTOMER_ID))
 model.define(
-    Customer.filter_by(id=customer_source.CUSTOMER_ID)
+    Customer.lookup(id=customer_source.CUSTOMER_ID)
     .lifetime_spend(customer_source.LIFETIME_SPEND)
 )
 

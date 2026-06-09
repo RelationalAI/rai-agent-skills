@@ -1,7 +1,7 @@
 # Pattern: enrichment table mapping — loading auxiliary data from a separate schema/table
 # Key ideas: Enrichment tables live in a different schema from core data; composite key
 # (site + sku) identifies each row; Relationships link enrichment to existing concepts
-# via filter_by(); Properties carry the enrichment payload. Useful when base tables are
+# via lookup(); Properties carry the enrichment payload. Useful when base tables are
 # read-only and derived/supplementary data lives in a separate schema.
 
 from relationalai.semantics import Model, Date, Float, Integer, String
@@ -44,8 +44,8 @@ enrich_inv = model.Table("MYDB.ENRICHMENT.INVENTORY")
 model.define(Inventory.new(
     warehouse_id=enrich_inv.warehouse_id,
     product_id=enrich_inv.product_id,
-    warehouse=Warehouse.filter_by(id=enrich_inv.warehouse_id),
-    product=Product.filter_by(id=enrich_inv.product_id),
+    warehouse=Warehouse.lookup(id=enrich_inv.warehouse_id),
+    product=Product.lookup(id=enrich_inv.product_id),
     quantity_on_hand=enrich_inv.quantity_on_hand,
     reorder_point=enrich_inv.reorder_point,
     holding_cost=enrich_inv.holding_cost,

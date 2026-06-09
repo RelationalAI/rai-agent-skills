@@ -4,7 +4,7 @@ These examples illustrate **build patterns** for starter ontologies — data loa
 
 ## Example 1: Snowflake tables with FK chains + junction concept
 
-Binding a multi-table Snowflake schema into concepts with FK-linked associations and a compound-identity junction concept. Uses `Sources` class for table organization, `Property` for scalars and functional FKs (e.g., each Order has one Customer), `Relationship` for multi-valued links and junction patterns, and `filter_by()` for FK resolution. Illustrated with TPC-H sample data (8 tables, including a PartSupply junction).
+Binding a multi-table Snowflake schema into concepts with FK-linked associations and a compound-identity junction concept. Uses `Sources` class for table organization, `Property` for scalars and functional FKs (e.g., each Order has one Customer), `Relationship` for multi-valued links and junction patterns, and `lookup()` for FK resolution. Illustrated with TPC-H sample data (8 tables, including a PartSupply junction).
 
 **Source:** `SNOWFLAKE_SAMPLE_DATA.TPCH_SF1` (available on every Snowflake account)
 
@@ -36,33 +36,37 @@ model.define(Region.new(id=src.region.R_REGIONKEY, name=src.region.R_NAME))
 Nation = model.Concept("Nation", identify_by={"id": Integer})
 Nation.name = model.Property(f"{Nation} has {String:name}")
 # Functional FK (each Nation in exactly one Region) → Property
-Nation.region = model.Property(f"{Nation} is within {Region:region}", short_name="nation_region")
+Nation.region = model.Property(f"{Nation} is within {Region:region}")
 model.define(Nation.new(
     id=src.nation.N_NATIONKEY,
     name=src.nation.N_NAME,
-    region=Region.filter_by(id=src.nation.N_REGIONKEY),
+    region=Region.lookup(id=src.nation.N_REGIONKEY),
 ))
 
 Customer = model.Concept("Customer", identify_by={"id": Integer})
 Customer.name = model.Property(f"{Customer} has {String:name}")
 Customer.account_balance = model.Property(f"{Customer} has {Float:account_balance}")
 # Functional FK (each Customer in exactly one Nation) → Property
-Customer.nation = model.Property(f"{Customer} is in {Nation:nation}", short_name="customer_nation")
+Customer.nation = model.Property(f"{Customer} is in {Nation:nation}")
 model.define(Customer.new(id=src.customer.C_CUSTKEY))
-model.define(Customer.name(src.customer.C_NAME)).where(
-    Customer.filter_by(id=src.customer.C_CUSTKEY))
-model.define(Customer.account_balance(src.customer.C_ACCTBAL)).where(
-    Customer.filter_by(id=src.customer.C_CUSTKEY))
-model.define(Customer.nation(Nation.filter_by(id=src.customer.C_NATIONKEY))).where(
-    Customer.filter_by(id=src.customer.C_CUSTKEY))
+cust = Customer.ref()
+model.define(cust.name(src.customer.C_NAME)).where(
+    cust.lookup(id=src.customer.C_CUSTKEY))
+cust = Customer.ref()
+model.define(cust.account_balance(src.customer.C_ACCTBAL)).where(
+    cust.lookup(id=src.customer.C_CUSTKEY))
+cust = Customer.ref()
+model.define(cust.nation(Nation.lookup(id=src.customer.C_NATIONKEY))).where(
+    cust.lookup(id=src.customer.C_CUSTKEY))
 
 Order = model.Concept("Order", identify_by={"id": Integer})
 Order.total_price = model.Property(f"{Order} has {Float:total_price}")
 Order.order_date = model.Property(f"{Order} has {Date:order_date}")
-Order.customer = model.Property(f"{Order} is placed by {Customer:customer}", short_name="order_customer")
+Order.customer = model.Property(f"{Order} is placed by {Customer:customer}")
 model.define(Order.new(id=src.orders.O_ORDERKEY))
-model.define(Order.customer(Customer.filter_by(id=src.orders.O_CUSTKEY))).where(
-    Order.filter_by(id=src.orders.O_ORDERKEY))
+ord_ref = Order.ref()
+model.define(ord_ref.customer(Customer.lookup(id=src.orders.O_CUSTKEY))).where(
+    ord_ref.lookup(id=src.orders.O_ORDERKEY))
 
 # Junction table with compound identity
 PartSupply = model.Concept("PartSupply", identify_by={"part_id": Integer, "supplier_id": Integer})
@@ -79,7 +83,7 @@ model.define(PartSupply.new(
 **Patterns demonstrated:**
 - Sources class for table organization
 - `Property` for scalars AND functional FKs (each Order has one Customer); `Relationship` for multi-valued links and junction patterns
-- `filter_by()` for FK binding (maps FK column to referenced entity's identity)
+- `lookup()` for FK binding (maps FK column to referenced entity's identity)
 - Inline property binding in `.new()` for compact entity creation
 - Compound identity for junction table (PartSupply)
 - Domain names (Customer, Order) not schema names (CUSTOMER, ORDERS)
@@ -119,15 +123,15 @@ Allocation = model.Concept("Allocation", identify_by={"aid": String})
 Allocation.min_budget = model.Property(f"{Allocation} has {Float:min_budget}")
 Allocation.max_budget = model.Property(f"{Allocation} has {Float:max_budget}")
 Allocation.channel = model.Property(
-    f"{Allocation} runs on {Channel:channel}", short_name="allocation_channel")
+    f"{Allocation} runs on {Channel:channel}")
 Allocation.country = model.Property(
-    f"{Allocation} is in {Country:country}", short_name="allocation_country")
+    f"{Allocation} is in {Country:country}")
 
 # --- PWL curve and Segment concepts (declared so the bridge below can reference them) ---
 PWL = model.Concept("PWL", identify_by={"pwl_id": String})
 Segment = model.Concept("Segment", identify_by={"sid": String})
 Allocation.pwl = model.Relationship(
-    f"{Allocation} has pwl {PWL}", short_name="allocation_pwl")
+    f"{Allocation} has pwl {PWL}")
 
 # Create entities and bind scalars
 model.define(
@@ -136,35 +140,40 @@ model.define(
     al.max_budget(allocations.max_budget),
 )
 
-# Bind concept relationships via filter_by
-model.define(Allocation.channel(Channel)).where(
-    Allocation.filter_by(aid=allocations.allocation_id),
-    Channel.filter_by(name=allocations.channel),
+# Bind concept relationships via lookup
+al_ref = Allocation.ref()
+ch_ref = Channel.ref()
+model.define(al_ref.channel(ch_ref)).where(
+    al_ref.lookup(aid=allocations.allocation_id),
+    ch_ref.lookup(name=allocations.channel),
 )
 
 # --- Bridge entity (joins two concepts through a third) ---
 PiecewiseLinearSegment = model.Concept("PiecewiseLinearSegment")
 PiecewiseLinearSegment.to_allocation = model.Property(
-    f"{PiecewiseLinearSegment} models {Allocation:to_allocation}", short_name="pls_allocation")
+    f"{PiecewiseLinearSegment} models {Allocation:to_allocation}")
 PiecewiseLinearSegment.segment = model.Property(
-    f"{PiecewiseLinearSegment} uses {Segment:segment}", short_name="pls_segment")
+    f"{PiecewiseLinearSegment} uses {Segment:segment}")
 PiecewiseLinearSegment.segment_length = model.Property(
     f"{PiecewiseLinearSegment} has {Float:segment_length}")
 PiecewiseLinearSegment.marginal_return = model.Property(
     f"{PiecewiseLinearSegment} has {Float:marginal_return}")
 
 # Create bridge entities by joining through PWL curve
+pwl_ref = PWL.ref()
+seg_ref = Segment.ref()
+al_ref = Allocation.ref()
 model.define(
     PiecewiseLinearSegment.new(
-        to_allocation=Allocation,
-        segment=Segment,
+        to_allocation=al_ref,
+        segment=seg_ref,
         segment_length=segments.segment_length,
         marginal_return=segments.marginal_return,
     )
 ).where(
-    Allocation.pwl(PWL),
-    PWL.filter_by(pwl_id=segments.pwl_id),
-    Segment.filter_by(sid=segments.segment),
+    al_ref.pwl(pwl_ref),
+    pwl_ref.lookup(pwl_id=segments.pwl_id),
+    seg_ref.lookup(sid=segments.segment),
 )
 
 # Reverse relationship via .alias()
@@ -357,22 +366,22 @@ model.define(Shipment.new(id=src.shipment["ID"]))
 
 # ── Multi-valued concept-to-concept associations (Relationship) ──
 Site.produces_sku = model.Relationship(
-    f"{Site} produces {StockKeepingUnit}", short_name="site_produces_sku")
+    f"{Site} produces {StockKeepingUnit}")
 Operation.transformation = model.Relationship(
-    f"{Operation} transforms at {Site}", short_name="operation_transformation")
+    f"{Operation} transforms at {Site}")
 Business.operates_site = model.Relationship(
-    f"{Business} operates {Site}", short_name="business_operates_site")
+    f"{Business} operates {Site}")
 # Self-referential: SKU → SKU for BOM assembly
 StockKeepingUnit.bom_components = model.Relationship(
     f"{StockKeepingUnit} requires {StockKeepingUnit} for assembly",
     short_name="bom_components")
 # BOM links to concepts
 BillOfMaterials.output_sku = model.Relationship(
-    f"{BillOfMaterials} outputs {StockKeepingUnit}", short_name="bom_output_sku")
+    f"{BillOfMaterials} outputs {StockKeepingUnit}")
 BillOfMaterials.input_sku = model.Relationship(
-    f"{BillOfMaterials} inputs {StockKeepingUnit}", short_name="bom_input_sku")
+    f"{BillOfMaterials} inputs {StockKeepingUnit}")
 BillOfMaterials.at_site = model.Relationship(
-    f"{BillOfMaterials} at {Site}", short_name="bom_at_site")
+    f"{BillOfMaterials} at {Site}")
 ```
 
 **Patterns demonstrated:**
@@ -462,9 +471,9 @@ Customer.churn_risk_score = model.Property(f"{Customer} has {Float:churn_risk_sc
 Customer.status = model.Property(f"{Customer} has {String:status}")
 # Bidirectional relationships
 Customer.located_in = model.Property(
-    f"{Customer} located in {Location:located_in}", short_name="customer_located_in")
+    f"{Customer} located in {Location:located_in}")
 Location.has_customer = model.Relationship(
-    f"{Location} has customer {Customer}", short_name="location_has_customer")
+    f"{Location} has customer {Customer}")
 
 model.define(
     c := Customer.new(id=raw.customers.CUST_ID),
@@ -474,14 +483,18 @@ model.define(
     c.status(raw.customers.STATUS),
 )
 
-# FK binding with filter_by — both directions
-model.define(Customer.located_in(Location)).where(
-    Customer.filter_by(id=raw.customers.CUST_ID),
-    Location.filter_by(id=raw.customers.POSTAL_CODE),
+# FK binding with lookup — both directions
+cust_ref = Customer.ref()
+loc_ref = Location.ref()
+model.define(cust_ref.located_in(loc_ref)).where(
+    cust_ref.lookup(id=raw.customers.CUST_ID),
+    loc_ref.lookup(id=raw.customers.POSTAL_CODE),
 )
-model.define(Location.has_customer(Customer)).where(
-    Location.filter_by(id=raw.customers.POSTAL_CODE),
-    Customer.filter_by(id=raw.customers.CUST_ID),
+cust_ref = Customer.ref()
+loc_ref = Location.ref()
+model.define(loc_ref.has_customer(cust_ref)).where(
+    loc_ref.lookup(id=raw.customers.POSTAL_CODE),
+    cust_ref.lookup(id=raw.customers.CUST_ID),
 )
 
 # ── Contract (unary flag from boolean column) ─────────────────────
@@ -489,11 +502,12 @@ Contract = model.Concept("Contract", identify_by={"id": String})
 Contract.monthly_rate = model.Property(f"{Contract} has {Float:monthly_rate}")
 Contract.term_months = model.Property(f"{Contract} has {Integer:term_months}")
 Contract.for_customer = model.Property(
-    f"{Contract} for customer {Customer:for_customer}", short_name="contract_for_customer")
+    f"{Contract} for customer {Customer:for_customer}")
 Contract.is_auto_renew = model.Relationship(f"{Contract} is auto renew")
 
-model.define(Contract.is_auto_renew()).where(
-    Contract.filter_by(id=raw.plans_contracts.CONTRACT_ID),
+contract_ref = Contract.ref()
+model.define(contract_ref.is_auto_renew()).where(
+    contract_ref.lookup(id=raw.plans_contracts.CONTRACT_ID),
     raw.plans_contracts.AUTO_RENEW == "True",
 )
 
@@ -501,30 +515,32 @@ model.define(Contract.is_auto_renew()).where(
 Facility = model.Concept("Facility", identify_by={"id": String})
 Facility.capacity = model.Property(f"{Facility} has {Integer:capacity}")
 Facility.located_in = model.Property(
-    f"{Facility} located in {Location:located_in}", short_name="facility_located_in")
+    f"{Facility} located in {Location:located_in}")
 model.define(
     f := Facility.new(id=raw.facilities.FACILITY_ID),
     f.capacity(raw.facilities.CAPACITY),
 )
-model.define(Facility.located_in(Location)).where(
-    Facility.filter_by(id=raw.facilities.FACILITY_ID),
-    Location.filter_by(id=raw.facilities.POSTAL_CODE),
+fac_ref = Facility.ref()
+loc_ref = Location.ref()
+model.define(fac_ref.located_in(loc_ref)).where(
+    fac_ref.lookup(id=raw.facilities.FACILITY_ID),
+    loc_ref.lookup(id=raw.facilities.POSTAL_CODE),
 )
 
 # ── Equipment (multi-FK: facility + part) ─────────────────────────
 Equipment = model.Concept("Equipment", identify_by={"id": String})
 Equipment.equipment_type = model.Property(f"{Equipment} has {String:equipment_type}")
 Equipment.installed_at = model.Property(
-    f"{Equipment} installed at {Facility:installed_at}", short_name="equipment_installed_at")
+    f"{Equipment} installed at {Facility:installed_at}")
 Equipment.uses_part = model.Relationship(
-    f"{Equipment} uses part {Part}", short_name="equipment_uses_part")
+    f"{Equipment} uses part {Part}")
 Equipment.has_outdated_firmware = model.Relationship(
     f"{Equipment} has outdated firmware")
 # Inverses
 Facility.has_equipment = model.Relationship(
-    f"{Facility} has equipment {Equipment}", short_name="facility_has_equipment")
+    f"{Facility} has equipment {Equipment}")
 Part.used_in_equipment = model.Relationship(
-    f"{Part} used in equipment {Equipment}", short_name="part_used_in_equipment")
+    f"{Part} used in equipment {Equipment}")
 
 # ── Transaction (self-referential: source + target both → Customer) ──
 Transaction = model.Concept("Transaction", identify_by={"id": String})
@@ -534,29 +550,34 @@ Transaction.quality_score = model.Property(
     f"{Transaction} has {Float:quality_score}")
 # Role-named relationships — same target concept, different roles
 Transaction.source = model.Property(
-    f"{Transaction} has source {Customer:source}", short_name="transaction_source")
+    f"{Transaction} has source {Customer:source}")
 Transaction.target = model.Property(
-    f"{Transaction} has target {Customer:target}", short_name="transaction_target")
+    f"{Transaction} has target {Customer:target}")
 Transaction.routed_through = model.Property(
-    f"{Transaction} routed through {Facility:routed_through}", short_name="transaction_routed_through")
+    f"{Transaction} routed through {Facility:routed_through}")
 Transaction.is_dropped = model.Relationship(f"{Transaction} is dropped")
 # Inverses with role names
 Customer.sent_transaction = model.Relationship(
-    f"{Customer} sent transaction {Transaction}", short_name="customer_sent_transaction")
+    f"{Customer} sent transaction {Transaction}")
 Customer.received_transaction = model.Relationship(
-    f"{Customer} received transaction {Transaction}", short_name="customer_received_transaction")
+    f"{Customer} received transaction {Transaction}")
 
 # FK binding — same concept referenced by two different columns
-model.define(Transaction.source(Customer)).where(
-    Transaction.filter_by(id=raw.transactions.TXN_ID),
-    Customer.filter_by(id=raw.transactions.SOURCE_CUST_ID),
+txn_ref = Transaction.ref()
+cust_ref = Customer.ref()
+model.define(txn_ref.source(cust_ref)).where(
+    txn_ref.lookup(id=raw.transactions.TXN_ID),
+    cust_ref.lookup(id=raw.transactions.SOURCE_CUST_ID),
 )
-model.define(Transaction.target(Customer)).where(
-    Transaction.filter_by(id=raw.transactions.TXN_ID),
-    Customer.filter_by(id=raw.transactions.TARGET_CUST_ID),
+txn_ref = Transaction.ref()
+cust_ref = Customer.ref()
+model.define(txn_ref.target(cust_ref)).where(
+    txn_ref.lookup(id=raw.transactions.TXN_ID),
+    cust_ref.lookup(id=raw.transactions.TARGET_CUST_ID),
 )
-model.define(Transaction.is_dropped()).where(
-    Transaction.filter_by(id=raw.transactions.TXN_ID),
+txn_ref = Transaction.ref()
+model.define(txn_ref.is_dropped()).where(
+    txn_ref.lookup(id=raw.transactions.TXN_ID),
     raw.transactions.TXN_STATUS == "DROPPED",
 )
 
@@ -566,8 +587,9 @@ Incident.severity = model.Property(f"{Incident} has {String:severity}")
 Incident.duration_minutes = model.Property(f"{Incident} has {Integer:duration_minutes}")
 Incident.is_outage = model.Relationship(f"{Incident} is outage")
 
-model.define(Incident.is_outage()).where(
-    Incident.filter_by(id=raw.incidents.EVENT_ID),
+inc_ref = Incident.ref()
+model.define(inc_ref.is_outage()).where(
+    inc_ref.lookup(id=raw.incidents.EVENT_ID),
     raw.incidents.EVENT_TYPE == "OUTAGE",
 )
 
@@ -579,8 +601,9 @@ RevenueForecast.actual_revenue = model.Property(
     f"{RevenueForecast} has {Float:actual_revenue}")
 RevenueForecast.is_on_target = model.Relationship(f"{RevenueForecast} is on target")
 
-model.define(RevenueForecast.is_on_target()).where(
-    RevenueForecast.filter_by(id=raw.revenue_forecast.FORECAST_ID),
+rf_ref = RevenueForecast.ref()
+model.define(rf_ref.is_on_target()).where(
+    rf_ref.lookup(id=raw.revenue_forecast.FORECAST_ID),
     raw.revenue_forecast.STATUS == "ON_TARGET",
 )
 ```
@@ -698,26 +721,25 @@ SystemBIteration.state = model.Property(f"{SystemBIteration} has {String:state}"
 # ── Concept-to-concept associations (Property for functional, Relationship for multi-valued) ──
 # Cross-system linking (different identity systems)
 SystemAUser.system_b_user_mapping = model.Property(
-    f"{SystemAUser} links to {SystemBUser:system_b_user_mapping}", short_name="system_a_to_b_user_mapping")
+    f"{SystemAUser} links to {SystemBUser:system_b_user_mapping}")
 SystemAWorkItem.implements_task = model.Property(
-    f"{SystemAWorkItem} implements {SystemBTask:implements_task}",
-    short_name="system_a_work_item_to_system_b_task")
+    f"{SystemAWorkItem} implements {SystemBTask:implements_task}")
 
 # Within System A
 SystemAUser.created_work_item = model.Relationship(
-    f"{SystemAUser} created {SystemAWorkItem}", short_name="system_a_user_created_work_item")
+    f"{SystemAUser} created {SystemAWorkItem}")
 SystemAProject.contains_work_item = model.Relationship(
-    f"{SystemAProject} contains {SystemAWorkItem}", short_name="project_work_items")
+    f"{SystemAProject} contains {SystemAWorkItem}")
 SystemAWorkItem.contains_activity = model.Relationship(
-    f"{SystemAWorkItem} contains {SystemAActivity}", short_name="work_item_activities")
+    f"{SystemAWorkItem} contains {SystemAActivity}")
 
 # Within System B: hierarchy
 SystemBTask.assigned_to = model.Property(
-    f"{SystemBTask} assigned to {SystemBUser:assigned_to}", short_name="system_b_task_assignment")
+    f"{SystemBTask} assigned to {SystemBUser:assigned_to}")
 SystemBTask.in_iteration = model.Property(
-    f"{SystemBTask} assigned to {SystemBIteration:in_iteration}", short_name="system_b_task_iteration_assignment")
+    f"{SystemBTask} assigned to {SystemBIteration:in_iteration}")
 SystemBTask.belongs_to_project = model.Property(
-    f"{SystemBTask} belongs to {SystemBProject:belongs_to_project}", short_name="system_b_task_project_membership")
+    f"{SystemBTask} belongs to {SystemBProject:belongs_to_project}")
 ```
 
 **Patterns demonstrated:**
@@ -767,10 +789,10 @@ ItemPair = model.Concept(
 )
 ItemPair.strength = model.Property(f"{ItemPair} has {Float:strength}")
 ItemPair.left = model.Property(
-    f"{ItemPair} has left {Item:left}", short_name="pair_left"
+    f"{ItemPair} has left {Item:left}"
 )
 ItemPair.right = model.Property(
-    f"{ItemPair} has right {Item:right}", short_name="pair_right"
+    f"{ItemPair} has right {Item:right}"
 )
 
 model.define(
@@ -781,19 +803,23 @@ model.define(
     ip.strength(src.interactions.STRENGTH),
 )
 
-model.define(ItemPair.left(Item)).where(
-    ItemPair.filter_by(
+ip_ref = ItemPair.ref()
+item_ref = Item.ref()
+model.define(ip_ref.left(item_ref)).where(
+    ip_ref.lookup(
         left_id=src.interactions.LEFT_ID,
         right_id=src.interactions.RIGHT_ID,
     ),
-    Item.filter_by(id=src.interactions.LEFT_ID),
+    item_ref.lookup(id=src.interactions.LEFT_ID),
 )
-model.define(ItemPair.right(Item)).where(
-    ItemPair.filter_by(
+ip_ref = ItemPair.ref()
+item_ref = Item.ref()
+model.define(ip_ref.right(item_ref)).where(
+    ip_ref.lookup(
         left_id=src.interactions.LEFT_ID,
         right_id=src.interactions.RIGHT_ID,
     ),
-    Item.filter_by(id=src.interactions.RIGHT_ID),
+    item_ref.lookup(id=src.interactions.RIGHT_ID),
 )
 ```
 

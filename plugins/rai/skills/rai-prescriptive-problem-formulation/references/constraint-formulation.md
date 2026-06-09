@@ -11,6 +11,7 @@
 - [Constraint Modeling Patterns](#constraint-modeling-patterns)
   - [Balance constraints](#balance-constraints)
   - [Concept-variable matching in constraints](#concept-variable-matching-in-constraints)
+  - [Declaring constraint keys for post-solve readback](#declaring-constraint-keys-for-post-solve-readback)
   - [Capacity limits and binary activation (big-M)](#capacity-limits-and-binary-activation-big-m)
   - [Historical comparison / tolerance band constraints](#historical-comparison--tolerance-band-constraints)
   - [Proportional / fair-share constraints](#proportional--fair-share-constraints)
@@ -359,6 +360,37 @@ problem.satisfy(model.require(sum(DecisionConcept.x_assigned).per(BaseConcept) >
 ```
 
 **To link to base model entities**, navigate via relationships defined on the decision concept (e.g., `DecisionConcept.entity_a`, `DecisionConcept.entity_b`), not by referencing the variable on the base concept.
+
+### Declaring constraint keys for post-solve readback
+
+A **constraint family** is one logical constraint instantiated per entity — a capacity limit per Resource, a coverage floor per Shift, a nutrient bound per Nutrient. Declaring the family's grounding key(s) at formulation time — `keyed_by=` on `satisfy()` — determines whether you can read each instance's post-solve marginal (`shadow_price`) or conflict membership (`in_conflict`) back **paired with the entity it grounds**.
+
+This is what keeps a solved model's output *ontology-native*: declare the key, and each marginal or conflict flag reads back as `cap.resource.capacity` — attached to the entity it describes and queryable like any other property, ready to join, filter, and present in your domain's own terms.
+
+Each `keyed_by` entry becomes an **identifying back-pointer Property** on the returned `ProblemConstraint`, named by the dict key you choose — `keyed_by={"resource": Resource}` reads back as `cap.resource`. The instance is identified by its key tuple, and the back-pointer joins a marginal or IIS flag to entity data by key (`cap.resource.capacity`) instead of parsing a constraint name string. A *variable's* back-pointer (`var.food`) is derived automatically from its Property's format-string fields; a *constraint's* must be **declared** — there is no automatic constraint back-pointer.
+
+```python
+# Declare the family's grounding key so each instance reads back by entity:
+cap = problem.satisfy(
+    model.require(usage <= Resource.capacity),
+    name=["cap", Resource.name],        # readable display label only
+    keyed_by={"resource": Resource},    # identifying key -> cap.resource back-pointer
+)
+# Post-solve, marginals and IIS flags read back joined by this key (cap.resource.name,
+# cap.shadow_price) — readback patterns live in rai-prescriptive-results-interpretation.
+```
+
+Rules of the declaration:
+
+- **The keys must uniquely determine the constraint instance** (1:1). A key set that doesn't — a family wider than its key, or two conjuncts of a single `require(A, B)` sharing the same keys — forces two constraint expressions onto one identity and **raises at solve** (an `FDError`: the relationship violates functional dependency guarantees). Add the missing key, or split a multi-conjunct `require` into one `satisfy` per conjunct.
+- **A constraint grounded over several entities takes several keys** — `keyed_by={"worker": Worker, "shift": Shift}` — and exposes one back-pointer per key.
+- **A key need not be an entity.** A value reference such as an identifier — `keyed_by={"i": X.i}` — keys by that scalar (`con.i`), the natural form when the grounding domain is a bare index with no richer entity to join to. A bare primitive type (`Integer`) is rejected — it carries no per-instance value.
+- **Key names** must be valid identifiers and must not clash with the constraint's managed properties (`name`, `root`, `type`, `shadow_price`, `basis_status`, `in_conflict`, `id`).
+- **Omit `keyed_by`** for constraints you never read back by key — they are still valid solver constraints.
+
+`name=` is a **display label only** — it keeps `problem.display()` rows readable (the `name=["cap", Entity.id]` form recommended under Constraint Join Patterns) and plays no part in identifying instances or naming the back-pointer.
+
+This is the formulation-time bridge for the post-solve readback patterns in `rai-prescriptive-results-interpretation` (Sensitivity & conflict attributes, plus its sensitivity-analysis.md and conflict-analysis.md references).
 
 ### Capacity limits and binary activation (big-M)
 

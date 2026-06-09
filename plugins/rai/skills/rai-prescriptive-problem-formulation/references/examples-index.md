@@ -20,6 +20,7 @@
 | N-queens (Integer) | Pairwise inequality constraints with `.ref()`, `Problem(model, Integer)`, MiniZinc | [examples/n_queens.py](../examples/n_queens.py) |
 | Sudoku (Integer) | `all_different` global constraint with `.per()` grouping, standalone property variables | [examples/sudoku.py](../examples/sudoku.py) |
 | Epsilon constraint Pareto | Epsilon constraint loop + Scenario Concept inside, quadratic objective, anchor solves + sweep | [examples/epsilon_constraint_pareto.py](../examples/epsilon_constraint_pareto.py) |
+| Dual-guided Pareto sweep | One `solve_at(eps)` kernel, `sensitivity=True` shadow price = exact frontier slope; uniform-grid vs adaptive vs dichotomic drivers; in-place weighted-sum equivalence check (the ε-point is the weighted-sum optimum for weights `(1, λ)` — a supporting hyperplane); convex QP on `highs` | [examples/dual_guided_pareto_sweep.py](../examples/dual_guided_pareto_sweep.py) |
 | Chained graph → prescriptive | Graph centrality enrichment feeding prescriptive objective weight | [examples/chained_graph_prescriptive.py](../examples/chained_graph_prescriptive.py) |
 | Chained graph → constraint | Graph centrality as prescriptive constraint lower bound (proportional allocation) | [examples/chained_graph_constraint.py](../examples/chained_graph_constraint.py) |
 | Chained rules → prescriptive | Rules-derived boolean flags as hard constraints + cost surcharges in optimizer | [examples/chained_rules_prescriptive.py](../examples/chained_rules_prescriptive.py) |

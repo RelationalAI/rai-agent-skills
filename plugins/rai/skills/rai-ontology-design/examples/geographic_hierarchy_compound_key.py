@@ -47,13 +47,13 @@ Region.name = model.Property(f"{Region} has {String:name}")
 Nation = model.Concept("Nation", identify_by={"id": NationId})
 Nation.name = model.Property(f"{Nation} has {String:name}")
 Nation.region = model.Relationship(
-    f"{Nation} is within {Region}", short_name="nation_region")
+    f"{Nation} is within {Region}")
 
 model.define(Region.new(id=region_src.R_REGIONKEY, name=region_src.R_NAME))
 model.define(Nation.new(
     id=nation_src.N_NATIONKEY,
     name=nation_src.N_NAME,
-    region=Region.filter_by(id=nation_src.N_REGIONKEY),
+    region=Region.lookup(id=nation_src.N_REGIONKEY),
 ))
 
 # --- Core Concepts (referenced by PartSupply and LineItem) ---
@@ -67,9 +67,9 @@ PartSupply = model.Concept("PartSupply", identify_by={
     "supplier_id": SupplierId,
 })
 PartSupply.part = model.Relationship(
-    f"{PartSupply} supplies {Part}", short_name="part_supply_part")
+    f"{PartSupply} supplies {Part}")
 PartSupply.supplier = model.Relationship(
-    f"{PartSupply} is from {Supplier}", short_name="part_supply_supplier")
+    f"{PartSupply} is from {Supplier}")
 PartSupply.available_quantity = model.Property(
     f"{PartSupply} has {Integer:available_quantity}")
 PartSupply.cost = model.Property(f"{PartSupply} has {Float:cost}")
@@ -77,8 +77,8 @@ PartSupply.cost = model.Property(f"{PartSupply} has {Float:cost}")
 model.define(PartSupply.new(
     part_id=part_supply_src.PS_PARTKEY,
     supplier_id=part_supply_src.PS_SUPPKEY,
-    part=Part.filter_by(id=part_supply_src.PS_PARTKEY),
-    supplier=Supplier.filter_by(id=part_supply_src.PS_SUPPKEY),
+    part=Part.lookup(id=part_supply_src.PS_PARTKEY),
+    supplier=Supplier.lookup(id=part_supply_src.PS_SUPPKEY),
     available_quantity=part_supply_src.PS_AVAILQTY,
     cost=part_supply_src.PS_SUPPLYCOST,
 ))
@@ -89,11 +89,11 @@ LineItem = model.Concept("LineItem", identify_by={
     "line_number": Integer,
 })
 LineItem.order = model.Relationship(
-    f"{LineItem} belongs to {Order}", short_name="line_item_order")
+    f"{LineItem} belongs to {Order}")
 LineItem.part = model.Relationship(
-    f"{LineItem} contains {Part}", short_name="line_item_part")
+    f"{LineItem} contains {Part}")
 LineItem.supplier = model.Relationship(
-    f"{LineItem} supplied by {Supplier}", short_name="line_item_supplier")
+    f"{LineItem} supplied by {Supplier}")
 LineItem.quantity = model.Property(f"{LineItem} has {Float:quantity}")
 LineItem.extended_price = model.Property(f"{LineItem} has {Float:extended_price}")
 LineItem.discount = model.Property(f"{LineItem} has {Float:discount}")
@@ -103,9 +103,9 @@ LineItem.receipt_date = model.Property(f"{LineItem} has {Date:receipt_date}")
 model.define(LineItem.new(
     order_id=line_item_src.L_ORDERKEY,
     line_number=line_item_src.L_LINENUMBER,
-    order=Order.filter_by(id=line_item_src.L_ORDERKEY),
-    part=Part.filter_by(id=line_item_src.L_PARTKEY),
-    supplier=Supplier.filter_by(id=line_item_src.L_SUPPKEY),
+    order=Order.lookup(id=line_item_src.L_ORDERKEY),
+    part=Part.lookup(id=line_item_src.L_PARTKEY),
+    supplier=Supplier.lookup(id=line_item_src.L_SUPPKEY),
     quantity=line_item_src.L_QUANTITY,
     extended_price=line_item_src.L_EXTENDEDPRICE,
     discount=line_item_src.L_DISCOUNT,

@@ -1,10 +1,12 @@
 ---
 name: rai-prescriptive-problem-formulation
-description: Formulates optimization and constraint satisfaction problems from ontology models — decision variables, constraints, objectives, and common patterns. Use for optimization and constraint-satisfaction tasks — building, reviewing, or debugging the formulation; then solve it with rai-prescriptive-solver-management and interpret the solution with rai-prescriptive-results-interpretation.
+description: Formulates optimization and constraint satisfaction problems from ontology models — decision variables, constraints, objectives, and common patterns. Use for optimization and constraint-satisfaction tasks — building, reviewing, debugging, or relaxing an over-constrained formulation to resolve a reported conflict / IIS; then solve it with rai-prescriptive-solver-management. Not for interpreting or diagnosing solve results, marginals, or conflicts themselves (see rai-prescriptive-results-interpretation).
 ---
 
 # Problem Formulation
 <!-- v1-SENSITIVE -->
+
+> **Requires `relationalai>=1.11.0`.** The dual-guided multi-objective methods in this skill read solver sensitivity via `solve("highs", sensitivity=True)` (shadow prices as exact frontier slopes); earlier versions reject the request at the solver and omit the dual fields on `solve_info()`. See `rai-setup`.
 
 ## Summary
 
@@ -71,7 +73,7 @@ cost = problem.minimize(aggs.sum(Lane.flow * Lane.unit_cost))
 | Method | Signature | Purpose |
 |--------|-----------|---------|
 | `solve_for` | `(expr, where=, populate=True, name=, type=, lower=, upper=, start=)` | Declare decision variable. Returns `ProblemVariable` (a Concept usable in `model.define()`, `model.select()`, `.ref()`). For row inspection use the DSL: `model.select(var.name, var.lower, var.upper).to_df()`. `type`: `"cont"`, `"int"`, `"bin"` |
-| `satisfy` | `(expr, name=)` | Add constraint. Returns `ProblemConstraint` — capture this ref to inspect the constraint's grounded form via `problem.display(ref)`. |
+| `satisfy` | `(expr, name=, keyed_by=)` | Add constraint. Returns `ProblemConstraint` — capture this ref to inspect the constraint's grounded form via `problem.display(ref)`. `keyed_by={"key": Concept}` declares the family's grounding keys as identifying entity back-pointers for post-solve readback — see `references/constraint-formulation.md` > Declaring constraint keys for post-solve readback. |
 | `minimize` | `(expr, name=)` | Set minimization objective. Returns `ProblemObjective` — capture for targeted `display(ref)`. |
 | `maximize` | `(expr, name=)` | Set maximization objective. Returns `ProblemObjective` — capture for targeted `display(ref)`. |
 | `solve` | `(solver, time_limit_sec=, print_format=, ...)` | Execute solve. Solvers: `"highs"`, `"minizinc"`, `"ipopt"`, `"gurobi"`. `print_format` (`"moi"`, `"latex"`, `"mof"`, `"lp"`, `"mps"`, `"nl"`) populates `solve_info().printed_model` |
@@ -453,7 +455,7 @@ prod_cost = ProdCapacity.production_cost * sum(x_prod).per(ProdCapacity).where(
 - **`name=[]` parts must resolve to scalars** — see [variable-formulation.md](references/variable-formulation.md) > Variable naming (`name=[]`).
 - **Cross-concept joins need distinct attribute names** — if two concepts both have `site_id` as `identify_by`, rename one (e.g., `wk_site_id`) to avoid ambiguity
 - **Only one objective supported** — HiGHS rejects multiple `minimize()`/`maximize()` calls
-- **Bi-objective via epsilon constraint**: To optimize two competing objectives, use the epsilon constraint loop — convert the secondary objective to a parameterized constraint and sweep it across the feasible range. Each iteration is a standard single-objective Problem. See [multi-objective-formulation.md](references/multi-objective-formulation.md).
+- **Multi-objective via dual-guided scalarization**: To optimize competing objectives, scalarize (epsilon-constraint `min f₁ s.t. f₂ ≥ ε`, or weighted-sum `min w·f`) and sweep — each iteration is a standard single-objective Problem. With `sensitivity=True` on an LP/QP solve, the epsilon-bound's `shadow_price` is the **exact frontier slope** at that point — use it to place adaptive / dichotomic samples (far fewer solves than a uniform grid) and to cross-check the equivalent weighted-sum weights. See [multi-objective-formulation.md](references/multi-objective-formulation.md).
 
 For constraint naming with lists, re-solve behavior (multi-scenario patterns), `| 0` fallback limitation, and numpy type casting, see [known-limitations.md](references/known-limitations.md).
 
@@ -471,7 +473,7 @@ MiniZinc-specific gotchas (`Problem(model, Integer)` pairing, empty-aggregate si
 
 **Practical impact:**
 - To remove or weaken an existing constraint or variable, create a **new Problem** and re-register only the elements you want.
-- Re-calling `problem.solve()` on the same Problem is safe: it re-runs the solver against the current (accumulated) formulation and updates variable values. Use this when you want to add more constraints/variables and re-solve. Use a new Problem only when you want to *remove* something.
+- Re-calling `problem.solve()` on the same Problem is safe: it re-runs the solver against the current (accumulated) formulation and updates variable values. Use this when you want to add more constraints/variables and re-solve. Use a new Problem only when you want to *remove* something. (Exception: the diagnostic flags — a Problem solved plain can't re-solve with `sensitivity=`/`conflict=`, and a requested diagnostic family can't be dropped on a re-solve; see [known-limitations.md](references/known-limitations.md) > Re-Solve Behavior.)
 - Multi-scenario optimization where the constraint set differs per scenario should use a new Problem per scenario. If only parameter values change, the Scenario Concept pattern (one Problem, one solve, scenario as a data dimension) is preferred — see [scenario-analysis.md](references/scenario-analysis.md).
 - Model-level additions (new properties, concepts) persist across all subsequent Problems on that model — plan the model schema before building formulations.
 
@@ -489,7 +491,7 @@ MiniZinc-specific gotchas (`Problem(model, Integer)` pairing, empty-aggregate si
 | CSP-style formulation | When this style fits, decision-variable shapes, constraint idioms, multi-solution mode, audit/witness, verify() limitation on implies-bodied ICs, the 4 globals available today | [csp-formulation.md](references/csp-formulation.md) |
 | Scenario analysis | Scenario Concept vs Loop + where= patterns, decision matrix, code examples | [scenario-analysis.md](references/scenario-analysis.md) |
 | Formulation simplification | Static vs dynamic parameters, goals vs constraints, grouped constraints, over-specification | [formulation-simplification.md](references/formulation-simplification.md) |
-| Multi-objective formulation | Approach selection, epsilon constraint method, tension heuristics, pitfalls | [multi-objective-formulation.md](references/multi-objective-formulation.md) |
+| Multi-objective formulation | Dual-guided scalarization (epsilon-constraint + weighted-sum), the shadow-price = frontier-slope principle, sampling policies (blind / adaptive / dichotomic), MOA family map, decision tree, applicability guard, pitfalls | [multi-objective-formulation.md](references/multi-objective-formulation.md) |
 | Diagnostic workflow | Capture-ref pattern, targeted `display(ref)`, sampling large constraints (`limit=N` / `where=` filter), `solve_info` triage, `verify`, INFEASIBLE walk, trivial-OPTIMAL localization | [diagnostic-workflow.md](references/diagnostic-workflow.md) |
 | Fix generation guidelines | Root cause taxonomy, grounding rules, join path fixes, trivial/infeasible fix strategies | [fix-generation-guidelines.md](references/fix-generation-guidelines.md) |
 | Examples index | All example problems with patterns demonstrated | [examples-index.md](references/examples-index.md) |

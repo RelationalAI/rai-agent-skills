@@ -183,8 +183,8 @@ You MUST also add a `define()` rule to populate it:
 ```python
 source = model.Table("DB.SCHEMA.ORDERS")
 model.define(
-    Order.filter_by(id=source.ORDER_ID)
-    .customer(Customer.filter_by(id=source.CUSTOMER_ID))
+    Order.lookup(id=source.ORDER_ID)
+    .customer(Customer.lookup(id=source.CUSTOMER_ID))
 )
 ```
 

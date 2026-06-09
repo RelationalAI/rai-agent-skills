@@ -33,8 +33,8 @@ link_data = model.data([
 ], columns=["id", "src", "dst", "weight"])
 model.define(Link.new(
     id=link_data.id,
-    source=Node.filter_by(id=link_data.src),
-    target=Node.filter_by(id=link_data.dst),
+    source=Node.lookup(id=link_data.src),
+    target=Node.lookup(id=link_data.dst),
     weight=link_data.weight,
 ))
 
