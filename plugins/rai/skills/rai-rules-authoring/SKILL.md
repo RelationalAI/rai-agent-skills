@@ -167,9 +167,11 @@ model.where(condition).define(Entity.is_valid())
 **Classification** — typed sub-concepts with mutually exclusive conditions:
 
 ```python
-HighValue = model.Concept(f"{Entity} is high value")
-model.where(Entity.score > threshold).define(HighValue(Entity))
+HighValue = model.Concept("HighValue", extends=[Entity])
+model.define(HighValue(Entity)).where(Entity.score > threshold)
 ```
+
+`model.Concept(name, extends=[Parent])` takes a plain name — a reading f-string (`model.Concept(f"{Entity} is high value")`) creates an *unrelated* concept with that string as its name, and `define(HighValue(Entity))` then raises `[TypeMismatch] Expected '... is high value', got 'Entity'`. Reading f-strings belong to `model.Relationship` / `model.Property`; sub-concepts always use `extends=[Parent]`.
 
 Use typed sub-concepts (not string Properties) for derived classifications. For full subtype classification with multiple tiers, see [pyrel-rule-patterns.md](references/pyrel-rule-patterns.md#classification-rules). For enumeration vs. subtyping guidance, see `rai-ontology-design` [categorization-and-advanced.md](../rai-ontology-design/references/categorization-and-advanced.md).
 
@@ -298,6 +300,13 @@ and [expression-rules.md](../rai-pyrel-coding/references/expression-rules.md).
 8. **One rule per derived property.** Keep all conditions that produce the same output property
    together in one place for readability and correctness verification.
 
+9. **Reuse an existing classification; don't re-derive it from a composite.** When a downstream rule
+   or summary references a tier/segment/flag that an earlier step already produced, carry that derived
+   property forward. Re-thresholding a *new* composite metric (e.g., classifying on
+   `centrality × probability`) invents a second, inconsistent definition of the same label. If the
+   composite needs a tier, inherit the upstream tier; define a fresh threshold only when the question
+   asks for a genuinely new classification.
+
 ---
 
 ## Complex Multi-Entity Rule Design
@@ -403,6 +412,7 @@ model.define(Customer.total_spend(total))
 | Aggregation-based rule gives wrong counts | Missing `.per()` or wrong `.where()` scope | Validate contributing rows with `model.select()` before defining the rule |
 | Classification + aggregation: `FDError` | Overlapping ranges when aggregate values land on boundary | Use strict `<` on one boundary, `>=` on the other |
 | `define()` in a Python loop | Defining rules per entity in a for loop instead of declaratively | Use `model.data()` + `.where().define()`. See `rai-pyrel-coding` Common Pitfalls for before/after examples |
+| Every query fails after one bad `define()` | A `define()` that raises (`TypeMismatch`/`TyperError`) is not rolled back — the bad rule stays registered, and every later query re-runs type inference and re-raises the original error | Restart the Python process (or rebuild the model) after a failed `define()`; don't debug unrelated queries in a poisoned session |
 | `~Relationship()` for negation | `TypeError: bad operand type for unary ~: 'Expression'` — Python `~` doesn't work on RAI expressions | Use `model.not_(Concept.relationship())` in `.where()`. For set-difference queries (entities matching flag A but not flag B), either nest `model.not_()` or query both sets and subtract in pandas |
 | `Unground Variables` from mixed numeric comparison | Comparing a Float property to an Integer property (or vice versa) in a rule condition — types must match exactly | Cast to a common type: `Entity.float_prop < floats.float(Entity.int_prop)` or `numbers.integer(Entity.float_prop)`. See `rai-pyrel-coding` Common Pitfalls for general ungrounded variable debugging |
 | Boolean flags can't be selected as columns | Unary Relationships can only be used in `.where()` filters, not in `.select().alias()` | Query flagged entity IDs separately, then merge into the main DataFrame — see pattern below |

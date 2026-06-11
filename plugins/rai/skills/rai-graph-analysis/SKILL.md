@@ -135,7 +135,7 @@ graph = Graph(
 | **Similarity** | `jaccard_similarity()`, `cosine_similarity()`, `adamic_adar()`, `preferential_attachment()` | `(node1, node2, score)` | Entity comparison, link prediction |
 | **Clustering** | `local_clustering_coefficient()`, `average_clustering_coefficient()`, `triangle_count()`, `triangle()`, `unique_triangle()` | `(node, value)` or `(n1, n2, n3)` | Local density, tightness |
 
-**Bridge edges (single points of failure on the edge side) have no named primitive — express them as WCC with per-edge ablation, in RAI.** `betweenness_centrality()` is *not* a substitute: it scores nodes on a relative scale and does not answer "would removing this edge disconnect the graph." See [Bridge edges in algorithm-selection.md](references/algorithm-selection.md#bridge-edges-no-named-primitive) for the recipe.
+**Bridge edges (edge-side single points of failure) have no named primitive — don't loop a WCC per candidate edge; collapse to one layered WCC.** See [Collapsing per-scenario connectivity checks](references/algorithm-selection.md#collapsing-per-scenario-connectivity-checks-into-one-wcc).
 
 For compatibility constraints (directed/weighted limits per algorithm), see Step 7.
 
@@ -220,7 +220,7 @@ Start from the question, not the algorithm name. **First check whether the quest
 | "Which nodes are bottlenecks?" | Centrality | `betweenness_centrality()` (bridge nodes) |
 | "What natural groups exist?" | Community | `louvain()` (undirected) or `infomap()` (directed) |
 | "Is the network fragmented?" | Components | `weakly_connected_component()` |
-| "Which **edges** are single points of failure (bridges)?" | Components | No named primitive — WCC with per-edge ablation. See [algorithm-selection.md](references/algorithm-selection.md#bridge-edges-no-named-primitive) |
+| "Which **edges** are single points of failure (bridges)?" | Components | No named primitive — a single layered WCC (one node per `(node, excluded-edge)`), **not** a per-edge WCC loop. See [algorithm-selection.md](references/algorithm-selection.md#collapsing-per-scenario-connectivity-checks-into-one-wcc) |
 | "What are all transitive dependencies?" | Reachability | `reachable()` |
 | "What depends on X? / What does X affect?" | Reachability | `reachable()` |
 | "How far apart are X and Y?" | Distance | `distance()` — supports weighted (non-negative) |
@@ -388,13 +388,18 @@ model.where(graph.Node == Customer).define(
 
 ### Type handling
 
-**Critical:** Community detection IDs (Louvain, Infomap) always return as `Int128Array` — cast with `.astype(int)` before pandas operations **and** before `model.data()`. WCC is different: its output is a Node, so the shorthand produces **string hashes** (`.astype(str)`) while the direct-query pattern using `graph.Node.ref()` exposes the node identifier type directly. See [result-extraction.md](references/result-extraction.md#int128array-from-rai) for full casting guidance including both WCC access modes.
+**Critical:** Any integer-valued graph result column (community IDs, unweighted `distance()` lengths, degree counts) arrives in pandas as `Int128Array` — reductions raise, and **equality filters against Python ints silently match nothing** (`df[df.hops == 6]` returns empty even when `df.hops.max()` is 6). Cast with `.astype(int)` before pandas comparisons, groupby, or `model.data()`. WCC is different: its output is a Node, so the shorthand produces **string hashes** (`.astype(str)`) while the direct-query pattern using `graph.Node.ref()` exposes the node identifier type directly. See [result-extraction.md](references/result-extraction.md#int128array-from-rai) for full casting guidance including both WCC access modes.
 
 ### Validation
 
 ```python
 graph.num_nodes().inspect()  # 0 = edge definitions don't match data
 graph.num_edges().inspect()  # 0 = relationship/join path is wrong
+
+# .inspect() prints and returns None — for an assertion or any Python-side
+# check, fetch the scalar through a query:
+n_edges = int(model.select(graph.num_edges().alias("n")).to_df()["n"].iloc[0])
+assert n_edges > 0
 ```
 
 For per-algorithm query patterns (binary, ternary, reachability, similarity filtering, aggregation), see [result-extraction.md](references/result-extraction.md).
@@ -431,8 +436,8 @@ model.where(Site.centrality_score < 0.1).define(Site.is_at_risk())
 | `Int128Array` errors in pandas or `model.data()` | Community detection IDs (Louvain, Infomap) are always Int128 — incompatible with pandas ops and `model.data()` type inference | Cast: `df["col"] = df["col"].astype(int)` before pandas operations and before passing to `model.data()`. WCC is different — its output is a Node, not an integer: via shorthand the column arrives as string hashes (`.astype(str)`), via direct-query `comp_ref.id` it inherits the node's identifier type — Int128 when `identify_by={"id": Integer}` (cast with `.astype(int)`), a plain string column otherwise. See [result-extraction.md](references/result-extraction.md#int128array-from-rai) |
 | Duplicate/self-loop edges | Missing guard in co-occurrence pattern | Add `left.id < right.id` to `.where()` clause |
 | `aggregator` missing | Weighted graph with multi-edges requires aggregator for parallel edges | Add `aggregator="sum"` — but only when multi-edges are expected (see [Aggregator guidance](#graph-constructor-aggregator-parameter-guidance)) |
-| Parallel edges mask bridges | Two edges between the same node pair mean removing one doesn't disconnect the pair — neither is a true bridge | Before reporting bridges, check whether the underlying data has parallel edges between the same endpoints. Do not collapse with `aggregator="sum"` before bridge detection — that merges parallel edges into one, making the single result appear to be a bridge when physically it isn't. For the recipe, see [Bridge edges](references/algorithm-selection.md#bridge-edges-no-named-primitive) |
-| Reaching for an external Python graph library when the algorithm isn't in the cheat sheet | Common reflex when the named primitive doesn't exist (e.g., bridge edges, edge betweenness) — but switching to NetworkX/igraph loses the concept binding that lets results feed downstream rules and optimization on the same model, and forces a pandas round-trip back into the model | First check whether the question can be expressed compositionally with the existing primitives — for example, bridge edges fall out of WCC + per-edge ablation, see [Bridge edges](references/algorithm-selection.md#bridge-edges-no-named-primitive). Stay in the RAI Graph reasoner; if scale is the concern, scope the candidate set first |
+| Parallel edges mask bridges | Two edges between the same node pair mean removing one doesn't disconnect the pair — neither is a true bridge | Before reporting bridges, check whether the underlying data has parallel edges between the same endpoints. Do not collapse with `aggregator="sum"` before bridge detection — that merges parallel edges into one, making the single result appear to be a bridge when physically it isn't. For the recipe, see [Collapsing per-scenario checks](references/algorithm-selection.md#collapsing-per-scenario-connectivity-checks-into-one-wcc) |
+| Reaching for an external Python graph library when the algorithm isn't in the cheat sheet | Common reflex when the named primitive doesn't exist (e.g., bridge edges, edge betweenness) — but switching to NetworkX/igraph loses the concept binding that lets results feed downstream rules and optimization on the same model, and forces a pandas round-trip back into the model | First check whether the question can be expressed compositionally with the existing primitives — for example, bridge edges fall out of a single layered WCC. If the reflex is driven by *scale* (a per-scenario loop is slow), collapse the scenarios into one layered graph + one WCC rather than leave the reasoner — see [Collapsing per-scenario connectivity checks](references/algorithm-selection.md#collapsing-per-scenario-connectivity-checks-into-one-wcc) |
 | Weight type error | Weights must be floats, but property is Integer/Number | Cast with `floats.float(property)` in Edge.new weight parameter |
 | `ValueError: edge_weight_relationship must have type Float, is Number(38,0)` | Weight property is Integer (count, duration in seconds, etc.), but graph weights must be Float | Cast inline with `weight=floats.float(Entity.int_prop)` in `Edge.new()`, or define a Float-typed derived property on the node concept |
 | Centrality all equal / graph too dense | Two causes: (1) co-occurrence edges built on shared attribute values rather than shared specific entities produce near-complete graphs; (2) even with correct edges, all nodes have identical connectivity | (1) Build edges from shared specific entities (same FK value), not shared attribute categories; (2) add weighted edges to differentiate. If centrality is still uniform after both fixes, the underlying data may lack structural bottlenecks |

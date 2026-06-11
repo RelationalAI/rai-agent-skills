@@ -246,75 +246,27 @@ predictions = gnn.predictions(domain=Test)
 
 Each concept-attribute name can be assigned **once per session** — re-binding `Source.predictions` raises `[Duplicate relationship]`. To call `predictions()` multiple times in one session, use Pattern 2 or a fresh attribute name (e.g. `Source.predictions_v2`).
 
-### Classification (binary, multiclass, multilabel)
+**Silent corruption — Pattern 2 cartesian-joins against bare source columns.** A plain-variable prediction relation is not bound to the source concept, so selecting the source's own columns alongside it cross-joins every source row with every prediction — N² rows with plausible-looking values and no error. Row count is the only tell: verify it equals the domain size.
 
 ```python
-User.predictions = gnn.predictions(domain=Test)
+# WRONG — Source.id is unbound relative to preds: N×N rows, no error.
+preds = gnn.predictions(domain=Test)
+select(Source.id, preds.probs).where(preds).inspect()
 
-select(
-    User.user_id,
-    User.predictions.probs,
-    User.predictions.predicted_labels,
-).where(User.predictions).inspect()
+# CORRECT (option A) — bound attribute joins per-row:
+Source.predictions = gnn.predictions(domain=Test)
+select(Source.id, Source.predictions.probs).where(Source.predictions).inspect()
+
+# CORRECT (option B) — reach the source through the relation's own field,
+# indexed by the source concept's field name (see [evaluation-debugging.md](references/evaluation-debugging.md)):
+select(preds["source"].id, preds.probs).where(preds).inspect()
 ```
 
-### Regression
+With Pattern 2, never select the bare source concept's columns next to the relation — go through the relation's own fields, or use Pattern 1.
 
-```python
-Unit.predictions = gnn.predictions(domain=Test)
+### Per-task result access
 
-select(
-    Unit.unit_id,
-    Unit.predictions.predicted_value,
-).where(Unit.predictions).inspect()
-```
-
-### Link Prediction
-
-```python
-User.predictions = gnn.predictions(domain=Test)
-
-select(
-    User.user_id,
-    Item.item_id,
-    User.predictions.rank,
-    User.predictions.scores,
-).where(
-    User.predictions.predicted_item == Item,
-).inspect()
-```
-
-The `predicted_<target>` attribute name is always lowercase: Target `Item` -> `.predicted_item`.
-
-### As DataFrame
-
-Replace `.inspect()` with `.to_df()` to get a pandas DataFrame:
-
-```python
-df = select(
-    User.user_id,
-    User.predictions.probs,
-    User.predictions.predicted_labels,
-).where(User.predictions).to_df()
-```
-
-### Dictionary-Style Field Indexing
-
-The prediction relation also supports dictionary-style field indexing, useful when the source concept name conflicts with an existing attribute:
-
-```python
-PredRelation = gnn.predictions(domain=Test)
-select(
-    PredRelation["beer"].name,
-    PredRelation["timestamp"],
-    PredRelation["prediction"].predicted_labels,
-    PredRelation["prediction"].probs,
-).inspect()
-```
-
-**Direct access via `gnn.prediction_concept`.** Exposes the underlying prediction concept without binding to a source attribute — useful when the source concept name conflicts with an existing attribute. Use it as the head in `select(...)`: `select(Source.source_id, gnn.prediction_concept.predicted_labels).where(Source.predictions(DateTime, gnn.prediction_concept)).inspect()`.
-
-For the full prediction attributes reference (per-task attribute types, code shapes), see [references/prediction-attributes.md](references/prediction-attributes.md). The summary table is in Quick Reference above.
+Each task type exposes its results as attributes on the prediction relation (summary table in Quick Reference above) — classification: `.probs` / `.predicted_labels`; regression: `.predicted_value`; link prediction: `.rank` / `.scores` / `.predicted_<target>` (always lowercase: Target `Item` -> `.predicted_item`). Swap `.inspect()` for `.to_df()` to get a pandas DataFrame. Full per-task code shapes including the link-prediction target join: [references/prediction-attributes.md](references/prediction-attributes.md); dictionary-style field indexing (when the source concept name conflicts with an existing attribute) and `gnn.prediction_concept` direct access: [references/evaluation-debugging.md](references/evaluation-debugging.md).
 
 ---
 
@@ -541,5 +493,5 @@ User.predictions = gnn.predictions(domain=Test)
 | Task types and metrics | All valid (task_type, eval_metric) combinations | [references/task-types-and-metrics.md](references/task-types-and-metrics.md) |
 | Hyperparameters | Full hyperparameter table with types, defaults, and tuning guidance | [references/hyperparameters.md](references/hyperparameters.md) |
 | Prediction attributes | Prediction attributes by task type with usage examples | [references/prediction-attributes.md](references/prediction-attributes.md) |
-| Evaluation & debugging | Dataset inspection, result checking, and tuning steps | [references/evaluation-debugging.md](references/evaluation-debugging.md) |
+| Evaluation & debugging | Dataset inspection, result checking, tuning steps; dictionary-style prediction field indexing and `gnn.prediction_concept` direct access | [references/evaluation-debugging.md](references/evaluation-debugging.md) |
 | Known limitations & runtime troubleshooting | `has_time_column=True` failure-mode fallback code; SUSPEND/RESUME runbook; `gnn.fit()` idempotency; `JobMonitor._wait_for_completion` polling; `GET_TRANSACTION_ARTIFACTS` recipe — load when the symptom→fix table in SKILL.md is too compact | [references/known-limitations.md](references/known-limitations.md) |

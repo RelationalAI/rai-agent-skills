@@ -67,6 +67,9 @@ graph = Graph(
 
 # --- Run distance() for all-pairs shortest paths ---
 
+# The length ref's type tracks the graph's weighted flag: Float.ref() on a
+# weighted graph (sum of edge weights), Integer.ref() on an unweighted graph
+# (hop count) — Float.ref() there raises [TypeMismatch] Expected 'Number(38,0)'.
 src, dst, length = graph.Node.ref("s"), graph.Node.ref("d"), Float.ref("len")
 dist_df = (
     model.where(graph.distance(full=True)(src, dst, length))
@@ -79,6 +82,10 @@ dist_df = (
     .sort_values("distance", ascending=True)
     .reset_index(drop=True)
 )
+# On an unweighted graph the Integer length arrives as Int128Array: equality
+# filters against Python ints silently match nothing (df[df.distance == 6]
+# -> empty) and reductions raise. Cast before pandas comparisons/groupby:
+# dist_df["distance"] = dist_df["distance"].astype(int)
 
 print("All-Pairs Shortest Path Distances")
 print(dist_df.to_string(index=False))

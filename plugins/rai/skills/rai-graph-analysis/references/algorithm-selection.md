@@ -28,7 +28,7 @@ Start from the question, not the algorithm name.
 | "What depends on X? / What does X affect?" | Reachability | `reachable(from_=X)` or `reachable(to=X)` |
 | "How far apart are two nodes?" | Distance | `distance()` |
 | "What's the maximum separation in the network?" | Distance | `diameter_range()` |
-| "Which **edges** are single points of failure (bridges)?" | Components | No named primitive — express as WCC with per-edge ablation, see [Bridge edges](#bridge-edges-no-named-primitive) |
+| "Which **edges** are single points of failure (bridges)?" | Components | No named primitive — a single layered WCC (not a per-edge WCC loop), see [Collapsing per-scenario checks](#collapsing-per-scenario-connectivity-checks-into-one-wcc) |
 | "Which nodes are structurally similar?" | Similarity | `jaccard_similarity()` |
 | "Which nodes are likely to connect?" | Similarity | `adamic_adar()` or `preferential_attachment()` |
 | "How tightly knit are local neighborhoods?" | Clustering | `local_clustering_coefficient()` |
@@ -49,6 +49,9 @@ Use these for graph validation and sanity checks before running algorithms.
 # Quick validation after graph construction
 graph.num_nodes().inspect()  # Should be > 0
 graph.num_edges().inspect()  # Should be > 0
+
+# .inspect() prints and returns None — to assert, fetch the scalar:
+assert int(model.select(graph.num_edges().alias("n")).to_df()["n"].iloc[0]) > 0
 ```
 
 ---
@@ -188,7 +191,7 @@ Both score a node by the importance of the nodes it connects to, so "which nodes
 - **Eigenvector (`directed=False`)** — *mutual, recursive* importance: a node is important when its neighbors are important, symmetrically. The structural-centrality reading — "well-connected to other well-connected nodes."
 - **PageRank (`directed=True`)** — *directional inbound* importance: a node is important when important nodes **point at it**. The flow/attention reading — "a lot flows into it from upstream."
 
-Decide by the **kind of importance** the question asks about: a structural-importance or centrality question is undirected (eigenvector); reserve `directed=True` (PageRank) for questions that turn on flow, dependency, or causality. The two give different rankings on the same network, so match the choice to the question's intent.
+Match the choice to the question's intent — the two give different rankings on the same network.
 
 ---
 
@@ -308,63 +311,64 @@ connected = graph.is_connected()
 
 ---
 
-### Bridge edges (no named primitive)
+### Collapsing per-scenario connectivity checks into one WCC
 
-**What you want:** Edges whose removal disconnects the graph — single-points-of-failure in the *edge* sense.
+**Principle.** When you would run a connectivity algorithm (`weakly_connected_component()`, `reachable()`, `is_connected()`) once per "what if entity X is removed" scenario, don't loop — collapse all scenarios into **one** layered graph + **one** WCC. A WCC costs a near-fixed ~20–25 s per call regardless of graph size, so cost tracks the *number of calls*, not graph size; a per-scenario loop hits ~5 min at ~14 scenarios. Identify a node by `(original_node, scenario)`; scenario S's layer holds the graph as it looks under S. Layers share no nodes, so one WCC labels every scenario independently — filter to a layer to read that scenario's answer. Cost ≈ one WCC for any N. Results stay bound to your concepts for downstream rules and optimization.
 
-**Don't substitute `betweenness_centrality()`.** It scores *nodes* on a relative scale and does not answer "would removing this edge disconnect the graph." A node can have high betweenness without any incident edge being a true bridge; a bridge can have endpoints with modest betweenness.
-
-**Express it directly in RAI as WCC with per-edge ablation.** For each candidate edge, build a Graph excluding that edge, run `weakly_connected_component()`, and check whether the edge's endpoints land in different components — if they do, the edge is a bridge. The loop creates one Graph instance per candidate edge on the same model, then binds the bridge result back as a Relationship on the edge concept so downstream rules, optimization, and other graph algorithms see it natively.
-
-**Step 1 — Scope the candidate set first.** The ablation runs N graphs sequentially; each is fast individually but the runtime is linear in N. Before building the loop, narrow the candidate set:
-- Restrict to edges within a single weakly-connected component of interest (bridges across components are trivially "bridges" — usually not what's asked).
-- Apply any domain filter from the question (e.g., `is_active=True`, edges meeting a capacity threshold, edges in a specific region).
-- For >100 candidates, scope further or accept that the analysis will take 5+ minutes.
-
-A `betweenness_centrality()` pre-pass on edges does NOT pre-filter cleanly (high node betweenness ≠ bridge edge); use a simpler structural filter instead.
-
-**Step 2 — Run the ablation loop.** Two patterns must be honored together:
-
-1. **Use the direct-query pattern for WCC, not the shorthand.** The shorthand `graph.Node.X = graph.weakly_connected_component()` creates a property on the host node concept. In a loop, the second iteration fails with `RAIException: Duplicate relationship 'X' on <NodeConcept>` because the property already exists. The direct-query pattern (`graph.weakly_connected_component()(node_ref, comp_ref)` inside `where()`) does not pollute the concept and is loop-safe.
-2. **Pass edge-endpoint relationships by attribute name, not as Property objects.** Calling a Property-as-parameter unbound (`src_rel(e).id`) trips type inference; bound attribute access via `getattr(e, "from_substation").id` is the form the rest of the skill uses and the typer accepts.
+**Worked example — bridge edges.** A bridge is an edge whose removal disconnects the graph (edge-side single point of failure). One scenario per edge: layer L keeps every edge *except* L. **Edge L is a bridge iff its two endpoints land in different components within layer L** — an endpoint left with no incident edges is absent from the WCC output, i.e. its own isolated component, still a bridge. Bind the result back as a `Relationship` on the edge concept. (`betweenness_centrality()` is **not** a substitute: it scores nodes, not "would removing this edge disconnect the graph" — high node betweenness ≠ bridge edge, so it can't even pre-filter candidates.)
 
 ```python
-def find_bridges(model, EdgeConcept, NodeConcept, src_attr, dst_attr):
-    """Bridge detection via per-edge ablation + WCC.
+# BAD — a separate Graph + WCC per edge = N WCC calls (per-scenario cost above) → times out at ~14 edges
+for excluded in candidate_edge_ids:
+    g = Graph(model, directed=False, node_concept=NodeConcept)  # graph minus `excluded`, then one WCC each
 
-    src_attr / dst_attr: attribute names (strings) on EdgeConcept resolving to NodeConcept,
-    e.g., "from_substation" / "to_substation".
-    """
+# GOOD — one layered graph, one WCC
+from relationalai.semantics import String
+import pandas as pd
+
+def find_bridges(model, EdgeConcept, NodeConcept, src_attr, dst_attr):
+    """src_attr/dst_attr: endpoint attribute NAMES (e.g. "from_substation"); to scope, add a domain filter to BOTH where()s."""
+    # Endpoints by attribute NAME via getattr — a Property object as a parameter trips type inference.
     e = EdgeConcept.ref()
-    cand = (
-        model.select(
-            e.id.alias("edge_id"),
-            getattr(e, src_attr).id.alias("src_id"),
-            getattr(e, dst_attr).id.alias("dst_id"),
-        )
-        .to_df()
+    edges = model.select(
+        e.id.alias("edge"),
+        getattr(e, src_attr).id.alias("src"),
+        getattr(e, dst_attr).id.alias("dst"),
+    ).to_df()
+
+    # node identity = (original node, excluded-edge "layer")
+    Layer = model.Concept("BridgeLayerNode", identify_by={"node": String, "layer": String})
+    L, O = EdgeConcept.ref(), EdgeConcept.ref()
+    model.where(O.id != L.id).define(
+        Layer.new(node=getattr(O, src_attr).id, layer=L.id),
+        Layer.new(node=getattr(O, dst_attr).id, layer=L.id),
     )
+    g = Graph(model, directed=False, weighted=False, node_concept=Layer)
+    L, O = EdgeConcept.ref(), EdgeConcept.ref()
+    sn, dn = Layer.ref(), Layer.ref()
+    model.where(                                   # layer L = every edge O except L
+        O.id != L.id,
+        sn.node == getattr(O, src_attr).id, sn.layer == L.id,
+        dn.node == getattr(O, dst_attr).id, dn.layer == L.id,
+    ).define(g.Edge.new(src=sn, dst=dn))
+
+    # ONE WCC (direct-query, not the `graph.Node.X = ...` shorthand). Composite-key gotcha: the
+    # component rep is a layered node with no scalar .id — select cr.node/cr.layer
+    # (cr.id raises `UnresolvedType ... argument 'id'`), then concatenate.
+    nr, cr = g.Node.ref(), g.Node.ref()
+    comps = (model.where(g.weakly_connected_component()(nr, cr))
+        .select(nr.node.alias("node"), nr.layer.alias("layer"),
+                cr.node.alias("cn"), cr.layer.alias("cl")).to_df())
+    comps["comp"] = comps["cn"].astype(str) + "||" + comps["cl"].astype(str)   # IDs surface as str hashes
 
     bridges = []
-    for _, row in cand.iterrows():
-        excluded_id = row["edge_id"]
-        g = Graph(model, directed=False, weighted=False, node_concept=NodeConcept)
-        other = EdgeConcept.ref()
-        model.where(other.id != excluded_id).define(
-            g.Edge.new(src=getattr(other, src_attr), dst=getattr(other, dst_attr))
-        )
-        # Direct-query pattern — does NOT define a property on NodeConcept (loop-safe)
-        node_ref, comp_ref = g.Node.ref(), g.Node.ref()
-        comps = (
-            model.where(g.weakly_connected_component()(node_ref, comp_ref))
-            .select(node_ref.id.alias("id"), comp_ref.id.alias("component"))
-            .to_df()
-        )
-        comps["component"] = comps["component"].astype(str)
-        src_c = comps.loc[comps["id"] == row["src_id"], "component"].iloc[0]
-        dst_c = comps.loc[comps["id"] == row["dst_id"], "component"].iloc[0]
-        if src_c != dst_c:
-            bridges.append(excluded_id)
+    for _, r in edges.iterrows():
+        cu = comps.loc[(comps["layer"] == r["edge"]) & (comps["node"] == r["src"]), "comp"]
+        cv = comps.loc[(comps["layer"] == r["edge"]) & (comps["node"] == r["dst"]), "comp"]
+        cu = cu.iloc[0] if len(cu) else f"__iso__{r['src']}"   # missing endpoint = isolated component
+        cv = cv.iloc[0] if len(cv) else f"__iso__{r['dst']}"
+        if cu != cv:
+            bridges.append(r["edge"])
     return bridges
 
 bridge_ids = find_bridges(model, EdgeConcept, NodeConcept, "from_substation", "to_substation")
@@ -372,14 +376,9 @@ EdgeConcept.is_bridge = model.Relationship(f"{EdgeConcept} is a bridge")
 model.where(EdgeConcept.id.in_(bridge_ids)).define(EdgeConcept.is_bridge())
 ```
 
-**Expected runtime warnings (informational, not errors):**
-- **`Multi-edges are not allowed when aggregator=None`** fires once per Graph build whenever the data has parallel edges (e.g., two transmission lines between the same substation pair, or one edge in each direction on an undirected graph). It is required that you let this warning fire — silencing it by setting `aggregator="sum"` would collapse parallel edges into one and falsely flag both members of the pair as bridges. See the parallel-edges row in the SKILL.md Common Pitfalls.
-- **`Rules created in a loop`** fires because each iteration adds a fresh `Edge.new(...)` rule for that ablation Graph. Expected, no action needed.
+**Parallel edges:** let the `Multi-edges are not allowed when aggregator=None` warning fire — `aggregator="sum"` collapses parallel edges into one and would falsely flag both as bridges (removing one leaves the other, so neither is a bridge).
 
-**Caveats:**
-- N Graph instances on one model compounds the type-inference scope limit — stay below a few hundred candidate edges. See the `TypeError` row in the SKILL.md Common Pitfalls. If your candidate set is larger, scope the loop first (e.g., restrict to edges within a single WCC of interest, or to edges meeting a domain filter), then ablate over that subset.
-- The component column from the direct-query pattern arrives as string hashes when the node concept is string-identified; cast with `.astype(str)` for the equality comparison. See [result-extraction.md](result-extraction.md#int128array-from-rai) for the full type-handling matrix across node identifier types.
-- **Stay in the RAI Graph reasoner.** A scaling concern is not a license to drop to a Python graph library — doing so loses the concept binding that lets the bridge result feed downstream rules and optimization on the same model, and forces an extra round-trip to load results back. Scope the candidate set instead.
+**Scale:** the layered graph is N× the original (N layers × ~E edges); one WCC absorbs that for typical N. If even one WCC strains the type-inference scope limit, scope the candidate/layer set with the docstring's domain filter — an optimization, not a timeout dodge.
 
 ---
 

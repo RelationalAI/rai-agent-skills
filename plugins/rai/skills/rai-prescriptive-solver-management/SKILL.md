@@ -305,6 +305,14 @@ if si.termination_status != "OPTIMAL":
 
 For verifying what the solver actually sees before solving, see [formulation-display.md](references/formulation-display.md).
 
+### Run to completion before reporting
+
+`problem.solve(...)` blocks until the solver returns. Run the solve in the foreground and read terminal status + objective + variable values **in the same run** before composing any answer. A formulation summary, a "solver is still running" status, or a backgrounded solve whose output you never collected is **not a result** — never present one as the answer. If a solve is slow, wait for it (raise `time_limit_sec` deliberately) rather than reporting the plan as if it were solved.
+
+### Parametric sweeps and what-if re-solves
+
+Each `problem.satisfy(...)` accumulates, so build a **fresh `Problem` per scenario / sweep point**. Loop, and extract each point's results before moving on so a later failure can't erase earlier rows. Before re-solving a point, check whether the **active constraint set actually changed** — if the registered variables and bounds match a point you already solved, reuse that result instead of paying for an identical solve. Derive per-point inputs (e.g., which entities fall in each tier at a given threshold) once, up front, rather than re-deriving inside the loop.
+
 ### First-class solve parameters
 
 These parameters are solver-independent — every solver accepts them. The two diagnostic flags are the caveat: any solver accepts `sensitivity` / `conflict`, but their *output* depends on model class and solver capability (see their rows — unsupported cases degrade to empty results, a warning, or `NOT_SUPPORTED`, not an error at the call):
@@ -358,6 +366,7 @@ The following operators are **not lowered to the solver** and will raise errors 
 
 | Mistake | Cause | Fix |
 |---------|-------|-----|
+| Reported a solve that hadn't finished | Backgrounded a long solve, or printed the formulation, and ended the turn on an "in progress" status | Run the solve to completion in the foreground; read terminal status and extract values before composing the answer (see Run to completion before reporting) |
 | Constraint has no decision variable | `problem.satisfy(model.require(Operation.cost >= 0.01))` is a data assertion | Constraints must reference `solve_for`-registered properties |
 | Cannot remove a constraint | Every `problem.satisfy()` call accumulates | Create a new `Problem` for different constraint sets |
 | Binary variable has no effect | Defined but not linked to quantities via big-M or capacity | Add `flow <= capacity * x_open` style linking constraints |

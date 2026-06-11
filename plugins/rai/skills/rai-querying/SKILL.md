@@ -267,6 +267,24 @@ model.where(strings.contains(Customer.legal_name, "Acme")).select(...)
 
 **Rule: every `==` against a string literal that came from a natural-language question is a discovery opportunity. Run `distinct()` on the property first, or fall back to `strings.contains()`.**
 
+### 7. Joining a one-to-many relationship fans out — collapse to the grain before ranking
+
+When an entity links to many rows of another concept — a record per period, per version, per event — binding that relationship multiplies the entity across all its matches. Rank or `limit` over the fanned-out scope and duplicate rows crowd out distinct entities; any per-entity metric is also computed against the wrong row.
+
+```python
+# WRONG — each Supplier fans out to one row per forecast period, so "top 5 by
+# value" repeats the same supplier and drops genuinely distinct ones.
+model.where(Supplier.forecast(F)).select(
+    Supplier.id.alias("id"), F.value.alias("v"),
+).to_df()
+
+# CORRECT — fix the grain first: filter to the single intended row...
+model.where(Supplier.forecast(F), F.period == latest_period).select(...)
+# ...or aggregate the many-side to one value per entity (aggs.max, latest-by, etc.).
+```
+
+**Rule: when you join to a relationship that can return more than one row per entity, decide the grain — one row (which one?) or an aggregate — before you rank, `limit`, or compute a per-entity metric. When you expect one row per entity, verify `row_count == entity_count`.**
+
 ---
 
 ## Query Basics
@@ -421,7 +439,7 @@ One-liner gotchas that don't justify a Silent Corruption prose treatment but wil
 | `Property.exists()` raises `RAIException` | `Concept.prop.exists()` — `Cannot access relationships on core concept 'Float'` | Use ref binding: `r = Float.ref(); model.where(Concept.prop(r)).select(r.alias("v"))` |
 | `.where()` on a bare Concept fails | `Site.where(...)` doesn't work | `.where()` lives on the model, aggregations, constraints, or definitions — not on bare concepts |
 | Mixing bare select with `distinct()` | `select(X.name, distinct(X.cat))` — runtime error | Wrap ALL columns in `distinct()` or none |
-| Integer aggregate (`aggs.count`, `aggs.sum` of Integer) returned as `Int128Array` — pandas reductions fail | `df["n"].sum()` / `df["n"].iloc[0]` / `df.groupby(...).sum()` raise `TypeError: 'Int128Array' with dtype Int128 does not support reduction 'sum'` (or surface as `KeyError`/wrong values via `.iloc[]`) | First check whether `to_df()` is even needed — if the value feeds another RAI query or derived property, compose inline (see Query Basics § default reflex). If pandas is the final consumer, cast immediately: `df["n"] = df["n"].astype(int)` |
+| Integer-valued result column returned as `Int128Array` — reductions fail loudly, equality filters fail silently | Any integer result column (`aggs.count`, `aggs.sum` of Integer, integer-typed refs): `df["n"].sum()` / `.groupby(...).sum()` raise `TypeError: 'Int128Array' ... does not support reduction`, while `df[df["n"] == 6]` **silently returns no rows** even when the value is present | First check whether `to_df()` is even needed — if the value feeds another RAI query or derived property, compose inline (see Query Basics § default reflex). If pandas is the final consumer, cast immediately: `df["n"] = df["n"].astype(int)` |
 | Multi-argument relationship returns wrong/zero rows or `KeyError`/`RAIException` | Guessing field access: keyword args (never works), a wrong integer index, or positional/index binding of an *entity* field (silently 0 rows / NaN) | `inspect.fields(rel)` first. Labeled value field → `rel["name"]`; unlabeled → `rel[i]` by position; entity link → bind via raw source column (`concept.id == table.fk`). See [joins-and-export.md](references/joins-and-export.md#multi-argument-relationships) |
 
 ---

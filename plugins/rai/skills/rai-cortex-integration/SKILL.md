@@ -270,6 +270,52 @@ This is a local-invocation crutch, not a deploy requirement. Prefer running from
 
 If `agent_schema` is set, `deploy()`, `status()`, `chat()`, and `cleanup()` operate on the agent in that schema while the stored procedures and stage remain in `database`.`schema`.
 
+### Step 7 — Deploying from a Snowflake Workspace / notebook
+
+Snowflake Workspaces and notebooks run the deploy script from the **workspace root** under an ipykernel, on a managed filesystem that handles targeted single-file I/O but throws `[Errno 5] Input/output error` (EIO) on the bulk or recursive I/O that the canonical flow relies on. Three things that work when running from a project root fail here; each needs a deliberate adjustment.
+
+**Prerequisites — the *user* must complete these first; the agent cannot.** Both require Snowflake UI / terminal access the agent does not have, so when you (the agent) are helping someone deploy from a Workspace, **surface this guidance to the user explicitly** and wait for them to confirm both are done before deploying:
+
+1. **Configure the Python kernel under "Edit service".** In the notebook's service/runtime settings ("Edit service"), attach the **pip artifact repository** and the **RAI external access integration**. Without these the kernel can't install packages or reach RAI services from inside the Workspace.
+2. **Install the SDK from the terminal** — the user runs `pip install relationalai` in the Workspace terminal.
+
+Only once both are done will the deploy script run. The three adjustments below are code-level and the agent handles them.
+
+**1. Layout — deploy script at the workspace root, model in a sibling module dir.** You can't `python -m <pkg>.deploy` here; the Run action executes the file directly with CWD = workspace root.
+
+```
+<workspace_root>/          # CWD when the script runs
+├── agent.py               # deploy script — at the root, run directly
+└── my_model/              # model package, sibling of the script
+    ├── clinical.py
+    └── queries.py
+```
+
+`init_tools()` imports from the package as usual: `from my_model import clinical, queries`.
+
+**2. Pass explicit file-level imports; do not use `discover_imports()`.** `discover_imports()` reads the *calling file* — in a Workspace that's a synthetic `/tmp/ipykernel_*.py` that doesn't exist on disk, so it warns `File not found` and returns `[]`. And a directory tuple like `("my_model/", "my_model")` makes Snowpark recursively read the whole tree (including `__pycache__`), which trips the EIO. Pass **file-level** tuples with dotted module names instead:
+
+```python
+manager.deploy(
+    init_tools=build_tool_registry,
+    imports=[
+        ("my_model/clinical.py", "my_model.clinical"),
+        ("my_model/queries.py",  "my_model.queries"),
+    ],
+)
+```
+
+Each tuple is `(local_file_path, dotted_module_name)`. List every module `init_tools()` imports; add `("my_model/__init__.py", "my_model")` if your `__init__.py` carries real content.
+
+**3. Disable the on-disk tracer.** PyRel's telemetry tracer writes `spans.jsonl` to `build/` during the run. Its auto-init guard falls back to a no-op tracer only for **read-only** filesystems (`EROFS`, errno 30 — the in-sproc case); it does **not** catch the Workspace's EIO, so span flushes raise mid-deploy. Stub the tracer at the very top of the script, before importing or constructing the model:
+
+```python
+from relationalai.observability.tracing import set_tracer, StubTracer
+set_tracer(StubTracer())
+```
+
+All three are facets of one root cause — the Workspace's managed filesystem rejecting bulk/recursive I/O — and none of them affect the canonical run-from-project-root flow in the Quick Reference. They are specific to the Workspace/notebook surface.
+
 ---
 
 ## After Deployment
@@ -381,6 +427,8 @@ Emit a paste-ready SQL block for an admin with `manager.print_setup_sql(deployer
 | `init_tools` is rejected or fails with stale state | Closed over local runtime objects or declared 2+ required parameters | Keep `init_tools` self-contained and use only the supported 0-param (recommended) or 1-param (legacy) forms |
 | Agent can't explain business rules | Per-concept rule signatures alone aren't enough for the question being asked | Drill via `EXPLAIN("Concept.<member>")` for rule bodies; `SourceCodeVerbalizer` is a legacy escape hatch retained for migration |
 | `discover_imports()` misses model code | Model package lives outside CWD, or needs a specific sproc-visible module name | Run the deploy script from the project root; for exceptions, use an explicit `_imports()` list with `(path, module_name)` tuples — see Step 6 |
+| `[Errno 5] Input/output error` during `deploy()` in a Snowflake Workspace | Snowpark recursively reads a directory import, or PyRel's tracer writes `spans.jsonl`, against the Workspace's managed filesystem | Use file-level `imports` tuples (not directories) and `set_tracer(StubTracer())` at the top of the script — see Step 7 |
+| `discover_imports()` warns `File not found: /tmp/ipykernel_*.py` and returns `[]` | Running in a Workspace/notebook — the executing cell has no real source file on disk | Don't rely on `discover_imports()` there; pass explicit file-level `imports` tuples — see Step 7 |
 | Preflight warns about DISCOVER truncation | Catalog has many queries and/or prose-rich descriptions | Trim descriptions or split into multiple registered models. Set `strict_payload_check=True` to make DISCOVER truncation block deploys |
 | Snowflake error during `deploy()` after preflight passed | Race or grant edge case | Re-run `manager.preflight()`; the report formats a SQL fix block. For one-off iteration, `deploy(skip_preflight=True)` after fixing |
 

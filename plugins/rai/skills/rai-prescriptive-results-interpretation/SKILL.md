@@ -40,7 +40,7 @@ Root-cause diagnosis of INFEASIBLE/DUAL_INFEASIBLE (demand vs capacity, contradi
 
 ## Interpretation Workflow
 
-After a solve completes, interpret results in this order:
+**Precondition — you must have a finished solve.** A formulation description, an in-progress or backgrounded solve, or "the solver is still running" is not a result and must never be presented as the answer; run the solve to completion first (see `rai-prescriptive-solver-management` > Run to completion before reporting). Once it has returned a terminal status and you hold the objective and variable values, interpret results in this order:
 
 1. **Recall the goal** — Before inspecting solver output, review what the formulation was trying to achieve: what decisions were being made, what objective was set, and what constraints were imposed. This context is essential for judging whether results are meaningful or trivial — an OPTIMAL status means nothing if the solution doesn't address the original intent.
 2. **Check status** (Status Interpretation) — Is the solve OPTIMAL, INFEASIBLE, DUAL_INFEASIBLE, or TIME_LIMIT?
@@ -535,6 +535,7 @@ For parameter sweep patterns, scenario comparison tables, and Pareto frontier co
 
 | Mistake | Cause | Fix |
 |---------|-------|-----|
+| Presented a plan/formulation as the result | The solve was still running or backgrounded — no terminal status or extracted values were ever read | Interpretation requires a finished solve: read terminal status + objective + variable values first; an in-progress solve is not a result |
 | Zero objective on minimize | Missing forcing constraints | Add `sum(x).per(Entity) >= Entity.demand` or equivalent |
 | All-zero from join mismatch | Forcing constraints exist but `.where()` joins match zero rows | Verify constraint joins match actual data |
 | Infeasible: demand > capacity | Total demand exceeds supply | Add slack/penalty variables or relax demand constraints |
