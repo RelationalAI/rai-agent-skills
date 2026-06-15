@@ -33,6 +33,8 @@ Covers the [relationalai Python package](https://pypi.org/project/relationalai) 
 
 Requires Python 3.10+ and `relationalai>=1.11.0`.
 
+Some guidance in the skill library is version-gated with inline *Requires relationalai ...* notes (e.g. `model.Enum` member constants beyond `where()`/`define()`, enum-typed properties, and enum-indexed decision variables need >=1.12) — install at least the noted version when following those blocks.
+
 The RelationalAI Native App for Snowflake must be installed in your account by an administrator — request access [here](https://app.snowflake.com/marketplace/listing/GZTYZOOIX8H/relationalai-relationalai); see the [Native App docs](https://docs.relational.ai/manage/install).
 
 The `rai_developer` role is the standard role for running PyRel programs. Custom Snowflake roles also work if granted the `rai_user` application role — see [User Access](https://docs.relational.ai/manage/user-access).

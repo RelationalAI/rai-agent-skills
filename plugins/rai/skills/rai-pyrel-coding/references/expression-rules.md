@@ -300,7 +300,60 @@ define(Order.is_open()).where(
 )
 ```
 
-Members resolve to their string/int values when compared with `==`. Use `model.Enum` instead of bare string comparisons when values are a fixed controlled vocabulary.
+Members resolve to their string/int values when compared with `==`. Use `model.Enum` instead of bare string comparisons when values are a fixed controlled vocabulary — and only where members clearly improve readability; leave open-ended, data-driven string fields as `String`.
+
+### Member constants in any value position
+
+*Requires relationalai>=1.12.*
+
+Members are accepted as constants everywhere a value is expected, not just in `where()`/`define()` comparisons:
+
+```python
+# kwargs in .new() / .lookup()
+Account.new(id=src.id, status=Status.ACTIVE)
+Account.lookup(status=Status.CLOSED)
+
+# prescriptive expressions (member-filtered solve_for, member comparisons in satisfy)
+problem.solve_for(Account.adjustment, where=[Account.status == Status.ACTIVE], type="cont")
+```
+
+Passing the **class** where a member is expected (`Account.new(status=Status)`) raises a `TypeError` at construction. The wrapped member values are arbitrary distinct constants — pick integers in a natural order (lifecycle, urgency) or strings matching the raw data.
+
+Members support Python iteration (`for member in Status:`) — useful for defining one rule per member without hardcoding the list.
+
+### Enum-typed properties and raw-string mapping
+
+*Requires relationalai>=1.12.*
+
+Declare a property typed by the enum, and map raw string columns to members with `lookup()`. `lookup()` matches member **names** (the Python identifiers), never the wrapped values — the raw data's strings must equal the member names exactly (case-sensitive):
+
+```python
+class OrderStatus(model.Enum):
+    ACTIVE = 1   # wrapped values are arbitrary; lookup() matches member NAMES
+    CLOSED = 2
+
+Order.status = model.Property(f"{Order} has {OrderStatus:status}")
+
+src = model.data(read_csv("orders.csv"))
+model.define(
+    o := Order.new(id=src.id),
+    o.status(OrderStatus.lookup(src.status)),   # CSV "ACTIVE" -> OrderStatus.ACTIVE
+)
+```
+
+Read the label back in queries with `.name`:
+
+```python
+model.select(Order.id, Order.status.name.alias("status"))
+```
+
+Three `lookup()` caveats:
+
+- **Forward-only.** `lookup(value)` maps a ground value to a member. It does NOT reverse-bind: `Status.lookup(free_ref)` compiles at construction but fails at query time with `[Unground Variable]`. To recover a member chosen by a solver, derive an enum-typed property with one `define()` per member instead — see `rai-prescriptive-problem-formulation/references/csp-formulation.md` § Enum-indexed decision.
+- **Unknown dynamic values miss silently.** A value arriving from a data column that matches no member name maps to a nonexistent entity, and those rows silently drop out of every member-comparison rule — keep member names in sync with the data's vocabulary. Literal strings are validated at construction as of *relationalai>=1.13* (`ValueError` naming the valid members); on 1.12.0 they miss silently too.
+- **Select position misfilters (any `lookup()`, not just enums).** Through *relationalai 1.12.0*, a `lookup()` passed as a top-level `select()` argument does not filter: `select(Order.lookup(id=42).total)` silently returns every row — the matched total plus a NULL per non-match (fixed upstream by PyRel #1782). Bind in `where()` and select off the ref, which is correct on every version: `model.where(o := Order.lookup(id=42)).select(o.total)`. Even post-fix, a lookup arg in a multi-arg `select()` cross-products with bare sibling args (e.g. `Order.id`) rather than row-aligning.
+
+**When not to use:** a property consumed as a categorical feature by the predictive (GNN) reasoner's transformers must stay `String` — enum-typed properties are not usable as model features.
 
 ---
 

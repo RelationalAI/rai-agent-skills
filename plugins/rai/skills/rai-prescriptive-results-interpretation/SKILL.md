@@ -82,19 +82,7 @@ After a successful solve, extract results using result attributes and model quer
 
 After `problem.solve()`, result attributes are available via two interfaces:
 
-**Engine-side (Relationships)** — usable in `model.require()`, `model.select()`, and solver expressions:
-
-| Method | Return type | Description |
-|--------|-------------|-------------|
-| `problem.termination_status()` | Relationship | `"OPTIMAL"`, `"INFEASIBLE"`, `"DUAL_INFEASIBLE"`, `"TIME_LIMIT"`, `"LOCALLY_SOLVED"`, `"SOLUTION_LIMIT"` |
-| `problem.objective_value()` | Relationship | Optimal objective value |
-| `problem.num_points()` | Relationship | Number of solutions returned |
-| `problem.error()` | Relationship | Error message tuple (if solve failed) |
-| `problem.printed_model()` | Relationship | Text representation (with `print_format=`) |
-| `problem.num_variables()` | Relationship | Total registered variables |
-| `problem.num_constraints()` | Relationship | Total constraints |
-| `problem.num_min_objectives()` | Relationship | Number of minimize objectives |
-| `problem.num_max_objectives()` | Relationship | Number of maximize objectives |
+**Engine-side (Relationships)** — `problem.termination_status()`, `problem.objective_value()`, `problem.num_points()`, `problem.error()`, plus model-shape accessors (`num_variables()`, `num_constraints()`, `num_min_objectives()`, `num_max_objectives()`, `printed_model()`) — usable in `model.require()`, `model.select()`, and solver expressions. Full accessor table: [references/solution-extraction-details.md](references/solution-extraction-details.md).
 
 **Python-side (`solve_info()`)** — for formatted output, scenario loops, and Python logic:
 
@@ -243,16 +231,20 @@ problem.verify(coverage_ic)  # Warns if any constraint is violated
 
 ## Status Interpretation
 
-### Optimal
-The solver found the best possible solution within its tolerance settings (typically 1e-6 for LP, 0.01% MIP gap for MIP).
+Canonical statuses and the action each demands:
 
-**What to tell users:** "We found the best possible plan given your requirements. Here is what it recommends..."
-**Next steps:** Proceed to quality assessment, then explain results.
+| Status | Meaning | Action |
+|---|---|---|
+| `OPTIMAL` | Best possible solution within solver tolerance (typically 1e-6 LP, 0.01% MIP gap) | Proceed to quality assessment, then explain results |
+| `INFEASIBLE` | No solution satisfies all constraints — the problem as stated is impossible | Diagnose before presenting — see Infeasible diagnosis below |
+| `DUAL_INFEASIBLE` | Objective can improve infinitely (unbounded); the status is `"DUAL_INFEASIBLE"`, not `"UNBOUNDED"` | See Unbounded diagnosis below |
+| `"Feasible"` (MIP) | HiGHS found a solution but didn't prove optimality within the default MIP gap | Treat the same as `TIME_LIMIT` for gap interpretation |
+| `TIME_LIMIT` | Feasible solution found, optimality unproven in the time allowed | Read the realized gap from `si.ancillary` — schema-less `Mapping[str, str]`, so discover the key first (`si.display()` or iterate `.items()`) and read with `.get(key)`, never `si.ancillary[key]` (a hardcoded key risks `KeyError` across solvers); fall back to the solver log. Gap < 1%: very close to optimal; 1–5%: good; > 10%: uncertain — increase time limit, tighten Big-M, add symmetry breaking, or simplify |
+| Error / Unknown | Compilation or solver error prevented a solution (undefined properties, type mismatches, expression syntax, solver license) | Check compilation output, fix expression syntax, verify all referenced properties exist; solver-level errors → `rai-prescriptive-solver-management` |
 
-### Infeasible
-No solution satisfies all constraints simultaneously. The problem as stated is impossible.
+A non-optimal status is information about problem structure, not necessarily a failure to fix: intentionally solving a proposed constraint set to test feasibility boundaries is a valid technique (INFEASIBLE = the set is too tight), and a TIME_LIMIT gap under 5% with business-sensible values is presentable as "near-optimal" — don't automatically increase time limits ("Is a 2% improvement worth waiting 10 minutes?"). **Iterate** on INFEASIBLE with no clear conflict, DUAL_INFEASIBLE, gap > 10%, or a trivial solution; **accept** OPTIMAL, gap < 5%, or INFEASIBLE used as an intentional feasibility probe. For per-status stakeholder phrasing ("what to tell users" / next steps) and reframing language, see [references/status-interpretation.md](references/status-interpretation.md).
 
-**Diagnosis steps:**
+### Infeasible diagnosis
 
 First, **localize with `solve(conflict=True)`** — when the solver supports it, one solve returns the conflict (IIS): a *minimal* set of constraints and variable bounds that cannot all hold together. Read membership as a bare predicate, joined to the grounding entity by key, instead of guessing:
 
@@ -272,67 +264,16 @@ If `conflict_status` is `NO_CONFLICT_EXISTS`, the conflict solve found the model
 1. Demand vs. capacity: does total demand exceed total supply / capacity?
 2. Contradictory constraints (e.g., `x >= 10` and `x <= 5`).
 3. Bound consistency: any variable with `lower_bound > upper_bound`?
-4. Bisect: rebuild the Problem with one `problem.satisfy(...)` call removed at a time and re-solve. The constraint whose removal restores feasibility is the binding conflict. (Problem accumulates `satisfy` calls — there's no in-place `remove_constraint` API; build a fresh Problem each iteration.)
+4. Bisect: rebuild the Problem with one `problem.satisfy(...)` call removed — or one variable bound relaxed, since bounds alone can be the source — at a time and re-solve. The member whose removal restores feasibility is the binding conflict. (Problem accumulates `satisfy` calls — there's no in-place `remove_constraint` API; build a fresh Problem each iteration.)
 
-**What to tell users:** "The requirements as stated cannot all be satisfied simultaneously. The most likely conflict is [specific conflict]. Options: relax [constraint], increase [capacity], or allow unmet demand with a penalty."
-**Next steps:** Identify the binding conflict, present trade-off options, add slack/penalty variables. A common and valuable path is moving the conflicting hard constraint to the objective with a penalty — feasibility restoration through softening is often more useful than pure diagnosis.
+After localizing: present trade-off options, add slack/penalty variables. A common and valuable path is moving the conflicting hard constraint to the objective with a penalty — feasibility restoration through softening is often more useful than pure diagnosis.
 
-### Unbounded (DUAL_INFEASIBLE)
-The objective can improve infinitely — the solver can keep making the solution "better" without limit. The termination status is `"DUAL_INFEASIBLE"` (not `"UNBOUNDED"`).
+### Unbounded (DUAL_INFEASIBLE) diagnosis
 
-**Diagnosis steps:**
 1. Check that all variables have appropriate bounds (especially upper bounds for maximize, lower bounds for minimize).
 2. Verify budget/capacity/resource constraints are present.
 3. Check objective direction: minimizing when should maximize, or vice versa?
 4. Check coefficient signs in the objective.
-
-**What to tell users:** "The model is missing limits that would bound the solution. Likely cause: [missing capacity constraint / missing budget limit / wrong objective direction]."
-**Next steps:** Add missing bounds or constraints, verify objective direction and coefficient signs.
-
-### Feasible (MIP)
-For MIP problems, HiGHS may return `"Feasible"` instead of `"OPTIMAL"` when a solution is found but optimality is not proven within the default MIP gap tolerance. Treat `"Feasible"` the same as `"TIME_LIMIT"` for gap interpretation below; read the realized gap from `si.ancillary` if present (see Time Limit below), or the solver log otherwise.
-
-### Time Limit
-The solver found a feasible solution but could not prove it is optimal within the time allowed.
-
-**Gap interpretation:**
-- Gap < 1%: Solution is very close to optimal; usually acceptable.
-- Gap 1-5%: Solution is good but there may be modest room for improvement.
-- Gap > 10%: Solution quality is uncertain; consider increasing time limit or simplifying the model.
-
-Read the realized gap programmatically from `si.ancillary` when present — it's a schema-less `Mapping[str, str]`, so discover the key first (`si.display()` or iterate `si.ancillary.items()`) and read with `.get(key)`, never `si.ancillary[key]` (a hardcoded key risks `KeyError` across solvers). Fall back to the solver log if no gap-style key is present.
-
-**What to tell users:** "The solver found a solution within [X%] of the best possible. [If gap is small: This is likely very close to optimal.] [If gap is large: More time or a simpler model could improve this.]"
-**Next steps:** For large gaps, increase time limit, tighten Big-M values, add symmetry-breaking constraints, or simplify the model.
-
-### Status as Signal, Not Always Error
-
-A non-optimal termination status is information about the problem structure, not necessarily a failure to fix.
-
-**INFEASIBLE as diagnostic tool:**
-- Intentionally solving with a proposed constraint set to test feasibility boundaries is a valid modeling technique. An infeasible result tells you the constraint set is too tight — which constraints to relax.
-- **Localizing the conflict:** `solve(conflict=True)` returns the minimal conflicting subset (IIS) in one solve — the structured first-line tool (see Infeasible above and [references/conflict-analysis.md](references/conflict-analysis.md)). **Constraint bisection** is the fallback when the solver reports `NOT_SUPPORTED` / `FAILED`: rebuild the Problem omitting one `satisfy(...)` call — or relaxing one variable bound, since bounds alone can be the source — at a time and re-solve; the omitted member whose absence restores feasibility is the binding conflict. (Problem accumulates `satisfy` calls — there's no in-place removal; build a fresh Problem each iteration.)
-
-**TIME_LIMIT with acceptable gap:**
-- A 2% gap after 60 seconds may be perfectly good for operational use. The "optimal" solution is at most 2% better — often indistinguishable in business terms.
-- **Rule of thumb:** If the gap is under 5% and the solution values make business sense, present it as "near-optimal" and let the user decide whether to invest more solve time.
-- Don't automatically increase time limits — ask: "Is a 2% improvement worth waiting 10 minutes?"
-
-**Reframing for users:**
-- Instead of "the solver failed to find an optimal solution," say: "The solver found a solution within X% of the theoretical best. Here's what it tells us about the problem..."
-- INFEASIBLE + constraint analysis = "These requirements cannot all be satisfied simultaneously. Which one has the most flexibility?"
-- TIME_LIMIT + good gap = "This is a strong solution. More time would give diminishing returns."
-
-**When to iterate vs. accept:**
-- **Iterate:** INFEASIBLE with no clear conflict, DUAL_INFEASIBLE, TIME_LIMIT with gap > 10%, trivial solution (all zeros)
-- **Accept:** TIME_LIMIT with gap < 5%, OPTIMAL (always), INFEASIBLE when used as intentional feasibility probe
-
-### Error / Unknown
-Compilation or solver errors prevented a solution.
-
-**Common causes:** Undefined properties referenced in formulation, type mismatches, syntax errors in expressions, solver license issues.
-**What to tell users:** "The model could not be solved due to a technical error: [error message]. This needs to be fixed before we can get results."
-**Next steps:** Check compilation output, fix expression syntax, verify all referenced properties exist.
 
 ### Audit / witness mode — status-aware verdict (CSP-style)
 
@@ -433,11 +374,7 @@ Prefer constraint fixes over variable fixes. All fixes must be grounded in actua
 ### Quality dimensions
 
 - **Actionability**: Can decision makers act on this solution? Does it provide useful granularity? (e.g., "produce 150 units at Site A" is actionable; "total cost = 0" is not)
-- **Interpretability**: Can the solution be explained in business terms? Decision variable attributes have an `x_` prefix (e.g., `x_quantity`, `x_assigned`). When generating user-facing prose (rationale, business_mapping, result tables shown to the user), translate the `x_` names to business language. Code samples, API references, and Python variable names stay technical.
-  - `x_flow` → "shipment quantity" or "units shipped"
-  - `x_assigned` → "assigned" or "selected"
-  - `x_quantity` → "production quantity" or "units allocated"
-  - `x_open` → "facility is open" or "selected for use"
+- **Interpretability**: Can the solution be explained in business terms? Decision variable attributes have an `x_` prefix (e.g., `x_quantity`, `x_assigned`) — in user-facing prose (rationale, business_mapping, result tables), translate them to business language; see Result Explanation Guide below. Code samples, API references, and Python variable names stay technical.
 
 ### Join Path Fix Rules
 
@@ -449,60 +386,9 @@ When fixing trivial solutions, fix broken join paths in constraints — not aggr
 
 Solution explanation is the return leg of bidirectional translation: the solver produced math, now translate it back into business language and actionable recommendations. Decision makers should never need to interpret solver output directly.
 
-### Understanding decision variables
+Present results in this order — **(1) problem context** (2-3 sentences), **(2) what was decided** (lead with the actionable output; objective value in business terms), **(3) why these decisions** (which constraints and costs drove each selection or exclusion — answer "Why was X selected?", "Why was Y excluded?", "What's preventing Z?" using actual entity names from the solution), **(4) solution quality** (non-triviality, red flags: all-zero, implausible objective, concentration on one entity, variables at bounds), **(5) business impact**, **(6) recommended next steps**. Translate `x_`-prefixed decision variables to business language in all user-facing prose (`x_flow` → "units shipped"; code samples and API references stay technical), and map extended (cross-product) decision concepts back to their base entities. For the full 6-part template with worked phrasing, the decision-variable translation examples, the explainability question patterns, and sensitivity framing as conditional business statements ("If demand increases by 10%, total cost rises by $80K..."), see [references/result-explanation.md](references/result-explanation.md).
 
-Solution results contain values for "decision concepts" — entities created to represent optimization choices.
-
-- `x_` prefix → decision variables controlled by the solver. Translate `x_` prefixed names to business terms when presenting results — the prefix is an internal convention that confuses business users (e.g., `x_quantity = 150` → "produce 150 units", `x_assigned = 1` → "assigned")
-- Extended concepts → cross-product entities linking two base concepts (the decision space). Map back to base entities when presenting (e.g., "SiteProduct.x_quantity" → "production of Product at Site")
-- Present decision values with entity context, not as raw numbers. Use business labels in result tables: "Quantity Shipped" not "x_flow", "Assigned" not "x_assigned", "Units Produced" not "x_quantity"
-
-### Structure for Stakeholders
-
-Present results in this order (6-part template):
-
-1. **Problem Context** (2-3 sentences): What problem was being solved and the business context.
-   - "We optimized the allocation to minimize total cost while meeting all demand constraints."
-
-2. **What Was Decided**: The key allocations, assignments, or quantities. Lead with the actionable output. Include objective value and what it means in business terms.
-   - "The model recommends producing 500 units at Site A and 300 at Site B. Total cost: $1.2M."
-
-3. **Why These Decisions (Key Drivers)**: Which constraints and costs drove the solution. Answer: "Why was X selected?", "Why was Y excluded?", "What's preventing Z?" — using actual entity names from the solution.
-   - "Site A is used heavily because it has the lowest unit cost and sufficient capacity."
-   - "Site C was not selected because its fixed cost exceeds the savings from lower transport distance."
-
-4. **Solution Quality Assessment**: Is the solution useful? Check for non-triviality, actionability, interpretability. Flag any red flags:
-   - All-zero or near-zero solution
-   - Objective value outside plausible range
-   - Concentration on a single entity when distribution is expected
-   - Variables clustered at bounds
-
-5. **Business Impact**: Translate the objective value and key metrics into business language. What does this mean for the organization?
-   - "Total cost: $1.2M, a 15% reduction from the current allocation."
-   - "All customer demand is met. Two facilities operate at >90% capacity."
-
-6. **Recommended Next Steps**: What should the user do with this solution?
-   - Validate with domain experts?
-   - Run sensitivity analysis on key parameters?
-   - Implement directly?
-   - Investigate specific entities that behave unexpectedly?
-
-### Answering "Why This Decision?" (Explainability)
-
-Decision makers need to understand not just what the solution recommends, but why. Reason from the formulation — which constraints are tight, which costs/coefficients drove the choice — to answer:
-
-- **"Why was X selected?"** → Identify which constraints and cost/value properties made X optimal. "Entity A gets 60% of allocation because it has the lowest unit cost while meeting the quality threshold."
-- **"Why was Y excluded?"** → Identify which constraint or cost makes Y suboptimal. "Entity C isn't used because its fixed cost exceeds the savings from proximity despite available capacity."
-- **"What's preventing Z?"** → Identify the binding constraint. "Site B can't produce more because its capacity constraint is binding at 500 units."
-
-Frame every explanation in terms the decision maker already knows — their entities, their resources, their constraints — not variable indices or solver internals. For *why* a constraint binds or an option was excluded, `solve(sensitivity=True)` gives exact marginals on LP/QP models — a constraint's `shadow_price` (what one more unit of its RHS is worth) and a variable's `reduced_cost` (the objective marginal on its bound); see Sensitivity Analysis for the sign rules and the left-out-option intuition. For MIP models (no duals) or finite/structural changes, reason from binding-constraint identification and scenario deltas.
-
-### Sensitivity Framing
-
-Frame sensitivity results as conditional business statements:
-- "If demand increases by 10%, total cost rises by $80K and Site B reaches full capacity."
-- "The solution is robust to +/-5% cost variation -- the same facilities are selected."
-- "The critical threshold is at 1,200 units of demand: beyond that, a fourth facility is needed."
+For *why* a constraint binds or an option was excluded: `solve(sensitivity=True)` gives exact marginals on LP/QP models — a constraint's `shadow_price` (what one more unit of its RHS is worth) and a variable's `reduced_cost` (the objective marginal on its bound); see Sensitivity Analysis for the sign rules and the left-out-option intuition. For MIP models (no duals) or finite/structural changes, reason from binding-constraint identification and scenario deltas. Frame every explanation in terms the decision maker already knows — their entities, their resources, their constraints — not variable indices or solver internals.
 
 ---
 
@@ -520,6 +406,10 @@ Duals give the instantaneous rate at today's optimum; scenarios give what actual
 Sensitivity analysis answers: "What happens if our assumptions change?" Present results as scenario comparison tables, not mathematical derivatives. Prioritize parameters that are uncertain (demand forecasts, cost estimates), controllable (budget limits, service level targets), or high-impact (small changes cause structural solution changes).
 
 Scenarios should be treated as a default post-solve step, not an optional advanced feature. After every solve, proactively suggest 1-2 scenario variations based on binding constraints and parameter sensitivity.
+
+**Sweep semantics — vary exactly what's named.** A sweep or what-if varies exactly the parameter(s) the task names; every other constant, boundary, and anchor stays fixed unless the task says otherwise. When the swept parameter participates in a larger definition (a tier partition, a derived bound), restate the full definition at each swept value and confirm only the named parameter moved — silently moving an unnamed anchor answers a different question than the one asked. Distinguish two things a sibling analysis leaves behind, because they are handled oppositely. A **derived artifact** is a first-class object an earlier step computed and wrote back — a classification subtype, a computed property; reuse it by referencing the object. A **structural constant** is a number a sibling picked when configuring its own formulation — a band width, an offset, a cap multiplier, a ratio; re-derive it from the current task rather than copying it forward. The quick test: reuse a written-back model object, but re-derive a number that was chosen while setting up a different question. (So when sweeping a tier threshold you reuse the tier subtypes but re-derive the band edges from this task; you do not carry the sibling's band *width* across.) If the task wording still admits more than one consistent reading, choose the minimal-change reading and state the choice in one line of the answer (e.g., "holding the lower boundary fixed, so the middle band widens as the threshold rises").
+
+**A discontinuity is a finding about your assumptions until verified.** When one sweep point flips status (e.g., to INFEASIBLE) or steps the objective while its neighbors don't, identify which modeling choice creates the break before reporting it. Arithmetic verification (the numbers are internally consistent) is necessary but not sufficient — test whether a plausible alternative reading of the task removes the discontinuity, and if it does, report both readings rather than committing to the dramatic one.
 
 **Strategic vs. operational context:** For strategic (one-time planning) decisions, Pareto frontiers showing the tradeoff surface are preferred — stakeholders choose from the frontier. For operational (recurring) decisions, weighted objectives with tunable weights are more practical — set once, run daily. Detect which context applies and frame scenario results accordingly.
 
@@ -554,6 +444,7 @@ For parameter sweep patterns, scenario comparison tables, and Pareto frontier co
 | `integrality_in_conflict == False` read as proof a variable isn't involved | The IIS is one minimal subset and isn't unique — `False` means only "not in this subset," not "uninvolved"; other conflicts may exist (and a `True` flag may be only a "maybe," since the predicates collapse `IN_CONFLICT` and `MAYBE_IN_CONFLICT`) | Treat only `True` as a lead; confirm non-involvement by relaxing and re-solving, not from a `False` flag |
 | Constraint **family** without a declared key → can't join a marginal / IIS flag to its entity | Constraint back-pointers are declared, not inferred — without `keyed_by` the instances expose no entity back-pointer (`name=` is a display label only) | Declare the grounding key at formulation time, e.g. `satisfy(..., keyed_by={"nutrient": Nutrient})`, and read via the back-pointer (`con.nutrient`). Full idiom: `rai-prescriptive-problem-formulation/references/constraint-formulation.md` |
 | Solve fails with an `FDError` (functional-dependency violation) on a `keyed_by` constraint | The declared keys don't uniquely determine the instance — a family wider than its key, or two conjuncts of one `require(A, B)` sharing the same keys — so two constraint expressions collide on one identity | Add the missing key(s) so each instance is 1:1 with its key tuple, or split a multi-conjunct `require` into one `satisfy` per conjunct |
+| Sweep moves an unnamed boundary along with the swept threshold | The swept parameter sits inside a multi-part definition (a tier partition, a derived bound) and the structure (band width, offset) was inherited from a sibling analysis instead of re-derived from the current task | Vary only the named parameter and hold every other anchor fixed; restate the full partition at each swept value and state the chosen reading in the answer. See Sensitivity Analysis above |
 
 For additional pitfalls (numerical instability, degenerate solutions, wrong aggregation scope, missing/null data) — distinct from the silent-bug rows above — see [references/common-pitfalls.md](references/common-pitfalls.md).
 
@@ -570,7 +461,7 @@ Use this after every solve to ensure result quality:
 - [ ] Binding constraints align with known bottlenecks?
 - [ ] Results are stable to minor parameter perturbations?
 
-**If checks fail:** Trivial solution (all zeros) → add forcing constraints first. Infeasible → localize with `solve(conflict=True)` (IIS) and act on the flagged members (see Infeasible above). See `rai-prescriptive-problem-formulation/references/fix-generation-guidelines.md` for fix strategies.
+**If checks fail:** Trivial solution (all zeros) → add forcing constraints first. Infeasible → localize with `solve(conflict=True)` (IIS) and act on the flagged members (see Infeasible diagnosis above). See `rai-prescriptive-problem-formulation/references/fix-generation-guidelines.md` for fix strategies.
 
 ---
 
@@ -591,7 +482,9 @@ Use this after every solve to ensure result quality:
 
 | Reference | Description | File |
 |-----------|-------------|------|
-| Solution extraction details | Query-pattern variations (`populate=True` vs `populate=False` — multiple solutions, iterative, scenario/parametric), `Variable.values()` back-pointer naming rules with examples table, silent-failure warnings, Snowflake export | [solution-extraction-details.md](references/solution-extraction-details.md) |
+| Solution extraction details | Engine-side result-attribute (Relationship) accessor table, query-pattern variations (`populate=True` vs `populate=False` — multiple solutions, iterative, scenario/parametric), `Variable.values()` back-pointer naming rules with examples table, silent-failure warnings, Snowflake export | [solution-extraction-details.md](references/solution-extraction-details.md) |
+| Status communication | Per-status stakeholder phrasing ("what to tell users" / next steps), gap-interpretation detail, reframing language, iterate-vs-accept guidance | [status-interpretation.md](references/status-interpretation.md) |
+| Result explanation templates | Full 6-part stakeholder structure with worked phrasing, decision-variable translation examples, explainability question patterns, sensitivity framing | [result-explanation.md](references/result-explanation.md) |
 | Failure taxonomy | Detailed root causes by solvability level and 5-step diagnosis protocol | [failure-taxonomy.md](references/failure-taxonomy.md) |
 | Common pitfalls | Additional result-interpretation pitfalls (numerical instability, degenerate solutions, aggregation scope, missing/null data, etc.) — distinct from the silent-bug rows in this SKILL | [common-pitfalls.md](references/common-pitfalls.md) |
 | Sensitivity analysis | Native LP/QP marginals (shadow prices, reduced costs, basis status) and the dual-economics / key-join idiom, plus finite scenario sweeps and Pareto frontiers | [sensitivity-analysis.md](references/sensitivity-analysis.md) |

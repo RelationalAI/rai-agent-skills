@@ -266,6 +266,8 @@ pt = PropertyTransformer(
 | Dates, timestamps | `datetime` |
 | Explicit integer values (not IDs) | `integer` |
 
+Status/enum codes used as `category` features must stay `String`-typed properties. A property typed by a `model.Enum` (relationalai>=1.12) is not usable as a feature — leave any property the `PropertyTransformer` consumes as a raw `String` (see `rai-pyrel-coding` § Enums).
+
 The `integer` parameter is a distinct type from `continuous` -- use it for whole-number counts or ordinal values where float precision is not meaningful (e.g. review counts, position ranks):
 
 ```python

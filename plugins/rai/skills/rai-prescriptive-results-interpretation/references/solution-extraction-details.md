@@ -1,6 +1,7 @@
 # Solution Extraction Details
 
 ## Table of Contents
+- [Engine-Side Result Attributes (Relationships)](#engine-side-result-attributes-relationships)
 - [Querying Solution Values — Full Patterns](#querying-solution-values--full-patterns)
 - [Variable.values() Back-Pointer Naming Rule](#variablevalues-back-pointer-naming-rule)
 - [Constraint Back-Pointer Access (marginals & conflict membership)](#constraint-back-pointer-access-marginals--conflict-membership)
@@ -9,6 +10,29 @@
 - [Multiple Solutions](#multiple-solutions)
 - [Iterative Solving](#iterative-solving)
 - [Scenario / Parametric Solving](#scenario--parametric-solving)
+
+---
+
+## Engine-Side Result Attributes (Relationships)
+
+After `problem.solve()`, these accessors return Relationships usable in `model.require()`, `model.select()`, and solver expressions (the Python-side `solve_info()` counterparts live in SKILL.md > Solution Extraction):
+
+| Method | Return type | Description |
+|--------|-------------|-------------|
+| `problem.termination_status()` | Relationship | `"OPTIMAL"`, `"INFEASIBLE"`, `"DUAL_INFEASIBLE"`, `"TIME_LIMIT"`, `"LOCALLY_SOLVED"`, `"SOLUTION_LIMIT"` |
+| `problem.objective_value()` | Relationship | Optimal objective value |
+| `problem.num_points()` | Relationship | Number of solutions returned |
+| `problem.error()` | Relationship | Error message tuple (if solve failed) |
+| `problem.printed_model()` | Relationship | Text representation (with `print_format=`) |
+| `problem.num_variables()` | Relationship | Total registered variables |
+| `problem.num_constraints()` | Relationship | Total constraints |
+| `problem.num_min_objectives()` | Relationship | Number of minimize objectives |
+| `problem.num_max_objectives()` | Relationship | Number of maximize objectives |
+
+```python
+# Engine-side: integrity constraint on status
+model.require(problem.termination_status() == "OPTIMAL")
+```
 
 ---
 

@@ -41,6 +41,8 @@ Component.lifecycle = model.Property(f"{Component} has lifecycle {Lifecycle:life
 
 **Benefits:** Type safety, referential integrity, extensibility (enumerations can have their own properties), and cleaner queries.
 
+**Compact alternative — `model.Enum`**: when the vocabulary is small, fixed, and carries no per-value properties or data table of its own, declare it as a `model.Enum` instead — members become typed literals in rules (`Component.lifecycle == Lifecycle.ACTIVE`), and queries read labels back with `.name` (*enum-typed properties and `.name` readback require relationalai>=1.12; plain member comparisons in `where()`/`define()` work on earlier versions*). Prefer the enumeration-concept pattern above when categories have their own properties (`sort_order`, display names) or are loaded from data; prefer `model.Enum` for closed code lists. See `rai-pyrel-coding` § Enums.
+
 **Soft-join pattern (shared enumerations across concepts):** When two concepts share categorical values (country codes, status codes, region names) but no strict FK exists between them, model the shared category as an enumeration concept and link both concepts to it:
 
 ```python
@@ -58,6 +60,7 @@ Use when you need to repeatedly filter entities by the same condition:
 ```python
 UncompletedTask = model.Concept("UncompletedTask", extends=[Task])
 model.define(UncompletedTask(Task)).where(Task.status != "done")
+# With a model.Enum status (relationalai>=1.12): Task.status != TaskStatus.DONE
 
 # Use as filter everywhere
 model.where(UncompletedTask(task), task.affects(Component))

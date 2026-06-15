@@ -391,6 +391,7 @@ BillOfMaterials.at_site = model.Relationship(
 - Self-referential relationship (SKU → SKU for BOM assembly)
 - `short_name` on every relationship for query disambiguation
 - Bracket syntax for column access (`src.site["ID"]`)
+- Closed status/priority vocabularies (`Shipment.status`, `Demand.priority`) kept as `String` here; with `relationalai>=1.12` they can instead be `model.Enum` types — see `rai-pyrel-coding` § Enums
 
 ---
 
@@ -458,7 +459,9 @@ model.define(
     p.stock_status(raw.parts_inventory.STOCK_STATUS),
 )
 
-# Unary flag binding — condition from column value
+# Unary flag binding — condition from column value. With relationalai>=1.12 the
+# closed vocabulary can be a model.Enum and the condition becomes
+# Part.stock_status == StockStatus.CRITICAL_SHORTAGE (see rai-pyrel-coding § Enums).
 model.define(Part.is_critical_shortage()).where(
     Part.stock_status == "CRITICAL_SHORTAGE",
 )
@@ -612,6 +615,7 @@ model.define(rf_ref.is_on_target()).where(
 - Large-scale model: 14 source tables, 12+ concepts
 - Walrus operator (`:=`) for compact entity creation + property binding
 - Unary flags from status/boolean columns (`is_critical_shortage`, `is_auto_renew`, `is_outage`, `is_dropped`, `is_on_target`)
+- Status columns (`Part.stock_status`, `Customer.status`) kept as `String` here; with `relationalai>=1.12`, closed vocabularies can instead be `model.Enum` types — see `rai-pyrel-coding` § Enums
 - Bidirectional relationships with explicit inverses (both directions defined)
 - **Self-referential relationships**: source and target both reference Customer — disambiguated with `short_name`
 - Multi-FK binding: Equipment references both Facility and Part

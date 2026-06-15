@@ -133,6 +133,46 @@ problem.solve_for(
 )
 ```
 
+### 2e. Enum-indexed decision: one binary per (entity, member)
+
+*Requires relationalai>=1.12.* Not CSP-specific — the same shape works in MIP-style.
+
+When the decision is "which member of a closed vocabulary does each entity take," declare a `model.Enum`, type the decision property by it, and `solve_for` once — the solver creates one binary variable per (entity, member) pair. This replaces K parallel per-member binary properties.
+
+```python
+class EventType(model.Enum):
+    PLACE = 1
+    MODIFY = 2
+    CANCEL = 3
+    FILL = 4
+
+Event.has_type = model.Property(f"{Event} is {EventType:event_type} if {Integer:indicator}")
+problem.solve_for(Event.has_type, type="bin", name=["is_type", Event.id])
+
+# Exactly one member per entity (one-hot)
+problem.satisfy(model.require(sum(Event.has_type).per(Event) == 1))
+
+# Member-sliced constraint: bind one member's indicator column via the ternary
+# form, then aggregate it per parent entity (Event.order = parent relationship)
+place_ind = Integer.ref()
+problem.satisfy(
+    model.where(Event.has_type(EventType.PLACE, place_ind))
+    .require(sum(place_ind).per(Event.order) == 1)
+)
+```
+
+**Readback of the decided member.** `Enum.lookup()` is forward-only — `EventType.lookup(free_ref)` compiles at construction but fails at query time with `[Unground Variable]`. Recover the chosen member with a derived enum-typed property, one `define()` per member (members are Python-iterable):
+
+```python
+Event.event_type = model.Property(f"{Event} has decided {EventType:event_type}")
+for member in EventType:
+    ind = Integer.ref()
+    model.define(Event.event_type(member)).where(Event.has_type(member, ind), ind == 1)
+
+# Post-solve:
+model.select(Event.id, Event.event_type.name.alias("event_type")).to_df()
+```
+
 ---
 
 ## 3. Constraint idioms

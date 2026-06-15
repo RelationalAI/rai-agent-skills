@@ -280,7 +280,7 @@ model.where(
 
 ## Enums
 
-`model.Enum` creates a concept-backed Python enum whose members are usable as concept literals in `where()` and `define()`. Use instead of bare string comparisons when values are a fixed controlled vocabulary.
+`model.Enum` creates a concept-backed Python enum whose members are usable as concept literals in `where()` and `define()` — and, as of `relationalai>=1.12`, as constants in every value position: kwargs (`Account.new(status=Status.ACTIVE)`, `Account.lookup(status=...)`), enum-typed property values, and prescriptive `solve_for()`/`satisfy()` expressions. Use instead of bare string comparisons when values are a fixed, closed vocabulary — and only where members are a clear readability or usability win; leave open-ended, data-driven string fields (entity names, free-form codes) as `String`.
 
 ```python
 # Class-style:
@@ -293,7 +293,7 @@ class Priority(model.Enum):
 Priority = model.Enum("Priority", ["low", "medium", "high"])
 ```
 
-Note: `Enum` is accessed via `model.Enum`, not imported standalone. When defining enums with integer values, comparing enum members in `where()`/`define()`, or using them in property declarations, see [expression-rules.md](references/expression-rules.md#enums).
+Note: `Enum` is accessed via `model.Enum`, not imported standalone. For integer-valued members, enum-typed properties, CSV-to-member mapping (`lookup()` and its caveats), member-name readback, and the class-vs-member `TypeError`, see [expression-rules.md](references/expression-rules.md#enums). For enum-indexed decision variables, see `rai-prescriptive-problem-formulation`.
 
 ---
 
