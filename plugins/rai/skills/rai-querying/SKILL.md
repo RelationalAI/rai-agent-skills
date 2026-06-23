@@ -118,14 +118,18 @@ model.where(
 ).to_df()
 ```
 
-**Top-N by ranking:**
+**Top-N (native — no pandas):**
 ```python
-# rank(desc(expr)) gives full ordering; filter or sort in pandas to get top N.
-model.where(FailurePrediction.period == 12).select(
+# top(N, expr) in where() keeps the N highest rows; add .per(Group) for top-N per group.
+model.where(
+    FailurePrediction.period == 12,
+    top(5, FailurePrediction.failure_probability),
+).select(
     FailurePrediction.machine_id.alias("machine_id"),
     FailurePrediction.failure_probability.alias("p"),
-    rank(desc(FailurePrediction.failure_probability)).alias("rank"),
 ).to_df()
+# Need the rank value as a column, or the inverse? rank(desc(expr)) / bottom(N, expr) —
+# see references/aggregation-advanced.md (ranking aggregates).
 ```
 
 ---
@@ -325,7 +329,9 @@ For extended `not_()` examples and OR-filter patterns, see [filtering-advanced.m
 
 ## Aggregation Patterns
 
-Available: `count`, `sum`, `min`, `max`, `avg`, `string_join`. **`avg` is query-only — it raises `NotImplementedError` in solver `satisfy/minimize/maximize` contexts.** Solver-supported aggregates: `sum, min, max, count`.
+Value aggregates: `count`, `sum`, `min`, `max`, `avg`, `product`, `stddev_samp`, `string_join`. **`avg`, `product`, and `stddev_samp` are query-only — they raise `NotImplementedError` in solver `satisfy/minimize/maximize` contexts.** Solver-supported aggregates: `sum, min, max, count`. `product` and `stddev_samp` are both `relationalai>=1.12` and always return `Float` — `product` is an exp-log approximation (not an exact product) and `stddev_samp` is the sample (`n-1`) estimator; see [product](references/aggregation-advanced.md#product) and [stddev_samp](references/aggregation-advanced.md#stddev_samp).
+
+For **ranking and top-N** — `top` / `bottom` / `limit` / `rank`, evaluated in-query (no pandas) — see [ranking aggregates](references/aggregation-advanced.md#ranking-aggregates).
 
 **`.per(K)` declares the dimensions of the result — one row per distinct value of K.** Use the same concept variables that appear in your `select()`. Given `Shipment.supplier(Supplier)` in `where()`, write `.per(Supplier)`, not `.per(Shipment.supplier)` — the bare concept names an entity cleanly, while a relationship application carries its source concept (Shipment) into the implicit key and over-groups.
 

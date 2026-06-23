@@ -38,7 +38,7 @@ description: Covers PyRel v1 language syntax — imports, type system, concepts,
 # Imports
 from relationalai.semantics import (
     Model, Float, Integer, String, Date, DateTime,
-    count, sum, min, max, avg, per, distinct,
+    count, sum, min, max, avg, product, stddev_samp, per, distinct,
 )
 from relationalai.semantics import Number  # Always use Number.size(p,s) — bare Number causes inference issues
 

@@ -25,7 +25,7 @@ from relationalai.semantics import (
     Model,                              # Model creation
     Float, Integer, String, Date,       # Type references
     DateTime, Number,                   # DateTime for timestamps, Number.size(p,s) for decimals
-    sum, count, max, min, avg,          # Aggregation — shadows Python builtins (see note below)
+    sum, count, max, min, avg, product, stddev_samp,  # Aggregation (sum/min/max shadow builtins)
     per, where, select, define,         # Query/definition functions
     require,                            # Constraint creation (also model.require)
     data, distinct,                     # Data loading, dedup

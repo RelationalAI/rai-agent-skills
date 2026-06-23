@@ -1,6 +1,6 @@
 ---
 name: rai-setup
-description: Setup and configuration for RelationalAI — first-time install walkthrough and all raiconfig.yaml tuning. Use when installing RAI, connecting to Snowflake, or editing raiconfig.yaml. Not for writing PyRel model code (see rai-pyrel-coding) or solver usage and diagnostics (see rai-prescriptive-solver-management).
+description: Setup and configuration for RelationalAI — first-time install walkthrough and all raiconfig.yaml tuning. Use when installing RAI, connecting to Snowflake, running RAI locally on DuckDB for development, or editing raiconfig.yaml. Not for writing PyRel model code (see rai-pyrel-coding) or solver usage and diagnostics (see rai-prescriptive-solver-management).
 ---
 
 # RelationalAI Setup & Configuration
@@ -14,6 +14,7 @@ Covers the [relationalai Python package](https://pypi.org/project/relationalai) 
 
 **When to use:**
 - First-time setup: install `relationalai`, connect to Snowflake, run a starter program
+- Running RAI locally on DuckDB for development, prototyping, or demos (no Snowflake)
 - Creating or editing `raiconfig.yaml`
 - Choosing or troubleshooting an authentication method
 - Tuning reasoner engines, sizes, solver settings
@@ -31,11 +32,11 @@ Covers the [relationalai Python package](https://pypi.org/project/relationalai) 
 
 ## Prerequisites
 
-Requires Python 3.10+ and `relationalai>=1.11.0`.
+Requires Python 3.10+ and `relationalai>=1.13.0`.
 
-Some guidance in the skill library is version-gated with inline *Requires relationalai ...* notes (e.g. `model.Enum` member constants beyond `where()`/`define()`, enum-typed properties, and enum-indexed decision variables need >=1.12) — install at least the noted version when following those blocks.
+Some guidance carries inline *Requires relationalai ...* notes flagging capabilities that need a version above this baseline; when following those blocks, install at least the version they name.
 
-The RelationalAI Native App for Snowflake must be installed in your account by an administrator — request access [here](https://app.snowflake.com/marketplace/listing/GZTYZOOIX8H/relationalai-relationalai); see the [Native App docs](https://docs.relational.ai/manage/install).
+The RelationalAI Native App for Snowflake must be installed in your account by an administrator — request access [here](https://app.snowflake.com/marketplace/listing/GZTYZOOIX8H/relationalai-relationalai); see the [Native App docs](https://docs.relational.ai/manage/install). (Not required for local DuckDB development — see [Local Development with DuckDB](#local-development-with-duckdb-no-snowflake) below.)
 
 The `rai_developer` role is the standard role for running PyRel programs. Custom Snowflake roles also work if granted the `rai_user` application role — see [User Access](https://docs.relational.ai/manage/user-access).
 
@@ -98,9 +99,9 @@ Users are expected to be Snowflake users with existing credentials. Walk the use
 
 ### Step 1. Install the package
 ```bash
-pip install 'relationalai>=1.11.0'
+pip install 'relationalai>=1.13.0'
 # or
-uv add 'relationalai>=1.11.0'
+uv add 'relationalai>=1.13.0'
 ```
 
 ### Step 2. Establish the connection
@@ -124,6 +125,36 @@ Offer a small sample program using inline data. Ask the user for a domain or use
 
 ---
 
+## Local Development with DuckDB (no Snowflake)
+
+For development, prototyping, and demos, PyRel runs against a local DuckDB database — no Snowflake account or Native App. The local path covers the data-and-logic workflow end to end:
+
+- **Ontology** — concepts, properties, relationships, data loading
+- **Querying** — select, filter, join, aggregate, group
+- **Rules / logic** — derived properties, classification, recursion
+- **String / regex matching** — `strings.like` and the `std.re` module (`match`, `search`, `findall`, `sub`) execute on the local backend (see `rai-pyrel-coding`)
+- **Relationship traversal** — model a link as a self-referential relationship and answer connectivity questions ("who transacts with whom", one hop from X) with a self-join (see `rai-querying`)
+
+Graph, prescriptive (optimization), and predictive (GNN) reasoners run on a Snowflake connection.
+
+The local path is unlocked by a `duckdb` connection plus a `deployment` section (`schema` + `auto_deploy`):
+
+```python
+from relationalai.config import create_config, DuckDBConnection
+
+config = create_config(
+    connections={"local": DuckDBConnection(path=":memory:")},  # or a file path
+    default_connection="local",
+    deployment={"schema": "main", "auto_deploy": True},
+)
+```
+
+> **Requires `relationalai >= 1.13`; experimental.** Local DuckDB execution relies on deploy mode, which the package flags as experimental — confirm the support stance with the RelationalAI team before customer-facing use.
+
+For the full recipe (YAML config, data loading with 3-part FQNs, and gotchas), see [local-development.md](references/local-development.md).
+
+---
+
 ## Reference files
 
 Load the reference when the trigger fires — don't read them all upfront.
@@ -136,6 +167,7 @@ Load the reference when the trigger fires — don't read them all upfront.
 | Configuring reasoners — backend, engine size, Gurobi, polling — or reasoner name/size doesn't take effect as expected | [reasoners.md](references/reasoners.md) |
 | Turning on metrics/logging, tuning retries, toggling compiler strictness, or changing data-loading defaults | [execution.md](references/execution.md) |
 | Provisioning, listing, resuming, or deleting engines via CLI/Python API, or evaluating warm reasoners | [engine-management.md](references/engine-management.md) |
+| Running locally on DuckDB without Snowflake — config recipe, data loading with 3-part FQNs, gotchas | [local-development.md](references/local-development.md) |
 
 ---
 
@@ -153,6 +185,8 @@ Load the reference when the trigger fires — don't read them all upfront.
 | Engine not provisioned | Reasoner config references a size unavailable on account | Check `reasoners.*.size` matches available sizes for your platform |
 | Unicode errors on Windows (`UnicodeEncodeError`) | Windows console defaults to a non-UTF-8 encoding | Set `PYTHONIOENCODING=utf-8`. PowerShell: `$env:PYTHONIOENCODING = "utf-8"`; cmd: `set PYTHONIOENCODING=utf-8` |
 | `rai` CLI fails on PowerShell | Execution policy blocks scripts | User runs `Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned` |
+
+(For local DuckDB gotchas — 3-part FQNs, the `deployment` section, schema collisions — see [local-development.md](references/local-development.md).)
 
 ---
 
