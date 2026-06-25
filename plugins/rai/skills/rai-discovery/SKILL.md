@@ -151,6 +151,9 @@ Some questions require multiple reasoners in sequence. Each stage's output enric
 | Rules → Prescriptive | Validate/classify, then optimize given compliance | Flags and classifications constrain the feasible set |
 | Rules → Graph | Flag entities, then analyze their structural role | Flagged nodes become the focus of graph analysis |
 | Graph → Predictive | Extract structural features, then predict | Centrality, component membership become prediction features |
+| Paths → Prescriptive (PREVIEW) | Enumerate candidate routes, then select | Each enumerated path becomes a candidate decision variable; constraints enforce demand across selected paths |
+| Paths → Rules (PREVIEW) | Enumerate routes, then classify | Per-path rules flag "any path through a watch-list node," "any path over a length/weight budget" |
+| Rules → Paths (PREVIEW) | Pre-filter the candidate set | Rules mark concepts Critical / Non-Critical; path enumeration uses the derived subconcepts as endpoint filters |
 | Predictive → Rules | Predict outcomes, then enforce thresholds | Predicted scores are evaluated against business rules |
 
 ### Suggesting chained questions
@@ -185,6 +188,7 @@ Each reasoner adds new concepts and properties to the ontology. Discovery should
 |----------------|--------------------------|---------------------------|
 | Graph centrality | `node.centrality_score` | Predictive: centrality as feature. Prescriptive: weight allocation by node importance. |
 | Graph reachability | impact_count, affected flags | Prescriptive: minimize disruption to high-impact nodes. Rules: alert on critical dependencies. |
+| Graph paths (enumeration, PREVIEW) | `PathTraversal` with `length`, `nodes(index)`, `relationship_fields(index, field_index)`; a route can be bound onto a concept | Prescriptive: route selection over enumerated candidate paths. Rules: flag a route whose length or summed weight exceeds a budget (a per-path predicate). |
 | Graph WCC / community | WCC: `(node, component_id_node)` membership (access `.id` to get its identifying value; cast to `int` only for integer-identified nodes); community: `node.community_label` (int) | Prescriptive: optimize within-cluster vs cross-cluster. Rules: flag isolated components. |
 | Predictive node classification | `Entity.predictions` with `.probs`, `.predicted_labels` | Rules: flag above threshold. Prescriptive: incorporate risk/class as constraint. |
 | Predictive node regression | `Entity.predictions.predicted_value` (incl. per-period forecasts) | Prescriptive: optimize against predicted values, often via aggregation/bridge concept. |

@@ -25,8 +25,13 @@ The RAI Graph reasoner (`relationalai.semantics.reasoners.graph.Graph`) analyzes
 | **Similarity / Link Prediction** | "Which entities are most alike?" "Who should be connected?" | Concepts with overlapping neighborhoods | `jaccard_similarity()`, `cosine_similarity()`, `adamic_adar()`, `preferential_attachment()` |
 | **Bridge Detection** | "Which nodes are critical connectors? Single points of failure?" | Network where node removal could disconnect components | WCC + derived Bridge concept (cross-boundary analysis) |
 | **Clustering Coefficient** | "How tightly connected are local neighborhoods?" | Dense local clusters | `local_clustering_coefficient()`, `average_clustering_coefficient()`, `triangle_count()` |
+| **Path enumeration (variable-length)** (PREVIEW) | "What is the actual route from X to Y?" "What's on the path of intermediaries?" "All dependency paths from this feature?" | Self-referencing or chained relationships where the answer is the *sequence*, not the endpoints | `m.path(rel.repeat(min, max)).all_paths()` — see `rai-graph-analysis` paths.md (`relationalai>=1.15`) |
 
 **Disambiguation rules:**
+- "The actual route" / "the path of intermediaries" / "all paths satisfying joint per-path conditions" → path enumeration (`m.path(...).all_paths()`, PREVIEW), **not** `reachable()` (which returns only pairs) or `distance()` (returns pairs and the length of the shortest path between them)
+- "Rank/score routes by a value accumulated *along* the path" → path enumeration + aggregate-along-route; "decompose this network into its critical paths" → path enumeration between typed endpoints
+- "Paths satisfying variable conditions (e.g., start at `x`, reach `y` in fewer than 2 hops, reach `z` in fewer than 5 hops)" → variable-length, variable-structure path queries
+- "Are these reachable?" / "list the reached set" → `reachable()`, not paths
 - "Most critical/important" + network context → centrality (eigenvector, betweenness, or PageRank depending on graph type)
 - "If X goes offline" → reachability (downstream from X on directed graph), then possibly → prescriptive for re-optimization
 - "Natural groups" → community detection (louvain for undirected, infomap for directed/weighted); "isolated clusters" → WCC
@@ -48,6 +53,11 @@ Which RAI Graph method to use. Maps directly to `Graph` instance methods:
 - Reachability: `reachable` (with `from_=` or `to=` parameter)
 - Distance: `distance` (supports weighted graphs, non-negative weights)
 - Similarity: `jaccard_similarity`, `cosine_similarity`, `adamic_adar`
+- Path enumeration (PREVIEW, `relationalai>=1.15`): `m.path(*expr).where(*filters).all_paths()` — variable-structure all-walks path traversals, from which you extract `.nodes`, `.relationships`, and `.relationship_fields`.
+  - `expr` may be a `Chain` (an edge), a `Concept` or `Ref` (a node), a nested `path()` pattern, or `.repeat(min, max)` attached to a `Chain` or `path()` — e.g. `m.path(x.follows, y.works_with.repeat(2, 5)).where(y.name == "Bob")`.
+  - `filters` is optional and accelerates enumeration by keeping only the desired output paths. A single filter may reference only one node, or the two endpoints of one edge.
+  - No `Graph` instance is needed — `path` operates natively over the ontology.
+  - `shortest_paths` / `reverse` / `undirected` are not yet implemented.
 
 ### graph_construction
 How to build the `Graph` instance:

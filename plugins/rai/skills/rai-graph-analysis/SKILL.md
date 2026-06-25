@@ -1,6 +1,6 @@
 ---
 name: rai-graph-analysis
-description: Graph algorithm selection and execution on PyRel v1 models — construction from ontology patterns, parameter tuning, and result extraction. Use for questions about a network's structure — centrality and importance, community detection, connectivity and components, reachability and dependencies, shortest paths and distance, and node similarity.
+description: Graph algorithm selection and execution on PyRel v1 models — construction from ontology patterns, parameter tuning, and result extraction. Use for questions about a network's structure — centrality and importance, community detection, connectivity and components, reachability and dependencies, shortest paths and distance, node similarity, and variable-length path enumeration (where the route itself is the answer).
 ---
 
 # Graph Analysis
@@ -469,6 +469,9 @@ Each example targets a distinct combination of edge construction, topology, algo
 | Multiple graphs, same model | Multiple Graph instances on same node concept | Weighted + unweighted | Eigenvector + betweenness | Parallel graph views, separate Edge defs | [multi_graph_same_model.py](examples/multi_graph_same_model.py) |
 | Jaccard similarity | Co-occurrence edges via shared attribute | Undirected, unweighted | Jaccard similarity | Top-k similar pairs extraction | [similarity_jaccard.py](examples/similarity_jaccard.py) |
 | Shortest path distances | `edge_concept` with cost weight | Directed, weighted | Distance | All-pairs shortest paths, filter by source/target | [shortest_path_distance.py](examples/shortest_path_distance.py) |
+| Path enumeration (PREVIEW) | Self-referencing relationship | Cyclic | `path(rel.repeat(min,max)).all_paths()` | Node-sequence projection + simple-path filter | [paths_variable_length_enumeration.py](examples/paths_variable_length_enumeration.py) |
+| Path scoring along route (PREVIEW) | Binary edge from intermediary | Typed endpoints | `all_paths()` + `aggregates.sum(...).per(p)` + `p.nodes(idx)` / nested-segment filters | Rank routes by a per-node value aggregated along the path; per-node and only-through filters | [paths_scored_routes.py](examples/paths_scored_routes.py) |
+| Multi-relationship sequence (PREVIEW) | Two distinct relationships in series | Directed | `path(a.rel1, b.rel2).all_paths()` | Route alternating edge types; `p.relationships` reads the per-hop label | [paths_multi_relationship_sequence.py](examples/paths_multi_relationship_sequence.py) |
 
 ---
 
@@ -480,3 +483,4 @@ Each example targets a distinct combination of edge construction, topology, algo
 | Algorithm selection | Per-algorithm deep dive — when to use, parameters, output shape, complexity, decision guidance | [algorithm-selection.md](references/algorithm-selection.md) |
 | Domain constraints | Why they matter, which relationships support which keywords, `full=True` guard rationale, worked constrained-similarity example | [domain-constraints.md](references/domain-constraints.md) |
 | Result extraction | Query patterns for each algorithm output shape, model binding, DataFrame extraction, type handling | [result-extraction.md](references/result-extraction.md) |
+| Path enumeration (PREVIEW) | When the answer is the route itself — variable-length traversal, intermediary→edge, multi-relationship sequences, typed endpoints, point queries, per-path filters, aggregate-a-value-along-route, walk-vs-simple-path. Load for any path-shaped question (`relationalai>=1.15`) | [paths.md](references/paths.md) |

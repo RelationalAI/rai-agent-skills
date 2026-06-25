@@ -32,7 +32,7 @@ Covers the [relationalai Python package](https://pypi.org/project/relationalai) 
 
 ## Prerequisites
 
-Requires Python 3.10+ and `relationalai>=1.13.0`.
+Requires Python 3.10+ and `relationalai>=1.15.0`.
 
 Some guidance carries inline *Requires relationalai ...* notes flagging capabilities that need a version above this baseline; when following those blocks, install at least the version they name.
 
@@ -99,9 +99,9 @@ Users are expected to be Snowflake users with existing credentials. Walk the use
 
 ### Step 1. Install the package
 ```bash
-pip install 'relationalai>=1.13.0'
+pip install 'relationalai>=1.15.0'
 # or
-uv add 'relationalai>=1.13.0'
+uv add 'relationalai>=1.15.0'
 ```
 
 ### Step 2. Establish the connection
@@ -149,7 +149,7 @@ config = create_config(
 )
 ```
 
-> **Requires `relationalai >= 1.13`; experimental.** Local DuckDB execution relies on deploy mode, which the package flags as experimental — confirm the support stance with the RelationalAI team before customer-facing use.
+> **Experimental.** Local DuckDB execution relies on deploy mode, which the package flags as experimental — confirm the support stance with the RelationalAI team before customer-facing use.
 
 For the full recipe (YAML config, data loading with 3-part FQNs, and gotchas), see [local-development.md](references/local-development.md).
 
