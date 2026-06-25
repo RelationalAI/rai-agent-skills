@@ -39,11 +39,13 @@ Invoke the skills using the `/rai-` command.
 | 6 | [rai-querying](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-querying) | Reasoning | Query construction: aggregation, filtering, joins, ordering, export |
 | 7 | [rai-discovery](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-discovery) | Reasoning | Surface answerable questions, classify by reasoner type, route to workflow |
 | 8 | [rai-graph-analysis](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-graph-analysis) | Reasoning | Graph algorithms: centrality, community detection, reachability, similarity |
-| 9 | [rai-prescriptive-problem-formulation](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-prescriptive-problem-formulation) | Reasoning | Formulate optimization and CSAT problems: decision variables, constraints, objectives, scenarios |
-| 10 | [rai-prescriptive-solver-management](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-prescriptive-solver-management) | Reasoning | Solver lifecycle: selection, creation, execution, diagnostics |
-| 11 | [rai-prescriptive-results-interpretation](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-prescriptive-results-interpretation) | Reasoning | Post-solve: solution extraction, status codes, quality, sensitivity |
-| 12 | [rai-cortex-integration](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-cortex-integration) | Operations | Deploy RAI models as Snowflake Cortex Agents |
-| 13 | [rai-health](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-health) | Operations | Diagnose engine performance: memory, CPU, demand metrics, remediation |
+| 9 | [rai-predictive-modeling](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-predictive-modeling) | Reasoning | Build graph neural network (GNN) models: data loading, task relationships, edges, feature transformers |
+| 10 | [rai-predictive-training](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-predictive-training) | Reasoning | Train GNNs, generate predictions, evaluate results, manage trained models |
+| 11 | [rai-prescriptive-problem-formulation](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-prescriptive-problem-formulation) | Reasoning | Formulate optimization and CSAT problems: decision variables, constraints, objectives, scenarios |
+| 12 | [rai-prescriptive-solver-management](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-prescriptive-solver-management) | Reasoning | Solver lifecycle: selection, creation, execution, diagnostics |
+| 13 | [rai-prescriptive-results-interpretation](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-prescriptive-results-interpretation) | Reasoning | Post-solve: solution extraction, status codes, quality, sensitivity |
+| 14 | [rai-cortex-integration](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-cortex-integration) | Operations | Deploy RAI models as Snowflake Cortex Agents |
+| 15 | [rai-health](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-health) | Operations | Diagnose engine performance, failed transactions, and CDC/data-stream health |
 
 ## Prerequisites
 
