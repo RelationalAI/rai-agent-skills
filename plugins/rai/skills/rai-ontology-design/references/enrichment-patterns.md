@@ -226,6 +226,16 @@ model.define(
 - Use the correct type annotation (Float, Integer, String) matching the target property's declared type.
 - Use `.ref()` aliases for BOTH the source and intermediate concepts in the `define().where()` statement.
 
+#### Aggregated scalar from a source row — Property + .lookup()
+
+When the scalar is an **aggregate** over a denormalized source table whose rows carry the target entity's identifying keys (no relationship to traverse), bind the entity by its keys with `Concept.lookup(key=…)` and reuse that one ref as the `define()` head and `.per()` key (see `rai-pyrel-coding` § Free-Variable Scoping):
+
+```python
+Period.amount_sum = model.Property(f"{Period} has {Float:amount_sum}")
+model.where(p := Period.lookup(region=src.REGION, month=src.MONTH)).define(
+    p.amount_sum(aggs.sum(src.AMOUNT).per(p)))
+```
+
 #### Entity target — Relationship + .set()
 
 Use when the final property resolves to another concept entity.

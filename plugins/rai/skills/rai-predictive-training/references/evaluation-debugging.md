@@ -136,3 +136,11 @@ If a first-pass GNN returns R² > 0.95 (regression), AUROC > 0.98, or accuracy >
 - Does the train/val/test split share entities in ways that let the model memorize — e.g., the same source entity appears in all three splits with the label tied to that entity? Especially common in `repeated_link_prediction`, where the same (source, target) pair can recur across splits.
 
 Strong features can legitimately produce high scores, but a cheap verification pass prevents shipping a leaky model.
+
+### Suspiciously-bad results (degenerate model)
+
+The opposite failure is a model that collapsed to the trivial baseline — AUROC ≈ 0.5, accuracy ≈ the majority-class rate, or near-constant probabilities (for regression, the "collapsed to the mean" symptoms above). No error is not the same as a signal: check the validation metric against the predict-baseline on every run, not only when a score looks too good. A collapse usually traces to one of:
+
+- **A leaky or non-temporal split** on a forecasting task — the model interpolated within a period it had already seen and has nothing for an unseen one (see `rai-predictive-modeling` § Define and Populate Concepts, temporal splits).
+- **A graph that carries no signal** — edges and features don't relate to the target, so message-passing adds nothing over the base rate (see `rai-predictive-modeling` § Graph and Edges).
+- **Under-training** — loss still flat at too few epochs; raise `n_epochs` and re-read the loss trajectory.

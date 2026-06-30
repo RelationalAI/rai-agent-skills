@@ -56,6 +56,8 @@ gnn = GNN(
 
 The predictive submodule (`relationalai.semantics.reasoners.predictive`) is not in every published `relationalai` release — `from relationalai.semantics.reasoners.predictive import GNN` raises `ModuleNotFoundError` on releases that pre-date it. Pin a release that ships the submodule (or install from the development branch when iterating against unreleased changes).
 
+The GNN runtime dependencies (PyTorch and the RAI GNN extensions) install as the `[gnn]` **extra**, added in 1.16.0. Declare it with an explicit floor — `relationalai[gnn]>=1.16.0` — rather than a bare `--upgrade`: the floor documents the minimum that carries the extra and keeps a resolver from settling on a release too old to provide it.
+
 ### Two-engine model: Logic + Predictive
 
 A GNN workflow runs against **two distinct reasoner engines** that must both be `READY`:
@@ -183,6 +185,10 @@ define(train_table_concept.new(Table("DB.TASKS.TRAIN").to_schema()))
 
 The GNN pipeline expects pre-existing train/val/test split tables in Snowflake. Each split table must contain: a join key column matching a source concept PK, a label/target column (train/val only), and optionally a timestamp column.
 
+**Split to match the prediction question.** When the task is a forecast — predicting a future period from past data — build the splits **temporally**: train on the earliest periods, validate on the next, test on the most recent, so the model is always scored on a period it has not seen. A random shuffle-and-slice (e.g. 80/10/10 by row) puts the same time range in every split, leaking seasonal and period-level signal into training — the validation metric looks healthy but reflects interpolation within a seen period, and the model degrades on a genuinely future one. A random split is right only when rows are exchangeable (the question has no time dimension).
+
+`has_time_column` and the `at {…}` clause are a separate concern: they make the *relationship* time-aware for the model but do **not** partition the data — the split is decided entirely by which rows you place in each task table. A forecast needs both: temporally-partitioned task tables *and* the time-aware relationship.
+
 `PropertyTransformer` and the task-table pattern also work with concepts populated from local data via `model.data(df)` -- not just `Table(...).to_schema()`. Useful when some concept data lives in local CSVs (e.g. optimizer parameters) while the graph comes from Snowflake.
 
 ---
@@ -199,6 +205,8 @@ For per-task-type Relationship Arity Rules and full code examples, see [referenc
 ---
 
 ## Graph and Edges
+
+A GNN earns its added complexity only when the **graph carries signal** — when a node's outcome depends on its neighbors' features or labels propagating across edges. If each row's own columns already explain the target, or the only edges are same-entity temporal lags, a tabular model is simpler and usually as accurate. Before committing to a GNN, confirm the edges are load-bearing: heterogeneous connections across concept types, or relational structure a flat feature table couldn't capture (see Common Pitfalls).
 
 ```python
 gnn_graph = Graph(model, directed=True, weighted=False)
@@ -326,6 +334,7 @@ For the full feature type reference including drop patterns, see [references/pro
 | Self-referential edge without `.ref()` | Same concept on both sides creates ambiguity | Use `PostRef = Post.ref()` for the destination |
 | `time_col` fields not in `datetime` list | Both lists must include the field | Add time columns to both `datetime=[...]` and `time_col=[...]` |
 | Task table concept used in edge definition | Only graph concepts participate in edges | Edges connect domain entities, not task tables |
+| Random shuffle-and-slice split on a forecasting task | Same time range lands in all three splits, leaking seasonal/future signal | Partition task tables temporally (earliest periods → train, latest → test); see § Define and Populate Concepts |
 | Missing type import | e.g. using `Date` without importing it | Add missing types to the import line |
 | Column name has spaces or special characters | Python identifier rules prevent `Concept.weight(kg)` | Use `getattr(People, "weight(kg)")` to reference the field |
 | `identify_by` key or property access doesn't match Snowflake column name | Typo or wrong column — matching is case-insensitive, but the column name must exist | Check `INFORMATION_SCHEMA.COLUMNS` / run `DESCRIBE TABLE` for the exact spelling |

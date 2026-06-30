@@ -98,6 +98,8 @@ When `has_time_column=True`, three things must move together:
 
 Setting only `has_time_column=True` without (2) raises `ValueError: has_time_column=True is set but time_col is not defined in the PropertyTransformer` from `validate_time_col` (`relationalai.semantics.reasoners.predictive.preparation`).
 
+**`has_time_column` is not a train/test split.** It makes the relationship time-aware for the model; it does not partition train/val/test by time. For a forecast, also build the task tables with a temporal split (see `rai-predictive-modeling` § Define and Populate Concepts) — these are separate requirements.
+
 ### Node Classification Example
 
 ```python

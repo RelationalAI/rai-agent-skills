@@ -334,13 +334,13 @@ Snowflake table loading follows the same `model.Table("DB.SCHEMA.TABLE")` + `loo
 
 Use `.ref()` to create independent variables of the same concept or type for pairwise expressions, multiarity value binding, and complex aggregation contexts. Use `.alias("name")` for readable debug output. The walrus operator `:=` creates inline refs inside `where()`. See [expression-rules.md](references/expression-rules.md#references-and-aliasing) for full patterns including named refs, `Float.ref()` value binding, and bracket notation.
 
-### Free-Variable Scoping: bare `Concept` vs `.ref()`
+### Free-Variable Scoping: a name and a `.ref()` are different variables
 
-Inside a single `model.where(...).require(...)` chain, references to the same Python `Concept` symbol — including those in aggregate `.per(...)` keys and aggregate inner `.where(...)` predicates — refer to ONE shared free variable. The chain is one scope; symbol identity carries throughout.
+**A PyRel statement is one logical rule: its head (`define` / `select` / `require`) and body (`where`) share logic variables by identity.** Within a `model.where(...)` chain, a bare `Concept` symbol is one free variable everywhere it appears: the head, the aggregate `.per(...)` key, and the inner `.where(...)`. Each `Concept.ref()` (and each `Concept.lookup(...)`, rooted at a fresh ref) is a different variable that shares the concept's type but not its identity; two variables unify only through an explicit equality.
 
-A `Concept`-typed Property (e.g., `Item.bin`, an FK) introduces an anonymous variable iterating over the linked concept's range. **It is NOT automatically equal to a bare reference to the linked Concept** — they are separate variables and produce a cartesian product unless explicitly linked via an equality predicate in a `.where(...)` clause.
+So a rule means what it says when its head names a variable the body grounds: bind a variable in `where()`, define on that same variable, and group by it. A head variable the body leaves free cross-products over the whole concept, raising `FDError` (a single-valued Property gets many values) or `Unground Variable`.
 
-`Concept.ref()` always creates a fresh, independent variable. Mixing bare + ref produces a cartesian product unless an equality binding links them.
+A `Concept`-typed Property (e.g., `Item.bin`, an FK) is its own case of this: it introduces an anonymous variable over the linked concept's range, which an equality predicate in `.where(...)` ties to a bare reference of that Concept.
 
 ```python
 # WRONG — Item.bin (anon var iterating bins-reached-by-items) and Bin (var over all bins)
@@ -359,13 +359,13 @@ For aggregates whose contributing rows are linked to the grouping Concept by a r
 ```python
 # CORRECT — bare IL throughout (outer where, .per, inner .where, RHS comparison)
 # all refer to the same free variable. The inner .where(SM.dest_il(IL)) is what
-# ties SM rows to that IL; it is NOT a scope boundary.
+# ties SM rows to that IL, staying in the same scope.
 model.where(IL.demand > 0).require(
     sum(SM.alloc).per(IL).where(SM.dest_il(IL)) + IL.unmet == IL.demand
 )
 ```
 
-**Cross-concept joins on shared dimensions** (e.g., `TechnicianMachinePeriod ↔ MachinePeriod` joined on `(machine, period)`) work with bare references — no `.ref()` aliasing required. The same scoping rule applies: bare `TMP` and bare `MP` are each a single free variable across the chain.
+**Cross-concept joins on shared dimensions** (e.g., `TechnicianMachinePeriod ↔ MachinePeriod` joined on `(machine, period)`) work with bare references: bare `TMP` and bare `MP` are each a single free variable across the chain.
 
 ```python
 # CORRECT — bare TMP and MP, joined on shared dims via inner .where():
@@ -376,7 +376,15 @@ model.where(TMP.machine == MP.machine, TMP.period == MP.period).require(
 )
 ```
 
-**When `.ref()` is genuinely needed:** pairwise / quadratic constraints (`Stock1, Stock2 = Stock, Stock.ref()`), self-joins inside aggregates (`T_in, T_out = Transaction.ref(), Transaction.ref()`), value binding from multiarity properties (`qty = Float.ref()`), and named refs to disambiguate multiple aggregation contexts. Don't reach for `.ref()` to "bridge scopes" in single-clause `.per(Concept)` aggregates or in cross-concept dimension joins — there is no scope boundary to bridge.
+**Same principle in a `define()`:** bind the entity by its identifying keys with `Concept.lookup(key=…)` under a walrus, then reuse that one variable as the head and the `.per()` key.
+
+```python
+# One variable `p` throughout: lookup binds it by keys; head and .per() reuse it.
+model.where(p := Period.lookup(region=src.REGION, month=src.MONTH)).define(
+    p.metric_sum(aggs.sum(src.AMOUNT).per(p)))
+```
+
+**When `.ref()` is genuinely needed:** pairwise / quadratic constraints (`Stock1, Stock2 = Stock, Stock.ref()`), self-joins inside aggregates (`T_in, T_out = Transaction.ref(), Transaction.ref()`), value binding from multiarity properties (`qty = Float.ref()`), and named refs to disambiguate multiple aggregation contexts. In single-clause `.per(Concept)` aggregates and cross-concept dimension joins, bare references already unify, so a bare `Concept` carries the whole chain.
 
 **Special case — aggregates of decision variables can't be materialized as Properties.** `model.define(Concept.total(aggs.sum(DecisionVar).per(Concept)))` decouples the aggregate from the solver's symbolic graph; later constraints reference the materialized total as a constant and the solver raises a `ValueError` complaining that the expression contains no decision variables. Keep aggregates of decision variables INLINE in `.require(...)`. Data-derived aggregates can be materialized normally.
 
