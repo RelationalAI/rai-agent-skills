@@ -44,7 +44,7 @@ Invoke the skills using the `/rai-` command.
 | 11 | [rai-prescriptive-problem-formulation](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-prescriptive-problem-formulation) | Reasoning | Formulate optimization and CSAT problems: decision variables, constraints, objectives, scenarios |
 | 12 | [rai-prescriptive-solver-management](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-prescriptive-solver-management) | Reasoning | Solver lifecycle: selection, creation, execution, diagnostics |
 | 13 | [rai-prescriptive-results-interpretation](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-prescriptive-results-interpretation) | Reasoning | Post-solve: solution extraction, status codes, quality, sensitivity |
-| 14 | [rai-cortex-integration](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-cortex-integration) | Operations | Deploy RAI models as Snowflake Cortex Agents |
+| 14 | [rai-deployment](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-deployment) | Operations | Take a model to production: deploy to a Snowflake schema and manage its lifecycle (op log, branch, merge, teardown), plus Cortex agents (early access) |
 | 15 | [rai-health](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-health) | Operations | Diagnose engine performance, failed transactions, and CDC/data-stream health |
 
 ## Prerequisites
