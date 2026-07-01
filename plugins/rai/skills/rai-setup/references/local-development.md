@@ -2,7 +2,7 @@
 
 PyRel runs against a local DuckDB database — in-memory or file-backed — with no Snowflake
 account or Native App. Use it for development, prototyping, demos, and fast iteration.
-**Requires `relationalai >= 1.13`.** Local DuckDB execution relies on deploy mode, which the
+Local DuckDB execution relies on deploy mode, which the
 package flags as experimental — use it for local work, and confirm the support stance with the
 RelationalAI team before customer-facing deliverables.
 

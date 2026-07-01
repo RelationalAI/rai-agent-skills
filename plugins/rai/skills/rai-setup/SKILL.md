@@ -32,7 +32,7 @@ Covers the [relationalai Python package](https://pypi.org/project/relationalai) 
 
 ## Prerequisites
 
-Requires Python 3.10+ and `relationalai>=1.15.0`.
+Requires Python 3.10+ and `relationalai>=1.17.0`.
 
 Some guidance carries inline *Requires relationalai ...* notes flagging capabilities that need a version above this baseline; when following those blocks, install at least the version they name.
 
@@ -99,9 +99,9 @@ Users are expected to be Snowflake users with existing credentials. Walk the use
 
 ### Step 1. Install the package
 ```bash
-pip install 'relationalai>=1.15.0'
+pip install 'relationalai>=1.17.0'
 # or
-uv add 'relationalai>=1.15.0'
+uv add 'relationalai>=1.17.0'
 ```
 
 ### Step 2. Establish the connection
@@ -121,7 +121,8 @@ Offer a small sample program using inline data. Ask the user for a domain or use
 ### Step 5. Propose next steps
 1. Adapt the sample to real Snowflake tables, or
 2. Enhance the sample with richer semantics and different analyses, or
-3. Point them at the [project templates](https://docs.relational.ai/build/templates).
+3. Point them at the [project templates](https://docs.relational.ai/build/templates), or
+4. When the model is ready to ship, take it to production with `rai-deployment` — deploy it to a Snowflake schema (then branch, collaborate, and merge), or as a Snowflake Intelligence (Cortex) agent.
 
 ---
 
@@ -193,6 +194,7 @@ Load the reference when the trigger fires — don't read them all upfront.
 ## Related Skills
 - `rai-pyrel-coding` — PyRel syntax and data loading
 - `rai-ontology-design` — domain modeling
+- `rai-deployment` — take a built model to production (schema deploy + lifecycle, or Cortex agent)
 - `rai-discovery` — surface answerable questions and route to the right reasoner
 - `rai-prescriptive-solver-management` — solver lifecycle and diagnostics (includes Gurobi usage)
 - `rai-health` — diagnose engine performance issues

@@ -1,38 +1,6 @@
----
-name: rai-cortex-integration
-description: Covers deploying RAI models as Snowflake Cortex Agents for Snowflake Intelligence. Use when deploying a model as a Cortex Agent or configuring Snowflake Intelligence.
----
+# Deploy as a Snowflake Intelligence (Cortex) agent
 
-# Snowflake Intelligence Integration
-<!-- v1-STABLE -->
-
-## Summary
-
-**What:** Operationalize a RAI knowledge graph by creating a **deployment script** that packages it as a Snowflake Intelligence (SI) agent. The deployment script is the primary output of this skill — a CLI that can preflight, deploy, update, test, and tear down the Cortex agent.
-
-**When to use:**
-- Scaffolding a deployment script to operationalize an existing RAI model as a Cortex agent
-- Configuring `DeploymentConfig` (`database`, `schema`, optional `agent_schema`, warehouse, LLM, preview flags)
-- Registering tools: `ModelVerbalizer` (default), `SourceCodeVerbalizer`, `QueryCatalog`, `DynamicQueries`, or default model tools
-- Deploying, updating, or cleaning up stored procedures and agents
-- Writing pre-defined query functions for `QueryCatalog`
-- Running `manager.preflight()` and emitting a `GRANT` block for a Snowflake admin
-- Troubleshooting deployment errors (missing grants, invalid `agent_schema`, preview flags, `init_tools` shape, payload truncation)
-
-**When NOT to use:**
-- Defining model logic (concepts, properties, relationships) — see `rai-pyrel-coding/SKILL.md`
-- Designing ontologies or data models — see `rai-ontology-design/SKILL.md`
-- Writing queries for local use (not deployment) — see `rai-querying`
-
-**Primary output:** A deployment script with CLI subcommands (`deploy`, `update`, `status`, `chat`, `teardown`, `preflight`, `setup-sql`) that manages the full agent lifecycle. See [examples/deploy.py](examples/deploy.py) for the reference implementation.
-
-**Overview:**
-1. Create a deployment script with CLI that wraps the user's model
-2. Use the script to deploy the user's model to a Snowflake Cortex Agent
-3. Test via `chat` subcommand
-4. Expose the agent to Snowflake Intelligence via `agent_schema` or the UI
-
----
+This reference covers operationalizing a built RAI model as a Snowflake Intelligence (Cortex) agent — one of the paths to prod from the [deployment hub](../SKILL.md). It assumes you already have a built, validated model; if you still need to install or connect, see `rai-setup`. The primary output is a deployment script — a CLI that can preflight, deploy, update, test, and tear down the Cortex agent — and [deploy.py](../examples/deploy.py) is the reference implementation.
 
 ## Quick Reference
 
@@ -48,7 +16,7 @@ python -m <package>.deploy preflight     # Probe grants without deploying
 python -m <package>.deploy setup-sql     # Emit a paste-ready GRANT block
 ```
 
-The script contains four key parts — see [examples/deploy.py](examples/deploy.py) for the complete reference:
+The script contains four key parts — see [deploy.py](../examples/deploy.py) for the complete reference:
 
 1. **Configuration** — constants for agent name, deployment `database`/`schema`, optional `agent_schema`, warehouse
 2. **`_build_manager()`** — creates session and `CortexAgentManager`
@@ -81,7 +49,7 @@ The goal is to produce a deployment script (e.g., `deploy.py`) that operationali
 
 ### Step 1 — Create a Snowflake Session
 
-Use `create_config().get_session(SnowflakeConnection)` to create a session from `raiconfig.yaml`. See `_build_manager()` in [examples/deploy.py](examples/deploy.py).
+Use `create_config().get_session(SnowflakeConnection)` to create a session from `raiconfig.yaml`. See `_build_manager()` in [deploy.py](../examples/deploy.py).
 
 The deployer role must have these privileges. Use `manager.print_setup_sql(deployer_role=...)` to emit a paste-ready `GRANT` block parameterized with the actual deployment values; the table below is the same content as a reference.
 
@@ -124,13 +92,13 @@ The deployer role must have these privileges. Use `manager.print_setup_sql(deplo
 | `strict_payload_check` | No | `False` | If `True`, DISCOVER truncation in the deploy-time payload-size preflight becomes a blocking error instead of a warning |
 | `sproc_config_overrides` | No | `None` | Top-level `Config` field overrides applied to every tool's `Model.config` inside the sproc sandbox. Example: `{"data": {"wait_for_stream_sync": False}}` to skip stream-sync waits for read-only ad-hoc queries |
 
-See `_build_manager()` in [examples/deploy.py](examples/deploy.py) for a complete construction example.
+See `_build_manager()` in [deploy.py](../examples/deploy.py) for a complete construction example.
 
 ### Step 3 — Write the `init_tools` Function
 
-The `init_tools` function is executed inside each stored procedure invocation. It must be **self-contained** — do not close over local runtime state (sessions, connections, dataframes). Import your model code inside the function so it resolves from the packaged sproc code and initializes within the sproc session. See `init_tools()` in [examples/deploy.py](examples/deploy.py).
+The `init_tools` function is executed inside each stored procedure invocation. It must be **self-contained** — do not close over local runtime state (sessions, connections, dataframes). Import your model code inside the function so it resolves from the packaged sproc code and initializes within the sproc session. See `init_tools()` in [deploy.py](../examples/deploy.py).
 
-**Three configuration levels** — each adds more capability via `ToolRegistry.add()`. [examples/deploy.py](examples/deploy.py) shows the recommended (level 2) form; the snippets below show the registry shape for each level.
+**Three configuration levels** — each adds more capability via `ToolRegistry.add()`. [deploy.py](../examples/deploy.py) shows the recommended (level 2) form; the snippets below show the registry shape for each level.
 
 1. **Default** — model discovery and schema verbalization only (no queries).
 
@@ -204,7 +172,7 @@ Each catalog query function must:
 - Have a clear **docstring** — used as the query description shown to the agent
 - Have a `__name__` attribute — used as the query identifier (the name `"dynamic"` is reserved)
 
-See [examples/model/queries.py](examples/model/queries.py) for a complete query definition.
+See [queries.py](../examples/model/queries.py) for a complete query definition.
 
 Prefer **module-level zero-argument query functions** imported inside `init_tools()`. This keeps `__name__` and `__doc__` intact for `QueryCatalog` without wrappers or partials.
 
@@ -222,7 +190,7 @@ For open-ended dimensional analysis and ad hoc filtering/aggregation, Snowflake 
 
 ### Step 6 — CLI Subcommands
 
-Wire the manager methods into CLI subcommands using `argparse`. Each command maps to a single manager call. See [examples/deploy.py](examples/deploy.py) for the complete implementation.
+Wire the manager methods into CLI subcommands using `argparse`. Each command maps to a single manager call. See [deploy.py](../examples/deploy.py) for the complete implementation.
 
 | Command | Manager method | Notes |
 |---------|---------------|-------|
@@ -335,7 +303,7 @@ After a successful deploy, inform the user of these next steps:
 
 A successful `deploy` means the sprocs and agent exist — it does *not* mean the agent answers correctly. Permission gaps, stale imports, an invalid `llm` choice, missing `allow_preview`, or a model that imports cleanly locally but fails inside the sproc sandbox all surface only at runtime, often as terse "tool error" messages in the agent's reply.
 
-See [examples/debug.py](examples/debug.py) for a runnable script that performs the three checks below in order. Copy it alongside `deploy.py`, keep the configuration block in sync, and run `python -m <package>.debug` from the project root.
+See [debug.py](../examples/debug.py) for a runnable script that performs the three checks below in order. Copy it alongside `deploy.py`, keep the configuration block in sync, and run `python -m <package>.debug` from the project root.
 
 **1. Describe the agent.** Fetch the agent spec via the Snowflake API to confirm what's actually registered: the tool names, their input schemas, and the bound stored procedures. If a tool is missing from the spec, the orchestrator can't call it; if a tool resource points at the wrong schema, every call returns a "does not exist" error.
 
@@ -438,6 +406,6 @@ Emit a paste-ready SQL block for an admin with `manager.print_setup_sql(deployer
 
 | Pattern | Description | File |
 |---------|-------------|------|
-| **Deployment script** | **Complete CLI with preflight/setup-sql/deploy/update/status/chat/teardown — primary reference. Uses the recommended catalog + dynamic queries form (level 2); see Step 3 for level 1 and level 3 registry shapes** | [**examples/deploy.py**](examples/deploy.py) |
-| Debug script | Describes the deployed agent, calls each sproc directly, and traces a chat turn. Run after a successful `deploy` when the agent misbehaves at runtime | [examples/debug.py](examples/debug.py) |
-| Model modules | Core, computed, and query modules for the recommended zero-arg `init_tools()` pattern | [examples/model/](examples/model/) |
+| **Deployment script** | **Complete CLI with preflight/setup-sql/deploy/update/status/chat/teardown — primary reference. Uses the recommended catalog + dynamic queries form (level 2); see Step 3 for level 1 and level 3 registry shapes** | [**deploy.py**](../examples/deploy.py) |
+| Debug script | Describes the deployed agent, calls each sproc directly, and traces a chat turn. Run after a successful `deploy` when the agent misbehaves at runtime | [debug.py](../examples/debug.py) |
+| Model modules | Core, computed, and query modules for the recommended zero-arg `init_tools()` pattern | [model/](../examples/model/) |
