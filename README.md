@@ -32,24 +32,20 @@ Invoke the skills using the `/rai-` command.
 | # | Skill | Area | Description |
 |:--|:------|:-----|:---------------------------------------------------------------------|
 | 1 | [rai-setup](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-setup) | Setup | First-time install, Snowflake connection, and all configuration including `raiconfig.yaml`, reasoners, engines |
-| 2 | [rai-pyrel-coding](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-pyrel-coding) | Development | Language syntax: imports, types, concepts, properties, data loading |
-| 3 | [rai-build-starter-ontology](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-build-starter-ontology) | Ontology | Build a first ontology from Snowflake tables or local data |
-| 4 | [rai-ontology-design](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-ontology-design) | Ontology | Domain modeling: concepts, relationships, data mapping, enrichment |
-| 5 | [rai-rules-authoring](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-rules-authoring) | Ontology | Business rules as PyRel derived properties: validation, classification, alerting |
-| 6 | [rai-querying](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-querying) | Reasoning | Query construction: aggregation, filtering, joins, ordering, export |
-| 7 | [rai-discovery](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-discovery) | Reasoning | Surface answerable questions, classify by reasoner type, route to workflow |
-| 8 | [rai-graph-analysis](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-graph-analysis) | Reasoning | Graph algorithms: centrality, community detection, reachability, similarity |
-| 9 | [rai-predictive-modeling](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-predictive-modeling) | Reasoning | Build graph neural network (GNN) models: data loading, task relationships, edges, feature transformers |
-| 10 | [rai-predictive-training](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-predictive-training) | Reasoning | Train GNNs, generate predictions, evaluate results, manage trained models |
-| 11 | [rai-prescriptive-problem-formulation](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-prescriptive-problem-formulation) | Reasoning | Formulate optimization and CSAT problems: decision variables, constraints, objectives, scenarios |
-| 12 | [rai-prescriptive-solver-management](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-prescriptive-solver-management) | Reasoning | Solver lifecycle: selection, creation, execution, diagnostics |
-| 13 | [rai-prescriptive-results-interpretation](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-prescriptive-results-interpretation) | Reasoning | Post-solve: solution extraction, status codes, quality, sensitivity |
-| 14 | [rai-deployment](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-deployment) | Operations | Take a model to production: deploy to a Snowflake schema and manage its lifecycle (op log, branch, merge, teardown), plus Cortex agents (early access) |
-| 15 | [rai-health](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-health) | Operations | Diagnose engine performance, failed transactions, and CDC/data-stream health |
+| 2 | [rai-pyrel](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-pyrel) | Development | PyRel v1 language: modeling syntax, data loading, business rules as derived properties, and query construction (aggregation, filtering, joins, export) |
+| 3 | [rai-ontology](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-ontology) | Ontology | Build and evolve ontologies: starter builds from Snowflake tables or local data, plus domain modeling (concepts, relationships, identity, data mapping, enrichment) |
+| 4 | [rai-discovery](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-discovery) | Reasoning | Surface answerable questions, classify by reasoner type, route to workflow |
+| 5 | [rai-graph-analysis](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-graph-analysis) | Reasoning | Graph algorithms: centrality, community detection, reachability, similarity, path enumeration |
+| 6 | [rai-predictive-modeling](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-predictive-modeling) | Reasoning | Build graph neural network (GNN) models: data loading, task relationships, edges, feature transformers |
+| 7 | [rai-predictive-training](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-predictive-training) | Reasoning | Train GNNs, generate predictions, evaluate results, manage trained models |
+| 8 | [rai-prescriptive-problem](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-prescriptive-problem) | Reasoning | Formulate optimization and CSAT problems (decision variables, constraints, objectives), plus solver selection and pre-solve validation |
+| 9 | [rai-prescriptive-results](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-prescriptive-results) | Reasoning | Run solves and interpret output: execution, diagnostics, status codes, solution extraction, sensitivity, infeasibility |
+| 10 | [rai-deployment](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-deployment) | Operations | Take a model to production: deploy to a Snowflake schema and manage its lifecycle (op log, branch, merge, teardown), plus Cortex agents (early access) |
+| 11 | [rai-health](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-health) | Operations | Diagnose engine performance, failed transactions, and CDC/data-stream health |
 
 ## Prerequisites
 
-**Requires `relationalai` (PyRel) v1.17+**
+**Requires `relationalai` (PyRel) v1.20.1+**
 
 The RelationalAI Native App for Snowflake must be installed in your account by an administrator.
 
