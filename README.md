@@ -46,6 +46,7 @@ Invoke the skills using the `/rai-` command.
 | 13 | [rai-prescriptive-results-interpretation](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-prescriptive-results-interpretation) | Reasoning | Post-solve: solution extraction, status codes, quality, sensitivity |
 | 14 | [rai-deployment](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-deployment) | Operations | Take a model to production: deploy to a Snowflake schema and manage its lifecycle (op log, branch, merge, teardown), plus Cortex agents (early access) |
 | 15 | [rai-health](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-health) | Operations | Diagnose engine performance, failed transactions, and CDC/data-stream health |
+| 16 | [rai-cost-analysis](https://github.com/RelationalAI/rai-agent-skills/tree/main/plugins/rai/skills/rai-cost-analysis) | Operations | Look up Snowflake credit consumption, cost estimates, and Marketplace paid usage for an account |
 
 ## Prerequisites
 
