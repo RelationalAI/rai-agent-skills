@@ -27,7 +27,7 @@ Discovery-to-routing walkthroughs for prescriptive reasoner questions. Each exam
  "scenario_parameter": "excluded_entity (binary: force flow=0 for that entity's activities)"}
 ```
 
-### Modeling needs (→ rai-ontology-design, rai-prescriptive-problem-formulation)
+### Modeling needs (→ rai-ontology, rai-prescriptive-problem)
 - Decision concept: `ComponentFlow` defined on `Activity` with `quantity` variable
 - Slack concept: `UnmetComponent` per (Resource, Entity) for infeasibility handling
 - Variables: `ComponentFlow.quantity` (continuous, 0 to capacity), `UnmetComponent.quantity` (continuous, >= 0)
@@ -64,7 +64,7 @@ Discovery-to-routing walkthroughs for prescriptive reasoner questions. Each exam
                          "min_reliability (hard threshold, exclude entities below)"]}
 ```
 
-### Modeling needs (→ rai-ontology-design, rai-prescriptive-problem-formulation)
+### Modeling needs (→ rai-ontology, rai-prescriptive-problem)
 - Decision concept: `AllocationFlow` defined on `Activity` with `quantity` variable
 - Slack concept: `UnmetDemand` per Resource
 - Reliability integration: `Entity.reliability_score` as constraint parameter

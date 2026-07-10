@@ -33,10 +33,10 @@ description: Graph algorithm selection and execution on PyRel v1 models — cons
 
 **When NOT to use:**
 - Discovering whether graph analysis is appropriate for a dataset — see `rai-discovery`
-- PyRel syntax reference (imports, types, model patterns) — see `rai-pyrel-coding`
-- Ontology design decisions (concept modeling, data mapping) — see `rai-ontology-design`
-- Optimization formulation (variables, constraints, objectives) — see `rai-prescriptive-problem-formulation`
-- Business rule authoring (validation, classification, alerting) — see `rai-rules-authoring`
+- PyRel syntax reference (imports, types, model patterns) — see `rai-pyrel`
+- Ontology design decisions (concept modeling, data mapping) — see `rai-ontology`
+- Optimization formulation (variables, constraints, objectives) — see `rai-prescriptive-problem`
+- Business rule authoring (validation, classification, alerting) — see `rai-pyrel`
 - GNN graph construction for predictive pipelines — see `rai-predictive-modeling`
 
 **Overview (process steps):**
@@ -62,7 +62,7 @@ from relationalai.semantics.std import aggregates, floats
 model = Model("my_model")
 ```
 
-**Note:** `where`, `define`, and `data` are available as standalone imports and as `model.where()`, `model.define()`, `model.data()` methods. Both are equivalent for single-model scripts. Use the `model.*` form when multiple Models exist — standalone functions fail with `"Multiple Models have been defined."`. See `rai-pyrel-coding` for data loading patterns with `model.data()`.
+**Note:** `where`, `define`, and `data` are available as standalone imports and as `model.where()`, `model.define()`, `model.data()` methods. Both are equivalent for single-model scripts. Use the `model.*` form when multiple Models exist — standalone functions fail with `"Multiple Models have been defined."`. See `rai-pyrel` for data loading patterns with `model.data()`.
 
 ### Graph constructor — three patterns
 

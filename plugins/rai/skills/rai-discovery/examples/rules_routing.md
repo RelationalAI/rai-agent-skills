@@ -25,7 +25,7 @@ Discovery-to-routing walkthroughs for rules reasoner questions. Each example sho
  "output": "unary relationship: Entity.is_unreliable()"}
 ```
 
-### Modeling needs (→ rai-ontology-design)
+### Modeling needs (→ rai-ontology)
 - Computed property: `at_risk_activity_count` via `count(Activity).where(Activity.is_at_risk()).per(Entity)`
 - Computed property: `total_activity_count` via `count(Activity).per(Entity)`
 - Derived ratio or direct threshold comparison on `reliability_score`
@@ -60,7 +60,7 @@ Discovery-to-routing walkthroughs for rules reasoner questions. Each example sho
  "output": "unary relationship: Activity.violates_sla()"}
 ```
 
-### Modeling needs (→ rai-ontology-design)
+### Modeling needs (→ rai-ontology)
 - Properties already on Activity: `risk_value`, `quantity`, `status`
 - Join to Agreement/Contract for SLA thresholds if not on Activity directly
 - Output: unary relationship `Activity.violates_sla()` + optional `Activity.violation_reason` property
@@ -97,7 +97,7 @@ Discovery-to-routing walkthroughs for rules reasoner questions. Each example sho
  "output": "Entity.value_tier property"}
 ```
 
-### Modeling needs (→ rai-ontology-design)
+### Modeling needs (→ rai-ontology)
 - Computed aggregates: `total_activity_value` = sum of activity totals per entity
 - Computed property: `account_age_days` from signup date
 - Enum-subconcept pattern or direct property assignment for tiers

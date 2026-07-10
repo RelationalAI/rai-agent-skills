@@ -1,6 +1,6 @@
-# Deploy as a Snowflake Intelligence (Cortex) agent
+# Deploy as a Snowflake CoWork (Cortex) agent
 
-This reference covers operationalizing a built RAI model as a Snowflake Intelligence (Cortex) agent — one of the paths to prod from the [deployment hub](../SKILL.md). It assumes you already have a built, validated model; if you still need to install or connect, see `rai-setup`. The primary output is a deployment script — a CLI that can preflight, deploy, update, test, and tear down the Cortex agent — and [deploy.py](../examples/deploy.py) is the reference implementation.
+This reference covers operationalizing a built RAI model as a Snowflake CoWork (Cortex) agent — one of the paths to prod from the [deployment hub](../SKILL.md). It assumes you already have a built, validated model; if you still need to install or connect, see `rai-setup`. The primary output is a deployment script — a CLI that can preflight, deploy, update, test, and tear down the Cortex agent — and [deploy.py](../examples/deploy.py) is the reference implementation.
 
 ## Quick Reference
 
@@ -82,6 +82,7 @@ The deployer role must have these privileges. Use `manager.print_setup_sql(deplo
 | `warehouse` | No | None | Warehouse for RAI tool execution. SI users need USAGE. If omitted, tools use the caller's session warehouse |
 | `stage_name` | No | `"rai_sprocs"` | Name of the Snowflake stage for storing sproc dependencies |
 | `manage_stage` | No | `True` | Automatically create/drop the stage during deploy/cleanup. Set `False` for a pre-existing stage |
+| `prefix` | No | `None` | Namespaces the physical stored-procedure names so multiple deployments can share one schema (e.g. `SALES_RAI_DISCOVER_MODELS`). `None` leaves names unprefixed — identical to prior behavior. Restricted-environment fallback; prefer a schema per deployment. See [Deploying multiple agents to one schema](#deploying-multiple-agents-to-one-schema) |
 | `llm` | No | `"claude-opus-4-6"` | LLM for agent orchestration. Must be available in Snowflake Cortex |
 | `query_timeout_s` | No | `300` | Timeout in seconds for stored procedure execution |
 | `budget_seconds` | No | None | Time budget for agent execution |
@@ -90,7 +91,7 @@ The deployer role must have these privileges. Use `manager.print_setup_sql(deplo
 | `artifact_repository` | No | `"snowflake.snowpark.pypi_shared_repository"` | Artifact repository for Python packages |
 | `allow_preview` | No | `False` | Enable preview capabilities — `RAI_QUERY_MODEL` (catalog + dynamic queries) |
 | `strict_payload_check` | No | `False` | If `True`, DISCOVER truncation in the deploy-time payload-size preflight becomes a blocking error instead of a warning |
-| `sproc_config_overrides` | No | `None` | Top-level `Config` field overrides applied to every tool's `Model.config` inside the sproc sandbox. Example: `{"data": {"wait_for_stream_sync": False}}` to skip stream-sync waits for read-only ad-hoc queries |
+| `sproc_config_overrides` | No | `None` | Top-level `Config` field overrides applied to every tool's `Model.config` inside the sproc sandbox. Example: `{"data": {"wait_for_stream_sync": False}}` to skip stream-sync waits for read-only ad-hoc queries. Also the hook for **deploy-mode reads** — pass `{"deployment": <DeploymentConfig object>}` to serve precomputed results instead of recomputing (Step 8) |
 
 See `_build_manager()` in [deploy.py](../examples/deploy.py) for a complete construction example.
 
@@ -286,6 +287,77 @@ All three are facets of one root cause — the Workspace's managed filesystem re
 
 ---
 
+### Step 8 — Serve precomputed results (deploy-mode integration)
+
+By default each RAI sproc rebuilds the model and **recomputes** via the reasoner on every query. If the model is *also* deployed in **deploy mode** — its outputs materialized to a Snowflake schema (see [Deploy](../SKILL.md#deploy-the-foundation)) — you can point the agent at those materialized tables instead. Every query then runs as a SQL read/aggregate over precomputed data, with no reasoner run: cheaper, more consistent, and shareable with non-agent consumers.
+
+**How it works.** The in-sproc `Model` selects its executor from `config.deployment_enabled`. Injecting a `deployment` block via `sproc_config_overrides` (Step 2) flips the whole in-sproc model into deploy mode, so it reads the materializations. This applies uniformly to **both catalog and dynamic queries** — they share the same `.to_df()`/executor path — so no per-query changes are needed.
+
+**Wire it up — two things, using the *same* deployment spec for both.** Define the spec once so the model deploy and the agent agree (a matching deploy fingerprint is required):
+
+```python
+from relationalai.config.config_deployment_fields import (
+    DeploymentConfig as ModelDeploymentConfig, OutputsConfig, ScheduleConfig,
+)
+
+# The model's deploy-mode spec — reuse for BOTH the model deploy and the agent.
+MODEL_DEPLOYMENT = ModelDeploymentConfig(
+    schema="MY_DB.MY_MODEL_SCHEMA",    # where model outputs are materialized
+    auto_deploy=False,                  # the agent only reads; it never re-deploys
+    schedules={"standard": ScheduleConfig(interval_s=300)},
+    outputs=OutputsConfig(type="dynamic_table", schedule="standard"),
+)
+```
+
+1. **Deploy the model in deploy mode** with that spec — via `rai models deploy` (with the block set under `deployment:` in `raiconfig.yaml`), or in-process: `model.config.deployment = MODEL_DEPLOYMENT; model._executor = None; model.deploy(wait=True)`.
+2. **Pass the same spec to the agent** as a built object:
+
+   ```python
+   DeploymentConfig(
+       agent_name="MY_AGENT", database="MY_DB", schema="MY_AGENT_SCHEMA",
+       warehouse="MY_WH", allow_preview=True,
+       sproc_config_overrides={"deployment": MODEL_DEPLOYMENT},
+   )
+   ```
+
+`init_tools` and the query surface are unchanged.
+
+**Pass a built `DeploymentConfig`, not a dict.** `sproc_config_overrides` merges nested values with `model_copy(update=...)`, which skips pydantic alias resolution — a raw `{"deployment": {"schema": ...}}` sets a bogus attribute (the field is `schema_`, aliased `schema`) and the override silently no-ops, so the agent falls back to recomputing. A constructed `DeploymentConfig` object is not a mapping, so it is set directly and correctly.
+
+**Notes and caveats:**
+
+- **Freshness.** With `auto_deploy=False` the agent never refreshes on its own; results are only as current as the last scheduled refresh (or a manual redeploy). Set `outputs.schedule` / `deployment.schedules` to the cadence you need (`interval_s=0, run_on_deploy=True` populates once and freezes — useful for demos).
+- **Version match.** The process that deploys the model and the sproc that reads it must use the **same** `relationalai` version, or deploy-state verification fails with `NO_DEPLOY_STATE` ("model has not been deployed or its deployment state cannot be verified"). This is normally automatic — the sproc installs `relationalai==<your installed version>` — so just avoid deploying the model from one version and the agent from another.
+- **Grants.** SI users need `SELECT` on the model's deploy schema (`MY_DB.MY_MODEL_SCHEMA`) in addition to the usual sproc grants in Deployed Stored Procedures.
+- **What is precomputed.** `deploy` materializes the model's **concepts, properties, and derived relations** — not the query functions. A catalog aggregation still executes as SQL at query time, but over the materialized tables (no reasoner). To precompute a specific result, model it as a derived property/concept so it becomes a materialized output.
+
+---
+
+## Deploying multiple agents to one schema
+
+Each deployment creates four fixed-name stored procedures (`RAI_DISCOVER_MODELS`, `RAI_VERBALIZE_MODEL`, `RAI_EXPLAIN_CONCEPT`, `RAI_QUERY_MODEL`). Two deployments pointed at the **same** `database`.`schema` would therefore overwrite each other's sprocs. **Prefer a dedicated schema per deployment** — it is the default and the recommended layout, and every example here assumes it.
+
+For **restricted environments** where you cannot provision a schema per agent, set a distinct `prefix` on each `DeploymentConfig`. It namespaces the *physical* procedure names so the deployments coexist in one schema:
+
+```python
+DeploymentConfig(agent_name="SALES_ASSISTANT", database="APPS", schema="CORTEX",
+                 warehouse="MY_WH", prefix="SALES")  # -> SALES_RAI_DISCOVER_MODELS, ...
+DeploymentConfig(agent_name="OPS_ASSISTANT",   database="APPS", schema="CORTEX",
+                 warehouse="MY_WH", prefix="OPS")    # -> OPS_RAI_DISCOVER_MODELS, ...
+```
+
+How it behaves:
+
+- **Agent-facing tool names are unchanged.** The prefix affects only the physical Snowflake procedure names, not how the agent calls its tools — so orchestration/instruction text is identical across deployments.
+- **One shared stage.** The `rai_sprocs` stage is created with `CREATE STAGE IF NOT EXISTS` (not `OR REPLACE`), so multiple deployments safely share it. Snowpark inlines the small sproc closures into the DDL and content-addresses the packaged `imports` under checksum paths, so nothing collides. A single `GRANT ... ON STAGE rai_sprocs` and `GRANT EXECUTE ON ALL PROCEDURES IN SCHEMA ...` cover every prefixed deployment.
+- **Cache-bust is scoped.** On deploy and cleanup the framework runs `REMOVE @rai_sprocs/<PREFIX>_RAI_*/` for that deployment only, recovering the refresh that `OR REPLACE` used to provide without disturbing siblings.
+- **Cleanup is prefix-scoped.** `cleanup()` on a prefixed deployment drops only that deployment's prefixed sprocs and removes only its code from the shared stage; it leaves the shared stage (and any sibling deployments) in place. An unprefixed deployment still drops the stage it manages, as before.
+- **Status ignores the shared stage.** For a prefixed deployment `status()` reports on the agent and its own sprocs only, so a fully torn-down prefixed deployment still reads as `clean()` even while the shared stage lingers.
+
+`prefix=None` (the default) is identical to prior behavior in every respect.
+
+---
+
 ## After Deployment
 
 After a successful deploy, inform the user of these next steps:
@@ -294,7 +366,7 @@ After a successful deploy, inform the user of these next steps:
 2. **Test** — run the `chat` subcommand with a sample question (e.g., `"What can I ask about?"`) to confirm the agent responds correctly.
 3. **Find the agent in Snowflake** — navigate to **AI & ML > Agents** in the Snowflake UI. The agent appears under `agent_schema` if you set it, otherwise under `database`.`schema`.
 4. **Preview the agent** — click the agent name to open its detail page. Use the **Chat** tab to interact with it directly and verify it answers domain questions correctly.
-5. **Expose it in Snowflake Intelligence** — if you deployed the agent directly to `SNOWFLAKE_INTELLIGENCE.AGENTS` via `agent_schema`, it is already in the SI schema. Otherwise, use **Add to Snowflake Intelligence** on the agent detail page to promote it.
+5. **Expose it in Snowflake CoWork** — if you deployed the agent directly to `SNOWFLAKE_INTELLIGENCE.AGENTS` via `agent_schema`, it is already in the SI schema. Otherwise, use **Add to Snowflake CoWork** on the agent detail page to promote it.
 6. **Monitor conversations** — the **Monitoring** tab on the agent detail page shows all conversations (both SI and programmatic via `manager.chat()`), including full tool-call traces for debugging.
 
 ---
@@ -358,6 +430,8 @@ Four CALLER'S RIGHTS stored procedures are created in the deployment schema (`da
 | `RAI_EXPLAIN_CONCEPT` | Explains a single concept, a single catalog query (`q:<id>`), a computed-predicate drill-down (`Concept.<member>`), or — for dynamic-mode models — the full dynamic-query reference (`"dynamic"`) | GA |
 | `RAI_QUERY_MODEL` | Executes a named catalog query (by id) or a dynamic query (`{"id":"dynamic","args":{"spec":{...}}}`) | PREVIEW |
 
+When `prefix` is set on `DeploymentConfig`, the physical procedure names are namespaced (e.g. `SALES_RAI_DISCOVER_MODELS`) so several deployments can share one schema — see [Deploying multiple agents to one schema](#deploying-multiple-agents-to-one-schema). The agent-facing tool names are unchanged.
+
 All sprocs run under the **invoking user's privileges**, not the owner's — Snowflake's existing RBAC is the single source of truth for data governance across all agent interactions. No privilege escalation is possible.
 
 Every sproc returns a uniform response envelope: `{content, kind, truncated, truncation_reason, applied_limit?}`. Errors land in the envelope too, as typed `{kind, path, available, hint}` payloads under `content`, so the agent has a single way to read both success and failure and can self-correct on the next turn without a round trip.
@@ -387,6 +461,7 @@ Emit a paste-ready SQL block for an admin with `manager.print_setup_sql(deployer
 | `use schema` fails during deploy | Deployment schema doesn't exist | Run `CREATE SCHEMA IF NOT EXISTS` before deploying. If `agent_schema` is different, ensure that schema exists and the deployer can use it too |
 | Object "does not exist" errors from Snowflake | Role lacks required privileges — Snowflake reports missing permissions as "does not exist" | Run `manager.preflight()` to get a named-grant fix list; `manager.print_setup_sql(deployer_role=...)` emits a paste-ready block |
 | Agent does not show up where expected in the UI | Agent was created in `database`.`schema`, not the SI schema | Set `agent_schema="SNOWFLAKE_INTELLIGENCE.AGENTS"` or promote the deployed agent from **AI & ML > Agents** in the UI |
+| A second deployment to the same schema overwrote the first agent's tools | Both created the same fixed-name sprocs; the second replaced the first | Deploy each agent to its own schema (preferred). In restricted environments, set a distinct `prefix` per deployment — see [Deploying multiple agents to one schema](#deploying-multiple-agents-to-one-schema) |
 | `agent_schema` validation fails | Value is not a two-part `DATABASE.SCHEMA` name | Use a fully qualified two-part name such as `SNOWFLAKE_INTELLIGENCE.AGENTS` |
 | `QueryCatalog` rejects a query definition | Wrapped queries lost `__name__` or `__doc__` metadata, or the function name is `"dynamic"` | Prefer module-level query functions with docstrings; avoid `functools.partial`; rename functions away from the reserved id `"dynamic"` |
 | Sproc fails at runtime with table-not-found | Model references a table unavailable in the sproc context | Restructure entity seeding to make that table optional |
@@ -398,6 +473,8 @@ Emit a paste-ready SQL block for an admin with `manager.print_setup_sql(deployer
 | `[Errno 5] Input/output error` during `deploy()` in a Snowflake Workspace | Snowpark recursively reads a directory import, or PyRel's tracer writes `spans.jsonl`, against the Workspace's managed filesystem | Use file-level `imports` tuples (not directories) and `set_tracer(StubTracer())` at the top of the script — see Step 7 |
 | `discover_imports()` warns `File not found: /tmp/ipykernel_*.py` and returns `[]` | Running in a Workspace/notebook — the executing cell has no real source file on disk | Don't rely on `discover_imports()` there; pass explicit file-level `imports` tuples — see Step 7 |
 | Preflight warns about DISCOVER truncation | Catalog has many queries and/or prose-rich descriptions | Trim descriptions or split into multiple registered models. Set `strict_payload_check=True` to make DISCOVER truncation block deploys |
+| Agent recomputes instead of reading precomputed deploy-mode tables | `sproc_config_overrides={"deployment": ...}` passed as a raw dict — nested merge skips the `schema`→`schema_` alias, so the override no-ops | Pass a **built** `ModelDeploymentConfig` object as the value (not a dict) — see Step 8 |
+| Deploy-mode agent query fails: "deployment state cannot be verified" / `NO_DEPLOY_STATE` | Model was deployed with a different `relationalai` version than the sproc reads with | Deploy the model and the agent from the same `relationalai` version — see Step 8 |
 | Snowflake error during `deploy()` after preflight passed | Race or grant edge case | Re-run `manager.preflight()`; the report formats a SQL fix block. For one-off iteration, `deploy(skip_preflight=True)` after fixing |
 
 ---

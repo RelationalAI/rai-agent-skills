@@ -23,7 +23,7 @@ Discovery-to-routing walkthroughs for graph reasoner questions. Each example sho
  "output_binding": "(node, centrality_score)"}
 ```
 
-### Modeling needs (→ rai-ontology-design)
+### Modeling needs (→ rai-ontology)
 - Graph construction: undirected `NodeDependencyGraph` with Node as nodes, Activity as edges
 - Derived properties: `count_is_source` / `count_is_target` for edge weights
 - PyRel: `Graph(model, directed=False, weighted=True, node_concept=Node)`
@@ -56,7 +56,7 @@ Discovery-to-routing walkthroughs for graph reasoner questions. Each example sho
  "output_binding": "(source_entity, target_entity) reachable pairs"}
 ```
 
-### Modeling needs (→ rai-ontology-design)
+### Modeling needs (→ rai-ontology)
 - Graph construction: directed `EntityGraph` with Entity as nodes, `provides_to` as edges
 - Derived relationship: `Entity.provides_to` from Allocation (source_entity → target_entity)
 - Target concept: `is_high_priority` filter (e.g., role='CONSUMER' AND priority_tier='HIGH')
@@ -91,7 +91,7 @@ Discovery-to-routing walkthroughs for graph reasoner questions. Each example sho
  "output_binding": "(source_entity, affected_entity) reachable pairs"}
 ```
 
-### Modeling needs (→ rai-ontology-design)
+### Modeling needs (→ rai-ontology)
 - Same `EntityGraph` as upstream reachability — no additional graph construction needed
 - Join path to Resource: `target.receives_allocation.Resource` for resource impact
 - Join path to quantities: `Allocation.quantity` for volume at risk

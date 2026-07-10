@@ -45,7 +45,7 @@ Options:
 - `--name` — which model in the file to deploy; required only when the file defines several (otherwise the last-defined model is used).
 - `--wait` — block until the first refresh triggered by the deploy completes. Use it in scripted/test flows for deterministic ordering.
 - `--force` — override the `shared_model.py` edit guard and divergence checks.
-- `--schema` — **ignored** (RAI-51584). The target is always `deployment.schema`; change it with `rai models switch`.
+- `--schema` — overrides `deployment.schema` for this deploy (working since 1.18; ignored on earlier releases — RAI-51584). For a persistent change, use `rai models switch`.
 
 ## Outcome messages
 

@@ -42,7 +42,7 @@ Prefer `--delete` for a clean lifecycle. A branch merged **without** it stays as
 
 ## Tear down a model or branch
 
-`rai models teardown` drops the **current model** and everything in it — its schema, its meta schema, and its op log. To tear down a different model, `rai models switch` to it first (as of 1.17 there is no `--name`).
+`rai models teardown` drops the **current model** and everything in it — its schema, its meta schema, and its op log. To tear down a different model, `rai models switch` to it first (as of 1.20 there is no `--name`).
 
 **It is a dry run by default**: it prints exactly what would be dropped and stops. Re-run with `--force` to perform it.
 

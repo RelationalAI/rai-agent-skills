@@ -68,7 +68,7 @@ For each rules suggestion, provide an implementation hint with these fields:
 
 ## Implementation Approach
 
-After selecting a rules suggestion, use `rai-rules-authoring` for the full authoring workflow (NL parsing → rule type classification → ontology mapping → PyRel translation → validation). The implementation hint fields above map directly to the authoring workflow's inputs.
+After selecting a rules suggestion, use `rai-pyrel` for the full authoring workflow (NL parsing → rule type classification → ontology mapping → PyRel translation → validation). The implementation hint fields above map directly to the authoring workflow's inputs.
 
 ---
 
@@ -130,13 +130,13 @@ For each chained suggestion, the implementation hint should include `downstream_
 
 ## Execution Skill Handoff
 
-After selecting a rules suggestion from discovery, the execution workflow uses the `rai-rules-authoring` skill for NL-to-PyRel translation, rule type classification, pattern selection, and validation.
+After selecting a rules suggestion from discovery, the execution workflow uses the `rai-pyrel` skill for NL-to-PyRel translation, rule type classification, pattern selection, and validation.
 
 **Question discovery** (`rai-discovery` + this reference file) answers: "What rules can this data support?"
-**Execution** (`rai-rules-authoring`) answers: "How do I translate the rule to PyRel and validate it?"
+**Execution** (`rai-pyrel`) answers: "How do I translate the rule to PyRel and validate it?"
 
 The implementation hint from discovery provides the starting point for execution:
-- `rule_type` → maps to `rai-rules-authoring` canonical pattern for that type
-- `source_concept` + `condition_properties` → maps to `rai-rules-authoring` ontology mapping step
-- `output_type` + `output_property` → maps to `rai-rules-authoring` output declaration pattern
-- `join_path` → maps to `rai-rules-authoring` cross-entity rule design
+- `rule_type` → maps to `rai-pyrel` canonical pattern for that type
+- `source_concept` + `condition_properties` → maps to `rai-pyrel` ontology mapping step
+- `output_type` + `output_property` → maps to `rai-pyrel` output declaration pattern
+- `join_path` → maps to `rai-pyrel` cross-entity rule design

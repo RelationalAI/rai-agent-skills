@@ -1,6 +1,6 @@
 ---
 name: rai-setup
-description: Setup and configuration for RelationalAI — first-time install walkthrough and all raiconfig.yaml tuning. Use when installing RAI, connecting to Snowflake, running RAI locally on DuckDB for development, or editing raiconfig.yaml. Not for writing PyRel model code (see rai-pyrel-coding) or solver usage and diagnostics (see rai-prescriptive-solver-management).
+description: Setup and configuration for RelationalAI — first-time install walkthrough and all raiconfig.yaml tuning. Use when installing RAI, connecting to Snowflake, running RAI locally on DuckDB for development, or editing raiconfig.yaml. Not for writing PyRel model code (see rai-pyrel) or solver usage and diagnostics (see rai-prescriptive-results).
 ---
 
 # RelationalAI Setup & Configuration
@@ -21,9 +21,9 @@ Covers the [relationalai Python package](https://pypi.org/project/relationalai) 
 - Troubleshooting connection or config errors
 
 **When NOT to use:**
-- Writing PyRel models or queries — see `rai-pyrel-coding`
-- Designing ontology structure — see `rai-ontology-design`
-- Solver execution and diagnostics — see `rai-prescriptive-solver-management`
+- Writing PyRel models or queries — see `rai-pyrel`
+- Designing ontology structure — see `rai-ontology`
+- Solver execution and diagnostics — see `rai-prescriptive-results`
 - Discovering what questions an existing model can answer — see `rai-discovery`
 
 **Overview:** For a returning user tweaking config, start from **Quick Reference** below and the **Reference files** trigger table — load only the reference matching the task. For a first-time user, drop into **First-Time Setup Workflow** and walk them through install → connect → validate → starter → next steps. Always finish a connection change by running `rai connect` — never hand the user a config and assume it works.
@@ -32,7 +32,7 @@ Covers the [relationalai Python package](https://pypi.org/project/relationalai) 
 
 ## Prerequisites
 
-Requires Python 3.10+ and `relationalai>=1.17.0`.
+Requires Python 3.10+ and `relationalai>=1.20.1`.
 
 Some guidance carries inline *Requires relationalai ...* notes flagging capabilities that need a version above this baseline; when following those blocks, install at least the version they name.
 
@@ -99,9 +99,9 @@ Users are expected to be Snowflake users with existing credentials. Walk the use
 
 ### Step 1. Install the package
 ```bash
-pip install 'relationalai>=1.17.0'
+pip install 'relationalai>=1.20.1'
 # or
-uv add 'relationalai>=1.17.0'
+uv add 'relationalai>=1.20.1'
 ```
 
 ### Step 2. Establish the connection
@@ -116,13 +116,13 @@ Run `rai connect` to validate the configuration.
 - On failure, check: (1) credentials, (2) account identifier, (3) warehouse exists and role has access, (4) the Native App is installed. See Common Pitfalls below.
 
 ### Step 4. Create a sample
-Offer a small sample program using inline data. Ask the user for a domain or use case and tailor the sample to it; if they don't have one, use a minimal structural default — one concept, a handful of instances, one derivation rule, one query — so the sample exercises the install without committing to a vertical. For PyRel syntax load `rai-pyrel-coding`. Ensure the sample runs and the user sees output. Offer to explain the components.
+Offer a small sample program using inline data. Ask the user for a domain or use case and tailor the sample to it; if they don't have one, use a minimal structural default — one concept, a handful of instances, one derivation rule, one query — so the sample exercises the install without committing to a vertical. For PyRel syntax load `rai-pyrel`. Ensure the sample runs and the user sees output. Offer to explain the components.
 
 ### Step 5. Propose next steps
 1. Adapt the sample to real Snowflake tables, or
 2. Enhance the sample with richer semantics and different analyses, or
 3. Point them at the [project templates](https://docs.relational.ai/build/templates), or
-4. When the model is ready to ship, take it to production with `rai-deployment` — deploy it to a Snowflake schema (then branch, collaborate, and merge), or as a Snowflake Intelligence (Cortex) agent.
+4. When the model is ready to ship, take it to production with `rai-deployment` — deploy it to a Snowflake schema (then branch, collaborate, and merge), or as a Snowflake CoWork (Cortex) agent.
 
 ---
 
@@ -133,8 +133,8 @@ For development, prototyping, and demos, PyRel runs against a local DuckDB datab
 - **Ontology** — concepts, properties, relationships, data loading
 - **Querying** — select, filter, join, aggregate, group
 - **Rules / logic** — derived properties, classification, recursion
-- **String / regex matching** — `strings.like` and the `std.re` module (`match`, `search`, `findall`, `sub`) execute on the local backend (see `rai-pyrel-coding`)
-- **Relationship traversal** — model a link as a self-referential relationship and answer connectivity questions ("who transacts with whom", one hop from X) with a self-join (see `rai-querying`)
+- **String / regex matching** — `strings.like` and the `std.re` module (`match`, `search`, `findall`, `sub`) execute on the local backend (see `rai-pyrel`)
+- **Relationship traversal** — model a link as a self-referential relationship and answer connectivity questions ("who transacts with whom", one hop from X) with a self-join (see `rai-pyrel`)
 
 Graph, prescriptive (optimization), and predictive (GNN) reasoners run on a Snowflake connection.
 
@@ -192,9 +192,9 @@ Load the reference when the trigger fires — don't read them all upfront.
 ---
 
 ## Related Skills
-- `rai-pyrel-coding` — PyRel syntax and data loading
-- `rai-ontology-design` — domain modeling
+- `rai-pyrel` — PyRel syntax and data loading
+- `rai-ontology` — domain modeling
 - `rai-deployment` — take a built model to production (schema deploy + lifecycle, or Cortex agent)
 - `rai-discovery` — surface answerable questions and route to the right reasoner
-- `rai-prescriptive-solver-management` — solver lifecycle and diagnostics (includes Gurobi usage)
+- `rai-prescriptive-problem` — solver selection (includes Gurobi setup); `rai-prescriptive-results` — solve execution and diagnostics
 - `rai-health` — diagnose engine performance issues

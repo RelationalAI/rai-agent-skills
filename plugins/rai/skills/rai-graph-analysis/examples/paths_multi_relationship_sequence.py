@@ -13,8 +13,8 @@ model = Model("paths_multi_relationship_sequence")
 # --- Ontology: one node type with two distinct edge types between nodes ---
 Node = model.Concept("Node", identify_by={"id": Integer})
 Node.name = model.Property(f"{Node} has name {String:name}")
-Node.rel_a = model.Relationship(f"{Node} rel_a to {Node}", short_name="rel_a")
-Node.rel_b = model.Relationship(f"{Node} rel_b to {Node}", short_name="rel_b")
+Node.rel_a = model.Relationship(f"{Node} rel_a to {Node}")
+Node.rel_b = model.Relationship(f"{Node} rel_b to {Node}")
 
 # --- Sample data ---
 nodes = model.data([

@@ -349,9 +349,9 @@ For a full predict-then-optimize example chaining multiple GNNs into optimizers 
 After `gnn.fit()`, inspect what data the engine received:
 
 ```python
-# Visual schema with data types (requires pydot; omit show_dtypes for the simple variant)
-graph_viz = gnn.visualize_dataset(show_dtypes=True)
-graph_viz.write_png("dataset_schema.png")
+# Visual schema with data types — inline (Jupyter) or saved to file
+gnn.display_dataset_diagram(show_dtypes=True)
+gnn.save_dataset_diagram("dataset_schema.svg", show_dtypes=True)
 
 # Full metadata dict (debugging feature types) and data-config printout
 config = gnn.dataset.metadata_dict

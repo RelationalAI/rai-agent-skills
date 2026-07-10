@@ -7,14 +7,15 @@ Detailed patterns for inspecting datasets, checking prediction results, and tuni
 After `gnn.fit()`, inspect what data the engine received:
 
 ```python
-# Visual graph of the dataset schema (requires pydot)
-graph_viz = gnn.visualize_dataset()
-graph_viz.write_png("dataset_schema.png")
+# Render the dataset schema diagram inline (Jupyter)
+gnn.display_dataset_diagram()
 
-# With data types shown
-graph_viz = gnn.visualize_dataset(show_dtypes=True)
-graph_viz.write_png("dataset_schema.png")
+# With data types shown, or written to a file
+gnn.display_dataset_diagram(show_dtypes=True)
+gnn.save_dataset_diagram("dataset_schema.svg", show_dtypes=True)
 ```
+
+(`visualize_dataset()` was renamed in 1.19.4; the old name is gone.)
 
 ### Metadata and Data Config
 
@@ -111,7 +112,7 @@ No single number describes quality. Before trusting predictions, look at:
 
 If results are significantly worse than expected, check these in order:
 
-1. **Inspect the dataset** -- run `gnn.visualize_dataset(show_dtypes=True)` and `gnn.dataset.print_data_config()` to verify feature types and edges match expectations.
+1. **Inspect the dataset** -- run `gnn.display_dataset_diagram(show_dtypes=True)` and `gnn.dataset.print_data_config()` to verify feature types and edges match expectations.
 2. **Reduce text features** -- too many text fields dilute signal. Start with 3-5 key text fields, add more only if metrics improve. In practice, reducing ~30 text fields to 5 improved AUROC from 57% to 68%.
 3. **Adjust hyperparameters** -- see [hyperparameters.md](hyperparameters.md) "Tuning When Results Are Poor" section for symptom-based guidance.
 

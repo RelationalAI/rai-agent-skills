@@ -21,8 +21,8 @@ Node.weight = model.Property(f"{Node} has weight {Float:weight}")
 Node.flagged = model.Property(f"{Node} is flagged {String:flagged}")
 
 Link = model.Concept("Link", identify_by={"id": Integer})
-Link.source = model.Relationship(f"{Link} from {Node}", short_name="source")
-Link.target = model.Relationship(f"{Link} to {Node}", short_name="target")
+Link.source = model.Relationship(f"{Link} from {Node}")
+Link.target = model.Relationship(f"{Link} to {Node}")
 
 # Typed endpoint subconcepts
 Source = model.Concept("Source", extends=[Node])
@@ -54,7 +54,7 @@ model.define(Link.new(
 ))
 
 # --- Derive the binary edge from the Link intermediary (default constructor) ---
-Node.flows_to = model.Relationship(f"{Node} flows to {Node}", short_name="flows_to")
+Node.flows_to = model.Relationship(f"{Node} flows to {Node}")
 lk = Link.ref()
 a, b = Node.ref(), Node.ref()
 model.where(lk.source(a), lk.target(b)).define(a.flows_to(b))

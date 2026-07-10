@@ -11,7 +11,7 @@ Requires op-log recording on (see [deploy-and-oplog.md](deploy-and-oplog.md)).
 A model has two parts that stay in sync in different ways:
 
 - **The part you own** — the model source you author. Split it across as many files as you like, named however you want. The op log records your changes to these entities, but **PyRel does not sync your source for you**: you share and reconcile it through version control (e.g. `git pull`). When you deploy owned changes, PyRel reminds you to commit them.
-- **The shared part** — entities contributed through the op log, including by collaborators. PyRel projects these into a generated `shared_model.py` written next to your source, wires it into the model automatically on `deploy`/`pull`, and keeps it current by regenerating it from the op log. `rai models pull` reconciles shared changes for you.
+- **The shared part** — entities contributed through the op log, including by collaborators. PyRel projects these into a generated `shared_model.py` written at the project root (next to the nearest `pyproject.toml`), wires it into the model automatically on `deploy`/`pull`, and keeps it current by regenerating it from the op log. `rai models pull` reconciles shared changes for you.
 
 In short: **`rai models pull` reconciles *shared* changes automatically; *owned* changes are yours to manage in version control.**
 

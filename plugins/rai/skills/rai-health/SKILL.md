@@ -6,9 +6,7 @@ description: Guides diagnosis of RAI engine performance, failed transactions, CD
 
 ## Summary
 
-**What:** A process skill for diagnosing RAI operational health across four domains: reasoner
-performance (memory/CPU/demand), failed transactions, CDC / data-stream health, and CDC engine
-management. Each domain has its own step with decision tables and remediation actions.
+**What:** A process skill for diagnosing RAI operational health across four domains — reasoner performance (memory/CPU/demand), failed transactions, CDC / data-stream health, and CDC engine management — each with decision tables and remediation actions.
 
 **When to use:**
 - Reasoner is slow, stuck, or queuing; need to check memory, CPU, or demand metrics
@@ -20,9 +18,8 @@ management. Each domain has its own step with decision tables and remediation ac
 - CDC engine needs resizing (`alter_cdc_engine_size`) or force-deletion
 
 **When NOT to use:**
-- Writing PyRel models or query logic → see `rai-pyrel-coding`
-- Configuring authentication or initial RAI setup → see `rai-setup`
-- Managing solver optimization problems → see `rai-prescriptive-solver-management`
+- Writing PyRel models or query logic → see `rai-pyrel`; authentication or initial setup → see `rai-setup`
+- Managing solver optimization problems → see `rai-prescriptive-problem` (formulation, solver selection) and `rai-prescriptive-results` (execution, diagnostics)
 
 **Overview (process steps):**
 1. Verify observability is set up (events view registered and healthy)

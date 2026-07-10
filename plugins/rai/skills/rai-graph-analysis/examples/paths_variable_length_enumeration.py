@@ -14,7 +14,7 @@ model = Model("paths_variable_length_enumeration")
 Component = model.Concept("Component", identify_by={"id": Integer})
 Component.name = model.Property(f"{Component} has name {String:name}")
 Component.depends_on = model.Relationship(
-    f"{Component} depends on {Component}", short_name="depends_on"
+    f"{Component} depends on {Component}"
 )
 
 # --- Sample data: a small dependency graph WITH a cycle (c4 <-> c5) ---

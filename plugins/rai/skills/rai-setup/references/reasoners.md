@@ -73,7 +73,7 @@ If `problem.solve("gurobi")` returns `Solver 'gurobi' is not enabled or not prop
 - The secret exists (`SHOW SECRETS IN SCHEMA SOLVERS.SECRETS`)
 - The integration exists and is enabled (`DESCRIBE INTEGRATION gurobi_integration`)
 
-For solver selection guidance, see `rai-prescriptive-solver-management`.
+For solver selection guidance, see `rai-prescriptive-problem`.
 
 ### Polling configuration
 

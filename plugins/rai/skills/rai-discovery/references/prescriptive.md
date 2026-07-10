@@ -35,12 +35,12 @@ These are the ONLY allowed problem types. Every suggestion must use exactly one 
 - If unsure between two types, check which structural checklist matches more components
 
 **Template examples by problem type:**
-- Resource Allocation: `../rai-prescriptive-problem-formulation/examples/continuous_ternary_join.py` (diet/blending), `../rai-prescriptive-problem-formulation/examples/quadratic_pairwise_ref.py` (portfolio balancing)
-- Network Flow: `../rai-prescriptive-problem-formulation/examples/flow_conservation.py` (network flow), `../rai-prescriptive-problem-formulation/examples/multi_concept_union_objective.py` (supply chain transport), `../rai-prescriptive-problem-formulation/examples/fixed_charge_facility.py` (facility location)
-- Routing: `../rai-prescriptive-problem-formulation/examples/subtour_elimination_mtz.py` (traveling salesman)
-- Scheduling/Assignment: `../rai-prescriptive-problem-formulation/examples/binary_coverage_scoped.py` (shift assignment), `../rai-prescriptive-problem-formulation/examples/epoch_filter_assignment.py` (sprint scheduling), `../rai-prescriptive-problem-formulation/examples/hinge_variable_penalty.py` (staffing with overtime), `../rai-prescriptive-problem-formulation/examples/conflict_graph_exclusion.py` (maintenance scheduling)
-- Resource Allocation (multi-period): `../rai-prescriptive-problem-formulation/examples/multi_period_flow_conservation.py` (demand planning)
-- Pricing: `../rai-prescriptive-problem-formulation/examples/one_hot_temporal_recurrence.py` (retail markdown)
+- Resource Allocation: `../rai-prescriptive-problem/examples/continuous_ternary_join.py` (diet/blending), `../rai-prescriptive-problem/examples/quadratic_pairwise_ref.py` (portfolio balancing)
+- Network Flow: `../rai-prescriptive-problem/examples/flow_conservation.py` (network flow), `../rai-prescriptive-problem/examples/multi_concept_union_objective.py` (supply chain transport), `../rai-prescriptive-problem/examples/fixed_charge_facility.py` (facility location)
+- Routing: `../rai-prescriptive-problem/examples/subtour_elimination_mtz.py` (traveling salesman)
+- Scheduling/Assignment: `../rai-prescriptive-problem/examples/binary_coverage_scoped.py` (shift assignment), `../rai-prescriptive-problem/examples/epoch_filter_assignment.py` (sprint scheduling), `../rai-prescriptive-problem/examples/hinge_variable_penalty.py` (staffing with overtime), `../rai-prescriptive-problem/examples/conflict_graph_exclusion.py` (maintenance scheduling)
+- Resource Allocation (multi-period): `../rai-prescriptive-problem/examples/multi_period_flow_conservation.py` (demand planning)
+- Pricing: `../rai-prescriptive-problem/examples/one_hot_temporal_recurrence.py` (retail markdown)
 
 ---
 
@@ -79,7 +79,7 @@ Detect when a prescriptive problem has competing objectives that warrant a Paret
 }
 ```
 
-This signals `rai-prescriptive-problem-formulation` to use the epsilon constraint approach (see its `multi-objective-formulation.md`) rather than defaulting to a single objective with the secondary as a fixed constraint.
+This signals `rai-prescriptive-problem` to use the epsilon constraint approach (see its `multi-objective-formulation.md`) rather than defaulting to a single objective with the secondary as a fixed constraint.
 
 ---
 
@@ -116,7 +116,7 @@ Detect when a prescriptive problem should explore how the solution changes under
 }
 ```
 
-This signals `rai-prescriptive-problem-formulation` to use scenario analysis (see its `scenario-analysis.md`) rather than solving for a single fixed parameter value.
+This signals `rai-prescriptive-problem` to use scenario analysis (see its `scenario-analysis.md`) rather than solving for a single fixed parameter value.
 
 ---
 
@@ -136,7 +136,7 @@ Within the five prescriptive problem types above, formulation can take two style
 - Audit / witness / "find K feasible" framings — answer in termination status (`INFEASIBLE` = no, `OPTIMAL`/`SOLUTION_LIMIT` = yes)
 - Also accepts directly: `min`/`max` in objective, `count` over decision variables, `implies` cascades, products of decision variables. MIP requires linearization for these (the wire applies the `implies` → big-M automatically); both styles work — preference.
 
-**Forcing MIP-style:** continuous decision or data; convex QP objective; use of `special_ordered_set_type_1` / `special_ordered_set_type_2` callables (Gurobi-only per the matrix in `rai-prescriptive-problem-formulation/references/global-constraints.md`).
+**Forcing MIP-style:** continuous decision or data; convex QP objective; use of `special_ordered_set_type_1` / `special_ordered_set_type_2` callables (Gurobi-only per the matrix in `rai-prescriptive-problem/references/global-constraints.md`).
 **Forcing CSP-style (in PyRel today):** use of the `all_different` callable (MiniZinc-only per the matrix); multi-solution workflow via `Variable.values` (theoretical MIP alternatives — Gurobi solution pools, re-solve with no-good cuts — aren't surfaced in PyRel).
 
 Many problems land outside both lists. In the gray zone, pick the style that's easier to maintain; if performance matters on a specific instance, try both styles and measure. Both families prove optimality. When filters are inconclusive, check the **Formulation style** note in each problem-type checklist below — each type has a default.
@@ -153,7 +153,7 @@ Many problems land outside both lists. In the gray zone, pick the style that's e
 
 `mode` values: `"enumeration"` (return K distinct feasible solutions), `"audit"` (INFEASIBLE = property holds, OPTIMAL/SOLUTION_LIMIT = counterexample found), `"optimization"` (objective set but CSP-style globals/expression surface make it the natural fit).
 
-This signals `rai-prescriptive-problem-formulation` to use CSP-style formulation (see its `csp-formulation.md`) rather than defaulting to MIP-style for the problem type.
+This signals `rai-prescriptive-problem` to use CSP-style formulation (see its `csp-formulation.md`) rather than defaulting to MIP-style for the problem type.
 
 ---
 
@@ -208,7 +208,7 @@ Deciding how much of a divisible resource goes where.
 - **Constraints:** Budget/capacity limits, minimum coverage or return targets, diversification/balance limits
 - **Objective:** Minimize cost/risk or maximize return/coverage
 - **Verify:** Budget constraint present? Forcing constraint ensures non-trivial allocation? Allocations sum correctly?
-- **Formulation style:** MIP-style is the default — divisible-resource problems usually have continuous allocations and a linear cost objective, where LP relaxation drives quality. CSP-style fits when the allocation is fully integer and you want to enumerate K different valid allocations (configurator-style: "show me 10 different valid product bundles satisfying the constraints"). See `rai-prescriptive-problem-formulation/references/csp-formulation.md` for the CSP-style decision flow.
+- **Formulation style:** MIP-style is the default — divisible-resource problems usually have continuous allocations and a linear cost objective, where LP relaxation drives quality. CSP-style fits when the allocation is fully integer and you want to enumerate K different valid allocations (configurator-style: "show me 10 different valid product bundles satisfying the constraints"). See `rai-prescriptive-problem/references/csp-formulation.md` for the CSP-style decision flow.
 
 ### Network Flow / Design
 Moving flow through a graph, optionally selecting which infrastructure to build.
@@ -224,7 +224,7 @@ Moving flow through a graph, optionally selecting which infrastructure to build.
 - **Constraints:** Flow conservation at interior nodes, arc capacity, source/sink limits, linking constraints (flow only if open)
 - **Objective:** Minimize transport + fixed cost, or maximize total flow
 - **Verify:** Every interior node has conservation constraint? Source/sink boundary conditions correct? No isolated nodes? Linking constraint prevents flow through closed arcs?
-- **Formulation style:** MIP-style is the default — flow volumes are typically continuous and LP relaxation drives the gap. CSP-style fits when flows are unit-valued (path-routing, packet-style) and the question is "find K feasible routings" or "enumerate all topologies satisfying capacity bounds." See `rai-prescriptive-problem-formulation/references/csp-formulation.md`.
+- **Formulation style:** MIP-style is the default — flow volumes are typically continuous and LP relaxation drives the gap. CSP-style fits when flows are unit-valued (path-routing, packet-style) and the question is "find K feasible routings" or "enumerate all topologies satisfying capacity bounds." See `rai-prescriptive-problem/references/csp-formulation.md`.
 
 ### Routing
 Determining paths or sequences for vehicles/shipments visiting locations.
@@ -240,7 +240,7 @@ Determining paths or sequences for vehicles/shipments visiting locations.
 - **Constraints:** Visit each location exactly once, degree constraints, vehicle capacity, subtour elimination (MTZ or similar)
 - **Objective:** Minimize total distance/time/cost
 - **Verify:** Subtour elimination present? Depot start/end constraints? Degree constraints enforce exactly one in-edge and one out-edge?
-- **Formulation style:** MIP-style is dominant for cost-objective routing — MTZ subtour elimination + LP relaxation drives the gap on TIME_LIMIT. CSP-style fits when the routing problem is combinatorial with `all_different` constraints, or when the question shifts to "find K distinct tours" (witness enumeration). See `rai-prescriptive-problem-formulation/references/csp-formulation.md`.
+- **Formulation style:** MIP-style is dominant for cost-objective routing — MTZ subtour elimination + LP relaxation drives the gap on TIME_LIMIT. CSP-style fits when the routing problem is combinatorial with `all_different` constraints, or when the question shifts to "find K distinct tours" (witness enumeration). See `rai-prescriptive-problem/references/csp-formulation.md`.
 
 ### Scheduling / Assignment
 Deciding when activities occur or which resources handle which tasks.
@@ -256,7 +256,7 @@ Deciding when activities occur or which resources handle which tasks.
 - **Constraints:** Each task assigned exactly once, resource capacity not exceeded, precedence ordering, time windows, no-overlap
 - **Objective:** Minimize makespan, tardiness, or cost; maximize coverage
 - **Verify:** Binary variables for decisions? Task coverage (each task assigned)? Resource capacity not exceeded? Time variables bounded within horizon?
-- **Formulation style:** Most live use of CSP-style. Slot assignment with `all_different`, precedence cascades via `implies`, multi-solution enumeration of valid schedules, and pure-satisfaction "is there any schedule covering all shifts" framings all fit CSP-style naturally. MIP-style fits when the objective is a linear cost or makespan minimization with LP-relaxation value. See `rai-prescriptive-problem-formulation/references/csp-formulation.md` — particularly the integer-slot-with-sentinel and audit/witness idioms.
+- **Formulation style:** Most live use of CSP-style. Slot assignment with `all_different`, precedence cascades via `implies`, multi-solution enumeration of valid schedules, and pure-satisfaction "is there any schedule covering all shifts" framings all fit CSP-style naturally. MIP-style fits when the objective is a linear cost or makespan minimization with LP-relaxation value. See `rai-prescriptive-problem/references/csp-formulation.md` — particularly the integer-slot-with-sentinel and audit/witness idioms.
 
 ### Multi-Period Considerations (applies to any type)
 When a problem has a temporal/period dimension, these additional structural elements apply regardless of the base type:
@@ -285,7 +285,7 @@ Setting prices to optimize revenue subject to demand response and business rules
 - **Constraints:** Price bounds, markdown monotonicity, inventory/demand coupling
 - **Objective:** Maximize revenue or profit
 - **Verify:** Demand-price relationship captured? Price bounds from data? Revenue calculation correct?
-- **Formulation style:** MIP-style by default — continuous price levels, possibly bilinear revenue terms. CSP-style fits when prices are restricted to a discrete tier menu and the objective is a revenue lookup via `implies` cascade (planogram-style: prices and SKUs are all-integer, decision-indexed table lookups for revenue per chosen tier). See `rai-prescriptive-problem-formulation/references/csp-formulation.md` — particularly the implies-cascade table-lookup idiom.
+- **Formulation style:** MIP-style by default — continuous price levels, possibly bilinear revenue terms. CSP-style fits when prices are restricted to a discrete tier menu and the objective is a revenue lookup via `implies` cascade (planogram-style: prices and SKUs are all-integer, decision-indexed table lookups for revenue per chosen tier). See `rai-prescriptive-problem/references/csp-formulation.md` — particularly the implies-cascade table-lookup idiom.
 
 ---
 

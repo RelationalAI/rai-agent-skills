@@ -1,30 +1,30 @@
 ---
 name: rai-deployment
-description: Take a built RelationalAI model to production — deploy it into a Snowflake schema and version it through the op log (branch, collaborate, merge, and tear down with the `rai models` CLI), or deploy it as a Snowflake Intelligence (Cortex) agent. The one path-to-prod skill across deployment targets. Use when deploying a model, managing its deployed lifecycle, or operationalizing it as a Cortex agent — not for first-time install/connect (see rai-setup), building the model (see rai-ontology-design, rai-pyrel-coding), or interpreting reasoner output.
+description: Take a built RelationalAI model to production — deploy it into a Snowflake schema and version it through the op log (branch, collaborate, merge, and tear down with the `rai models` CLI), or deploy it as a Snowflake CoWork (Cortex) agent. The one path-to-prod skill across deployment targets. Use when deploying a model, managing its deployed lifecycle, or operationalizing it as a Cortex agent — not for first-time install/connect (see rai-setup), building the model (see rai-ontology, rai-pyrel), or interpreting reasoner output.
 ---
 
 # RelationalAI Deployment (Path to Prod)
 <!-- v1-SENSITIVE -->
 
-Covers the path from a built RelationalAI model to production: the `rai models` CLI (schema deployment + lifecycle) and Snowflake Intelligence (Cortex) agents. Built on the [relationalai package](https://pypi.org/project/relationalai) (PyRel).
+Covers the path from a built RelationalAI model to production: the `rai models` CLI (schema deployment + lifecycle) and Snowflake CoWork (Cortex) agents. Built on the [relationalai package](https://pypi.org/project/relationalai) (PyRel).
 
 > **Early access.** Deploy mode and semantic model management — the `rai models` deploy + branch/collaborate/merge/teardown lifecycle — are **early-access** features (documented in the RAI docs' early-access section); the API, messages, and defaults may still change. Op-log recording (the basis for `branch`/`pull`/`merge`) is **off by default** today, expected to default on soon. Verified against relationalai 1.17.0; see **Prerequisites** to turn it on. (The Cortex-agent path carries its own GA/PREVIEW markers — see [references/cortex-agents.md](references/cortex-agents.md).)
 
 ## Summary
 
-**What:** Everything between a built model and production, by either of two paths. You've built and validated a model; this skill ships it. **Schema deployment** — deploy into a Snowflake schema and manage its lifecycle: track every change in the op log, fork experiments into branches, collaborate through a shared model, promote vetted changes back with merge, and tear models down safely. **Cortex agent** — package the model as a Snowflake Intelligence agent users query in natural language.
+**What:** Everything between a built model and production, by either of two paths. You've built and validated a model; this skill ships it. **Schema deployment** — deploy into a Snowflake schema and manage its lifecycle: track every change in the op log, fork experiments into branches, collaborate through a shared model, promote vetted changes back with merge, and tear models down safely. **Cortex agent** — package the model as a Snowflake CoWork agent users query in natural language.
 
 **When to use:**
 - Deploying a model to a Snowflake schema (`rai models deploy`) and understanding what the op log records
 - Branching a deployed model for isolated experiments (`rai models branch`)
 - Collaborating with other developers on one model (shared model, `rai models pull`)
 - Promoting a branch back to its parent (`rai models merge`) or removing a model (`rai models teardown`)
-- Deploying a model as a Snowflake Intelligence (Cortex) agent
+- Deploying a model as a Snowflake CoWork (Cortex) agent
 - Choosing a path to prod (schema deployment vs. Cortex agent)
 
 **When NOT to use:**
 - First-time install, `rai connect`, or `raiconfig.yaml` auth/engine tuning — see `rai-setup`
-- Building or evolving the model itself (concepts, rules, queries) — see `rai-ontology-design`, `rai-pyrel-coding`, `rai-querying`
+- Building or evolving the model itself (concepts, rules, queries) — see `rai-ontology`, `rai-pyrel`
 - Diagnosing engine performance or failed transactions — see `rai-health`
 
 **Overview:** Start with **Choose a path to prod** to pick the deployment target. For **schema deployment**, read **Quick Reference** for the command surface, then **Deploy** for the foundation; the lifecycle commands build on a single idea — the **op log** — so read that first, then load the reference matching the task (branching, collaboration, merge/teardown). **Always check Prerequisites before the lifecycle commands** — they refuse cleanly if op-log recording is off. For the **Cortex-agent path**, go straight to [references/cortex-agents.md](references/cortex-agents.md).
@@ -36,7 +36,7 @@ Covers the path from a built RelationalAI model to production: the `rai models` 
 A built model reaches production by one of these paths. Pick the target, then follow the matching guidance:
 
 - **Deploy into a Snowflake schema** — the model's resources and outputs live in a schema you deploy, version, and evolve with `rai models`. This is the default path and the foundation for branching and collaboration. Covered below; lifecycle detail in the reference files.
-- **Deploy as a Snowflake Intelligence (Cortex) agent** — package the model as a Cortex agent users query in natural language. Use when the deliverable is a conversational agent rather than a deployed schema. → [references/cortex-agents.md](references/cortex-agents.md); reference implementation in [examples/deploy.py](examples/deploy.py).
+- **Deploy as a Snowflake CoWork (Cortex) agent** — package the model as a Cortex agent users query in natural language. Use when the deliverable is a conversational agent rather than a deployed schema. → [references/cortex-agents.md](references/cortex-agents.md); reference implementation in [examples/deploy.py](examples/deploy.py).
 
 The two are not exclusive: you deploy a model to a schema first, then optionally expose it as a Cortex agent.
 
@@ -44,7 +44,7 @@ The two are not exclusive: you deploy a model to a schema first, then optionally
 
 ## Prerequisites
 
-- **relationalai ≥ 1.17** (`rai --version`) — this skill targets the 1.17 `rai models` surface.
+- **relationalai ≥ 1.20.1** (`rai --version`) — this skill targets the 1.20 `rai models` surface.
 - A reachable Snowflake connection (`rai connect` passes) with a **`database` set on the connection** — model-management resolves its metadata schema from it and falls back to the app name (which fails) when it's unset. For install/auth, see `rai-setup`.
 - A model to deploy — a `.py` model file or package, with `model.path` set in `raiconfig.yaml` (or pass `--path`). Its outputs need a refresh schedule (`deployment.schedules` + `deployment.outputs.schedule`) or deploy refuses with "Unscheduled Outputs".
 - **For `branch` / `pull` / `merge`: op-log recording must be ON.** It is **off by default** (opt-in while rolling out). Turn it on in `raiconfig.yaml`:
@@ -74,7 +74,7 @@ The **current model** is the schema named by `deployment.schema` in `raiconfig.y
 | `rai models merge` | Promote branch to parent, retire branch | `--path` `--delete` `--force` |
 | `rai models teardown` | Drop the current model/branch + schema + op log | `--force` `--allow-unmerged` `--allow-children` |
 
-`--schema` exists on `deploy` but is **ignored** (RAI-51584) — set the target via `deployment.schema` / `switch`. As of 1.17, `pull` / `merge` / `teardown` act on the **current model only** (no `--name`); use `switch` to target a different one.
+`deploy --schema` overrides `deployment.schema` for that deploy (working since 1.18; earlier releases ignored it — RAI-51584). As of 1.20, `pull` / `merge` / `teardown` act on the **current model only** (no `--name`); use `switch` to target a different one.
 
 ---
 
@@ -116,7 +116,7 @@ Load only the file matching the task:
 | [references/branching.md](references/branching.md) | `branch`, `switch`, `list`; live vs. static; `--from-parent`; single-level limit |
 | [references/collaboration.md](references/collaboration.md) | Multi-developer work; owned vs. shared; `shared_model.py`; `pull`; `build_shared` |
 | [references/merge-and-teardown.md](references/merge-and-teardown.md) | `merge` (preconditions, `--delete`/`--force`); `teardown` (dry-run, guards) |
-| [references/cortex-agents.md](references/cortex-agents.md) | Deploying the model as a Snowflake Intelligence (Cortex) agent — deployment script, `DeploymentConfig`, tool registry, query catalog, grants, debugging |
+| [references/cortex-agents.md](references/cortex-agents.md) | Deploying the model as a Snowflake CoWork (Cortex) agent — deployment script, `DeploymentConfig`, tool registry, query catalog, deploy-mode reads (serving precomputed results), grants, debugging |
 
 ---
 
@@ -137,8 +137,7 @@ Reference implementations for the Cortex-agent path (see [references/cortex-agen
 | Mistake | Cause | Fix |
 |---|---|---|
 | `branch`/`pull`/`merge` refuse: "Oplog recording is disabled" | Op-log recording is **off by default** (opt-in while rolling out) | Set `oplog.enabled: true` in `raiconfig.yaml`. `deploy`/`teardown` work without it |
-| `deploy --schema` has no effect | `--schema` is a no-op (RAI-51584) | Set the target via `deployment.schema`; change it with `rai models switch` |
-| `deploy` fails: "Database '...' does not exist or not authorized" | `deploy` creates the target **schema** but not its database | Create the database first — `deploy` runs `CREATE SCHEMA IF NOT EXISTS <db>.<schema>` |
+| `deploy` fails: "Database '...' does not exist or not authorized" | `deploy` creates the target **schema** but not its database | Create the database first — `deploy` runs `CREATE SCHEMA IF NOT EXISTS <db>.<schema>`. If the deploy role lacks `CREATE SCHEMA`, pre-create the schema and grant `USAGE`; deploy confirms it exists and proceeds |
 | `deploy` (op-log on) fails: "Insufficient privileges to operate on application 'RELATIONALAI'" | No `database` on the connection — model-management falls back to the app name and tries to create its metadata schema inside the app | Set `database:` on the connection in `raiconfig.yaml`; the metadata schema resolves from it (not a grant or account-enablement issue) |
 | Bare `rai models merge` fails: "Model file path is required" | Merge diffs your source to confirm the branch is fully deployed | Pass `--path <model>`, or set `model.path` in config |
 | `merge` refuses: "branch has not observed the parent's latest changes" | Branch isn't rebased on the parent's latest | On the branch: `rai models pull` then `rai models deploy`, then merge |
@@ -151,6 +150,6 @@ Reference implementations for the Cortex-agent path (see [references/cortex-agen
 
 ## Related Skills
 - `rai-setup` — install, `rai connect`, and `raiconfig.yaml` (do this first)
-- `rai-ontology-design` — build and evolve the model you deploy
-- `rai-pyrel-coding` — PyRel syntax and data loading
+- `rai-ontology` — build and evolve the model you deploy
+- `rai-pyrel` — PyRel syntax and data loading
 - `rai-health` — diagnose engine performance, failed transactions, and CDC health

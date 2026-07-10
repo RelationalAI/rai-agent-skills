@@ -6,7 +6,7 @@ Local DuckDB execution relies on deploy mode, which the
 package flags as experimental — use it for local work, and confirm the support stance with the
 RelationalAI team before customer-facing deliverables.
 
-The coarse per-reasoner summary lives in the `rai-setup` SKILL.md support table. This reference goes deeper on what is specific to the local backend: the config recipe, data loading, and gotchas. The modeling itself — concepts, rules, queries, relationship traversal, string and regex matching — is identical to Snowflake; see `rai-pyrel-coding` and `rai-querying`.
+The coarse per-reasoner summary lives in the `rai-setup` SKILL.md support table. This reference goes deeper on what is specific to the local backend: the config recipe, data loading, and gotchas. The modeling itself — concepts, rules, queries, relationship traversal, string and regex matching — is identical to Snowflake; see `rai-pyrel`.
 
 ## Config
 
@@ -50,7 +50,7 @@ session.execute("INSERT INTO raw.employees VALUES (1, 'Ada', 'Engineering')")
 employees = model.Table("memory.raw.employees")   # 3-part FQN; separate schema
 ```
 
-From here the model is authored exactly as against Snowflake — see `rai-pyrel-coding`.
+From here the model is authored exactly as against Snowflake — see `rai-pyrel`.
 
 ## Gotchas
 

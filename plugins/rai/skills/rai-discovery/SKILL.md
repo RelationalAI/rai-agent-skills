@@ -18,11 +18,11 @@ description: Translation, ideation, and routing layer between an ontology and th
 - Assessing data feasibility before committing to a workflow
 
 **When NOT to use:**
-- Formulating optimization variables, constraints, objectives — see `rai-prescriptive-problem-formulation`
-- PyRel syntax and coding patterns — see `rai-pyrel-coding`
-- Ontology modeling or enrichment — see `rai-ontology-design`
-- Solver execution and diagnostics — see `rai-prescriptive-solver-management`
-- Post-solve interpretation — see `rai-prescriptive-results-interpretation`
+- Formulating optimization variables, constraints, objectives — see `rai-prescriptive-problem`
+- PyRel syntax and coding patterns — see `rai-pyrel`
+- Ontology modeling or enrichment — see `rai-ontology`
+- Solver execution and diagnostics — see `rai-prescriptive-results`
+- Post-solve interpretation — see `rai-prescriptive-results`
 
 **Overview:**
 1. Ground in the real model via `inspect.schema(model)` — concepts, properties with real types, relationships, data sources
@@ -58,7 +58,7 @@ Question discovery is the analyst's springboard into data-driven reasoning. The 
 
 ### Steps
 
-1. **Ground in the real model first.** Before enumerating opportunities from memory or source files, run `inspect.schema(model)` to see what's actually registered — concepts, properties (including inherited), types (enriched from the backing `TableSchema` where available), relationships, and both `model.tables` and inline `model.data_items` sources. Discovery suggestions are only useful if they're grounded in what the data can actually support; guessing from partial reads produces confident-but-wrong recommendations. See `rai-querying/references/inspect-module.md`.
+1. **Ground in the real model first.** Before enumerating opportunities from memory or source files, run `inspect.schema(model)` to see what's actually registered — concepts, properties (including inherited), types (enriched from the backing `TableSchema` where available), relationships, and both `model.tables` and inline `model.data_items` sources. Discovery suggestions are only useful if they're grounded in what the data can actually support; guessing from partial reads produces confident-but-wrong recommendations. See `rai-pyrel/references/inspect-module.md`.
 
    ```python
    from relationalai.semantics import inspect
@@ -267,7 +267,7 @@ The set-difference is stable because `inspect.schema()` walks the whole model in
 
 Model gaps are ONLY for data in the schema but not in the model. Decision variables, cross-products, and computed expressions are NOT model gaps (formulation layer). Check "Available for enrichment" columns in schema info. Each gap must specify `source_table` and `source_column`.
 
-For full gap classification rules (property vs relationship gaps, boundary between base model and reasoner workflow), see `rai-ontology-design` § Model Gap Identification.
+For full gap classification rules (property vs relationship gaps, boundary between base model and reasoner workflow), see `rai-ontology` § Model Gap Identification.
 
 ---
 
@@ -437,12 +437,12 @@ Each suggestion includes a `reasoners` field — an ordered list specifying the 
 
 | Selected reasoner | Skills to load (in order) |
 |-------------------|---------------------------|
-| **prescriptive** | `rai-prescriptive-problem-formulation` → `rai-prescriptive-solver-management` → `rai-prescriptive-results-interpretation` |
+| **prescriptive** | `rai-prescriptive-problem` → `rai-prescriptive-results` |
 | **graph** | `rai-graph-analysis` |
 | **predictive** | `rai-predictive-modeling` → `rai-predictive-training` |
-| **rules** | `rai-rules-authoring` |
+| **rules** | `rai-pyrel` |
 
-For all reasoners, also load `rai-querying` + `rai-pyrel-coding` for v1 syntax, imports, and query patterns. If the selected question is **MODEL_GAP**, load `rai-ontology-design` first to enrich the ontology before the reasoner skill runs (see Enrichment Handoff above).
+For all reasoners, also load `rai-pyrel` for v1 syntax, imports, and query patterns. If the selected question is **MODEL_GAP**, load `rai-ontology` first to enrich the ontology before the reasoner skill runs (see Enrichment Handoff above).
 
 Discovery covers *what* to ask. The reasoner-specific reference files in this skill (`prescriptive.md` / `graph.md` / `predictive.md` / `rules.md`) translate the user's framing into the technical fields each downstream skill consumes (problem_type / algorithm / task_type / rule_type). The downstream coding skills cover *how* to write the PyRel. Skipping the coding-skill load leads to hallucinated APIs and wrong imports.
 
@@ -466,10 +466,10 @@ Discovery covers *what* to ask. The reasoner-specific reference files in this sk
 
 | Reference | Description | File |
 |-----------|-------------|------|
-| Prescriptive | Optimization problem types (resource allocation, network flow, routing, scheduling, pricing) → translate into formulation parameters for `rai-prescriptive-problem-formulation` | [prescriptive.md](references/prescriptive.md) |
+| Prescriptive | Optimization problem types (resource allocation, network flow, routing, scheduling, pricing) → translate into formulation parameters for `rai-prescriptive-problem` | [prescriptive.md](references/prescriptive.md) |
 | Graph | Graph question types (centrality, community, reachability, distance, similarity) → translate into RAI Graph algorithms for `rai-graph-analysis` | [graph.md](references/graph.md) |
 | Predictive | User-facing predictive types (node classification, node regression, link prediction) → translate into GNN `task_type` / `eval_metric` / `has_time_column` for `rai-predictive-modeling` and `rai-predictive-training` | [predictive.md](references/predictive.md) |
-| Rules | Rule question types (validation, classification, derivation, alerting, reconciliation) → translate into `rule_type` and PyRel patterns for `rai-rules-authoring` | [rules.md](references/rules.md) |
+| Rules | Rule question types (validation, classification, derivation, alerting, reconciliation) → translate into `rule_type` and PyRel patterns for `rai-pyrel` | [rules.md](references/rules.md) |
 
 ---
 

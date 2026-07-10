@@ -27,7 +27,7 @@ Discovery-to-routing walkthroughs for predictive reasoner questions. Each exampl
  "temporal_column": "time_period", "prediction_horizon": "next period"}
 ```
 
-### Modeling needs (→ rai-ontology-design)
+### Modeling needs (→ rai-ontology)
 - Map `RiskPrediction` table as a concept if not already in the model
 - Establish relationship: `RiskPrediction.entity` → `Entity` (via entity_id FK)
 - Properties: `predicted_risk_prob` (Float), `risk_tier` (String), `confidence` (Float)
