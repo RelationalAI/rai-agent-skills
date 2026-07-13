@@ -8,7 +8,7 @@ description: Take a built RelationalAI model to production — deploy it into a 
 
 Covers the path from a built RelationalAI model to production: the `rai models` CLI (schema deployment + lifecycle) and Snowflake CoWork (Cortex) agents. Built on the [relationalai package](https://pypi.org/project/relationalai) (PyRel).
 
-> **Early access.** Deploy mode and semantic model management — the `rai models` deploy + branch/collaborate/merge/teardown lifecycle — are **early-access** features (documented in the RAI docs' early-access section); the API, messages, and defaults may still change. Op-log recording (the basis for `branch`/`pull`/`merge`) is **off by default** today, expected to default on soon. Verified against relationalai 1.17.0; see **Prerequisites** to turn it on. (The Cortex-agent path carries its own GA/PREVIEW markers — see [references/cortex-agents.md](references/cortex-agents.md).)
+> **Early access.** Deploy mode and semantic model management — the `rai models` deploy + branch/collaborate/merge/teardown lifecycle — are **early-access** features (documented in the RAI docs' early-access section); the API, messages, and defaults may still change. Op-log recording (the basis for `branch`/`pull`/`merge`) is **off by default** today, expected to default on soon. Verified against relationalai 1.20.1; see **Prerequisites** to turn it on. (The Cortex-agent path carries its own GA/PREVIEW markers — see [references/cortex-agents.md](references/cortex-agents.md).)
 
 ## Summary
 
@@ -137,7 +137,7 @@ Reference implementations for the Cortex-agent path (see [references/cortex-agen
 | Mistake | Cause | Fix |
 |---|---|---|
 | `branch`/`pull`/`merge` refuse: "Oplog recording is disabled" | Op-log recording is **off by default** (opt-in while rolling out) | Set `oplog.enabled: true` in `raiconfig.yaml`. `deploy`/`teardown` work without it |
-| `deploy` fails: "Database '...' does not exist or not authorized" | `deploy` creates the target **schema** but not its database | Create the database first — `deploy` runs `CREATE SCHEMA IF NOT EXISTS <db>.<schema>`. If the deploy role lacks `CREATE SCHEMA`, pre-create the schema and grant `USAGE`; deploy confirms it exists and proceeds |
+| `deploy` fails: "Database '...' does not exist or not authorized" | `deploy` creates the target **schema** but not its database | Create the database first — `deploy` runs `CREATE SCHEMA IF NOT EXISTS <db>.<schema>`. If the deploy role lacks `CREATE SCHEMA`, pre-create the schema (and its `_META` meta schema, when op-log recording is on) and grant `USAGE`; deploy confirms it exists and proceeds |
 | `deploy` (op-log on) fails: "Insufficient privileges to operate on application 'RELATIONALAI'" | No `database` on the connection — model-management falls back to the app name and tries to create its metadata schema inside the app | Set `database:` on the connection in `raiconfig.yaml`; the metadata schema resolves from it (not a grant or account-enablement issue) |
 | Bare `rai models merge` fails: "Model file path is required" | Merge diffs your source to confirm the branch is fully deployed | Pass `--path <model>`, or set `model.path` in config |
 | `merge` refuses: "branch has not observed the parent's latest changes" | Branch isn't rebased on the parent's latest | On the branch: `rai models pull` then `rai models deploy`, then merge |

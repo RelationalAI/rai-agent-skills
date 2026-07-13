@@ -117,7 +117,7 @@ PositiveInt = model.Concept("PositiveInt", extends=[Integer])    # extending a p
 
 ### Enums
 
-`model.Enum` creates a concept-backed enum whose members work as literals in `where()`/`define()` and (relationalai>=1.12) in every value position: kwargs, enum-typed property values, and `solve_for()`/`satisfy()` expressions. Use for fixed, closed vocabularies; leave open-ended data-driven strings as `String`.
+`model.Enum` creates a concept-backed enum whose members work as literals in `where()`/`define()` and in every value position: kwargs, enum-typed property values, and `solve_for()`/`satisfy()` expressions. Use for fixed, closed vocabularies; leave open-ended data-driven strings as `String`.
 
 ```python
 class Priority(model.Enum):
@@ -308,7 +308,7 @@ aggs.sum(Order.amount).per(Customer)         # bare Concept unifies with where()
 
 ### Aggregation
 
-Value aggregates: `count, sum, min, max, avg, product, stddev_samp, string_join`. **`avg`, `product`, `stddev_samp` are query-only** (raise `NotImplementedError` under `satisfy`/`minimize`/`maximize`; solver supports `sum, min, max, count`). `product`/`stddev_samp` need relationalai>=1.12, return Float; `product` is an exp-log approximation — see [aggregation-advanced.md](references/aggregation-advanced.md).
+Value aggregates: `count, sum, min, max, avg, product, stddev_samp, string_join`. **`avg`, `product`, `stddev_samp` are query-only** (raise `NotImplementedError` under `satisfy`/`minimize`/`maximize`; solver supports `sum, min, max, count`). `product`/`stddev_samp` return Float; `product` is an exp-log approximation — see [aggregation-advanced.md](references/aggregation-advanced.md).
 
 **`.per(K)` declares the result dimensions — one row per distinct K.** Use the same concept variables that appear in `select()`: given `Shipment.supplier(Supplier)` in `where()`, write `.per(Supplier)`, not `.per(Shipment.supplier)` (carries Shipment into the key and over-groups; see Silent Corruption #5).
 

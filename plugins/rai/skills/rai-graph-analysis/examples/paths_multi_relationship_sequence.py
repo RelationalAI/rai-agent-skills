@@ -56,17 +56,11 @@ edges_df["hop"] = edges_df["hop"].astype(int)
 edges_df = edges_df.drop_duplicates(["path", "hop"]).sort_values(["path", "hop"])
 
 
-def edge_type_label(raw):
-    # On >=1.15 the per-hop label is decorated, e.g. "-⟨rel_a⟩→"; strip to the
-    # stem. (An upcoming release returns the bare name, making this a no-op.)
-    return raw.strip("-<>⟨⟩→ ")
-
-
 routes = []
 for path_id, g in nodes_df.groupby("path"):
     names = list(g.sort_values("step")["node"])
-    types = [edge_type_label(t) for t in
-             edges_df[edges_df["path"] == path_id].sort_values("hop")["edge_type"]]
+    # Since 1.17 the per-hop label is the bare relationship name (e.g. "rel_a").
+    types = list(edges_df[edges_df["path"] == path_id].sort_values("hop")["edge_type"])
     label = names[0]
     for name, etype in zip(names[1:], types):
         label += f"  --[{etype}]-->  {name}"

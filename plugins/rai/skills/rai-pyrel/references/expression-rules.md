@@ -304,8 +304,6 @@ Members resolve to their string/int values when compared with `==`. Use `model.E
 
 ### Member constants in any value position
 
-*Requires relationalai>=1.12.*
-
 Members are accepted as constants everywhere a value is expected, not just in `where()`/`define()` comparisons:
 
 ```python
@@ -322,8 +320,6 @@ Passing the **class** where a member is expected (`Account.new(status=Status)`) 
 Members support Python iteration (`for member in Status:`) — useful for defining one rule per member without hardcoding the list.
 
 ### Enum-typed properties and raw-string mapping
-
-*Requires relationalai>=1.12.*
 
 Declare a property typed by the enum, and map raw string columns to members with `lookup()`. `lookup()` matches member **names** (the Python identifiers), never the wrapped values — the raw data's strings must equal the member names exactly (case-sensitive):
 

@@ -191,7 +191,7 @@ model.where(
 | **Does NOT handle** | FK/Relationship columns — must be excluded and bound separately |
 | **No rename** | Cannot remap column names to different property names; use explicit mapping instead |
 | **`exclude` param** | `to_schema(exclude=["col1", "col2"])` skips listed columns |
-| **Casing** | Snowflake normalizes unquoted identifiers to UPPERCASE; column names in schema dicts must match. Quoted case-sensitive names are supported — tables since 1.19.1, columns since 1.20.1 |
+| **Casing** | Snowflake normalizes unquoted identifiers to UPPERCASE; column names in schema dicts must match. Quoted case-sensitive identifiers are supported — tables since 1.19.1, columns since 1.20.1 |
 | **Combinable** | Can be mixed with explicit kwargs in the same `.new()` call |
 
 ---

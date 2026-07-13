@@ -65,7 +65,7 @@ In query contexts, you can also use `.where()` on the aggregate for the same eff
 
 ## product
 
-`product` (as of `relationalai>=1.12`) multiplies numeric values within a group, taking `.per(...)`, `.where(...)`, and `.alias(...)` like any other aggregate:
+`product` multiplies numeric values within a group, taking `.per(...)`, `.where(...)`, and `.alias(...)` like any other aggregate:
 
 ```python
 # Compound factor per group — multiply each row's ratio within the group
@@ -80,7 +80,7 @@ aggs.product(Period.factor).per(Scenario).alias("compound_factor")
 
 ## stddev_samp
 
-`stddev_samp` (as of `relationalai>=1.12`) computes the **sample** standard deviation — the square root of the sample variance (an `n-1` denominator) — taking `.per(...)`, `.where(...)`, and `.alias(...)` like any other aggregate:
+`stddev_samp` computes the **sample** standard deviation — the square root of the sample variance (an `n-1` denominator) — taking `.per(...)`, `.where(...)`, and `.alias(...)` like any other aggregate:
 
 ```python
 # Sample standard deviation per group

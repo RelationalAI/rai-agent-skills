@@ -286,53 +286,33 @@ model.where(
 
 ### Negation of Boolean Relationships in Queries
 
-The `~` (bitwise NOT) operator does **not** work on boolean relationships in query contexts. It raises
-`bad operand type for unary ~: 'Chain'`. There is no direct negation operator for boolean
-relationships in PyRel v1.
+Negate a unary boolean-flag relationship in a query `where()` with `model.not_(...)` — the same
+operator used for property existence and in `define()` contexts (verified live on relationalai
+1.20.1):
+
+```python
+# Entities with flag A but NOT flag B
+results = model.where(
+    model.RecommendationLog.was_watched(),
+    model.not_(model.RecommendationLog.was_clicked()),
+).select(
+    model.RecommendationLog.id.alias("id"),
+).to_df()
+```
+
+Python's own negation operators do not work on RAI expressions:
 
 ```python
 # FAILS — ~ operator on boolean relationship
-results = model.where(
-    model.RecommendationLog.was_watched,
-    ~model.RecommendationLog.was_clicked,   # TypeError: bad operand type for unary ~
-).select(...).to_df()
+~model.RecommendationLog.was_clicked    # TypeError: bad operand type for unary ~
 
-# FAILS — not operator on boolean relationship
-results = model.where(
-    model.RecommendationLog.was_watched,
-    not model.RecommendationLog.was_clicked,  # Python not converts to bool, wrong semantics
-).select(...).to_df()
+# FAILS — Python not converts to bool, wrong semantics
+not model.RecommendationLog.was_clicked
 ```
 
-**Workaround — two-query pandas subtraction:**
-
-Query the positive set and the intersection, then subtract with pandas:
-
-```python
-# Step 1: Get all entities with flag A
-all_watched = model.where(
-    model.RecommendationLog.was_watched,
-).select(
-    model.RecommendationLog.id.alias("id"),
-    model.RecommendationLog.recommendation_date.alias("date"),
-).to_df()
-
-# Step 2: Get entities with BOTH flag A AND flag B
-watched_and_clicked = model.where(
-    model.RecommendationLog.was_watched,
-    model.RecommendationLog.was_clicked,
-).select(
-    model.RecommendationLog.id.alias("id"),
-).to_df()
-
-# Step 3: Subtract — entities with A but NOT B
-results = all_watched[~all_watched["id"].isin(watched_and_clicked["id"])]
-```
-
-> **Note:** `model.not_()` works for negating **property existence** (e.g., `model.not_(Entity.email)`)
-> and **relationship applications** in `define()` contexts. But for **boolean flag relationships**
-> (unary relationships like `Entity.is_active`) in query `model.where()` contexts, use the two-query
-> pandas subtraction pattern above.
+On `relationalai<1.20.1`, some negations inside `where()` were silently dropped (the query returned
+unfiltered results) — upgrade rather than restructure (see
+[common-pitfalls.md](common-pitfalls.md)).
 
 **Aggregation-based rule — flag groups exceeding threshold:**
 

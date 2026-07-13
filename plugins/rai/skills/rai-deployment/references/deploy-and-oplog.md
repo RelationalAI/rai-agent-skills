@@ -87,4 +87,4 @@ Behavior by state:
 
 ## shared_model.py (generated)
 
-On every non-empty deploy and every non-up-to-date pull, PyRel (re)writes `shared_model.py` next to the model file. It projects the *shared* entities from the op log into a `build_shared(m)` function and wires them into the model automatically. Details and the collaboration contract: [collaboration.md](collaboration.md).
+On every non-empty deploy and every non-up-to-date pull, PyRel (re)writes `shared_model.py` at the project root (next to the nearest `pyproject.toml`). It projects the *shared* entities from the op log into a `build_shared(m)` function and wires them into the model automatically. Details and the collaboration contract: [collaboration.md](collaboration.md).
