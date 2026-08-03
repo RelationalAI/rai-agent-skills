@@ -190,6 +190,8 @@ Q: Should this be rejected?
 
 **Rule:** For every constraint you encode (FD via Property, subtype filter, business rule), state one concrete violation and confirm rejection. If you cannot construct a counterexample, the constraint may be vacuous.
 
+**Who confirms:** in guided mode, put the counterexample to the user — a concrete violating fact is the fastest way to elicit the actual rule (see [constraint-patterns.md](constraint-patterns.md) § Data proposes, the user asserts). In one-shot mode, answer it yourself and record the answer as an assumption.
+
 ### Reading string validation
 
 Every Property and Relationship already has a reading string (the `f"{Concept} has {Type:name}"` pattern). Use these reading strings -- enriched with constraint semantics -- as a self-check or domain expert validation step.

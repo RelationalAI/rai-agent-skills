@@ -2,19 +2,44 @@
 
 <!-- TOC -->
 - [Constraint Patterns](#constraint-patterns)
+  - [Data proposes, the user asserts](#data-proposes-the-user-asserts)
   - [Mandatory vs. optional roles](#mandatory-vs-optional-roles)
   - [Subset constraints](#subset-constraints)
   - [Equality constraints (paired presence)](#equality-constraints-paired-presence)
   - [Exclusion constraints (mutual exclusivity)](#exclusion-constraints-mutual-exclusivity)
+  - [Inclusive-or and exclusive-or constraints](#inclusive-or-and-exclusive-or-constraints)
   - [Value constraints (enumerations and ranges)](#value-constraints-enumerations-and-ranges)
   - [Self-referential relationship constraints](#self-referential-relationship-constraints)
   - [Frequency constraints](#frequency-constraints)
+  - [Cardinality constraints (population bounds)](#cardinality-constraints-population-bounds)
   - [Value-comparison constraints](#value-comparison-constraints)
 <!-- /TOC -->
 
 ## Constraint Patterns
 
 Beyond the FD enforcement provided by Property and the subtype exclusion via `extends`, RAI models benefit from explicit constraint declarations. Each constraint below should be considered as an active design decision during steps 3-5 of the design sequence. Constraints are implemented as derived properties, business rules, or validation checks in the computed layer.
+
+### Data proposes, the user asserts
+
+Data shows what *is*, not what *must be*: zero observed violations means the data is clean so far, not that the rule holds, and an observed maximum is a candidate bound, not the bound. Treat every constraint as a two-step decision: **propose** it from an observed data signal, then **confirm** it as a rule.
+
+- **Guided mode:** each proposed constraint is a user-confirmation point. Present the verbalized rule with its bound ("each student may enroll in the same course at most twice — is 2 the rule, or just the max observed?") and let the user assert, adjust, or reject it.
+- **One-shot mode:** adopt the proposal but record it as an assumption in the design notes ("assumed from data: ...") so the user can review afterward.
+
+Bounds and choices — frequency N, cardinality caps, value ranges, at-least-one vs. exactly-one — are user-supplied facts in the same sense as `parameter_gap` business parameters ([enrichment-patterns.md](enrichment-patterns.md)): the data supplies a candidate, only the user supplies the rule.
+
+| Constraint | Data signal that suggests proposing it | What the user confirms |
+|---|---|---|
+| Mandatory role | Zero null rate in the source column | Is absence invalid, or just unobserved? |
+| Inclusive-or / exclusive-or | Optional columns where at least one (or exactly one) is always present | Is the disjunction a rule? At least one, or exactly one? |
+| Subset / equality | A present implies B present (or bidirectional) | Rule or coincidence? |
+| Exclusion | Two flags or associations never co-occur | Must they never co-occur? |
+| Value constraint | Closed distinct-value set; observed min/max | Is the set/range closed, or just what's seen so far? |
+| Frequency | Observed max occurrences per entity or per pair | The actual bound N |
+| Cardinality | Current population count of a concept or role | The cap, or the required minimum |
+| Ring constraints | Self-join probes: self-loops, reciprocal pairs, cycles | Which structural properties must hold |
+
+The fastest confirmation instrument is a counterexample — put one concrete violating fact to the user and ask whether it should be rejected (see [fact-decomposition-and-validation.md](fact-decomposition-and-validation.md) § Counterexample validation).
 
 ### Mandatory vs. optional roles
 
@@ -141,6 +166,48 @@ model.where(
 - Temporal exclusion (resource cannot be in two places at the same time)
 - Complementary roles (an entity acting as buyer cannot also be seller in the same transaction)
 
+### Inclusive-or and exclusive-or constraints
+
+An inclusive-or constraint (disjunctive mandatory) declares that every entity must play **at least one** of a set of roles — each role is optional individually, but the set is jointly mandatory. Adding an exclusion constraint on the same roles makes it exclusive-or: **exactly one**.
+
+**How to apply:**
+
+When two or more optional properties or relationships cover the same requirement, decide whether an entity may lack all of them. If not, declare the disjunction explicitly:
+
+```python
+# Business rule: every account must have at least one contact channel
+Account.email = model.Property(f"{Account} has {String:email}")   # optional
+Account.phone = model.Property(f"{Account} has {String:phone}")   # optional
+
+# Validate inclusive-or: flag entities with neither
+Account.unreachable = model.Relationship(f"{Account} has no contact channel")
+model.where(
+    Account, model.not_(Account.email), model.not_(Account.phone)
+).define(Account.unreachable())
+```
+
+For exclusive-or, add the both-present check alongside the neither-present check:
+
+```python
+# Business rule: each order is fulfilled from stock OR by a supplier -- exactly one
+Order.fulfillment_conflict = model.Relationship(f"{Order} has conflicting fulfillment")
+model.where(
+    Order.from_stock(), Order.from_supplier()
+).define(Order.fulfillment_conflict())          # both present -- exclusion violation
+Order.unfulfilled = model.Relationship(f"{Order} has no fulfillment source")
+model.where(
+    Order, model.not_(Order.from_stock), model.not_(Order.from_supplier)
+).define(Order.unfulfilled())                   # neither present -- inclusive-or violation
+```
+
+**Common patterns:**
+- At least one identifier or credential among alternatives
+- At least one contact or delivery channel
+- Exactly one source per record when data can arrive from alternative systems
+- Exactly one of a pair of mutually exclusive states, where "neither" is also invalid
+
+**Decision rule:** When several optional roles jointly cover a requirement, declare which combination is valid: at least one (inclusive-or), exactly one (exclusive-or), or genuinely all-optional. Leaving the disjunction implicit turns missing data into silent query loss instead of a flagged violation. This differs from the [equality constraint](#equality-constraints-paired-presence) (both-or-neither) and from plain [exclusion](#exclusion-constraints-mutual-exclusivity) (at most one, but none is fine).
+
 ### Value constraints (enumerations and ranges)
 
 Value constraints restrict the allowed values for a property beyond its base type. Distinguish between **type-level** constraints (all uses of the type) and **role-level** constraints (only in a specific context).
@@ -190,7 +257,9 @@ For every self-referential Relationship, ask which of these constraints hold:
 | Constraint | Meaning | Graph type | Example |
 |------------|---------|------------|---------|
 | **Irreflexive** | No self-loops: X cannot relate to itself | No self-edges | A task cannot depend on itself |
+| **Symmetric** | Mutual by definition: if X->Y then Y->X | Undirected | Peer-of, adjacent-to |
 | **Asymmetric** | No mutual pairs: if X->Y then not Y->X | Directed, no reciprocal edges | Manager-of (if A manages B, B doesn't manage A) |
+| **Antisymmetric** | Mutual only at self: if X->Y and Y->X then X=Y | Partial order (with reflexivity) | Contains-or-equals, version ordering |
 | **Acyclic** | No cycles of any length | DAG | Task dependencies, bill of materials |
 | **Intransitive** | No shortcutting: if X->Y and Y->Z, then not X->Z | No redundant edges | Direct-report (skip-level is a different relationship) |
 | **Transitive** | Closure included: if X->Y and Y->Z, then X->Z | Transitive closure | Ancestor-of, reachability |
@@ -216,7 +285,18 @@ Part.contains = model.Relationship(f"{Part} contains {Part}")
 # If you need "all descendants," compute transitive closure via graph reachability
 ```
 
-**Decision rule:** Always declare at least irreflexivity for self-referential relationships (self-loops are almost never meaningful). Then decide: is the relationship directed (asymmetric)? Can it have cycles (acyclic)? Does it need transitive closure? The answers determine whether you need validation rules, graph algorithms, or both.
+**Symmetric relationships need a storage decision.** Source data may list a mutual pair once, twice, or inconsistently. Pick one convention and validate it: store each pair once with an ordered-pair filter during binding (`Item.id < other.id` — see the pairwise matrix example in [build-examples.md](build-examples.md)), or store both directions and flag pairs missing their reciprocal:
+
+```python
+# Both-directions convention: flag one-directional edges
+item2 = Item.ref()
+Item.missing_reciprocal = model.Relationship(f"{Item} peer link not reciprocated by {Item:peer}")
+model.where(
+    Item.peer_of(item2), model.not_(item2.peer_of(Item))
+).define(Item.missing_reciprocal(item2))
+```
+
+**Decision rule:** Always declare at least irreflexivity for self-referential relationships (self-loops are almost never meaningful). Then decide: is the relationship mutual by definition (symmetric — pick a storage convention), directed (asymmetric), or an ordering (antisymmetric)? Can it have cycles (acyclic)? Does it need transitive closure? The answers determine whether you need validation rules, graph algorithms, or both.
 
 ### Frequency constraints
 
@@ -239,13 +319,50 @@ model.where(Team.member_count(count_ref), count_ref != 3).define(Team.invalid_si
 # To enforce as a solver constraint, see `rai-prescriptive-problem`
 ```
 
+**Frequency over a role combination:** when the limit applies to a *pair* (or tuple) of participants rather than a single entity, aggregate per multiple keys. This is the constraint a junction concept's compound identity does NOT give you — identity makes each (student, course, ...) row unique, but bounding how many rows share a (student, course) pair requires an explicit count:
+
+```python
+# Business rule: a student may enroll in the same course at most twice (retakes)
+student_ref, course_ref = Student.ref(), Course.ref()
+Student.over_enrolled = model.Relationship(f"{Student} over-enrolled in {Course:course}")
+model.where(
+    Enrollment.student(student_ref), Enrollment.course(course_ref),
+    aggs.count(Enrollment).per(student_ref, course_ref) > 2
+).define(Student.over_enrolled(course_ref))
+```
+
 **Common patterns:**
 - Fixed-size groups (teams, panels, committees): exactly N
 - Workload limits (max shifts per nurse, max courses per student): at most N
 - Minimum participation (each project must have at least 2 reviewers): at least N
 - Exact coverage (each time slot filled by exactly 1 resource): exactly 1
+- Pair limits (max repeats per entity pair): at most N per role combination
 
-### Value-comparison constraints
+### Cardinality constraints (population bounds)
+
+A cardinality constraint bounds the size of a whole population — how many instances of a concept may exist, or how many entities may play a given role — rather than how often one entity appears (that is a [frequency constraint](#frequency-constraints)).
+
+**How to apply:**
+
+The bound has no per-entity anchor, so check it with a validation query rather than a violation-flag rule:
+
+```python
+# Business rule: at most one configuration is active at a time
+ActiveConfiguration = model.Concept("ActiveConfiguration", extends=[Configuration])
+model.define(ActiveConfiguration(Configuration)).where(Configuration.status == "active")
+
+df = model.select(aggs.count(ActiveConfiguration).alias("n")).to_df()
+# Expect: n <= 1. Two or more active configurations violates the rule.
+```
+
+> `count()` on a concept with zero instances returns an *empty* DataFrame, not `n=0`. For lower bounds ("at least one X must exist"), treat an empty result as count 0 — see Step 7b in [SKILL.md](../SKILL.md).
+
+**Common patterns:**
+- Singleton roles: at most one entity holds a designated status at a time
+- Licensed capacity: population capped at a contractual or physical limit
+- Required existence: at least one instance of a setup/reference concept must exist before dependent processing
+
+**Decision rule:** Reach for a cardinality constraint when the business rule counts the population itself ("only one...", "no more than N... in total"). If the rule counts occurrences per entity or per entity combination, use a frequency constraint instead. Run cardinality checks in the validation layer (Step 7 queries or scheduled data-quality checks); to enforce a bound inside an optimization, see `rai-prescriptive-problem`.
 
 A value-comparison constraint enforces an ordering between two properties on the same entity or related entities. "Project end date must be after start date."
 

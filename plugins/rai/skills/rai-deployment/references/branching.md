@@ -15,7 +15,7 @@ rai models list                          # schema, parent, type, HEAD, owner, cr
 rai models switch MY_DB.MY_DEV_SCHEMA    # validate + set deployment.schema
 ```
 
-- `rai models list` discovers the deployed models registered in the **connection's `database`** — all of them, not just the current model, so it's how you find existing ontologies. It shows each model's name, its parent (if a branch), its type (base / live branch / static branch), its HEAD sequence, and owner. Scope is that one database's `_RAI_MODEL_MGMT` registry, not account-wide; point the connection's `database` at another DB to list its models. `--limit N` caps the rows (default 100).
+- `rai models list` discovers the deployed models registered in the **management database** — the database of your qualified `deployment.schema` (else the connection's `database`) — all of them, not just the current model, so it's how you find existing ontologies. It shows each model's name, its parent (if a branch), its type (base / live branch / static branch), its HEAD sequence, and owner. Scope is that one database's `_RELATIONALAI_MODEL_MGMT` registry, not account-wide; point at another database to list its models. `--limit N` caps the rows (default 100).
 - `rai models switch NAME` validates that `NAME` is a provisioned model, then rewrites `deployment.schema` (preserving comments/layout). `-y/--yes` skips the confirmation prompt (e.g. when editing a raiconfig outside the current directory). A branch is a valid switch target — that is how you work inside a branch.
 
 ## Create a branch

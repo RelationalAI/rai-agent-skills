@@ -45,8 +45,9 @@ The two are not exclusive: you deploy a model to a schema first, then optionally
 ## Prerequisites
 
 - **relationalai ≥ 1.20.1** (`rai --version`) — this skill targets the 1.20 `rai models` surface.
-- A reachable Snowflake connection (`rai connect` passes) with a **`database` set on the connection** — model-management resolves its metadata schema from it and falls back to the app name (which fails) when it's unset. For install/auth, see `rai-setup`.
+- A reachable Snowflake connection (`rai connect` passes) and a **fully qualified `deployment.schema` (`DB.SCHEMA`)** — model management co-locates its metadata schema with the model's database. (Bare or unset, it falls back to the connection's `database`, then the app name — which fails.) For install/auth, see `rai-setup`.
 - A model to deploy — a `.py` model file or package, with `model.path` set in `raiconfig.yaml` (or pass `--path`). Its outputs need a refresh schedule (`deployment.schedules` + `deployment.outputs.schedule`) or deploy refuses with "Unscheduled Outputs".
+- **Rules-based reasoning models only** (current limitation), with PyRel queries kept out of the model definition — the model file is loaded whole at deploy time.
 - **For `branch` / `pull` / `merge`: op-log recording must be ON.** It is **off by default** (opt-in while rolling out). Turn it on in `raiconfig.yaml`:
 
   ```yaml
@@ -112,7 +113,7 @@ Load only the file matching the task:
 
 | File | Load when |
 |---|---|
-| [references/deploy-and-oplog.md](references/deploy-and-oplog.md) | Deploying; understanding the op log, backends, op-log opt-in, install-only mode |
+| [references/deploy-and-oplog.md](references/deploy-and-oplog.md) | Deploying; the op log, backends, opt-in, install-only mode; refresh schedules, output materialization, `REFRESH_STATUS` monitoring |
 | [references/branching.md](references/branching.md) | `branch`, `switch`, `list`; live vs. static; `--from-parent`; single-level limit |
 | [references/collaboration.md](references/collaboration.md) | Multi-developer work; owned vs. shared; `shared_model.py`; `pull`; `build_shared` |
 | [references/merge-and-teardown.md](references/merge-and-teardown.md) | `merge` (preconditions, `--delete`/`--force`); `teardown` (dry-run, guards) |
@@ -138,7 +139,7 @@ Reference implementations for the Cortex-agent path (see [references/cortex-agen
 |---|---|---|
 | `branch`/`pull`/`merge` refuse: "Oplog recording is disabled" | Op-log recording is **off by default** (opt-in while rolling out) | Set `oplog.enabled: true` in `raiconfig.yaml`. `deploy`/`teardown` work without it |
 | `deploy` fails: "Database '...' does not exist or not authorized" | `deploy` creates the target **schema** but not its database | Create the database first — `deploy` runs `CREATE SCHEMA IF NOT EXISTS <db>.<schema>`. If the deploy role lacks `CREATE SCHEMA`, pre-create the schema (and its `_META` meta schema, when op-log recording is on) and grant `USAGE`; deploy confirms it exists and proceeds |
-| `deploy` (op-log on) fails: "Insufficient privileges to operate on application 'RELATIONALAI'" | No `database` on the connection — model-management falls back to the app name and tries to create its metadata schema inside the app | Set `database:` on the connection in `raiconfig.yaml`; the metadata schema resolves from it (not a grant or account-enablement issue) |
+| `deploy` (op-log on) fails: "Insufficient privileges to operate on application 'RELATIONALAI'" | `deployment.schema` is bare or unset and the connection has no `database` — model management falls back to the app name and tries to create its metadata schema inside the app | Use a fully qualified `deployment.schema` (`DB.SCHEMA`), or set `database:` on the connection (not a grant or account-enablement issue) |
 | Bare `rai models merge` fails: "Model file path is required" | Merge diffs your source to confirm the branch is fully deployed | Pass `--path <model>`, or set `model.path` in config |
 | `merge` refuses: "branch has not observed the parent's latest changes" | Branch isn't rebased on the parent's latest | On the branch: `rai models pull` then `rai models deploy`, then merge |
 | `merge --force` doesn't get past a precondition | `--force` only affects `--delete` (drops a branch that has children) | Rebase the branch (pull + deploy) to satisfy the merge preconditions |

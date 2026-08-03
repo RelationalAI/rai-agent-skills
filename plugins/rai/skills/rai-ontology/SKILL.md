@@ -109,6 +109,8 @@ Then assign remaining columns as properties of their parent concepts, grouped by
 
 **Same-type-slot disambiguation.** When a `Relationship` has two slots of the same concept type, the slots are roles and must be distinguished: either split into two `Property` declarations whose attribute names are the roles, or label both slots — `f"{Lane} from {Location:origin} to {Location:destination}"`. Without this, `model.define(...)` silently binds both slots to whichever column you list first. Verify with a Step 7 query that origin ≠ destination on at least one row.
 
+**Constraints are user-asserted, data-proposed.** As you assign links, note the candidate constraints the Step 2 EDA suggests (mandatory roles, disjunctions, frequency and cardinality bounds) and confirm each with the user in guided mode — or record it as an assumption in one-shot mode. Signal-to-question mapping: [constraint-patterns.md](references/constraint-patterns.md).
+
 ### Step 5 — Validate design
 
 Validate the proposed design against source data before coding:
@@ -121,6 +123,7 @@ Validate the proposed design against source data before coding:
 | Concept grounding | Every concept maps to an authoritative source |
 | Orthogonality | No two concepts represent the same entity set |
 | Threshold scale | For any planned threshold (subtype or flag), check `min/max/avg` of the property first — assuming 0-100 when the data is 0-10 captures nothing or everything |
+| Constraint intent | Every proposed constraint and bound is user-confirmed (guided) or recorded as an assumption (one-shot) — data proposes, the user asserts ([constraint-patterns.md](references/constraint-patterns.md)) |
 | Fact decomposition | Each relationship is irreducible and survives sample-data + counterexample checks — apply [fact-decomposition-and-validation.md](references/fact-decomposition-and-validation.md) to steps 3-5 output |
 
 **Type validation is the gate.** Verify every property's RAI type against `INFORMATION_SCHEMA.COLUMNS` using the [type mapping table](#data-mapping-guidance) — a single mismatch causes a `TyperError` at query time that blocks ALL queries on the model with no indication of which property failed. The high-risk cases: date-like columns stored as TEXT or TIMESTAMP_NTZ (use `String` / `DateTime`, not `Date`), `NUMBER` scale (scale > 0 → `Float`), BOOLEAN (→ `Boolean` property or unary Relationship), and numeric IDs (a `PHONE` column may be NUMBER — the schema dictates, not the name).
@@ -303,7 +306,7 @@ Enrollment.grade = model.Property(f"{Enrollment} has {Float:grade}")
 | Reading string quality | ≤8 static words, precise verbs, max 3 fields, don't echo owner concept | [advanced-modeling.md](references/advanced-modeling.md) |
 | Inverse relationships | `.alt()` for concise inverse declaration | [advanced-modeling.md](references/advanced-modeling.md) |
 | Role naming / same-type refs | `{Person:payer}` roles; `.ref()` for same-type instances | [advanced-modeling.md](references/advanced-modeling.md) |
-| Constraint vocabulary | Mandatory/optional, subset, exclusion, self-referential, frequency, value-comparison | [constraint-patterns.md](references/constraint-patterns.md) |
+| Constraint vocabulary | Mandatory/optional, inclusive-or/xor, subset, exclusion, self-referential, frequency, cardinality, value-comparison | [constraint-patterns.md](references/constraint-patterns.md) |
 | Decomposition checks | Irreducibility, sample-data validation, counterexample — verify ternaries are truly irreducible | [fact-decomposition-and-validation.md](references/fact-decomposition-and-validation.md) |
 
 ---
@@ -465,4 +468,4 @@ After the ontology validates and queries correctly: surface what problems it can
 - Advanced modeling (value types, identity patterns, ternary properties, inverses, role naming, scenario modeling)? See [advanced-modeling.md](references/advanced-modeling.md)
 - Model inventory or unmapped data classification? See [examination-guidance.md](references/examination-guidance.md)
 - Decomposition quality gates (irreducibility, sample data validation, counterexample)? See [fact-decomposition-and-validation.md](references/fact-decomposition-and-validation.md)
-- Constraint patterns beyond FD (mandatory/optional, subset, exclusion, self-referential, frequency, value-comparison)? See [constraint-patterns.md](references/constraint-patterns.md)
+- Constraint patterns beyond FD (mandatory/optional, inclusive-or/xor, subset, exclusion, self-referential, frequency, cardinality, value-comparison)? See [constraint-patterns.md](references/constraint-patterns.md)

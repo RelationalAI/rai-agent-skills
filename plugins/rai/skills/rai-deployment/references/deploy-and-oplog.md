@@ -23,17 +23,18 @@ connections:
   sf:
     type: snowflake
     # ... auth fields (see rai-setup) ...
-    database: MY_DB          # model-management resolves its metadata schema from this; if unset it
-                             # falls back to the app name and deploy fails with
-                             # "Insufficient privileges to operate on application 'RELATIONALAI'"
 oplog:
   enabled: true              # required for branch / pull / merge
   backend: snowflake
 deployment:
-  schema: MY_DB.MY_MODEL     # the current model (deploy target); MY_DB must already exist
+  schema: MY_DB.MY_MODEL     # fully qualified — model management co-locates its metadata schema in
+                             # MY_DB (which must already exist). Bare or unset, it falls back to the
+                             # connection's `database`, then the app name — which fails with
+                             # "Insufficient privileges to operate on application 'RELATIONALAI'"
+  # role: MY_DEPLOY_ROLE     # role for deploy + refresh tasks (default: connection/session role)
   schedules:
     standard:
-      interval_s: 0          # 0 = refresh once on deploy; >= 10 for a periodic refresh
+      interval_s: 0          # 0 = refresh once on deploy, then only on manual/external trigger; >= 10 for periodic
   outputs:
     schedule: standard       # outputs must attach to a schedule, or deploy refuses with "Unscheduled Outputs"
 model:
@@ -46,6 +47,28 @@ Options:
 - `--wait` — block until the first refresh triggered by the deploy completes. Use it in scripted/test flows for deterministic ordering.
 - `--force` — override the `shared_model.py` edit guard and divergence checks.
 - `--schema` — overrides `deployment.schema` for this deploy (working since 1.18; ignored on earlier releases — RAI-51584). For a persistent change, use `rai models switch`.
+
+## Schedules and materialization
+
+- `interval_s` must be `0` (refresh only on deploy or on a manual/external trigger of the schedule's task) or `>= 10` seconds. Schedule names start with a letter and use only letters, numbers, and underscores. An interval is a refresh cadence, not a freshness guarantee.
+- Every schedule runs once on deploy — even at `interval_s: 0`. Set `run_on_deploy: false` on the schedule to deploy without triggering a refresh.
+- `deployment.suspend_after_mins: N` auto-suspends schedules after N minutes — useful in development so test deployments don't leave tasks running.
+- `deployment.outputs.type` sets the default materialization (`dynamic_table` — the default — `table`, or `view`); per-object `overrides` change individual outputs. PyRel falls back to a table when an output can't be represented as a dynamic table.
+- Everything PyRel creates carries a `relationalai_managed = 'true'` tag, and deploy **errors rather than overwrite an untagged object** — keep the target schema dedicated to the model.
+
+## Monitor a deployment
+
+Deploy also maintains a **meta schema** (`<target schema>_META` by default; override with `deployment.meta_schema`) holding model state and the refresh tasks — others should not depend on its contents. Its `REFRESH_STATUS` procedure is the first place to look when a model isn't refreshing as expected:
+
+```sql
+CALL MY_DB.MY_MODEL_META.REFRESH_STATUS();
+```
+
+One row per schedule; `status` is `DEPLOY_RUNNING`, `DEPLOY_FAILED`, `NEVER_RUN`, `RUNNING`, `SUCCEEDED`, or `FAILED` (failure message in the `error` column). A refresh-time privilege failure usually means `deployment.role` can't execute tasks.
+
+Deployed outputs are **eventually consistent** with their sources. Within one schedule a refresh updates outputs in dependency order; schedules run independently, so dependent outputs on *different* schedules can show mixed freshness while refreshing.
+
+For config-shaped failures, `rai doctor` and `rai config explain` diagnose, and `rai doctor report` bundles config, privilege checks, deployment state, and run traces into a zip for support.
 
 ## Outcome messages
 
