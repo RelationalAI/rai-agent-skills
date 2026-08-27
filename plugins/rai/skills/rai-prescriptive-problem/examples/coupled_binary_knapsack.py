@@ -81,7 +81,8 @@ problem.maximize(sum(Project.x_approved * (Project.revenue - Project.connection_
 n_grounded = len(model.select(cap_constr).to_df())
 n_sites = len(model.select(Site).to_df())
 if n_grounded != n_sites:
-    problem.install_display_strings()  # rules must be installed before display_string is non-null
+    # Needs both the install and name= on every variable, or display_string is null.
+    problem.install_display_strings()
     print(model.where(aggs.limit(10, cap_constr.name))
                .select(cap_constr.name, cap_constr.display_string).to_df())
     raise AssertionError(f"cap_constr fired {n_grounded}/{n_sites}")

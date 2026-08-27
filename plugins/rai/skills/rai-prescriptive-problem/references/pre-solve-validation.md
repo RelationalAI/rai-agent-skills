@@ -45,7 +45,8 @@ cap_constr = problem.satisfy(
 n_grounded = len(model.select(cap_constr).to_df())
 n_entities = len(model.select(Entity).to_df())
 if n_grounded != n_entities:
-    # Drill in on the survivors. Install once; without it every display_string is null.
+    # Drill in on the survivors. Needs the install AND name= on every variable;
+    # without either, display_string is silently null.
     problem.install_display_strings()
     print(model.where(aggs.limit(10, cap_constr.name))
                .select(cap_constr.name, cap_constr.display_string).to_df())

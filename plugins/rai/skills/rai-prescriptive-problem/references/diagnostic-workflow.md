@@ -25,7 +25,7 @@ problem.install_display_strings()
 model.select(constr_ref.name, constr_ref.display_string).inspect()
 ```
 
-`display_string` is declared whether or not the rules are installed. A select that skips `install_display_strings()` returns a row per expression with a **null** `display_string` and no error saying why — only `problem.display()` installs on demand. Under Deploy Mode, install before deploying.
+`display_string` is declared whether or not the rules are installed, so a null never comes with an error. It means either the rules are not installed (only `problem.display()` installs on demand; a direct select does not) or a decision variable in the expression was declared without `name=` — the second stays null after a correct install, so check the names before re-installing. Full list and the install's cost: [formulation-display.md](formulation-display.md) > Targeted Inspection. Under Deploy Mode, install before deploying.
 
 Variables have no `display_string`; query their rows via the DSL — `model.select(var_ref.name, var_ref.lower, var_ref.upper).to_df()`.
 
@@ -57,7 +57,7 @@ The `name=["cap", Entity.id]` you passed at `satisfy()` time is what makes the f
 
 For the whole problem rather than one component, `problem.display(limit=N)` caps each printed table at its first N rows, per type section, with the header counts still reporting true totals. It cannot be scoped to one component, and its rows sort as plain text (`cap_10` before `cap_2`), so it is a sample rather than the numerically-first N.
 
-For stratification caveats and when to drop into `model.select(ref.name)` instead, see [rai-prescriptive-problem/references/formulation-display.md](formulation-display.md) > Targeted Inspection.
+For when to drop into `model.select(ref.name)` instead, see [rai-prescriptive-problem/references/formulation-display.md](formulation-display.md) > Targeted Inspection.
 
 ---
 
@@ -164,8 +164,8 @@ When status is OPTIMAL but values are all-zero or otherwise vacuous, the suspect
 
 1. `problem.install_display_strings()` first — without it every `display_string` below is null, which reads exactly like an objective that expanded to nothing.
 2. `model.select(obj_ref.name, obj_ref.display_string).inspect()` — confirm the objective expanded with non-zero coefficients on the variables you expect. All-zero coefficients = `model.define(...)` populating data is missing.
-3. For each forcing constraint (`>= demand`, `>= min_coverage`, etc.) run `c = problem.Constraint; model.select(c.name, c.display_string).inspect()` — confirm the constraint generated rows. If the constraint body's own `.where(...)` filter matches no entities, the constraint grounds zero rows; it exists in the formulation but is vacuous against the data.
-4. For per-entity constraints, check cardinality (`len(model.select(constr_ref).to_df()) == len(model.select(Entity).to_df())`) — a sparse bound property leaves the per-grouping body empty for entities missing data, so under PyRel relational semantics no row grounds for them (Step 5 (d)).
+3. Read every constraint in one go — `c = problem.Constraint; model.select(c.name, c.display_string).inspect()` — and confirm each forcing constraint (`>= demand`, `>= min_coverage`, etc.) generated rows. If the constraint body's own `.where(...)` filter matches no entities, the constraint grounds zero rows; it exists in the formulation but is vacuous against the data.
+4. For a per-entity constraint, check its cardinality against the ref you captured at `satisfy()` time (`len(model.select(constr_ref).to_df()) == len(model.select(Entity).to_df())`) — a sparse bound property leaves the per-grouping body empty for entities missing data, so under PyRel relational semantics no row grounds for them (Step 5 (d)).
 5. Cross-check with [examples/presolve_feasibility_gate.py](../examples/presolve_feasibility_gate.py) — the same aggregation-query checks that gate solve also localize which forcing requirement is empty.
 
 See [fix-generation-guidelines.md](fix-generation-guidelines.md) > Trivial Solution for fix priority.
@@ -188,3 +188,5 @@ See [fix-generation-guidelines.md](fix-generation-guidelines.md) > Trivial Solut
 | Constraint re-evaluation | `problem.verify(*fragments)` | Tolerance-sensitive constraints; before committing solution downstream |
 | Constraint walk | `c = problem.Constraint; model.select(c.name, c.display_string).to_df()` | INFEASIBLE; surprising OPTIMAL where one constraint is suspect |
 | Solver-format dump | `solve(..., print_format="moi"\|"latex"\|"mof"\|"lp"\|"mps"\|"nl")` then `si.printed_model` | Solver-level debugging beyond formulation |
+
+Every `display_string` row above needs `problem.install_display_strings()` first, and every decision variable in the expression needs a `name=`; without either the column is silently null.

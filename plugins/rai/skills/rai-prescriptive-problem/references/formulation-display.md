@@ -181,7 +181,14 @@ c = problem.Constraint
 print(model.select(c.name, c.display_string).to_df())
 ```
 
-`display_string` is declared whether or not its rules are installed, so a select that skips `install_display_strings()` returns a row per expression with a **null** `display_string` and no error saying why. Only `problem.display()` installs on demand; a direct select does not. Under Deploy Mode, install before deploying — the rules must exist at deploy time. Installing is idempotent, and a problem that never displays or installs pays no rendering cost.
+`display_string` is declared whether or not its rules are installed, so the select always returns a row per expression and a **null** `display_string` is never accompanied by an error. Two causes account for almost every case, and they need different fixes:
+
+- **The rules are not installed.** Only `problem.display()` installs on demand; a direct select does not.
+- **A decision variable in the expression was declared without `name=`.** Expressions render server-side from `Variable.name`, so one over an unnamed variable stays null *after* a correct install. Name every variable you intend to inspect.
+
+(Rarer: an incomplete engine read, or an argument the renderer cannot consume — it then fails closed for the whole expression rather than rendering it partially.) Check the variable names before re-installing: a second install is a no-op and will not change a null caused by a missing `name=`.
+
+Under Deploy Mode, install before deploying — the rules must exist at deploy time. Installing is idempotent and a problem that never displays or installs pays no rendering cost, but the install is not free: the first query after it renders **every** expression in the problem, whether or not that query selects one, and any later model change re-pays it on the next query. Install once, after the model is fully declared.
 
 Variables have no `display_string`. Query their rows directly via the DSL:
 
