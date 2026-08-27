@@ -46,7 +46,7 @@ For very-large per-grouping constraints where the full rendered table is too lon
 ```python
 from relationalai.semantics.std import aggregates as aggs
 
-# First N rows of one constraint, by .name ascending
+# First N rows in plain-text name order (cap_10 sorts before cap_2)
 model.where(aggs.limit(N, constr_ref.name)).select(constr_ref.name, constr_ref.display_string).inspect()
 
 # One specific row by name (or any other property)
@@ -55,7 +55,7 @@ model.select(constr_ref.name, constr_ref.display_string).where(constr_ref.name =
 
 The `name=["cap", Entity.id]` you passed at `satisfy()` time is what makes the filter strings predictable (joined with `_`, e.g. `name=["cap", Site.id]` → `"cap_42"` for the Site whose `id` is 42).
 
-For the whole problem rather than one component, `problem.display(limit=N)` caps each printed table at its first N rows, per type section, with the header counts still reporting true totals. It cannot be scoped to one component, and its rows sort as plain text (`cap_10` before `cap_2`), so it is a sample rather than the numerically-first N.
+For the whole problem rather than one component, `problem.display(limit=N)` caps each printed table at its first N rows, per type section, with the header counts still reporting true totals. It cannot be scoped to one component. Like `aggs.limit`, it orders rows as plain text (`cap_10` before `cap_2`), so both are samples rather than the numerically-first N.
 
 For when to drop into `model.select(ref.name)` instead, see [rai-prescriptive-problem/references/formulation-display.md](formulation-display.md) > Targeted Inspection.
 

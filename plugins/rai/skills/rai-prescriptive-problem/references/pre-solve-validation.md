@@ -37,6 +37,8 @@ Zero constraints is almost as bad as zero variables. `model.require()` produces 
 - **Per-constraint cardinality** for any per-entity constraint: capture the `satisfy()` return value and assert it grounded on the expected number of entities. `num_constraints()` is a global check; per-constraint cardinality + a `display_string` select on the ref localize *which* one is short.
 
 ```python
+from relationalai.semantics.std import aggregates as aggs
+
 # Capture at satisfy time; pass name=[Entity.id] so display rows are identifiable.
 cap_constr = problem.satisfy(
     model.require(usage <= Entity.cap),
@@ -107,6 +109,7 @@ model.require(problem.num_constraints() > 0)
 model.require(problem.num_min_objectives() + problem.num_max_objectives() == 1)  # optimization/sensitivity; use == 0 for pure feasibility/CSP (conflict=True allows either)
 # Problem-specific: adjust counts to match your formulation
 # model.require(problem.num_variables() == expected_var_count)
+# from relationalai.semantics.std import aggregates as aggs
 # model.require(problem.num_constraints() >= expected_constraint_count)
 
 # Per-constraint cardinality (for per-entity constraints — catches the

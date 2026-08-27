@@ -140,6 +140,8 @@ cap_constr = problem.satisfy(
     model.require(usage <= Entity.cap),
     name=["cap", Entity.id],   # name=[Entity.id] makes display rows identifiable
 )
+from relationalai.semantics.std import aggregates as aggs
+
 n_grounded = len(model.select(cap_constr).to_df())
 n_expected = len(model.select(Entity).to_df())
 if n_grounded != n_expected:
@@ -184,11 +186,11 @@ print(model.select(c.name, c.display_string).to_df())
 `display_string` is declared whether or not its rules are installed, so the select always returns a row per expression and a **null** `display_string` is never accompanied by an error. Two causes account for almost every case, and they need different fixes:
 
 - **The rules are not installed.** Only `problem.display()` installs on demand; a direct select does not.
-- **A decision variable in the expression was declared without `name=`.** Expressions render server-side from `Variable.name`, so one over an unnamed variable stays null *after* a correct install. Name every variable you intend to inspect.
+- **A decision variable in the expression was declared without `name=`.** Expressions render server-side from `Variable.name`, so one over an unnamed variable stays null *after* a correct install. Re-installing will not fix it — a second install is a no-op. Name every variable you intend to inspect.
 
-(Rarer: an incomplete engine read, or an argument the renderer cannot consume — it then fails closed for the whole expression rather than rendering it partially.) Check the variable names before re-installing: a second install is a no-op and will not change a null caused by a missing `name=`.
+(Rarer causes exist — an incomplete engine read, or an argument the renderer cannot consume — so treat these two as the first checks, not the only ones.)
 
-Under Deploy Mode, install before deploying — the rules must exist at deploy time. Installing is idempotent and a problem that never displays or installs pays no rendering cost, but the install is not free: the first query after it renders **every** expression in the problem, whether or not that query selects one, and any later model change re-pays it on the next query. Install once, after the model is fully declared.
+Under Deploy Mode, install before deploying — the rules must exist at deploy time. Installing is idempotent, but not free: the first query after it renders **every** expression in the problem, whether or not that query selects one, and any later model change re-pays it on the next query.
 
 Variables have no `display_string`. Query their rows directly via the DSL:
 
@@ -208,18 +210,18 @@ from relationalai.semantics.std import aggregates as aggs
 # One row by name (or any other property)
 print(model.select(cap.name, cap.display_string).where(cap.name == "cap_NYC_LAX").to_df())
 
-# First 10 rows of one constraint, by .name ascending
+# First 10 rows in plain-text name order (cap_10 sorts before cap_2)
 print(model.where(aggs.limit(10, cap.name)).select(cap.name, cap.display_string).to_df())
 
 # Cap with aggs.limit in a where, NOT Fragment.limit -- the latter exists on the
 # fragment but raises "[Feature unavailable] ... 'order_by' ..." against RAI.
 ```
 
-A predicate that matches nothing returns an empty DataFrame, with no warning — check `len(df)` rather than reading the render.
+A predicate that matches nothing returns an empty result, with no warning — read it with `.to_df()` and check `len(df)` rather than eyeballing a render.
 
 `problem.display(limit=N)` still caps the printed whole-problem summary at its first N rows per table, applied per type section so objectives cannot crowd out constraints. The header counts stay accurate for the whole problem. `N` must be a positive integer. `limit` cannot be scoped to one part; use the selects above for that.
 
-Rows order as plain text, not as numbers, so `limit` samples differently than it did through 1.28: over `cap_1`..`cap_12`, `limit=5` keeps `cap_1, cap_10, cap_11, cap_12, cap_2`. Filter by name when you need specific rows.
+**Both forms cap by plain-text order, not numeric.** `.name` is a string, so over `cap_1`..`cap_12` both `problem.display(limit=5)` and `aggs.limit(5, cap.name)` keep `cap_1, cap_10, cap_11, cap_12, cap_2`. Either is a sample, not the numerically-first N — filter by name when you need specific rows. (For `display(limit=)` this is also a change from 1.28, which sorted naturally.)
 
 To list grounded groupings without rendering the formula text — useful for very-large constraints where even a capped render is more than you need:
 
