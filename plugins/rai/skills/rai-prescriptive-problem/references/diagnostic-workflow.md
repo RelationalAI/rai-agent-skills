@@ -14,7 +14,7 @@ The Step 5 audit (`SKILL.md`) catches static issues before solve. This reference
 
 ## Targeted display
 
-Every constraint and objective carries a `display_string` property holding the text the solver receives for it. Selecting it on a captured ref reads just that component's grounded form — substituted sums for a constraint, expanded coefficients for an objective. `problem.display()` with no argument prints the whole formulation, including the variable table.
+`problem.display(ref)` and `display(where=...)` were removed in 1.29 and raise `TypeError`. Every constraint and objective instead carries a `display_string` property holding the text the solver receives for it. Selecting it on a captured ref reads just that component's grounded form — substituted sums for a constraint, expanded coefficients for an objective. `problem.display()` with no argument prints the whole formulation, including the variable table.
 
 Install the rendering rules once, after the model is fully declared, then select:
 
@@ -53,7 +53,7 @@ model.select(constr_ref.name, constr_ref.display_string).where(constr_ref.name =
 
 The `name=["cap", Entity.id]` you passed at `satisfy()` time is what makes the filter strings predictable (joined with `_`, e.g. `name=["cap", Site.id]` → `"cap_42"` for the Site whose `id` is 42).
 
-For the whole problem rather than one component, `problem.display(limit=N)` caps each printed table at its first N rows, per type section, with the header counts still reporting true totals. It cannot be scoped to one component.
+For the whole problem rather than one component, `problem.display(limit=N)` caps each printed table at its first N rows, per type section, with the header counts still reporting true totals. It cannot be scoped to one component, and its rows sort as plain text (`cap_10` before `cap_2`), so it is a sample rather than the numerically-first N.
 
 For stratification caveats and when to drop into `model.select(ref.name)` instead, see [rai-prescriptive-problem/references/formulation-display.md](formulation-display.md) > Targeted Inspection.
 
@@ -174,7 +174,7 @@ See [fix-generation-guidelines.md](fix-generation-guidelines.md) > Trivial Solut
 | Diagnostic | Call | Use when |
 |---|---|---|
 | Whole-problem snapshot | `problem.display()` | First glance at an unfamiliar Problem; verify formulation shape after major rewrite |
-| Whole-problem sample | `problem.display(limit=N)` | Large model — caps each table at top-N rows by name; counts in header stay true |
+| Whole-problem sample | `problem.display(limit=N)` | Large model — caps each table at its first N rows in plain-text name order; counts in header stay true |
 | Component grounding | `model.select(ref.name, ref.display_string)` | Localized failure; verifying `.per()` scope; confirming bounds substitution |
 | Sampled component | `model.where(aggs.limit(N, ref.name)).select(ref.name, ref.display_string)` | Very-large per-grouping constraint where even one component is too long to read in full |
 | Filtered component | `model.select(ref.name, ref.display_string).where(<predicate>)` | Pick a specific row by name (or any other property) when you know which one to look at |

@@ -117,7 +117,7 @@ c = problem.Constraint
 model.select(c.name, c.display_string).inspect()
 ```
 
-For very-large per-grouping constraints, cap the read with `model.where(aggs.limit(10, c.name)).select(c.name, c.display_string)` or pick a specific row with `.where(c.name == "...")`. See [diagnostic-workflow.md](diagnostic-workflow.md) > INFEASIBLE for what to look for. Once you've identified the offender, **rebuild the Problem** omitting or replacing the offending `satisfy(...)` call (Problem accumulates `satisfy` calls — there is no in-place removal API):
+For very-large per-grouping constraints, cap the read with `model.where(aggs.limit(10, c.name)).select(c.name, c.display_string)` (`from relationalai.semantics.std import aggregates as aggs`) or pick a specific row with `.where(c.name == "...")`. See [diagnostic-workflow.md](diagnostic-workflow.md) > INFEASIBLE for what to look for. Once you've identified the offender, **rebuild the Problem** omitting or replacing the offending `satisfy(...)` call (Problem accumulates `satisfy` calls — there is no in-place removal API):
 - Are existing constraints too tight (equality where inequality would suffice)?
 - Are there redundant constraints that conflict with each other?
 - Can a constraint be softened (e.g., `== demand` to `>= demand * 0.9`)?
