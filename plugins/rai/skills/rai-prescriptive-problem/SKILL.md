@@ -6,7 +6,7 @@ description: Formulates optimization and constraint-satisfaction problems from o
 # Prescriptive Problem
 <!-- v1-SENSITIVE -->
 
-> **Requires `relationalai>=1.11.0`.** The dual-guided multi-objective methods here read solver sensitivity via `solve("highs", sensitivity=True)`; earlier versions reject the request. See `rai-setup`.
+> **Requires `relationalai>=1.11.0`.** The dual-guided multi-objective methods here read solver sensitivity via `solve("highs", sensitivity=True)`; earlier versions reject the request. See `rai-setup`. The formulation-display surface — `display_string`, `install_display_strings()`, and `display()` without `part=`/`where=` — requires `relationalai>=1.29.0`.
 
 ## Summary
 
@@ -190,7 +190,7 @@ Select the solver (section above), solve, and triage. Solve execution mechanics 
 - `si = problem.solve_info(); si.display()` first; branch by status: `INFEASIBLE` → walk constraints; `OPTIMAL` with suspicious values → unbound coefficients or vacuous forcing constraints; right shape → `problem.verify(*original_fragments)` if tolerance-sensitive.
 - `model.select(var_ref.name, var_ref.lower, var_ref.upper).to_df()` — bounds and tuples per instance; catches `where=` over-/under-scoping.
 - `problem.install_display_strings()` once, then `model.select(constr_ref.name, constr_ref.display_string).to_df()` — grounded sums per row; catches `.per()` mis-scoping (the silent-OPTIMAL trap), contradictions, and bodies that didn't ground (Step 5(d)'s runtime view). Without the install every `display_string` comes back null with no error saying why.
-- `model.select(obj_ref.name, obj_ref.display_string).to_df()` — expanded objective; catches unbound coefficients. `c = problem.Constraint; model.select(c.name, c.display_string)` reads all of them at once when one of many is the offender.
+- `model.select(obj_ref.name, obj_ref.display_string).to_df()` — expanded objective; catches unbound coefficients. `c = problem.Constraint; model.select(c.name, c.display_string).to_df()` reads all of them at once when one of many is the offender.
 - Sampling very large constraints (`aggs.limit(N, ref.name)` in a `where`, or a `where` on `.name`): [formulation-display.md](references/formulation-display.md) > Targeted Inspection.
 - When proposing a fix, ground it in the root-cause taxonomy: [fix-generation-guidelines.md](references/fix-generation-guidelines.md).
 
@@ -243,7 +243,7 @@ Without linking constraints, multiple decision concepts produce trivial (indepen
 | Missing forcing requirement | MINIMIZE with no forcing constraint yields zero | Identify what real-world requirement forces positive activity |
 | Forcing constraint added when the objective already penalizes inaction | `>= 1` forcing alongside a cost-penalty objective over-constrains — OPTIMAL-with-tradeoff becomes INFEASIBLE | Only add forcing the problem statement requires; check whether the objective already penalizes zero activity |
 | Constraint references unwired relationship | Relationship declared but no `define()` binding — joins to zero rows, constraint produces no rows, OPTIMAL with vacuous objective | Verify all relationships in `.where()` joins have `define()` rules. Detail: [constraint-formulation.md](references/constraint-formulation.md) > Unwired Relationships |
-| Per-entity constraint applies to fewer entities than `.per(Entity)` suggests | Sparse bound (`Entity.bound` empty for some entities) → no row for them; those entities silently unconstrained | Step 5(d) cardinality check; populate the missing values, coalesce (`Entity.bound \| 0.0`), or join via a fully-populated relationship; localize with `model.where(aggs.limit(10, constr_ref.name)).select(constr_ref.name, constr_ref.display_string)` |
+| Per-entity constraint applies to fewer entities than `.per(Entity)` suggests | Sparse bound (`Entity.bound` empty for some entities) → no row for them; those entities silently unconstrained | Step 5(d) cardinality check; populate the missing values, coalesce (`Entity.bound \| 0.0`), or join via a fully-populated relationship; localize with `model.where(aggs.limit(10, constr_ref.name)).select(constr_ref.name, constr_ref.display_string).to_df()` |
 | Inline cast, subtype filter, or multi-hop join inside `satisfy(...)`/`minimize(...)` crashes | Constraint scope is less expressive than query `.where()` — `floats.float(...)`, subtype applications, multi-hop joins fail with `AttributeError: ... '_short_name'` | Pre-derive casts as Float properties via `model.define()`; resolve subtype/join membership to id sets and scope with `Entity.id.in_([...])` |
 | `problem.satisfy()` / `model.define()` in a Python loop, or hardcoded per-period constraints | Iterating a modeled dimension in Python or hand-writing N near-identical `satisfy()` calls — both bypass declarative quantification | One constraint quantifying over the dimension: Concept + `ref()` adjacency, `Integer` ref via `range()`, or `.per(Entity)`. See [examples/multi_period_flow_conservation.py](examples/multi_period_flow_conservation.py), [scenario-analysis.md](references/scenario-analysis.md) |
 | `Duplicate relationship` / `FDError` on re-solve | Multi-scenario solving with `populate=True` writes conflicting results | `populate=False` + `Variable.values()`; fresh `Problem` per iteration. [known-limitations.md](references/known-limitations.md) > Re-Solve Behavior |

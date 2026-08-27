@@ -14,7 +14,9 @@ The Step 5 audit (`SKILL.md`) catches static issues before solve. This reference
 
 ## Targeted display
 
-`problem.display(ref)` and `display(where=...)` were removed in 1.29 and raise `TypeError`. Every constraint and objective instead carries a `display_string` property holding the text the solver receives for it. Selecting it on a captured ref reads just that component's grounded form — substituted sums for a constraint, expanded coefficients for an objective. `problem.display()` with no argument prints the whole formulation, including the variable table.
+*Requires relationalai>=1.29.*
+
+`problem.display(ref)` and `display(where=...)` were removed in 1.29 and raise `TypeError`. Every constraint and objective instead carries a `display_string` property holding its rendered form as the wire format carries it to the solver. Selecting it on a captured ref reads just that component's grounded form — substituted sums for a constraint, expanded coefficients for an objective. `problem.display()` with no argument prints the whole formulation, including the variable table.
 
 Install the rendering rules once, after the model is fully declared, then select:
 
@@ -93,7 +95,7 @@ Branch by status:
 
 | Status | What it means | Diagnostic move |
 |---|---|---|
-| `OPTIMAL` / `LOCALLY_SOLVED` | Solver claims a solution | If values look right, run `verify`. If suspicious (all-zero, concentrated, dominated), suspect a missing forcing constraint, an unbound coefficient, or a per-entity constraint that grounded for fewer entities than expected — display each constraint and objective ref |
+| `OPTIMAL` / `LOCALLY_SOLVED` | Solver claims a solution | If values look right, run `verify`. If suspicious (all-zero, concentrated, dominated), suspect a missing forcing constraint, an unbound coefficient, or a per-entity constraint that grounded for fewer entities than expected — install the rendering rules and read each constraint and objective ref's `display_string` |
 | `INFEASIBLE` | No feasible point | Localize with `solve(conflict=True)` (IIS) — one solve returns the minimal conflicting subset of constraints / bounds; then rebuild the Problem omitting or relaxing a member (see below and [fix-generation-guidelines.md](fix-generation-guidelines.md) > Infeasible Solution). Manual constraint-walking is the fallback when the solver reports `NOT_SUPPORTED` / `FAILED` |
 | `TIME_LIMIT` / `ITERATION_LIMIT` | Solver gave up | Distinct from formulation bug — see `rai-prescriptive-results` |
 | Status unset / `error` non-empty | Solver rejected the model | Read `si.error`; common causes are unsupported expression types, type mismatches, solver-specific syntax limits. If `si.error` is also empty, the formulation failed before the solver received it — check stderr for `ModelWarning` or `RAIException`. |
@@ -160,10 +162,11 @@ After identifying the offender, rebuild the `Problem` omitting or relaxing the c
 
 When status is OPTIMAL but values are all-zero or otherwise vacuous, the suspect is a missing forcing constraint, an unbound coefficient, or a per-entity constraint whose body didn't ground for the entities that mattered.
 
-1. `model.select(obj_ref.name, obj_ref.display_string).inspect()` — confirm the objective expanded with non-zero coefficients on the variables you expect. All-zero coefficients = `model.define(...)` populating data is missing.
-2. For each forcing constraint (`>= demand`, `>= min_coverage`, etc.) select `model.select(c.name, c.display_string)` — confirm the constraint generated rows. If the constraint body's own `.where(...)` filter matches no entities, the constraint grounds zero rows; it exists in the formulation but is vacuous against the data.
-3. For per-entity constraints, check cardinality (`len(model.select(c).to_df()) == len(model.select(Entity).to_df())`) — a sparse bound property leaves the per-grouping body empty for entities missing data, so under PyRel relational semantics no row grounds for them (Step 5 (d)).
-4. Cross-check with [examples/presolve_feasibility_gate.py](../examples/presolve_feasibility_gate.py) — the same aggregation-query checks that gate solve also localize which forcing requirement is empty.
+1. `problem.install_display_strings()` first — without it every `display_string` below is null, which reads exactly like an objective that expanded to nothing.
+2. `model.select(obj_ref.name, obj_ref.display_string).inspect()` — confirm the objective expanded with non-zero coefficients on the variables you expect. All-zero coefficients = `model.define(...)` populating data is missing.
+3. For each forcing constraint (`>= demand`, `>= min_coverage`, etc.) run `c = problem.Constraint; model.select(c.name, c.display_string).inspect()` — confirm the constraint generated rows. If the constraint body's own `.where(...)` filter matches no entities, the constraint grounds zero rows; it exists in the formulation but is vacuous against the data.
+4. For per-entity constraints, check cardinality (`len(model.select(constr_ref).to_df()) == len(model.select(Entity).to_df())`) — a sparse bound property leaves the per-grouping body empty for entities missing data, so under PyRel relational semantics no row grounds for them (Step 5 (d)).
+5. Cross-check with [examples/presolve_feasibility_gate.py](../examples/presolve_feasibility_gate.py) — the same aggregation-query checks that gate solve also localize which forcing requirement is empty.
 
 See [fix-generation-guidelines.md](fix-generation-guidelines.md) > Trivial Solution for fix priority.
 
@@ -175,13 +178,13 @@ See [fix-generation-guidelines.md](fix-generation-guidelines.md) > Trivial Solut
 |---|---|---|
 | Whole-problem snapshot | `problem.display()` | First glance at an unfamiliar Problem; verify formulation shape after major rewrite |
 | Whole-problem sample | `problem.display(limit=N)` | Large model — caps each table at its first N rows in plain-text name order; counts in header stay true |
-| Component grounding | `model.select(ref.name, ref.display_string)` | Localized failure; verifying `.per()` scope; confirming bounds substitution |
-| Sampled component | `model.where(aggs.limit(N, ref.name)).select(ref.name, ref.display_string)` | Very-large per-grouping constraint where even one component is too long to read in full |
-| Filtered component | `model.select(ref.name, ref.display_string).where(<predicate>)` | Pick a specific row by name (or any other property) when you know which one to look at |
+| Component grounding | `model.select(ref.name, ref.display_string).to_df()` | Localized failure; verifying `.per()` scope; confirming bounds substitution |
+| Sampled component | `model.where(aggs.limit(N, ref.name)).select(ref.name, ref.display_string).to_df()` | Very-large per-grouping constraint where even one component is too long to read in full |
+| Filtered component | `model.select(ref.name, ref.display_string).where(<predicate>).to_df()` | Pick a specific row by name (or any other property) when you know which one to look at |
 | Cardinality assertion | `model.require(problem.num_constraints() == ...)` | Catch "constraint loop never ran" before solving |
 | Per-constraint cardinality | `len(model.select(constr_ref).to_df()) == len(model.select(Entity).to_df())` | Localize a per-entity constraint that didn't ground for missing-bound entities |
 | Post-solve summary | `problem.solve_info().display()` | Always — first thing after `solve()` returns |
 | Solver error inspection | `si.error` | Status looks fine but result is wrong; status is unset |
 | Constraint re-evaluation | `problem.verify(*fragments)` | Tolerance-sensitive constraints; before committing solution downstream |
-| Constraint walk | `c = problem.Constraint; model.select(c.name, c.display_string)` | INFEASIBLE; surprising OPTIMAL where one constraint is suspect |
+| Constraint walk | `c = problem.Constraint; model.select(c.name, c.display_string).to_df()` | INFEASIBLE; surprising OPTIMAL where one constraint is suspect |
 | Solver-format dump | `solve(..., print_format="moi"\|"latex"\|"mof"\|"lp"\|"mps"\|"nl")` then `si.printed_model` | Solver-level debugging beyond formulation |

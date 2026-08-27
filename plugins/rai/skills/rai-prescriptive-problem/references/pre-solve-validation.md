@@ -47,7 +47,8 @@ n_entities = len(model.select(Entity).to_df())
 if n_grounded != n_entities:
     # Drill in on the survivors. Install once; without it every display_string is null.
     problem.install_display_strings()
-    print(model.select(cap_constr.name, cap_constr.display_string).to_df().head(10))
+    print(model.where(aggs.limit(10, cap_constr.name))
+               .select(cap_constr.name, cap_constr.display_string).to_df())
     raise AssertionError(
         f"cap_constr fired {n_grounded}/{n_entities}: bound data missing for some entities"
     )
@@ -115,7 +116,8 @@ model.require(problem.num_min_objectives() + problem.num_max_objectives() == 1) 
 # n_e = len(model.select(Entity).to_df())
 # if n_g != n_e:
 #     problem.install_display_strings()
-#     print(model.select(cap_constr.name, cap_constr.display_string).to_df().head(10))
+#     print(model.where(aggs.limit(10, cap_constr.name))
+#                .select(cap_constr.name, cap_constr.display_string).to_df())
 #     raise AssertionError(f"cap_constr fired {n_g}/{n_e}")
 ```
 
