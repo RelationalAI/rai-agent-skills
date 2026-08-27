@@ -34,7 +34,7 @@ Zero constraints is almost as bad as zero variables. `model.require()` produces 
 - `problem.num_constraints() > 0`
 - Constraint count is proportional to the entities they constrain — e.g., one capacity constraint per facility
 - At least one forcing constraint exists for minimize objectives (a constraint that requires positive variable values, e.g., `sum(x) >= demand`)
-- **Per-constraint cardinality** for any per-entity constraint: capture the `satisfy()` return value and assert it grounded on the expected number of entities. `num_constraints()` is a global check; per-constraint cardinality + `display(constr_ref)` localize *which* one is short.
+- **Per-constraint cardinality** for any per-entity constraint: capture the `satisfy()` return value and assert it grounded on the expected number of entities. `num_constraints()` is a global check; per-constraint cardinality + a `display_string` select on the ref localize *which* one is short.
 
 ```python
 # Capture at satisfy time; pass name=[Entity.id] so display rows are identifiable.
@@ -45,8 +45,9 @@ cap_constr = problem.satisfy(
 n_grounded = len(model.select(cap_constr).to_df())
 n_entities = len(model.select(Entity).to_df())
 if n_grounded != n_entities:
-    # Drill in. limit caps very-large constraints; summary header shows true totals.
-    problem.display(cap_constr, limit=10)
+    # Drill in on the survivors. Install once; without it every display_string is null.
+    problem.install_display_strings()
+    print(model.select(cap_constr.name, cap_constr.display_string).to_df().head(10))
     raise AssertionError(
         f"cap_constr fired {n_grounded}/{n_entities}: bound data missing for some entities"
     )
@@ -113,7 +114,8 @@ model.require(problem.num_min_objectives() + problem.num_max_objectives() == 1) 
 # n_g = len(model.select(cap_constr).to_df())
 # n_e = len(model.select(Entity).to_df())
 # if n_g != n_e:
-#     problem.display(cap_constr, limit=10)  # survivors, before raising
+#     problem.install_display_strings()
+#     print(model.select(cap_constr.name, cap_constr.display_string).to_df().head(10))
 #     raise AssertionError(f"cap_constr fired {n_g}/{n_e}")
 ```
 

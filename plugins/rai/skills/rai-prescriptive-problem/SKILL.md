@@ -30,7 +30,7 @@ description: Formulates optimization and constraint-satisfaction problems from o
 3. Define constraints (forcing, capacity, balance, linking)
 4. Define objective(s) (direction, coefficients, multi-component)
 5. Validate the complete formulation — including the pre-solver audit that variables/constraints/objectives registered, bound, and grounded
-6. Classify the problem type, select the solver, solve and refine (targeted `display(ref)` diagnosis)
+6. Classify the problem type, select the solver, solve and refine (targeted `display_string` diagnosis)
 7. Post-solve refinement — present results, surface reactions, iterate on the formulation
 
 ---
@@ -62,7 +62,8 @@ cost = problem.minimize(aggs.sum(Lane.flow * Lane.unit_cost))
 | `minimize` / `maximize` | `(expr, name=)` | Set the (single) objective. Returns `ProblemObjective` |
 | `solve` | `(solver, time_limit_sec=, ...)` | Execute — parameters, diagnostics requests, and everything after are `rai-prescriptive-results` |
 | `verify` | `(*fragments)` | Post-solve constraint check — pass the original `model.require(...)` values (see `rai-prescriptive-results`) |
-| `display` | `(part=None, *, where=None, limit=None)` | Print materialized formulation; `display(ref)` for one constraint/objective; `limit=N` caps rows. Variable subconcepts raise — query via `model.select(...)` |
+| `display` | `(*, limit=None, print_output=True)` | Print the whole materialized formulation. `limit=N` caps each table at its first N rows per type section; header counts stay whole-problem. `print_output=False` returns the text instead of printing. `part=` / `where=` were removed in 1.29 and raise `TypeError` — read one component via `display_string` instead |
+| `install_display_strings` | `()` | Install the rules that render `Expression.display_string`. Call once, after the model is fully declared, whenever you select `display_string` yourself — `display()` installs on demand, a direct select does not, and every row comes back null with no error saying why. Under Deploy Mode install before deploying. Idempotent |
 | `num_variables` / `num_constraints` / `num_min_objectives` / `num_max_objectives` | `()` | Engine-queryable counts; usable in `model.require(...)` before solve |
 | `problem.variables` / `.constraints` / `.objectives` | attributes | Registered refs in declaration order — iterate to walk an unfamiliar Problem |
 
@@ -180,7 +181,7 @@ if len(model.select(cap_constr).to_df()) != len(model.select(Entity).to_df()):
     raise AssertionError("cap_constr short — Entity.cap unpopulated for some entities")
 ```
 
-(a)-(d) are the downstream complement of Step 1: Step 1 verifies formulation *inputs* exist; Step 5 verifies the *outputs* registered, bound, weighted, and grounded. Full pattern (drill-in with `display(ref, limit=10)`, per-failure-mode lookup): [diagnostic-workflow.md](references/diagnostic-workflow.md) and [pre-solve-validation.md](references/pre-solve-validation.md). Generation/compile failures before any solve: the failure taxonomy at `rai-prescriptive-results/references/failure-taxonomy.md` (`generates`/`compiles` levels); prescriptive-context compile errors (entity ref as scalar, zero entities, type mismatch): [compilation-errors.md](references/compilation-errors.md).
+(a)-(d) are the downstream complement of Step 1: Step 1 verifies formulation *inputs* exist; Step 5 verifies the *outputs* registered, bound, weighted, and grounded. Full pattern (drill-in with a `display_string` select, per-failure-mode lookup): [diagnostic-workflow.md](references/diagnostic-workflow.md) and [pre-solve-validation.md](references/pre-solve-validation.md). Generation/compile failures before any solve: the failure taxonomy at `rai-prescriptive-results/references/failure-taxonomy.md` (`generates`/`compiles` levels); prescriptive-context compile errors (entity ref as scalar, zero entities, type mismatch): [compilation-errors.md](references/compilation-errors.md).
 
 ### Step 6: Solve and refine (iterate)
 
@@ -188,9 +189,9 @@ Select the solver (section above), solve, and triage. Solve execution mechanics 
 
 - `si = problem.solve_info(); si.display()` first; branch by status: `INFEASIBLE` → walk constraints; `OPTIMAL` with suspicious values → unbound coefficients or vacuous forcing constraints; right shape → `problem.verify(*original_fragments)` if tolerance-sensitive.
 - `model.select(var_ref.name, var_ref.lower, var_ref.upper).to_df()` — bounds and tuples per instance; catches `where=` over-/under-scoping.
-- `problem.display(constr_ref)` — grounded sums per row; catches `.per()` mis-scoping (the silent-OPTIMAL trap), contradictions, and bodies that didn't ground (Step 5(d)'s runtime view).
-- `problem.display(obj_ref)` — expanded objective; catches unbound coefficients. `for c in problem.constraints: problem.display(c)` when one of many is the offender.
-- Sampling very large constraints (`limit=N`, `where=` filter): [formulation-display.md](references/formulation-display.md) > Targeted Inspection.
+- `problem.install_display_strings()` once, then `model.select(constr_ref.name, constr_ref.display_string).to_df()` — grounded sums per row; catches `.per()` mis-scoping (the silent-OPTIMAL trap), contradictions, and bodies that didn't ground (Step 5(d)'s runtime view). Without the install every `display_string` comes back null with no error saying why.
+- `model.select(obj_ref.name, obj_ref.display_string).to_df()` — expanded objective; catches unbound coefficients. `c = problem.Constraint; model.select(c.name, c.display_string)` reads all of them at once when one of many is the offender.
+- Sampling very large constraints (`aggs.limit(N, ref.name)` in a `where`, or a `where` on `.name`): [formulation-display.md](references/formulation-display.md) > Targeted Inspection.
 - When proposing a fix, ground it in the root-cause taxonomy: [fix-generation-guidelines.md](references/fix-generation-guidelines.md).
 
 **Simplify once correct:** static parameters over dynamic calculations; objective terms for goals, constraints for hard requirements; group-level over pairwise. [formulation-simplification.md](references/formulation-simplification.md).
@@ -242,7 +243,7 @@ Without linking constraints, multiple decision concepts produce trivial (indepen
 | Missing forcing requirement | MINIMIZE with no forcing constraint yields zero | Identify what real-world requirement forces positive activity |
 | Forcing constraint added when the objective already penalizes inaction | `>= 1` forcing alongside a cost-penalty objective over-constrains — OPTIMAL-with-tradeoff becomes INFEASIBLE | Only add forcing the problem statement requires; check whether the objective already penalizes zero activity |
 | Constraint references unwired relationship | Relationship declared but no `define()` binding — joins to zero rows, constraint produces no rows, OPTIMAL with vacuous objective | Verify all relationships in `.where()` joins have `define()` rules. Detail: [constraint-formulation.md](references/constraint-formulation.md) > Unwired Relationships |
-| Per-entity constraint applies to fewer entities than `.per(Entity)` suggests | Sparse bound (`Entity.bound` empty for some entities) → no row for them; those entities silently unconstrained | Step 5(d) cardinality check; populate the missing values, coalesce (`Entity.bound \| 0.0`), or join via a fully-populated relationship; localize with `problem.display(constr_ref, limit=10)` |
+| Per-entity constraint applies to fewer entities than `.per(Entity)` suggests | Sparse bound (`Entity.bound` empty for some entities) → no row for them; those entities silently unconstrained | Step 5(d) cardinality check; populate the missing values, coalesce (`Entity.bound \| 0.0`), or join via a fully-populated relationship; localize with `model.where(aggs.limit(10, constr_ref.name)).select(constr_ref.name, constr_ref.display_string)` |
 | Inline cast, subtype filter, or multi-hop join inside `satisfy(...)`/`minimize(...)` crashes | Constraint scope is less expressive than query `.where()` — `floats.float(...)`, subtype applications, multi-hop joins fail with `AttributeError: ... '_short_name'` | Pre-derive casts as Float properties via `model.define()`; resolve subtype/join membership to id sets and scope with `Entity.id.in_([...])` |
 | `problem.satisfy()` / `model.define()` in a Python loop, or hardcoded per-period constraints | Iterating a modeled dimension in Python or hand-writing N near-identical `satisfy()` calls — both bypass declarative quantification | One constraint quantifying over the dimension: Concept + `ref()` adjacency, `Integer` ref via `range()`, or `.per(Entity)`. See [examples/multi_period_flow_conservation.py](examples/multi_period_flow_conservation.py), [scenario-analysis.md](references/scenario-analysis.md) |
 | `Duplicate relationship` / `FDError` on re-solve | Multi-scenario solving with `populate=True` writes conflicting results | `populate=False` + `Variable.values()`; fresh `Problem` per iteration. [known-limitations.md](references/known-limitations.md) > Re-Solve Behavior |
@@ -301,7 +302,7 @@ For all example problems and the patterns they demonstrate, see [examples-index.
 | Scenario analysis | Scenario Concept vs Loop + `where=`, decision matrix | [scenario-analysis.md](references/scenario-analysis.md) |
 | Formulation simplification | Static vs dynamic parameters, goals vs constraints, over-specification | [formulation-simplification.md](references/formulation-simplification.md) |
 | Multi-objective formulation | Dual-guided scalarization, shadow-price = frontier slope, sampling policies | [multi-objective-formulation.md](references/multi-objective-formulation.md) |
-| Diagnostic workflow | Capture-ref pattern, targeted `display(ref)`, `solve_info` triage, INFEASIBLE walk | [diagnostic-workflow.md](references/diagnostic-workflow.md) |
+| Diagnostic workflow | Capture-ref pattern, targeted `display_string` reads, `solve_info` triage, INFEASIBLE walk | [diagnostic-workflow.md](references/diagnostic-workflow.md) |
 | Pre-solve validation | Entity/constraint population checks, data integrity queries, checklist | [pre-solve-validation.md](references/pre-solve-validation.md) |
 | Formulation display | `problem.display()` output structure, targeted inspection | [formulation-display.md](references/formulation-display.md) |
 | Compilation errors | Entity-reference errors, type mismatch, zero entities | [compilation-errors.md](references/compilation-errors.md) |

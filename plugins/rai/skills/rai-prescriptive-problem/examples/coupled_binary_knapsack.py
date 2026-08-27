@@ -80,7 +80,8 @@ problem.maximize(sum(Project.x_approved * (Project.revenue - Project.connection_
 n_grounded = len(model.select(cap_constr).to_df())
 n_sites = len(model.select(Site).to_df())
 if n_grounded != n_sites:
-    problem.display(cap_constr, limit=10)  # human-readable view of survivors
+    problem.install_display_strings()  # rules must be installed before display_string is non-null
+    print(model.select(cap_constr.name, cap_constr.display_string).to_df().head(10))
     raise AssertionError(f"cap_constr fired {n_grounded}/{n_sites}")
 
 problem.solve("highs", time_limit_sec=60)

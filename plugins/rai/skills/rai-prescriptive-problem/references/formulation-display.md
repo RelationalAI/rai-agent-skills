@@ -6,7 +6,7 @@
   - [Formulation Verification Checklist](#formulation-verification-checklist)
 - [Problem-Type Verification](#problem-type-verification)
 - [Counts before display, especially for large problems](#counts-before-display-especially-for-large-problems)
-- [Targeted Inspection with `problem.display(part)`](#targeted-inspection-with-problemdisplaypart)
+- [Targeted Inspection with `display_string`](#targeted-inspection-with-display_string)
 - [`problem.printed_model()` — Solver Model Text Representation](#problemprinted_model--solver-model-text-representation)
 - [Re-solving the Same Problem](#re-solving-the-same-problem)
 <!-- /TOC -->
@@ -144,7 +144,8 @@ n_grounded = len(model.select(cap_constr).to_df())
 n_expected = len(model.select(Entity).to_df())
 if n_grounded != n_expected:
     # Drill in: human-readable view of the survivors before raising.
-    problem.display(cap_constr, limit=10)
+    problem.install_display_strings()
+    print(model.select(cap_constr.name, cap_constr.display_string).to_df().head(10))
     raise AssertionError(
         f"cap_constr fired {n_grounded}/{n_expected}: bound data missing for some entities"
     )
@@ -154,9 +155,11 @@ If a count is off, drill in with the targeted display patterns below.
 
 ---
 
-## Targeted Inspection with `problem.display(part)`
+## Targeted Inspection with `display_string`
 
-Pass the return value of `minimize()`, `maximize()`, or `satisfy()` to inspect just that part of the formulation:
+Every objective and constraint carries a `display_string` property holding the text the solver receives for it. Selecting it returns a DataFrame you can filter, join and count. This is what replaces the `part` and `where` arguments `display()` accepted through 1.28.
+
+Install the rendering rules once, after the model is fully declared, then select:
 
 ```python
 x_vars = problem.solve_for(Route.x_flow, name=["flow", Route.origin, Route.dest], lower=0)
@@ -165,10 +168,19 @@ cap = problem.satisfy(
     name=["cap", Route.origin, Route.dest],
 )
 
-problem.display(cap)  # just the capacity constraints
+problem.install_display_strings()
+
+# Just the capacity constraints
+print(model.select(cap.name, cap.display_string).to_df())
+
+# Every constraint on the problem
+c = problem.Constraint
+print(model.select(c.name, c.display_string).to_df())
 ```
 
-`display(part)` is for objectives and constraints. For variables, query rows directly via the DSL:
+`display_string` is declared whether or not its rules are installed, so a select that skips `install_display_strings()` returns a row per expression with a **null** `display_string` and no error saying why. Only `problem.display()` installs on demand; a direct select does not. Under Deploy Mode, install before deploying — the rules must exist at deploy time. Installing is idempotent, and a problem that never displays or installs pays no rendering cost.
+
+Variables have no `display_string`. Query their rows directly via the DSL:
 
 ```python
 # All variables of one subconcept
@@ -178,22 +190,23 @@ print(model.select(x_vars.name, x_vars.lower, x_vars.upper).to_df())
 print(model.select(x_vars.name, x_vars.lower, x_vars.upper).where(x_vars.name == "flow_NYC_LAX").to_df())
 ```
 
-For very-large constraints, cap the rendered rows with the `limit` kwarg or filter directly with `where=`:
+Narrow or cap the rows with an ordinary `where`:
 
 ```python
-# Top 10 rows of one constraint, by .name ascending
-problem.display(cap, limit=10)
+from relationalai.semantics.std import aggregates as aggs
 
-# Top 5 of every kind in the full summary; counts in the header stay accurate
-problem.display(limit=5)
+# One row by name (or any other property)
+print(model.select(cap.name, cap.display_string).where(cap.name == "cap_NYC_LAX").to_df())
 
-# Filter to a specific row by name (or any other property) — where= requires part
-problem.display(cap, where=cap.name == "cap_NYC_LAX")
+# First 10 rows of one constraint, by .name ascending
+print(model.where(aggs.limit(10, cap.name)).select(cap.name, cap.display_string).to_df())
 ```
 
-`display(part, limit=N)` appends `(showing N of M)` when truncated. The whole-problem `display(limit=N)` omits that note because the summary header at the top already shows the true totals. A `where=` predicate that matches zero rows renders empty and emits a `UserWarning` (`display(part, where=...) matched no rows`), so the empty render is never silent.
+A predicate that matches nothing returns an empty DataFrame, with no warning — check `len(df)` rather than reading the render.
 
-To list grounded groupings without rendering the formula text — useful for very-large constraints where even `limit` is more than you need:
+`problem.display(limit=N)` still caps the printed whole-problem summary at its first N rows per table, applied per type section so objectives cannot crowd out constraints. The header counts stay accurate for the whole problem. `N` must be a positive integer. `limit` cannot be scoped to one part; use the selects above for that.
+
+To list grounded groupings without rendering the formula text — useful for very-large constraints where even a capped render is more than you need:
 
 ```python
 # All grounded names (DataFrame)
