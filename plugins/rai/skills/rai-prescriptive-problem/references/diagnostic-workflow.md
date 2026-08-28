@@ -16,7 +16,7 @@ The Step 5 audit (`SKILL.md`) catches static issues before solve. This reference
 
 *Requires relationalai>=1.29.*
 
-`problem.display(ref)` and `display(where=...)` were removed in 1.29 and raise `TypeError`. Every constraint and objective instead carries a `display_string` property holding its rendered form as the wire format carries it to the solver. Selecting it on a captured ref reads just that component's grounded form — substituted sums for a constraint, expanded coefficients for an objective. `problem.display()` with no argument prints the whole formulation, including the variable table.
+`problem.display(ref)` and `display(where=...)` were removed in 1.29 and raise `TypeError`. Every constraint and objective instead carries a `display_string` property holding its rendered form as the wire format carries it to the solver. Selecting it on a captured ref reads just that component's grounded form — substituted sums for a constraint, expanded coefficients for an objective. `problem.display()` with no argument prints the whole formulation, including the variable table once at least one variable has grounded (an empty problem prints just `Problem (numeric type: ...): empty`).
 
 Install the rendering rules once, after the model is fully declared, then select:
 
@@ -25,7 +25,7 @@ problem.install_display_strings()
 model.select(constr_ref.name, constr_ref.display_string).inspect()
 ```
 
-`display_string` is declared whether or not the rules are installed, so a null never comes with an error. It means either the rules are not installed (only `problem.display()` installs on demand; a direct select does not) or a decision variable in the expression was declared without `name=` — the second stays null after a correct install, so check the names before re-installing. Full list and the install's cost: [formulation-display.md](formulation-display.md) > Targeted Inspection. Under Deploy Mode, install before deploying.
+`display_string` is declared whether or not the rules are installed, so a null never comes with an error. It is usually one of two causes: the rules are not installed (only `problem.display()` installs on demand; a direct select does not), or a decision variable in the expression was declared without `name=` — the second stays null after a correct install, so check the names before re-installing. Neither is the only possibility; an expression the renderer cannot consume also stays null. Full list and the install's cost: [formulation-display.md](formulation-display.md) > Targeted Inspection. Under Deploy Mode, install before deploying.
 
 Variables have no `display_string`; query their rows via the DSL — `model.select(var_ref.name, var_ref.lower, var_ref.upper).to_df()`.
 
