@@ -190,7 +190,7 @@ print(model.select(c.name, c.display_string).to_df())
 
 (Rarer causes exist — an incomplete engine read, or an argument the renderer cannot consume — so treat these two as the first checks, not the only ones.)
 
-Under Deploy Mode, install before deploying — the rules must exist at deploy time. Installing is idempotent, but not free: the first query after it renders **every** expression in the problem, whether or not that query selects one, and any later model change re-pays it on the next query.
+Under Deploy Mode, install before deploying — the rules must exist at deploy time. Installing is idempotent, but not free: on the SQL backend the first query after it renders **every** expression in the problem, whether or not that query selects one, and any later model change re-pays it on the next query.
 
 Variables have no `display_string`. Query their rows directly via the DSL:
 
