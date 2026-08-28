@@ -111,6 +111,7 @@ model.require(problem.num_min_objectives() + problem.num_max_objectives() == 1) 
 # model.require(problem.num_variables() == expected_var_count)
 # model.require(problem.num_constraints() >= expected_constraint_count)
 
+# from relationalai.semantics.std import aggregates as aggs
 # Per-constraint cardinality (for per-entity constraints — catches the
 # case where a body grounds no row for entities whose bound is empty,
 # under PyRel relational semantics):

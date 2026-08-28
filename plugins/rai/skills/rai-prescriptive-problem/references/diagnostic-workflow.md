@@ -14,7 +14,7 @@ The Step 5 audit (`SKILL.md`) catches static issues before solve. This reference
 
 ## Targeted display
 
-*Requires relationalai>=1.29.*
+*The `display_string` surface below requires relationalai>=1.29; `problem.display()` with no argument works on earlier versions.*
 
 `problem.display(ref)` and `display(where=...)` were removed in 1.29 and raise `TypeError`. Every constraint and objective instead carries a `display_string` property holding its rendered form as the wire format carries it to the solver. Selecting it on a captured ref reads just that component's grounded form — substituted sums for a constraint, expanded coefficients for an objective. `problem.display()` with no argument prints the whole formulation, including the variable table once at least one variable has grounded (an empty problem prints just `Problem (numeric type: ...): empty`).
 
