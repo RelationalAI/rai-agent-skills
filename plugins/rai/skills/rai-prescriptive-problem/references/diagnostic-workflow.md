@@ -53,7 +53,7 @@ model.where(aggs.limit(N, constr_ref.name)).select(constr_ref.name, constr_ref.d
 model.select(constr_ref.name, constr_ref.display_string).where(constr_ref.name == "cap_42").inspect()
 ```
 
-The `name=["cap", Entity.id]` you passed at `satisfy()` time is what makes the filter strings predictable (joined with `_`, e.g. `name=["cap", Site.id]` → `"cap_42"` for the Site whose `id` is 42).
+The `aggs.limit` form drops constraints whose `.name` is unpopulated, so name any constraint you sample with it. The `name=["cap", Entity.id]` you passed at `satisfy()` time is what makes the filter strings predictable (joined with `_`, e.g. `name=["cap", Site.id]` → `"cap_42"` for the Site whose `id` is 42).
 
 For the whole problem rather than one component, `problem.display(limit=N)` caps each printed table at its first N rows, per type section, with the header counts still reporting true totals. It cannot be scoped to one component. Like `aggs.limit`, it orders rows as plain text (`cap_10` before `cap_2`), so both are samples rather than the numerically-first N.
 
