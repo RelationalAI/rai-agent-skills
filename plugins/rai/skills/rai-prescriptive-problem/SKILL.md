@@ -6,7 +6,7 @@ description: Formulates optimization and constraint-satisfaction problems from o
 # Prescriptive Problem
 <!-- v1-SENSITIVE -->
 
-> **Requires `relationalai>=1.11.0`.** The dual-guided multi-objective methods here read solver sensitivity via `solve("highs", sensitivity=True)`; earlier versions reject the request. See `rai-setup`. The formulation-display surface — `display_string`, `install_display_strings()`, and `display()` without `part=`/`where=` — requires `relationalai>=1.29.0`.
+> **Requires `relationalai>=1.11.0`.** The dual-guided multi-objective methods here read solver sensitivity via `solve("highs", sensitivity=True)`; earlier versions reject the request. See `rai-setup`. The formulation-display surface — `display_string`, `install_display_strings()`, and a `display()` that rejects `part=`/`where=` — requires `relationalai>=1.29.0`.
 
 ## Summary
 

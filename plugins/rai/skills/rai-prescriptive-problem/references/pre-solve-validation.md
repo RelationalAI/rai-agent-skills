@@ -109,7 +109,6 @@ model.require(problem.num_constraints() > 0)
 model.require(problem.num_min_objectives() + problem.num_max_objectives() == 1)  # optimization/sensitivity; use == 0 for pure feasibility/CSP (conflict=True allows either)
 # Problem-specific: adjust counts to match your formulation
 # model.require(problem.num_variables() == expected_var_count)
-# from relationalai.semantics.std import aggregates as aggs
 # model.require(problem.num_constraints() >= expected_constraint_count)
 
 # Per-constraint cardinality (for per-entity constraints — catches the
