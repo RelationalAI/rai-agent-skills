@@ -111,12 +111,13 @@ The constraints are mutually contradictory or over-restrictive. Before adding an
 **Fallback** (solver reports `conflict_status == "NOT_SUPPORTED"` / `FAILED`) — walk each constraint's grounded form:
 
 ```python
-for c in problem.constraints:
-    print(c)
-    problem.display(c)  # grounded sums and bounds — find the row that can't be satisfied
+problem.install_display_strings()
+c = problem.Constraint
+# grounded sums and bounds — find the row that can't be satisfied
+model.select(c.name, c.display_string).inspect()
 ```
 
-For very-large per-grouping constraints, cap the rendered table with `problem.display(c, limit=10)` or pick a specific row with `problem.display(c, where=c.name == "...")`. See [diagnostic-workflow.md](diagnostic-workflow.md) > INFEASIBLE for what to look for. Once you've identified the offender, **rebuild the Problem** omitting or replacing the offending `satisfy(...)` call (Problem accumulates `satisfy` calls — there is no in-place removal API):
+For very-large per-grouping constraints, cap the read with `model.where(aggs.limit(10, c.name)).select(c.name, c.display_string)` (`from relationalai.semantics.std import aggregates as aggs`) or pick a specific row with `.where(c.name == "...")`. See [diagnostic-workflow.md](diagnostic-workflow.md) > INFEASIBLE for what to look for. Once you've identified the offender, **rebuild the Problem** omitting or replacing the offending `satisfy(...)` call (Problem accumulates `satisfy` calls — there is no in-place removal API):
 - Are existing constraints too tight (equality where inequality would suffice)?
 - Are there redundant constraints that conflict with each other?
 - Can a constraint be softened (e.g., `== demand` to `>= demand * 0.9`)?

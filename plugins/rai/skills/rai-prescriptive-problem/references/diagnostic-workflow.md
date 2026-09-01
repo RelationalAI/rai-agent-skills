@@ -2,35 +2,62 @@
 
 Iterative debugging surface for the formulate → solve → inspect → fix → re-solve loop. Use when a solve returns something surprising (INFEASIBLE, trivial-zero OPTIMAL, OPTIMAL with values that don't match intent) or when you want to confirm a specific component grounded as expected before committing to a long solve.
 
-The Step 5 audit (`SKILL.md`) catches static issues before solve. This reference covers the diagnostic surface around solve: pre-solve handles (capture-ref pattern, cardinality assertions) and post-solve triage (status branching, targeted `display(ref)`, `verify`).
+The Step 5 audit (`SKILL.md`) catches static issues before solve. This reference covers the diagnostic surface around solve: pre-solve handles (capture-ref pattern, cardinality assertions) and post-solve triage (status branching, targeted `display_string` reads, `verify`).
 
 ---
 
 ## The capture-ref pattern
 
-`solve_for`, `satisfy`, `minimize`, `maximize` each return a Concept (`ProblemVariable`, `ProblemConstraint`, `ProblemObjective`) — the diagnostic handle. Pass `name=[Entity.id]` at `satisfy()` time so `display(ref)` rows carry identifiable labels; without it, rows are formula text only and you can't tell *which* entity didn't ground. The Python attributes `problem.variables`, `problem.constraints`, `problem.objectives` hold these refs as lists in declaration order — useful when iterating over an unfamiliar Problem. See [SKILL.md](../SKILL.md) for the full setup pattern.
+`solve_for`, `satisfy`, `minimize`, `maximize` each return a Concept (`ProblemVariable`, `ProblemConstraint`, `ProblemObjective`) — the diagnostic handle. Pass `name=[Entity.id]` at `satisfy()` time so the rendered rows carry identifiable labels; without it, rows are formula text only and you can't tell *which* entity didn't ground. The Python attributes `problem.variables`, `problem.constraints`, `problem.objectives` hold these refs as lists in declaration order — useful when iterating over an unfamiliar Problem. See [SKILL.md](../SKILL.md) for the full setup pattern.
 
 ---
 
 ## Targeted display
 
-`problem.display(ref)` prints just the named component's grounded form for a constraint (substituted sums) or objective (expanded coefficients). `problem.display()` with no argument prints the whole formulation, including the variable table. For per-variable inspection, query rows via the DSL — `model.select(var_ref.name, var_ref.lower, var_ref.upper).to_df()` — since `display(part)` is reserved for constraints and objectives.
+*The `display_string` surface below requires relationalai>=1.29; `problem.display()` with no argument works on earlier versions.*
 
-Prefer targeted display when the failure is localized — it cuts noise and makes the relevant grounding readable.
+`problem.display(ref)` and `display(where=...)` were removed in 1.29 and raise `TypeError`. Every constraint and objective instead carries a `display_string` property holding its rendered form as the wire format carries it to the solver. Selecting it on a captured ref reads just that component's grounded form — substituted sums for a constraint, expanded coefficients for an objective. `problem.display()` with no argument prints the whole formulation, including the variable table once at least one variable has grounded (an empty problem prints just `Problem (numeric type: ...): empty`).
+
+Install the rendering rules once, after the model is fully declared, then select:
+
+```python
+problem.install_display_strings()
+model.select(constr_ref.name, constr_ref.display_string).inspect()
+```
+
+`display_string` is declared whether or not the rules are installed, so a null never comes with an error. It is usually one of two causes: the rules are not installed (only `problem.display()` installs on demand; a direct select does not), or a decision variable in the expression was declared without `name=` — the second stays null after a correct install, so check the names before re-installing. Neither is the only possibility; an expression the renderer cannot consume also stays null. Full list and the install's cost: [formulation-display.md](formulation-display.md) > Targeted Inspection. Under Deploy Mode, install before deploying.
+
+Variables have no `display_string`; query their rows via the DSL — `model.select(var_ref.name, var_ref.lower, var_ref.upper).to_df()`.
+
+Prefer a targeted read when the failure is localized — it cuts noise and makes the relevant grounding readable.
 
 | Suspicion | Targeted call | What to check in the output |
 |---|---|---|
-| `where=` excluded too much (or too little) | `model.select(var_ref.name, var_ref.lower, var_ref.upper).to_df()` | Per-instance bounds and entity tuples — does the variable exist for every entity it should? Variable rows are queried via the DSL; `display(part)` itself is for constraints and objectives. |
-| `.per()` mis-scoped (silent OPTIMAL trap) | `problem.display(constr_ref)` | Each generated row's sum should disaggregate by the intended group; `sum(all_AB) == 1` repeated per row signals wrong scope |
-| Per-entity bound missing for some entities (Step 5 (d)) | `problem.display(constr_ref)` | A grouping whose body has no tuples grounds no row; rows that did ground show the expected name. Use `name=[Entity.id]` at `satisfy()` time so identifiers appear |
-| Objective coefficient property has no tuples for some entities | `problem.display(obj_ref)` | Expanded objective shows the terms that ground; entities missing from the rendered sum have no tuple for the coefficient property (under PyRel relational semantics, no tuple = no row in the join) — typically `model.define(...)` missing |
-| Constraint redundant or contradictory | `problem.display(c)` for each suspect `c` | Same constraint twice, or two constraints whose grounded forms are mutually unsatisfiable |
+| `where=` excluded too much (or too little) | `model.select(var_ref.name, var_ref.lower, var_ref.upper).to_df()` | Per-instance bounds and entity tuples — does the variable exist for every entity it should? Variables carry no `display_string`; query their rows directly. |
+| `.per()` mis-scoped (silent OPTIMAL trap) | `model.select(constr_ref.name, constr_ref.display_string).to_df()` | Each generated row's sum should disaggregate by the intended group; `sum(all_AB) == 1` repeated per row signals wrong scope |
+| Per-entity bound missing for some entities (Step 5 (d)) | `model.select(constr_ref.name, constr_ref.display_string).to_df()` | A grouping whose body has no tuples grounds no row; rows that did ground show the expected name. Use `name=[Entity.id]` at `satisfy()` time so identifiers appear |
+| Objective coefficient property has no tuples for some entities | `model.select(obj_ref.name, obj_ref.display_string).to_df()` | Expanded objective shows the terms that ground; entities missing from the rendered sum have no tuple for the coefficient property (under PyRel relational semantics, no tuple = no row in the join) — typically `model.define(...)` missing |
+| Constraint redundant or contradictory | `model.select(c.name, c.display_string).to_df()` for each suspect `c` | Same constraint twice, or two constraints whose grounded forms are mutually unsatisfiable |
 
 ### Sampling large constraints
 
-For very-large per-grouping constraints where the full rendered table is too long to read, use `problem.display(ref, limit=N)`, the whole-problem `display(limit=N)`, or the `where=` filter form `display(ref, where=ref.name == "...")`. The `name=["cap", Entity.id]` you passed at `satisfy()` time is what makes the filter strings predictable (joined with `_`, e.g. `name=["cap", Site.id]` → `"cap_42"` for the Site whose `id` is 42).
+For very-large per-grouping constraints where the full rendered table is too long to read, cap or filter the select with an ordinary `where`:
 
-For the sampling API, stratification caveats, and when to drop into `model.select(ref.name)` instead, see [rai-prescriptive-problem/references/formulation-display.md](formulation-display.md) > Targeted Inspection.
+```python
+from relationalai.semantics.std import aggregates as aggs
+
+# First N rows in plain-text name order (cap_10 sorts before cap_2)
+model.where(aggs.limit(N, constr_ref.name)).select(constr_ref.name, constr_ref.display_string).inspect()
+
+# One specific row by name (or any other property)
+model.select(constr_ref.name, constr_ref.display_string).where(constr_ref.name == "cap_42").inspect()
+```
+
+The `aggs.limit` form drops constraints whose `.name` is unpopulated, so name any constraint you sample with it. The `name=["cap", Entity.id]` you passed at `satisfy()` time is what makes the filter strings predictable (joined with `_`, e.g. `name=["cap", Site.id]` → `"cap_42"` for the Site whose `id` is 42).
+
+For the whole problem rather than one component, `problem.display(limit=N)` caps each printed table at its first N rows, per type section, with the header counts still reporting true totals. It cannot be scoped to one component. Like `aggs.limit`, it orders rows as plain text (`cap_10` before `cap_2`), so both are samples rather than the numerically-first N.
+
+For when to drop into `model.select(ref.name)` instead, see [rai-prescriptive-problem/references/formulation-display.md](formulation-display.md) > Targeted Inspection.
 
 ---
 
@@ -68,7 +95,7 @@ Branch by status:
 
 | Status | What it means | Diagnostic move |
 |---|---|---|
-| `OPTIMAL` / `LOCALLY_SOLVED` | Solver claims a solution | If values look right, run `verify`. If suspicious (all-zero, concentrated, dominated), suspect a missing forcing constraint, an unbound coefficient, or a per-entity constraint that grounded for fewer entities than expected — display each constraint and objective ref |
+| `OPTIMAL` / `LOCALLY_SOLVED` | Solver claims a solution | If values look right, run `verify`. If suspicious (all-zero, concentrated, dominated), suspect a missing forcing constraint, an unbound coefficient, or a per-entity constraint that grounded for fewer entities than expected — install the rendering rules and read each constraint and objective ref's `display_string` |
 | `INFEASIBLE` | No feasible point | Localize with `solve(conflict=True)` (IIS) — one solve returns the minimal conflicting subset of constraints / bounds; then rebuild the Problem omitting or relaxing a member (see below and [fix-generation-guidelines.md](fix-generation-guidelines.md) > Infeasible Solution). Manual constraint-walking is the fallback when the solver reports `NOT_SUPPORTED` / `FAILED` |
 | `TIME_LIMIT` / `ITERATION_LIMIT` | Solver gave up | Distinct from formulation bug — see `rai-prescriptive-results` |
 | Status unset / `error` non-empty | Solver rejected the model | Read `si.error`; common causes are unsupported expression types, type mismatches, solver-specific syntax limits. If `si.error` is also empty, the formulation failed before the solver received it — check stderr for `ModelWarning` or `RAIException`. |
@@ -115,9 +142,10 @@ The IIS is a subset to inspect or relax — **not necessarily a single offending
 **Fallback — manual constraint-walking** (when `conflict_status` is `NOT_SUPPORTED` on the chosen solver, or `FAILED`): walk the constraints and inspect their grounded forms:
 
 ```python
-for c in problem.constraints:
-    print(c)               # constraint name / id
-    problem.display(c)     # grounded sums and bounds (limit=N to cap large ones)
+problem.install_display_strings()
+c = problem.Constraint
+# grounded sums and bounds for every constraint, in one read
+model.select(c.name, c.display_string).inspect()
 ```
 
 What to look for:
@@ -134,10 +162,11 @@ After identifying the offender, rebuild the `Problem` omitting or relaxing the c
 
 When status is OPTIMAL but values are all-zero or otherwise vacuous, the suspect is a missing forcing constraint, an unbound coefficient, or a per-entity constraint whose body didn't ground for the entities that mattered.
 
-1. `problem.display(obj_ref)` — confirm the objective expanded with non-zero coefficients on the variables you expect. All-zero coefficients = `model.define(...)` populating data is missing.
-2. For each forcing constraint (`>= demand`, `>= min_coverage`, etc.) call `problem.display(c)` — confirm the constraint generated rows. If the constraint body's own `.where(...)` filter matches no entities, the constraint grounds zero rows; it exists in the formulation but is vacuous against the data.
-3. For per-entity constraints, check cardinality (`len(model.select(c).to_df()) == len(model.select(Entity).to_df())`) — a sparse bound property leaves the per-grouping body empty for entities missing data, so under PyRel relational semantics no row grounds for them (Step 5 (d)).
-4. Cross-check with [examples/presolve_feasibility_gate.py](../examples/presolve_feasibility_gate.py) — the same aggregation-query checks that gate solve also localize which forcing requirement is empty.
+1. `problem.install_display_strings()` first — without it every `display_string` below is null, which reads exactly like an objective that expanded to nothing.
+2. `model.select(obj_ref.name, obj_ref.display_string).inspect()` — confirm the objective expanded with non-zero coefficients on the variables you expect. All-zero coefficients = `model.define(...)` populating data is missing.
+3. Read every constraint in one go — `c = problem.Constraint; model.select(c.name, c.display_string).inspect()` — and confirm each forcing constraint (`>= demand`, `>= min_coverage`, etc.) generated rows. If the constraint body's own `.where(...)` filter matches no entities, the constraint grounds zero rows; it exists in the formulation but is vacuous against the data.
+4. For a per-entity constraint, check its cardinality against the ref you captured at `satisfy()` time (`len(model.select(constr_ref).to_df()) == len(model.select(Entity).to_df())`) — a sparse bound property leaves the per-grouping body empty for entities missing data, so under PyRel relational semantics no row grounds for them (Step 5 (d)).
+5. Cross-check with [examples/presolve_feasibility_gate.py](../examples/presolve_feasibility_gate.py) — the same aggregation-query checks that gate solve also localize which forcing requirement is empty.
 
 See [fix-generation-guidelines.md](fix-generation-guidelines.md) > Trivial Solution for fix priority.
 
@@ -148,14 +177,16 @@ See [fix-generation-guidelines.md](fix-generation-guidelines.md) > Trivial Solut
 | Diagnostic | Call | Use when |
 |---|---|---|
 | Whole-problem snapshot | `problem.display()` | First glance at an unfamiliar Problem; verify formulation shape after major rewrite |
-| Whole-problem sample | `problem.display(limit=N)` | Large model — caps each table at top-N rows by name; counts in header stay true |
-| Component grounding | `problem.display(ref)` | Localized failure; verifying `.per()` scope; confirming bounds substitution |
-| Sampled component | `problem.display(ref, limit=N)` | Very-large per-grouping constraint where even one component is too long to read in full |
-| Filtered component | `problem.display(ref, where=<predicate>)` | Pick a specific row by name (or any other property) when you know which one to look at — `where=` requires `part`. |
+| Whole-problem sample | `problem.display(limit=N)` | Large model — caps each table at its first N rows in plain-text name order; counts in header stay true |
+| Component grounding | `model.select(ref.name, ref.display_string).to_df()` | Localized failure; verifying `.per()` scope; confirming bounds substitution |
+| Sampled component | `model.where(aggs.limit(N, ref.name)).select(ref.name, ref.display_string).to_df()` | Very-large per-grouping constraint where even one component is too long to read in full |
+| Filtered component | `model.select(ref.name, ref.display_string).where(<predicate>).to_df()` | Pick a specific row by name (or any other property) when you know which one to look at |
 | Cardinality assertion | `model.require(problem.num_constraints() == ...)` | Catch "constraint loop never ran" before solving |
 | Per-constraint cardinality | `len(model.select(constr_ref).to_df()) == len(model.select(Entity).to_df())` | Localize a per-entity constraint that didn't ground for missing-bound entities |
 | Post-solve summary | `problem.solve_info().display()` | Always — first thing after `solve()` returns |
 | Solver error inspection | `si.error` | Status looks fine but result is wrong; status is unset |
 | Constraint re-evaluation | `problem.verify(*fragments)` | Tolerance-sensitive constraints; before committing solution downstream |
-| Constraint walk | `for c in problem.constraints: problem.display(c)` | INFEASIBLE; surprising OPTIMAL where one constraint is suspect |
+| Constraint walk | `c = problem.Constraint; model.select(c.name, c.display_string).to_df()` | INFEASIBLE; surprising OPTIMAL where one constraint is suspect |
 | Solver-format dump | `solve(..., print_format="moi"\|"latex"\|"mof"\|"lp"\|"mps"\|"nl")` then `si.printed_model` | Solver-level debugging beyond formulation |
+
+Every `display_string` row above needs `problem.install_display_strings()` first, and every decision variable in the expression needs a `name=`; without either the column is silently null.

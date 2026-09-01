@@ -6,6 +6,7 @@
 # Illustrated with a capacity-expansion model (approve projects, select site investments).
 
 from relationalai.semantics import Float, Integer, Model, String, sum
+from relationalai.semantics.std import aggregates as aggs
 from relationalai.semantics.reasoners.prescriptive import Problem
 
 model = Model("coupled_binary_knapsack")
@@ -80,7 +81,10 @@ problem.maximize(sum(Project.x_approved * (Project.revenue - Project.connection_
 n_grounded = len(model.select(cap_constr).to_df())
 n_sites = len(model.select(Site).to_df())
 if n_grounded != n_sites:
-    problem.display(cap_constr, limit=10)  # human-readable view of survivors
+    # Needs both the install and name= on every variable, or display_string is null.
+    problem.install_display_strings()
+    print(model.where(aggs.limit(10, cap_constr.name))
+               .select(cap_constr.name, cap_constr.display_string).to_df())
     raise AssertionError(f"cap_constr fired {n_grounded}/{n_sites}")
 
 problem.solve("highs", time_limit_sec=60)
