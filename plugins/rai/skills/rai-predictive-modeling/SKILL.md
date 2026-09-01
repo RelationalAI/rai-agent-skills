@@ -1,6 +1,6 @@
 ---
 name: rai-predictive-modeling
-description: Build graph neural network (GNN) models — concepts, Snowflake data loading, task relationships, graph edges, and PropertyTransformer features. Use for node classification, regression, and link prediction tasks; for training, predictions, and evaluation, see `rai-predictive-training`.
+description: Build graph neural network (GNN) models — concepts, Snowflake data loading, task relationships, graph edges, and PropertyTransformer features. Use for node classification, regression, and link prediction tasks; for training, predictions, and evaluation, see `rai-predictive-training`. Not for creating or scaffolding the task table itself (the labelled Snowflake table this step binds to) — see `rai-predictive-task-generation`.
 ---
 
 # Predictive Modeling
