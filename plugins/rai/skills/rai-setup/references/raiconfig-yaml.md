@@ -83,7 +83,7 @@ profile:
 ```
 
 ### Environment variable syntax
-Use `${VAR_NAME}` in any string value.
+Use `{{ env_var('VAR_NAME') }}` in any string value, or `{{ env_var('VAR_NAME', 'default') }}` to supply a fallback when the variable is unset. `${VAR_NAME}` is not substituted — it is passed through as a literal string, which silently breaks fields like `password`.
 
 ### Profile overlays
 Profile selection priority (highest wins): `create_config(active_profile=...)` > `RAI_PROFILE` env var > `active_profile` in YAML. The selected profile's values merge on top of the base config.
