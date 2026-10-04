@@ -1,0 +1,50 @@
+[
+  {
+    "id": "p01",
+    "sql": "SELECT s.TITLE, COUNT(DISTINCT e.LEARNER_NO) FROM ENROLLMENT e JOIN SUBJECT s ON e.SUBJECT_ID = s.ID GROUP BY s.TITLE"
+  },
+  {
+    "id": "p02",
+    "sql": "SELECT DISTINCT st.FULL_NAME FROM STUDENT st JOIN ENROLLMENT e ON e.LEARNER_NO = st.ID WHERE e.TERM = '2024A'"
+  },
+  {
+    "id": "p03",
+    "sql": "SELECT s.TITLE, SUM(CASE WHEN e.GRADE >= 50 THEN 1 ELSE 0 END) * 1.0 / COUNT(*) FROM ENROLLMENT e JOIN SUBJECT s ON e.SUBJECT_ID = s.ID GROUP BY s.TITLE"
+  },
+  {
+    "id": "p04",
+    "sql": "SELECT d.NAME, SUM(CASE WHEN e.GRADE >= 50 THEN 1 ELSE 0 END) * 1.0 / COUNT(*) FROM ENROLLMENT e JOIN SUBJECT s ON e.SUBJECT_ID = s.ID JOIN DEPARTMENT d ON s.DEPT_CODE = d.CODE GROUP BY d.NAME"
+  },
+  {
+    "id": "p05",
+    "sql": "SELECT d.NAME, COUNT(*) FROM SUBJECT s JOIN DEPARTMENT d ON s.DEPT_CODE = d.CODE WHERE s.LEVEL = 'UG' GROUP BY d.NAME"
+  },
+  {
+    "id": "p06",
+    "sql": "SELECT COUNT(*) FROM SUBJECT WHERE LEVEL = 'PG'"
+  },
+  {
+    "id": "p07",
+    "sql": "SELECT COUNT(*) FROM STUDENT_DIRECTORY"
+  },
+  {
+    "id": "p08",
+    "sql": "SELECT COUNT(*) FROM STUDENT"
+  },
+  {
+    "id": "p09",
+    "sql": "SELECT DISTINCT d.EMAIL FROM STUDENT_DIRECTORY d JOIN ENROLLMENT e ON e.LEARNER_NO = d.ID JOIN SUBJECT s ON e.SUBJECT_ID = s.ID WHERE s.LEVEL = 'PG'"
+  },
+  {
+    "id": "p10",
+    "sql": "SELECT st.FULL_NAME, AVG(e.GRADE) FROM STUDENT st JOIN ENROLLMENT e ON e.LEARNER_NO = st.ID GROUP BY st.FULL_NAME"
+  },
+  {
+    "id": "p11",
+    "sql": "SELECT st.FULL_NAME, COUNT(sf.ID) FROM STUDENT st JOIN STAFF sf ON st.HOME_DEPT = sf.DEPT_CODE GROUP BY st.FULL_NAME"
+  },
+  {
+    "id": "p12",
+    "sql": "SELECT d.NAME, COUNT(*) FROM STUDENT st JOIN DEPARTMENT d ON st.HOME_DEPT = d.CODE GROUP BY d.NAME"
+  }
+]

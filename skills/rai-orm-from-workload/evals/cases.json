@@ -1,0 +1,72 @@
+{
+  "$schema_note": "Eval cases for rai-orm-from-workload. Same layout as rai-orm-from-schema/evals/cases.json. Manual, in-session runs; results under evals/results/<YYYY-MM-DD>/<case>/.",
+  "version": 1,
+  "v0_1_pass_bar": "W-E1 exact on the SQL-side sections; W-E2 all targets met; W-E3 and W-E4 no violation.",
+  "cases": [
+    {
+      "id": "W-E1",
+      "type": "reference-solution-match",
+      "description": "The digest tool on the SQL modality reproduces the expected digest.",
+      "fixture": "fixtures/campus/workload.sql.json",
+      "fixture_setup": "python tools/workload_digest.py --input evals/fixtures/campus/workload.sql.json --schema evals/fixtures/campus/schema.sql --dialect sqlite --no-timestamp --out output.digest.yaml",
+      "input_kind": "sql",
+      "expected": "expected/campus.sql.digest.yaml",
+      "pass_criteria": ["output.digest.yaml equals the expected file byte for byte"]
+    },
+    {
+      "id": "W-E2",
+      "type": "evidence-coverage",
+      "description": "Each modality yields the evidence it can, and only that.",
+      "fixture": "fixtures/campus/",
+      "targets_by_modality": {
+        "sql": {
+          "join_edges": 6, "undeclared_join_edges": 5, "expressions_min": 1, "filter_columns_min": 2, "terms": "absent"
+        },
+        "questions": {
+          "join_edges": "absent", "terms_must_include": ["student", "subject", "department", "pass rate", "enrolled in"],
+          "terms_must_not_include": ["2024A", "postgraduate subject emails"]
+        },
+        "pairs": {
+          "join_edges": 6,
+          "alignments_must_include": [
+            {"term": "pass rate", "target": "expression"},
+            {"term": "enrolled in", "target": "join_edge ENROLLMENT.LEARNER_NO-STUDENT.ID"},
+            {"term": "home department", "target": "column STUDENT.HOME_DEPT or join_edge STUDENT.HOME_DEPT-DEPARTMENT.CODE"}
+          ],
+          "conflicting_alignment_expected": {"term": "student", "targets": ["STUDENT", "STUDENT_DIRECTORY"]}
+        }
+      },
+      "pass_criteria": ["every target of the modality is met", "the conflicting alignment of 'student' is recorded with both tables, not resolved to one"]
+    },
+    {
+      "id": "W-E3",
+      "type": "no-leak",
+      "description": "No SQL literal and no full question text reaches the digest or the model YAML.",
+      "applies_to": ["sql", "questions", "pairs"],
+      "pass_criteria": [
+        "none of '2024A', 'UG', 'PG', '50' appears in workload.digest.yaml",
+        "no question of workload.questions.txt appears verbatim in workload.digest.yaml or model.orm.yaml",
+        "if model.orm.yaml lists UG and PG as allowed values, the constraint is source: sample with a sample_query, not source: workload"
+      ]
+    },
+    {
+      "id": "W-E4",
+      "type": "no-fabrication",
+      "description": "The SRP with the digest proposes what the evidence supports and nothing else (run rai-orm-from-schema on the fixture with the pairs digest, One-shot).",
+      "fixture": "fixtures/campus/",
+      "input_kind": "sql",
+      "test_variants": [
+        {"id": "W-E4a", "expected_behavior": "three fact types with provenance.origin: workload for LEARNER_NO->STUDENT, SUBJECT.DEPT_CODE->DEPARTMENT, STUDENT.HOME_DEPT->DEPARTMENT; all proposed; each with provenance.workload.probe", "pass": "all three present, none confirmed"},
+        {"id": "W-E4b", "expected_behavior": "no fact type between Student and Staff from the HOME_DEPT = DEPT_CODE join", "pass": "absent from fact_types; listed for Step 9c"},
+        {"id": "W-E4c", "modification": "run without the digest", "expected_behavior": "none of the three fact types is emitted (no naming-convention match); SRP output otherwise unchanged", "pass": "absent"},
+        {"id": "W-E4d", "expected_behavior": "STAFF, which only one workload item touches, is modeled in full", "pass": "Staff entity with its fact types present"},
+        {"id": "W-E4e", "expected_behavior": "no mandatory constraint on the workload-proposed Student-Department fact type unless source: sample proposes it; HOME_DEPT has a NULL, so none", "pass": "no mandatory constraint on that role"}
+      ]
+    }
+  ],
+  "running_evals": {
+    "manual_methodology": "Run the skill in-session on the fixture, once per modality. Save outputs under evals/results/<YYYY-MM-DD>/<case>-<modality>/.",
+    "diff_format": "diff.md listing each target as met / not met with the YAML path",
+    "automation_status": "W-E1 and the literal check of W-E3 are covered by tools/test_workload_digest.py; the rest is manual."
+  }
+}

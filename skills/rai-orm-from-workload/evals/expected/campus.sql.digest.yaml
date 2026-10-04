@@ -1,0 +1,358 @@
+version: 1
+workload:
+  kind: sql
+  artifacts:
+  - workload.sql.json
+  dialect: sqlite
+  n_items: 12
+  n_sql: 12
+  n_questions: 0
+  n_parsed: 12
+  parse_errors: []
+  skipped_non_select: 0
+  extraction: tool
+tables:
+- table: ENROLLMENT
+  support: 6
+- table: SUBJECT
+  support: 6
+- table: STUDENT
+  support: 5
+- table: DEPARTMENT
+  support: 3
+- table: STUDENT_DIRECTORY
+  support: 2
+- table: STAFF
+  support: 1
+columns:
+- table: ENROLLMENT
+  column: LEARNER_NO
+  support: 4
+  roles:
+    select: 1
+    filter: 0
+    join: 3
+    group: 0
+    order: 0
+    aggregate: 1
+- table: ENROLLMENT
+  column: SUBJECT_ID
+  support: 4
+  roles:
+    select: 0
+    filter: 0
+    join: 4
+    group: 0
+    order: 0
+    aggregate: 0
+- table: SUBJECT
+  column: ID
+  support: 4
+  roles:
+    select: 0
+    filter: 0
+    join: 4
+    group: 0
+    order: 0
+    aggregate: 0
+- table: DEPARTMENT
+  column: CODE
+  support: 3
+  roles:
+    select: 0
+    filter: 0
+    join: 3
+    group: 0
+    order: 0
+    aggregate: 0
+- table: DEPARTMENT
+  column: NAME
+  support: 3
+  roles:
+    select: 3
+    filter: 0
+    join: 0
+    group: 3
+    order: 0
+    aggregate: 0
+- table: ENROLLMENT
+  column: GRADE
+  support: 3
+  roles:
+    select: 3
+    filter: 2
+    join: 0
+    group: 0
+    order: 0
+    aggregate: 3
+- table: STUDENT
+  column: FULL_NAME
+  support: 3
+  roles:
+    select: 3
+    filter: 0
+    join: 0
+    group: 2
+    order: 0
+    aggregate: 0
+- table: SUBJECT
+  column: LEVEL
+  support: 3
+  roles:
+    select: 0
+    filter: 3
+    join: 0
+    group: 0
+    order: 0
+    aggregate: 0
+- table: STUDENT
+  column: HOME_DEPT
+  support: 2
+  roles:
+    select: 0
+    filter: 0
+    join: 2
+    group: 0
+    order: 0
+    aggregate: 0
+- table: STUDENT
+  column: ID
+  support: 2
+  roles:
+    select: 0
+    filter: 0
+    join: 2
+    group: 0
+    order: 0
+    aggregate: 0
+- table: SUBJECT
+  column: DEPT_CODE
+  support: 2
+  roles:
+    select: 0
+    filter: 0
+    join: 2
+    group: 0
+    order: 0
+    aggregate: 0
+- table: SUBJECT
+  column: TITLE
+  support: 2
+  roles:
+    select: 2
+    filter: 0
+    join: 0
+    group: 2
+    order: 0
+    aggregate: 0
+- table: ENROLLMENT
+  column: TERM
+  support: 1
+  roles:
+    select: 0
+    filter: 1
+    join: 0
+    group: 0
+    order: 0
+    aggregate: 0
+- table: STAFF
+  column: DEPT_CODE
+  support: 1
+  roles:
+    select: 0
+    filter: 0
+    join: 1
+    group: 0
+    order: 0
+    aggregate: 0
+- table: STAFF
+  column: ID
+  support: 1
+  roles:
+    select: 1
+    filter: 0
+    join: 0
+    group: 0
+    order: 0
+    aggregate: 1
+- table: STUDENT_DIRECTORY
+  column: EMAIL
+  support: 1
+  roles:
+    select: 1
+    filter: 0
+    join: 0
+    group: 0
+    order: 0
+    aggregate: 0
+- table: STUDENT_DIRECTORY
+  column: ID
+  support: 1
+  roles:
+    select: 0
+    filter: 0
+    join: 1
+    group: 0
+    order: 0
+    aggregate: 0
+join_edges:
+- id: je_1
+  left:
+    table: ENROLLMENT
+    columns:
+    - SUBJECT_ID
+  right:
+    table: SUBJECT
+    columns:
+    - ID
+  declared_fk: true
+  support: 4
+  kinds:
+    inner: 4
+- id: je_2
+  left:
+    table: DEPARTMENT
+    columns:
+    - CODE
+  right:
+    table: SUBJECT
+    columns:
+    - DEPT_CODE
+  declared_fk: false
+  support: 2
+  kinds:
+    inner: 2
+- id: je_3
+  left:
+    table: ENROLLMENT
+    columns:
+    - LEARNER_NO
+  right:
+    table: STUDENT
+    columns:
+    - ID
+  declared_fk: false
+  support: 2
+  kinds:
+    inner: 2
+- id: je_4
+  left:
+    table: DEPARTMENT
+    columns:
+    - CODE
+  right:
+    table: STUDENT
+    columns:
+    - HOME_DEPT
+  declared_fk: false
+  support: 1
+  kinds:
+    inner: 1
+- id: je_5
+  left:
+    table: ENROLLMENT
+    columns:
+    - LEARNER_NO
+  right:
+    table: STUDENT_DIRECTORY
+    columns:
+    - ID
+  declared_fk: false
+  support: 1
+  kinds:
+    inner: 1
+- id: je_6
+  left:
+    table: STAFF
+    columns:
+    - DEPT_CODE
+  right:
+    table: STUDENT
+    columns:
+    - HOME_DEPT
+  declared_fk: false
+  support: 1
+  kinds:
+    inner: 1
+grain_keys:
+- table: DEPARTMENT
+  columns:
+  - NAME
+  support: 3
+  evidence:
+    group_by: 3
+    count_distinct: 0
+    distinct: 0
+- table: STUDENT
+  columns:
+  - FULL_NAME
+  support: 3
+  evidence:
+    group_by: 2
+    count_distinct: 0
+    distinct: 1
+- table: SUBJECT
+  columns:
+  - TITLE
+  support: 2
+  evidence:
+    group_by: 2
+    count_distinct: 0
+    distinct: 0
+- table: ENROLLMENT
+  columns:
+  - LEARNER_NO
+  support: 1
+  evidence:
+    group_by: 0
+    count_distinct: 1
+    distinct: 0
+- table: STUDENT_DIRECTORY
+  columns:
+  - EMAIL
+  support: 1
+  evidence:
+    group_by: 0
+    count_distinct: 0
+    distinct: 1
+filter_columns:
+- table: SUBJECT
+  column: LEVEL
+  support: 3
+  operators:
+    eq: 3
+    in: 0
+    like: 0
+    range: 0
+    is_null: 0
+  distinct_literals: 2
+- table: ENROLLMENT
+  column: GRADE
+  support: 2
+  operators:
+    eq: 0
+    in: 0
+    like: 0
+    range: 2
+    is_null: 0
+  distinct_literals: 1
+- table: ENROLLMENT
+  column: TERM
+  support: 1
+  operators:
+    eq: 1
+    in: 0
+    like: 0
+    range: 0
+    is_null: 0
+  distinct_literals: 1
+expressions:
+- id: ex_1
+  kind: aggregate-ratio
+  template: SUM(CASE WHEN ENROLLMENT.GRADE >= ? THEN ? ELSE ? END) * ? / COUNT(*)
+  tables:
+  - ENROLLMENT
+  columns:
+  - ENROLLMENT.GRADE
+  support: 2
+unresolved: []

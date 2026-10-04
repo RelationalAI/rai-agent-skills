@@ -42,6 +42,9 @@ The skills in this repo instruct your agent **how to use the `relationalai` Pyth
 | 14 | [rai-health-skill](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-health-skill) | Operations | Diagnose engine performance — memory, CPU, demand metrics, remediation |
 | 15 | [rai-orm-from-schema](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-orm-from-schema) | Schema modeling | Recover an ORM 2 conceptual model from a relational schema; emit YAML with constraint provenance + PyRel translation |
 | 16 | [rai-orm-from-text](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-orm-from-text) | Conceptual modeling | Design an ORM 2 conceptual model from natural-language domain description via Halpin's CSDP; emit YAML + PyRel translation |
+| 17 | [rai-orm](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-orm) | ORM entry point | Pick and sequence the ORM skills from what the user has: schema, description, and an optional workload |
+| 18 | [rai-orm-from-workload](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-orm-from-workload) | Workload evidence | Turn SQL logs, questions, or question+SQL pairs into a digest of modeling evidence for the ORM skills |
+| 19 | [rai-orm-verify](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-orm-verify) | Model verification | Rewrite the workload in PyRel against the ORM model, check it, and repair the model until it can |
 
 ## Prerequisites
 **Requires `relationalai` (PyRel) v1.0.14+**

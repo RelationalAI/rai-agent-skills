@@ -1,0 +1,12 @@
+How many students are enrolled in each subject?
+List the names of the students enrolled in term 2024A.
+What is the pass rate of each subject?
+What is the pass rate in each department?
+How many undergraduate subjects does each department offer?
+How many postgraduate subjects are there?
+How many students have a directory entry?
+How many students are registered?
+What are the emails of the students enrolled in a postgraduate subject?
+What is the average grade of each student?
+For each student, how many staff work in the student's home department?
+How many students does each home department have?

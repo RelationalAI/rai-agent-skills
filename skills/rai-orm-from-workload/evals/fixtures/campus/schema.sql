@@ -1,0 +1,45 @@
+-- Campus fixture (SQLite). Synthetic; written for the rai-orm workload evals.
+-- Planted on purpose (see README.md):
+--   * ENROLLMENT.LEARNER_NO, SUBJECT.DEPT_CODE, STUDENT.HOME_DEPT, STAFF.DEPT_CODE: real references, no FK declared,
+--     and none of them matches the <entity>_id naming convention.
+--   * STUDENT and STUDENT_DIRECTORY describe the same people with different row sets (grain trap).
+--   * STUDENT_DIRECTORY has no primary key.
+
+CREATE TABLE DEPARTMENT (
+  CODE      TEXT PRIMARY KEY,
+  NAME      TEXT NOT NULL
+);
+
+CREATE TABLE STUDENT (
+  ID        INTEGER PRIMARY KEY,
+  FULL_NAME TEXT NOT NULL,
+  HOME_DEPT TEXT
+);
+
+CREATE TABLE STUDENT_DIRECTORY (
+  ID        INTEGER,
+  EMAIL     TEXT,
+  PHONE     TEXT
+);
+
+CREATE TABLE STAFF (
+  ID        INTEGER PRIMARY KEY,
+  FULL_NAME TEXT NOT NULL,
+  DEPT_CODE TEXT
+);
+
+CREATE TABLE SUBJECT (
+  ID        INTEGER PRIMARY KEY,
+  TITLE     TEXT NOT NULL,
+  LEVEL     TEXT NOT NULL,
+  DEPT_CODE TEXT
+);
+
+CREATE TABLE ENROLLMENT (
+  LEARNER_NO INTEGER NOT NULL,
+  SUBJECT_ID INTEGER NOT NULL,
+  TERM       TEXT NOT NULL,
+  GRADE      INTEGER,
+  PRIMARY KEY (LEARNER_NO, SUBJECT_ID, TERM),
+  FOREIGN KEY (SUBJECT_ID) REFERENCES SUBJECT (ID)
+);

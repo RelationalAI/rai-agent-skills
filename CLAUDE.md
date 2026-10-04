@@ -68,6 +68,7 @@ Skills compose in a natural workflow progression:
 - **Operations:** rai-cortex-integration, rai-health-skill
 - **Schema modeling (in development):** rai-orm-from-schema
 - **Conceptual modeling from text (in development):** rai-orm-from-text (Halpin CSDP)
+- **ORM with a workload (in development):** rai-orm (router) -> rai-orm-from-workload -> rai-orm-from-schema or rai-orm-from-text -> rai-orm-verify
 
 ## Version Bumps
 

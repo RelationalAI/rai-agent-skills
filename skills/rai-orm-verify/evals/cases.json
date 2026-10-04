@@ -1,0 +1,59 @@
+{
+  "$schema_note": "Eval cases for rai-orm-verify. Fixture shared with rai-orm-from-workload: ../../rai-orm-from-workload/evals/fixtures/campus/. Manual, in-session runs.",
+  "version": 1,
+  "v0_1_pass_bar": "V-E1 reaches the stated pass counts; V-E2, V-E3 and V-E4 show no violation.",
+  "cases": [
+    {
+      "id": "V-E1",
+      "type": "verification-loop",
+      "description": "Starting from a model built WITHOUT the digest (so the planted defects are present), the loop finds and repairs them.",
+      "fixture": "../../rai-orm-from-workload/evals/fixtures/campus/",
+      "fixture_setup": "Build model.orm.yaml and model.py with rai-orm-from-schema on the fixture, no digest, One-shot; bind model.py to the SQLite data. Then run rai-orm-verify with workload.pairs.json.",
+      "input_kind": "pairs",
+      "expected_behavior": {
+        "oracle": "execution-match",
+        "round_0": "items that need an undeclared join (p02, p04, p05, p09, p10, p12) fail as missing-element",
+        "repairs": "fact types for the three undeclared references, proposed, provenance.origin: workload, evidence: verification; a derived fact type for pass rate (p03, p04)",
+        "final": "at least 11 of 12 items pass; p11 passes without any Student-Staff fact type, or is left as residual; p07 returns 9 and p08 returns 12"
+      },
+      "pass_criteria": [
+        "model.verification.json exists, validates against references/report-format.md, and names the oracle",
+        "split.holdout is 0 (12 items)",
+        "every repair's defect and change are stated without an item id or question text",
+        "model.py was regenerated from the YAML, not edited (the YAML contains every element model.py uses)",
+        "verification/<id>.py exists for every pass"
+      ]
+    },
+    {
+      "id": "V-E2",
+      "type": "oracle-honesty",
+      "description": "The report never claims more than the oracle supports.",
+      "test_variants": [
+        {"id": "V-E2a", "modification": "no data: give schema.sql only, model unbound", "expected_behavior": "oracle: structural; the summary says the check is weaker", "pass": "no item reported as execution-matched"},
+        {"id": "V-E2b", "modification": "questions modality, One-shot", "expected_behavior": "oracle: user-review; verification/review.md written with 5-10 items covering different concepts; all items unverified", "pass": "pass rate numerator is 0; unverified is 12"},
+        {"id": "V-E2c", "modification": "questions modality, Guided; reviewer answers 'no' to the item behind p07 if the rewrite counts all students", "expected_behavior": "that item is fail; the reviewer's one-line correction is used to classify it as grain", "pass": "fail recorded with a class; items outside the sample stay unverified"}
+      ]
+    },
+    {
+      "id": "V-E3",
+      "type": "no-workaround",
+      "description": "A rewrite must not get around the model.",
+      "expected_behavior": "no verification/<id>.py reads source tables directly, embeds SQL, or reconstructs a join through a shared literal; an item that would need it is a fail with a model class",
+      "pass_criteria": ["grep of verification/*.py finds no table name used outside the model's concepts", "no SQL string in any rewrite"]
+    },
+    {
+      "id": "V-E4",
+      "type": "regression-and-stop",
+      "description": "Passed items are re-run after each model revision, and the loop stops by rule.",
+      "pass_criteria": [
+        "every round in model.verification.json has a regressions count",
+        "summary.stopped_because is one of all-pass, plateau, budget",
+        "no more than 5 rounds"
+      ]
+    }
+  ],
+  "running_evals": {
+    "manual_methodology": "Run the skill in-session on the fixture. Save outputs under evals/results/<YYYY-MM-DD>/<case>/.",
+    "automation_status": "The result comparison is covered by tools/test_compare_results.py; the loop is manual."
+  }
+}

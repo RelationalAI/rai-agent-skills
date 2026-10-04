@@ -446,7 +446,7 @@ Every constraint entry — inline or top-level — carries the same six metadata
 ```yaml
 - type: <constraint-type>
   # constraint-specific fields …
-  source: explicit                            # explicit | sample | common-sense | llm-inferred | user-supplied
+  source: explicit                            # explicit | sample | common-sense | llm-inferred | user-supplied | workload
   status: confirmed                           # proposed | confirmed | rejected
   modality: alethic                           # alethic | deontic. Default = alethic if omitted.
   rationale: "Free-text explanation."         # optional for explicit; required for non-explicit sources
@@ -516,6 +516,39 @@ provenance:
   added_at_step: 9d                           # when in the SRP (or CSDP Step 7d) the user added this
   user_note: "Confirmed verbally during review on 2026-05-04."  # optional
 ```
+
+### `source: workload`
+
+Used only when a workload was given: evidence from a workload digest (`rai-orm-from-workload`) or a repair made by `rai-orm-verify`. The workload itself is recorded once, at the top level:
+
+```yaml
+source:
+  kind: sql                                   # unchanged: the workload is not a source kind
+  artifacts: ["workload.digest.yaml"]         # allowed for every source kind
+  workload: { kind: pairs, n_items: 109 }     # sql | questions | pairs
+```
+
+Per constraint:
+
+```yaml
+provenance:
+  workload_kind: pairs                        # sql | questions | pairs
+  evidence: join-edge                         # join-edge | grain-key | filter-column | expression | term | verification
+  digest_ref: je_1                            # id in workload.digest.yaml, when the evidence is a digest entry
+  support: 14                                 # workload items showing the evidence
+  n_items: 109                                # workload size
+  probe:                                      # the data check that backs it, when one ran
+    kind: inclusion                           # inclusion | distinct-values | uniqueness
+    rate: 0.97
+    sample_size: 10000
+  failure_class: grain                        # only for evidence: verification (see rai-orm-verify)
+```
+
+`rationale` is required. Neither `rationale` nor `provenance` may hold a SQL literal, a data value taken from a query, or the text of a question.
+
+Object types and fact types added from workload evidence carry `provenance.origin: workload` and the same block under `provenance.workload`.
+
+Status rules: starts `proposed`; becomes `confirmed` only by user review (SRP Step 9b / CSDP Step 7b). A passing probe is recorded in `provenance.probe` and does not confirm by itself.
 
 ## Text-first extensions (text-conversation source.kind)
 
@@ -611,7 +644,7 @@ A YAML is valid when **all** of the following hold:
 ### Provenance
 
 16. Every constraint has `source` and `status`.
-17. `rationale` is present when `source ∈ {sample, common-sense, llm-inferred, user-supplied}`.
+17. `rationale` is present when `source ∈ {sample, common-sense, llm-inferred, user-supplied, workload}`.
 18. `provenance` shape matches `source` per the per-source schemas above.
 19. `source: llm-inferred` constraints have `provenance.rationale_world_fact` set (non-empty).
 
@@ -626,8 +659,9 @@ A YAML is valid when **all** of the following hold:
 
 24. `source: explicit` constraints have `status: confirmed` (DDL-derived constraints aren't proposed for review).
 25. `source: user-supplied` constraints have `status: confirmed` (user added them deliberately).
-26. `source: common-sense | llm-inferred` start at `status: proposed`. They may transition to `confirmed` (Step 9b accept) or `rejected` (move to `rejected_proposals`).
+26. `source: common-sense | llm-inferred | workload` start at `status: proposed`. They may transition to `confirmed` (Step 9b accept) or `rejected` (move to `rejected_proposals`).
 27. `source: sample` is `confirmed` only when input is live SQL and the probe saturated; otherwise `proposed`.
+28. `source: workload` appears only when `source.workload` is present, and its `provenance` has `workload_kind`, `evidence` and `support`.
 
 A validator that fails any of these rules emits a structured error pointing at the offending entry. The validator is markdown-documented for v0.1; Phase 4+ stretch goal S4 introduces a Python validator if the rules grow burdensome to apply by hand.
 

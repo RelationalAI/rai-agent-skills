@@ -23,6 +23,9 @@ description: Recovers an ORM 2 conceptual model (YAML with full constraint prove
 - PyRel syntax reference (Concept, Property, Relationship, model.require, f-string patterns) — see `rai-pyrel-coding`
 - Text-only inputs (requirements documents, domain descriptions, no schema or data) — see `rai-orm-from-text` (the text-first companion skill, which uses Halpin's CSDP for forward design)
 - Querying, graph analysis, optimization formulation — see the respective reasoner skills (`rai-querying`, `rai-graph-analysis`, `rai-prescriptive-*`)
+- Choosing between the ORM skills, or sequencing them around a workload — see `rai-orm`
+- Extracting evidence from SQL logs, questions, or question+SQL pairs — see `rai-orm-from-workload` (its digest is an optional input here)
+- Checking that the finished model can answer a workload — see `rai-orm-verify`
 
 **Overview:**
 1. Open with mode choice — Guided (interactive confirmation) or One-shot (full YAML for post-hoc review)
@@ -53,6 +56,8 @@ description: Recovers an ORM 2 conceptual model (YAML with full constraint prove
 | `llm-inferred` | LLM proposal for novel object types/relationships | `proposed` |
 | `user-supplied` | Added by user during Step 9 review | `confirmed` |
 
+A sixth source, `workload`, exists only when a workload digest was given or `rai-orm-verify` repaired the model: evidence from the user's queries or questions. Default `status`: `proposed`.
+
 **Core principle: propose, never assert.** Constraints not lifted from DDL are *candidates* validated with the user.
 
 ## Inputs and Outputs
@@ -61,6 +66,8 @@ description: Recovers an ORM 2 conceptual model (YAML with full constraint prove
 - Live database connection (Snowflake / Postgres / MySQL / Oracle / SQLite — dialect-aware introspection via INFORMATION_SCHEMA or equivalent).
 - DDL file (`.sql` with `CREATE TABLE` / `ALTER TABLE` / `CREATE INDEX` statements).
 - CSV samples (typed inference; `confidence: low`; PKs/FKs/CHECKs absent).
+
+**Optional, with any of the above:** a workload digest (`workload.digest.yaml`) from `rai-orm-from-workload`. It adds evidence to Steps 2, 3, 5 and 7 and changes no step's procedure; see [Workload evidence](#workload-evidence-optional-input).
 
 **Outputs (always emitted as the triple):**
 - `model.orm.yaml` — full canonical YAML; format spec in [`references/representation-format.md`](references/representation-format.md).
@@ -82,7 +89,7 @@ Before introspecting anything, ask the user:
 > - *One-shot — I emit the full YAML in one pass; you review by editing the file. Best for fast retargeting.*
 > *Which would you prefer?*
 
-Default to Guided if no answer. Record the choice in `source.mode` of the YAML.
+Default to Guided if no answer. Record the choice in `source.mode` of the YAML. When this skill is run by `rai-orm`, the mode was already chosen there: record it and skip the question.
 
 In **Guided** mode, the SRP pauses for user input at three pivot points (after Step 0 itself, after Step 7, and across Step 9's six substeps). In **One-shot** mode, those pauses collapse — library-tier proposals auto-confirm; LLM-tier proposals stay `proposed` for the user to review by editing the YAML.
 
@@ -242,7 +249,7 @@ Every constraint in the model carries:
 ```yaml
 - type: <constraint-type>
   # constraint-specific fields …
-  source: explicit | sample | common-sense | llm-inferred | user-supplied   # set once
+  source: explicit | sample | common-sense | llm-inferred | user-supplied   # set once (plus `workload` when a workload was given)
   status: proposed | confirmed | rejected                                    # evolves through review
   modality: alethic | deontic                                                # set at Step 9e; default alethic
   rationale: "Free-text explanation."                                        # required for non-explicit sources
@@ -265,7 +272,24 @@ Antipatterns are detected in Step 7 and flagged on the affected YAML entries via
 **Discipline:**
 - Antipatterns are **flagged, never silently corrected.** The user resolves at Step 9c.
 - Detection is **conservative** — false negatives (missing a real antipattern) are preferred over false positives (calling clean schema "antipattern"). TPC-H runs should produce zero antipattern flags.
-- Sample-driven uniqueness candidates and missing-FK candidates do **not** auto-emit constraints. They flag for user confirmation only.
+- Sample-driven uniqueness candidates and missing-FK candidates do **not** auto-emit constraints. They flag for user confirmation only. (A join that the workload uses and that passes its inclusion probe is not a name-convention guess; it is handled under [Workload evidence](#workload-evidence-optional-input).)
+
+## Workload evidence (optional input)
+
+When a workload digest is given, it feeds four steps. Each line below adds evidence to a step; none replaces the step's own rules. Details and thresholds in [`references/workload-evidence.md`](references/workload-evidence.md).
+
+| Step | Digest section | Effect |
+|---|---|---|
+| 2 — object types | `grain_keys` | Checks each entity's reference scheme against the grain the workload groups by; a mismatch raises a `grain-mismatch` note for Step 9c |
+| 3 — fact types | `terms`, `expressions` | Readings and role names may use an aligned business term; an expression with support ≥ 2 becomes a `proposed` derived fact type |
+| 5 — probes | `join_edges`, `filter_columns` | Each undeclared join edge requests an inclusion probe; each filter column requests a distinct-value probe |
+| 7 — antipatterns | `join_edges` | `missing-fk`: an edge that passed its inclusion probe is emitted as a `proposed` fact type with `provenance.origin: workload` (Guided: confirmed in one batch at 9c; One-shot: stays `proposed` with `# REVIEW PROPOSAL`) |
+
+**Discipline:**
+- Workload evidence may **add or promote, never prune**. Tables and columns the workload never touches are modeled as usual.
+- A join edge that fails its inclusion probe is **not** emitted, whatever its support.
+- No SQL literal and no question text enters the YAML. Provenance carries counts and digest ids.
+- Everything from the workload starts `proposed`.
 
 ## ORM → PyRel Translation
 
@@ -278,7 +302,8 @@ Four tiers (table above; full rules in [`references/orm-to-pyrel.md`](references
 | Mistake | Cause | Fix |
 |---|---|---|
 | Asserting an inferred constraint in the YAML as `confirmed` without user review | Skipping Step 9b in Guided mode, or assuming One-shot's auto-confirm covers LLM-tier | LLM-tier and `sample`-on-CSV stay `proposed` always until user review. Library-tier auto-confirms only in One-shot mode. |
-| Inventing fact types from name conventions (`*_id`) without an actual FK | Treating "missing FK" antipattern as auto-resolution | Step 7 flags missing-FK candidates. Do NOT emit a fact type until the user confirms in Step 9c. |
+| Inventing fact types from name conventions (`*_id`) without an actual FK | Treating "missing FK" antipattern as auto-resolution | Step 7 flags missing-FK candidates. Do NOT emit a fact type until the user confirms in Step 9c. The only exception is a join edge from a workload digest that passed its inclusion probe, emitted as `proposed`. |
+| Dropping tables or columns because the workload never uses them | Reading the workload as the scope of the model | The digest adds and promotes; it never prunes. |
 | Using Python's `and`/`or`/`not` in PyRel `model.require()` | Forgetting PyRel's boolean operator rules | Use `&` / `\|` / `model.not_()`. Triggers compile-time `[Invalid operator] Cannot use python's 'bool check'`. |
 | Reference mode = `derived` for a single-column PK | Mistaking Halpin's `popular` mode for "derived" terminology | Halpin's term is `popular`. `derived` refers to derivation status, not reference mode. |
 | Combining ring variants in one entry (`variant: asymmetric+intransitive`) | Looking at Halpin's compound names and assuming one YAML entry | Emit each variant as a separate `ring` constraint entry. Cleaner verbalization, cleaner translation, independent confirm/reject. |
@@ -307,3 +332,4 @@ Four tiers (table above; full rules in [`references/orm-to-pyrel.md`](references
 | [`references/orm-to-pyrel.md`](references/orm-to-pyrel.md) | Four-tier translation rules. Load at Step 10. |
 | [`references/antipattern-catalog.md`](references/antipattern-catalog.md) | Full antipattern catalog with detection SQL, resolution mechanics, false-positive guidance. Load at Step 7. |
 | [`references/probing-strategies.md`](references/probing-strategies.md) | Per-dialect SQL for INFORMATION_SCHEMA introspection and Step 5 sample probes. Sample-size caps and timeouts. Load at Steps 1 and 5. |
+| [`references/workload-evidence.md`](references/workload-evidence.md) | How each section of a workload digest is consumed, with thresholds and provenance. Load only when a `workload.digest.yaml` was given. |

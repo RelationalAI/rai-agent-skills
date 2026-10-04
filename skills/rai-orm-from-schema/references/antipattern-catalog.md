@@ -206,6 +206,8 @@ Default = objectified because the extra column is a strong signal that the relat
 - **Confirm FK** — emit a fact type linking the two entities + a mandatory constraint per the pattern. `source: user-supplied`.
 - **Reject** — the column name happens to match but is not a foreign key (e.g., `external_user_id` is not the same as `user_id`).
 
+**With a workload digest:** an undeclared join that the workload uses is detected from the digest's `join_edges` (not from the name pattern) and probed for inclusion at Step 5. If the probe passes, the fact type is emitted as `proposed` with `provenance.origin: workload`; if it fails, nothing is emitted and the edge is listed for Step 9c. See [workload-evidence.md](workload-evidence.md). The name-convention rule above is unchanged.
+
 **False-positive guidance:**
 - The discipline is firm — the SRP must NOT silently invent fact types from name conventions. Half the false positives in DDL recovery come from this kind of guess.
 - A column named exactly like another table's PK (`USER_ID` matching `USER.USER_ID`) is the strongest signal; weaker matches downgrade.

@@ -24,6 +24,8 @@ CSDP is Halpin's canonical forward-design methodology. Unlike the schema-side Sc
 - Enriching or reviewing a PyRel model that already loads and queries — see `rai-ontology-design`
 - PyRel syntax reference (Concept, Property, Relationship, model.require, f-string patterns) — see `rai-pyrel-coding`
 - Querying, graph analysis, optimization formulation — see the respective reasoner skills (`rai-querying`, `rai-graph-analysis`, `rai-prescriptive-*`)
+- Choosing between the ORM skills, or sequencing them around a workload — see `rai-orm`
+- Checking that the finished model can answer the user's questions — see `rai-orm-verify`
 
 **Overview:**
 0. Open with mode choice — Guided (full dialogue, recommended) or One-shot (user provides a rich description; skill drafts in one pass)
@@ -67,6 +69,7 @@ CSDP is Halpin's canonical forward-design methodology. Unlike the schema-side Sc
 | **Natural-language domain description** | Primary case. The user describes the domain. May arrive in one prompt or unfold conversationally. |
 | **Sample data** (small) | Forms, reports, spreadsheets, CSV exports. Used illustratively (Halpin's CSDP populates fact types with a handful of sample fact instances, not thousands). |
 | **Existing artifacts** | Glossaries, requirements docs, business-rule catalogs, sample queries. |
+| **Sample questions** | Questions the business wants answered, as a list or as the `terms` of a workload digest from `rai-orm-from-workload`. Used at Step 1 as prompts for examples; checked afterwards by `rai-orm-verify`. |
 | **Conversation** | The user answers Claude's questions throughout CSDP. The dialogue itself is part of the input. |
 
 **Outputs (always emitted as the triple):**
@@ -91,7 +94,7 @@ Before eliciting examples, ask the user:
 > - *One-shot — you give me a detailed domain description up front; I produce a draft model in one pass; you review by editing the YAML. Caveat: text-first One-shot is significantly more degraded than schema-first One-shot, because there's no DDL to anchor structure. Best for fast retargeting when you already have a rich description.*
 > *Which would you prefer?*
 
-Default to **Guided** if no answer. Record the choice in `source.mode` of the YAML.
+Default to **Guided** if no answer. Record the choice in `source.mode` of the YAML. When this skill is run by `rai-orm`, the mode was already chosen there: record it and skip the question.
 
 In Guided mode the SRP pauses at three pivot points (Step 0 itself, Step 6d's LLM spot-check, Step 7's six substeps). In One-shot mode those pauses collapse — library-tier proposals auto-confirm; LLM-tier proposals stay `proposed` for the user to review by editing the YAML.
 
@@ -114,6 +117,8 @@ Reference-scheme elicitation lives here too. For each entity type that emerges, 
 Avoid attribute-thinking. The user might say "by the customer's name" — push to make this a separate reference-scheme decision: is the name a popular reference mode (e.g., `Customer(.name)`), or do customers have their own identifier?
 
 See [`references/dialogue-patterns.md`](references/dialogue-patterns.md) for question templates that elicit examples, reference schemes, and push back on attribute thinking.
+
+**Sample questions as input.** When the user gives questions they want answered, each question is a *prompt for an example*, not a source of facts: ask for a concrete case behind it (*"You ask how many students passed each subject — show me one student and one subject where that happened"*), then verbalize that case as elementary facts as above. A term that recurs across questions is a candidate object type or predicate to ask about; it is not confirmed by recurring. Record the question file under `source.artifacts`. Constraints that rest only on the questions carry `source: workload` and stay `proposed`. After Step 8, `rai-orm-verify` rewrites the questions in PyRel and the user reviews a sample.
 
 ### Step 2 — Draw the fact types and apply a population check
 
@@ -203,7 +208,7 @@ Same structure as the schema skill. Every constraint carries:
 ```yaml
 - type: <constraint-type>
   # constraint-specific fields …
-  source: explicit | sample | common-sense | llm-inferred | user-supplied   # set once
+  source: explicit | sample | common-sense | llm-inferred | user-supplied   # set once (plus `workload` when sample questions were given)
   status: proposed | confirmed | rejected                                    # evolves through review
   modality: alethic | deontic                                                # set at Step 7e; default alethic
   rationale: "…"                                                             # required for non-explicit sources
