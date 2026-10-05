@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from collections import Counter
 import csv
 import io
 import json
@@ -63,7 +64,7 @@ class Schema:
         self.tables: dict[str, str] = {}
         self.columns: dict[str, dict[str, str]] = {}
         self.fks: set[tuple] = set()
-        trees = sqlglot.parse(path.read_text(), read=dialect) if path else []
+        trees = sqlglot.parse(path.read_text(encoding="utf-8"), read=dialect) if path else []
         for tree in trees:
             if isinstance(tree, exp.Create) and isinstance(tree.this, exp.Schema):
                 table = tree.this.this.name
@@ -192,7 +193,8 @@ class Digest:
                     continue
             for ref in refs:
                 record = self.add("filter_columns", ref, {"table": ref[0], "column": ref[1]}, item, "operators", operator)
-                record.setdefault("_literals", set()).update(literals)
+                for literal in literals:
+                    record.setdefault("_literals", {}).setdefault(literal, set()).add(item)
                 self.use_column(ref, item, "filter")
 
     def expression_kind(self, node: exp.Expression) -> str | None:
@@ -296,7 +298,7 @@ class Digest:
             if isinstance(count.this, exp.Distinct):
                 self.grain(count.this.expressions, "count_distinct", scope, item)
 
-    def sections(self) -> dict:
+    def sections(self, item: int | None = None) -> dict:
         result = {}
         defaults = {"roles": ("select", "filter", "join", "group", "order", "aggregate"),
                     "operators": ("eq", "in", "like", "range", "is_null"),
@@ -306,24 +308,38 @@ class Digest:
                 continue
             rows = []
             for record in records.values():
+                if item is not None and item not in record["_items"]:
+                    continue
+                count = lambda items: len(items) if item is None else int(item in items)
                 row = {k: v for k, v in record.items() if not k.startswith("_")}
-                row["support"] = len(record["_items"])
+                row["support"] = count(record["_items"])
                 counters = dict(record["_counts"])
                 for field in ({"columns": ["roles"], "grain_keys": ["evidence"],
                                "filter_columns": ["operators"]}.get(section, [])):
                     counters.setdefault(field, {})
                 for field, counts in counters.items():
                     names = defaults.get(field, sorted(counts))
-                    row[field] = {name: len(counts.get(name, set())) for name in names}
+                    row[field] = {name: count(counts.get(name, set())) for name in names}
                 if section == "filter_columns":
-                    row["distinct_literals"] = len(record.get("_literals", set()))
+                    row["distinct_literals"] = sum(count(items) > 0 for items in record.get("_literals", {}).values())
                 rows.append(row)
             rows.sort(key=lambda row: (-row["support"], self.name_key(row)))
-            if section in ("join_edges", "expressions"):
+            if item is None and section in ("join_edges", "expressions"):
                 prefix = "je" if section == "join_edges" else "ex"
                 rows = [{"id": f"{prefix}_{i}", **row} for i, row in enumerate(rows, 1)]
             result[section] = rows
         return result
+
+    def contributions(self, items: list[dict]) -> dict:
+        result = {row["id"]: self.sections(i) for i, row in enumerate(items)}
+        for item in result.values():
+            for row in item["filter_columns"]:
+                record = self.records["filter_columns"][(row["table"], row["column"])]
+                cohorts = Counter(tuple(sorted(items[i]["id"] for i in members))
+                                  for members in record.get("_literals", {}).values())
+                row["literal_cohorts"] = [{"items": list(members), "count": count}
+                                          for members, count in sorted(cohorts.items())]
+        return dict(sorted(result.items()))
 
     def name_key(self, row: dict) -> tuple:
         if "left" in row:
@@ -334,11 +350,34 @@ class Digest:
         return (row.get("table", ""), row.get("column", ""), tuple(row.get("columns", [])))
 
 
+def select_items(items: list[dict], ids: Path | None, split: str | None,
+                 verification: Path | None) -> list[dict]:
+    known = {row["id"] for row in items}
+    if len(known) != len(items):
+        raise ValueError("workload item ids must be unique")
+    selected = set(ids.read_text(encoding="utf-8").splitlines()) - {""} if ids else known
+    if selected - known:
+        raise ValueError("ids file contains unknown workload item ids")
+    if split:
+        if verification is None:
+            raise ValueError("--split requires --verification")
+        saved = json.loads(verification.read_text(encoding="utf-8"))
+        assignments = {str(row["id"]): row.get("split") for row in saved.get("items", [])}
+        if len(assignments) != len(saved.get("items", [])) or any(
+                assignments.get(item) not in {"repair", "holdout"} for item in selected):
+            raise ValueError("verification needs one saved split assignment per selected item")
+        selected &= {item for item, assigned in assignments.items() if assigned == split}
+    return [row for row in items if row["id"] in selected]
+
+
 def build_digest(path: Path, dialect: str = "sqlite", schema: Path | None = None,
-                 kind: str | None = None, no_timestamp: bool = False) -> dict:
+                 kind: str | None = None, no_timestamp: bool = False, ids: Path | None = None,
+                 split: str | None = None, verification: Path | None = None) -> dict:
     items = read_items(path)
+    kind = kind or ("pairs" if any(i["sql"] for i in items) and any(i["question"] for i in items)
+                    else "sql" if any(i["sql"] for i in items) else "questions")
+    items = select_items(items, ids, split, verification)
     n_sql, n_questions = sum(bool(i["sql"]) for i in items), sum(bool(i["question"]) for i in items)
-    kind = kind or ("pairs" if n_sql and n_questions else "sql" if n_sql else "questions")
     workload = {"kind": kind, "artifacts": [path.name]}
     if kind != "questions":
         workload["dialect"] = dialect
@@ -347,7 +386,7 @@ def build_digest(path: Path, dialect: str = "sqlite", schema: Path | None = None
     if not no_timestamp:
         workload["generated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
     if kind == "questions":
-        return {"workload": workload}
+        return {"workload": workload, "item_contributions": {row["id"]: {} for row in sorted(items, key=lambda r: r["id"])}}
     digest = Digest(Schema(schema, dialect), dialect)
     for item, row in enumerate(items):
         if not row["sql"]:
@@ -366,7 +405,8 @@ def build_digest(path: Path, dialect: str = "sqlite", schema: Path | None = None
             else:
                 workload["skipped_non_select"] += 1
     workload["parse_errors"].sort()
-    return {"version": 1, "workload": workload, **digest.sections()}
+    return {"version": 1, "workload": workload, **digest.sections(),
+            "item_contributions": digest.contributions(items)}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -377,8 +417,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--kind", choices=("sql", "questions", "pairs"))
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--no-timestamp", action="store_true")
+    parser.add_argument("--ids", type=Path, help="one workload item id per line")
+    parser.add_argument("--split", choices=("repair", "holdout"))
+    parser.add_argument("--verification", type=Path, help="saved model.verification.json split assignments")
     args = parser.parse_args(argv)
-    result = build_digest(args.input, args.dialect, args.schema, args.kind, args.no_timestamp)
+    if args.split and not args.verification:
+        parser.error("--split requires --verification")
+    result = build_digest(args.input, args.dialect, args.schema, args.kind, args.no_timestamp,
+                          args.ids, args.split, args.verification)
     args.out.write_text(yaml.safe_dump(result, sort_keys=False, allow_unicode=True), encoding="utf-8")
     return 0
 

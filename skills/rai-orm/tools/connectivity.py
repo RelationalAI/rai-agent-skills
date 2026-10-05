@@ -18,7 +18,7 @@ import yaml
 
 
 def read_yaml(path):
-    return yaml.safe_load(Path(path).read_text()) or {}
+    return yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
 
 
 def stable_id(prefix, value):
@@ -71,6 +71,9 @@ def model_graph(model):
         roles = [r["object_type"] for r in fact.get("roles", []) if r["object_type"] in entities]
         for a, b in combinations(roles, 2):
             link(a, b, "fact:" + fact["id"])
+        if fact.get("objectified_as") in entities:
+            for role in roles:
+                link(fact["objectified_as"], role, "fact:" + fact["id"])
     for o in model.get("object_types", []):
         if o["id"] in entities:
             for parent in o.get("subtype_of", []):
@@ -89,9 +92,6 @@ def model_graph(model):
     for c, fact in constraints:
         if c.get("type") != "uniqueness" or c.get("status") == "rejected":
             continue
-        p = c.get("provenance", {})
-        if p.get("table"):
-            keys[p["table"]].update(p.get("columns", []) + ([p["column"]] if p.get("column") else []))
         refs = list(c.get("role_refs", []))
         if fact:
             refs += [{"fact_type": fact["id"], "role": r} for r in c.get("roles", [])]
@@ -136,7 +136,7 @@ def column_counts(db, table, columns):
         expressions += [f"count(DISTINCT {quote(col)})", f"count({quote(col)})"]
     counts = db.execute(f"SELECT {', '.join(expressions)} FROM {table_sql(table)}").fetchone()
     rows = counts[0]
-    return {col: {"distinct": counts[1 + 2 * i],
+    return {col: {"rows": rows, "distinct": counts[1 + 2 * i],
                   "null_rate": round((rows - counts[2 + 2 * i]) / rows, 6) if rows else 0.0}
             for i, col in enumerate(selected)}
 
@@ -151,25 +151,28 @@ def test_values(db, left, right, profiles=None):
         return f"SELECT DISTINCT {selected} FROM {table} WHERE {valid}", valid, table
     a, av, at = selection(left)
     b, bv, bt = selection(right)
-    def null_rate(table, valid):
+    def row_counts(table, valid):
         rows, nonnull = db.execute(f"SELECT count(*), count(*) FILTER (WHERE {valid}) FROM {table}").fetchone()
-        return round((rows - nonnull) / rows, 6) if rows else 0.0
+        return rows, round((rows - nonnull) / rows, 6) if rows else 0.0
     if profiles is not None and len(left["columns"]) == len(right["columns"]) == 1:
         pa = profiles[left["table"]][left["columns"][0]]
         pb = profiles[right["table"]][right["columns"][0]]
         distinct_a, distinct_b = pa["distinct"], pb["distinct"]
         shared = db.execute(f"SELECT count(*) FROM ({a} INTERSECT {b})").fetchone()[0]
         null_a, null_b = pa["null_rate"], pb["null_rate"]
+        rows_a, rows_b = pa["rows"], pb["rows"]
     else:
         distinct_a, distinct_b, shared = db.execute(
             f"WITH a AS ({a}), b AS ({b}) SELECT (SELECT count(*) FROM a), "
             "(SELECT count(*) FROM b), (SELECT count(*) FROM (SELECT * FROM a INTERSECT SELECT * FROM b))"
         ).fetchone()
-        null_a, null_b = null_rate(at, av), null_rate(bt, bv)
+        rows_a, null_a = row_counts(at, av)
+        rows_b, null_b = row_counts(bt, bv)
     return {"distinct_left": distinct_a, "distinct_right": distinct_b, "shared_distinct": shared,
             "containment_left": round(shared / distinct_a, 6) if distinct_a else 0.0,
             "containment_right": round(shared / distinct_b, 6) if distinct_b else 0.0,
-            "null_rate_left": null_a, "null_rate_right": null_b}
+            "null_rate_left": null_a, "null_rate_right": null_b,
+            "rows_left": rows_a, "rows_right": rows_b}
 
 
 def analyze(model, digest=None, db=None, fk=0.98, partial=0.30, max_comparisons=5000):
@@ -206,6 +209,13 @@ def analyze(model, digest=None, db=None, fk=0.98, partial=0.30, max_comparisons=
             except duckdb.Error:
                 columns[table] = {}
     requests = {}
+    def canonical(side):
+        table = resolve(side["table"])
+        metadata = {c.casefold(): c for c in columns.get(table, {})}
+        return {"table": table, "columns": [metadata.get(c.casefold(), c) for c in side["columns"]]}
+    keys = {t: {c.casefold() for c in cols} for t, cols in keys.items()}
+    def declared(side):
+        return bool(side["columns"]) and all(c.casefold() in keys.get(side["table"], set()) for c in side["columns"])
     def signature(left, right):
         return tuple(sorted((s["table"], tuple(s["columns"])) for s in (left, right)))
     def add(left, right, required=None):
@@ -216,7 +226,19 @@ def analyze(model, digest=None, db=None, fk=0.98, partial=0.30, max_comparisons=
         if required and required not in request["required_gaps"]:
             request["required_gaps"].append(required)
     for gap in gaps:
+        gap["left"], gap["right"] = canonical(gap["left"]), canonical(gap["right"])
         add(gap["left"], gap["right"], gap["id"])
+    rejected = list(model.get("rejected_proposals", [])) + [
+        f for f in model.get("fact_types", []) if f.get("status") == "rejected"]
+    rejected_ids = {p if isinstance(p, str) else p.get("id") for p in rejected}
+    rejected_links = set()
+    for proposal in rejected:
+        if not isinstance(proposal, dict):
+            continue
+        provenance = proposal.get("provenance", {})
+        if provenance.get("left") and provenance.get("right"):
+            rejected_links.add((signature(canonical(provenance["left"]), canonical(provenance["right"])),
+                                tuple(sorted(r["object_type"] for r in proposal.get("roles", [])))))
     gap_pairs = {tuple(sorted((g["left"]["table"], g["right"]["table"]))) for g in gaps}
     isolated_tables = {t for t, nodes in tables.items() if nodes.intersection(isolated)}
     def pair_priority(pair):
@@ -230,7 +252,7 @@ def analyze(model, digest=None, db=None, fk=0.98, partial=0.30, max_comparisons=
             for ca, cb in product(sorted(columns[ta]), sorted(columns[tb])):
                 if not columns[ta][ca] or columns[ta][ca] != columns[tb][cb]:
                     continue
-                if ca not in keys[ta] and cb not in keys[tb] and name_similarity(ca, cb) < 0.65:
+                if ca.casefold() not in keys.get(ta, set()) and cb.casefold() not in keys.get(tb, set()) and name_similarity(ca, cb) < 0.65:
                     continue
                 left, right = {"table": ta, "columns": [ca]}, {"table": tb, "columns": [cb]}
                 if signature(left, right) not in requests:
@@ -259,6 +281,8 @@ def analyze(model, digest=None, db=None, fk=0.98, partial=0.30, max_comparisons=
                 test_status = "degenerate-columns"
                 evidence.update({"distinct_left": pa["distinct"], "distinct_right": pb["distinct"],
                                  "null_rate_left": pa["null_rate"], "null_rate_right": pb["null_rate"]})
+            elif not r["required_gaps"] and len(left["columns"]) == 1 and min(pa["distinct"], pb["distinct"]) < 10:
+                test_status = "low-cardinality"
             elif comparisons >= max_comparisons:
                 test_status = "comparison-cap"
                 untested += 1
@@ -269,7 +293,11 @@ def analyze(model, digest=None, db=None, fk=0.98, partial=0.30, max_comparisons=
                     test_status = "tested"
                     rate = max(evidence["shared_distinct"] / evidence["distinct_left"] if evidence["distinct_left"] else 0,
                                evidence["shared_distinct"] / evidence["distinct_right"] if evidence["distinct_right"] else 0)
-                    classification = "fk-like" if rate >= fk else ("partial" if rate >= partial else "none")
+                    unique_side = any(declared(side) or (
+                        evidence["rows_" + label] > 0 and
+                        evidence["distinct_" + label] / evidence["rows_" + label] >= 0.98)
+                        for side, label in ((left, "left"), (right, "right")))
+                    classification = "fk-like" if rate >= fk and unique_side else ("partial" if rate >= partial else "none")
                 except duckdb.Error:
                     test_status = "probe-error"
         r.update({"classification": classification, "test_status": test_status, "evidence": evidence})
@@ -297,7 +325,9 @@ def analyze(model, digest=None, db=None, fk=0.98, partial=0.30, max_comparisons=
                                            "required_gaps": r["required_gaps"], "test_status": test_status, "evidence": evidence}}
                 if classification == "partial":
                     proposal["partial"] = True
-                proposals.append(proposal)
+                if (proposal["id"] not in rejected_ids and
+                        (signature(left, right), tuple(sorted((a, b)))) not in rejected_links):
+                    proposals.append(proposal)
     counts = [{"id": n, "name": names[n], "relationships": len(relations[n])} for n in sorted(names)]
     result = {"version": 1, "summary": {"concepts": len(names), "relationships": len(set().union(*relations.values())) if relations else 0,
               "components": len(groups), "largest_component": len(groups[0]) if groups else 0, "isolated": len(isolated),
@@ -330,8 +360,8 @@ def main():
             db = duckdb.connect(args.db, read_only=True)
         result, proposals = analyze(read_yaml(args.model), read_yaml(args.digest) if args.digest else None,
                                     db, args.fk_containment, args.partial_containment, args.max_comparisons)
-        Path(args.out).write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
-        Path(args.proposals).write_text(yaml.safe_dump(proposals, sort_keys=False))
+        Path(args.out).write_text(json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        Path(args.proposals).write_text(yaml.safe_dump(proposals, sort_keys=False), encoding="utf-8")
         return 2 if args.fail_on_required_gap and result["required_gaps"] else 0
     except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError, duckdb.Error):
         # Exceptions can contain source values or SQL; never print their text.
