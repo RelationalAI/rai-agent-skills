@@ -62,13 +62,17 @@ For each undeclared join edge that **passed**:
 
 **Only key-to-reference edges are relationships.** One side of the edge must be the other table's key (its PK, a declared UNIQUE, or a column set the uniqueness probe found unique). An edge where neither side is a key (two tables joined on a shared code column) is not a fact type between the two entities: both columns reference the same third thing. Do not emit it. If a table keyed by that column exists, the edges from each side to that table carry the meaning; if none exists, note a `lookup-table-candidate` at 9c.
 
-Edges that are weak, unprobed or failed are listed at 9c and not emitted. The name-convention detection of `missing-fk` is unchanged: a `*_id` match with no workload evidence is still flag-only.
+Edges that are weak, unprobed or failed are listed at 9c and not emitted by Step 7. Step 9g separately checks graph reachability and reviews required-gap proposals, including partial overlap, with count-only evidence. Its defaults (0.98 FK-like, 0.30 partial) classify connectivity candidates; Step 5's 0.90 threshold above remains its earlier inclusion triage. A name match alone never confirms a relationship.
 
 ## Step 8 and Step 9 — review order
 
 With a digest, the verbalization lists object types in order of table `support` (most used first), so the user reviews what the workload depends on before the long tail. Nothing is hidden.
 
 At Step 9c the workload items form their own group: accepted joins, weak or failed edges, `grain-mismatch` notes, derived fact types, conflicting terms.
+
+## Before hand-off
+
+At Step 9g, follow the [connectivity procedure](../../rai-orm/references/connectivity.md). Required joins without a graph path are model defects; partial overlap is preserved in a proposed fact type instead of silently discarding the gap. Review non-key matches for a shared concept before accepting a direct relationship. Re-run until connected or every remaining island is justified; an unresolved required gap remains a verification failure.
 
 ## After Step 10
 

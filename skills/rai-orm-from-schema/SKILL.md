@@ -1,6 +1,6 @@
 ---
 name: rai-orm-from-schema
-description: Recovers an ORM 2 conceptual model (YAML with full constraint provenance — explicit / sample / common-sense / llm-inferred / user-supplied, alethic vs deontic, antipattern flags) from a relational schema (live DB, DDL file, CSV samples), then translates to PyRel. Produces a stakeholder-reviewable intermediate artifact. Use for schema-driven model recovery — not for greenfield builds that go direct to PyRel without an ORM stage (rai-build-starter-ontology), enriching/reviewing an already-loaded PyRel model (rai-ontology-design), or text-only inputs without schema (see the text-first companion rai-orm-from-text, which uses Halpin's CSDP for forward design).
+description: Recovers a stakeholder-reviewable ORM 2 model with constraint provenance and a PyRel translation when a relational schema, DDL file or CSV samples are available; not for direct greenfield PyRel builds (rai-build-starter-ontology), loaded-model review (rai-ontology-design), text-only modeling (rai-orm-from-text), or workload verification (rai-orm-verify).
 ---
 
 # Schema-to-ORM Recovery
@@ -36,7 +36,8 @@ description: Recovers an ORM 2 conceptual model (YAML with full constraint prove
 6. Detect schema antipatterns and flag for user resolution
 7. Verbalize the recovered model end-to-end (Halpin-style controlled natural language)
 8. Capture user decisions — confirm / reject / add / label alethic vs deontic
-9. Translate the finalized YAML to PyRel via four-tier rules (mechanical / heuristic / model.require / not-translated)
+9. Check connectivity, review data-tested links and justify remaining islands
+10. Translate the finalized YAML to PyRel via four-tier rules (mechanical / heuristic / model.require / not-translated)
 
 ## Quick Reference
 
@@ -76,7 +77,7 @@ A sixth source, `workload`, exists only when a workload digest was given or `rai
 
 ## Instructions
 
-**Required dependencies:** [`rai-pyrel-coding`](../rai-pyrel-coding/SKILL.md) for PyRel idioms used in Step 10. No dependency on `rai-ontology-design` or `rai-build-starter-ontology` — this skill is self-contained for schema recovery (per the build discipline locked in PLAN.md).
+**Required dependencies:** `rai-pyrel-coding` for PyRel idioms used in Step 10. No dependency on `rai-ontology-design` or `rai-build-starter-ontology` — this skill is self-contained for schema recovery (per the build discipline locked in PLAN.md).
 
 **Working principle:** propose, never assert. Every constraint that isn't lifted directly from DDL gets an explicit confidence path through Steps 6–9 before reaching the YAML as `confirmed`.
 
@@ -229,6 +230,10 @@ Six substeps:
 
 This is the only step with mandatory user interaction in Guided mode (Step 0's mode opener excepted).
 
+### Step 9g — Connectivity before hand-off
+
+Run `connectivity.py` from `rai-orm` with `--model model.orm.yaml`, adding `--db` and `--digest` when available. Follow the [connectivity procedure](../rai-orm/references/connectivity.md): review proposals as one batch in Guided mode; apply as `proposed` in One-shot mode. Re-run until the verdict is `connected` or every remaining island is justified in `ontology-notes.md`. Workload-required gaps remain model defects even if an island is justified. Preserve partial-overlap evidence and complete source bindings before Step 10.
+
 ### Step 10 — Translate to PyRel
 
 Apply the four-tier rules from [`references/orm-to-pyrel.md`](references/orm-to-pyrel.md) to the finalized YAML. Output `model.py`:
@@ -287,7 +292,7 @@ When a workload digest is given, it feeds four steps. Each line below adds evide
 
 **Discipline:**
 - Workload evidence may **add or promote, never prune**. Tables and columns the workload never touches are modeled as usual.
-- A join edge that fails its inclusion probe is **not** emitted, whatever its support.
+- Step 7 leaves failed inclusion probes for review; Step 9g additionally reviews required-gap proposals with their full overlap evidence, including partial overlap.
 - No SQL literal and no question text enters the YAML. Provenance carries counts and digest ids.
 - Everything from the workload starts `proposed`.
 
@@ -302,7 +307,8 @@ Four tiers (table above; full rules in [`references/orm-to-pyrel.md`](references
 | Mistake | Cause | Fix |
 |---|---|---|
 | Asserting an inferred constraint in the YAML as `confirmed` without user review | Skipping Step 9b in Guided mode, or assuming One-shot's auto-confirm covers LLM-tier | LLM-tier and `sample`-on-CSV stay `proposed` always until user review. Library-tier auto-confirms only in One-shot mode. |
-| Inventing fact types from name conventions (`*_id`) without an actual FK | Treating "missing FK" antipattern as auto-resolution | Step 7 flags missing-FK candidates. Do NOT emit a fact type until the user confirms in Step 9c. The only exception is a join edge from a workload digest that passed its inclusion probe, emitted as `proposed`. |
+| Asserting fact types from name conventions without evidence | Treating a name match as an FK | Probe candidate links at Step 9g, preserve evidence and apply only as `proposed` pending review. |
+| Handing on a model with unexplained islands | Checking only individual fact types | Run Step 9g; justify remaining islands and retain required gaps as model defects. |
 | Dropping tables or columns because the workload never uses them | Reading the workload as the scope of the model | The digest adds and promotes; it never prunes. |
 | Using Python's `and`/`or`/`not` in PyRel `model.require()` | Forgetting PyRel's boolean operator rules | Use `&` / `\|` / `model.not_()`. Triggers compile-time `[Invalid operator] Cannot use python's 'bool check'`. |
 | Reference mode = `derived` for a single-column PK | Mistaking Halpin's `popular` mode for "derived" terminology | Halpin's term is `popular`. `derived` refers to derivation status, not reference mode. |
@@ -333,3 +339,4 @@ Four tiers (table above; full rules in [`references/orm-to-pyrel.md`](references
 | [`references/antipattern-catalog.md`](references/antipattern-catalog.md) | Full antipattern catalog with detection SQL, resolution mechanics, false-positive guidance. Load at Step 7. |
 | [`references/probing-strategies.md`](references/probing-strategies.md) | Per-dialect SQL for INFORMATION_SCHEMA introspection and Step 5 sample probes. Sample-size caps and timeouts. Load at Steps 1 and 5. |
 | [`references/workload-evidence.md`](references/workload-evidence.md) | How each section of a workload digest is consumed, with thresholds and provenance. Load only when a `workload.digest.yaml` was given. |
+| [Connectivity procedure](../rai-orm/references/connectivity.md) | Step 9g — graph check, data-tested proposals and island justification before hand-off. |

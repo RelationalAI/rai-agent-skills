@@ -1,0 +1,43 @@
+# Connectivity and required joins
+
+Load after the ORM YAML is built, before translation and hand-off, and at the start of every verification round. The graph measures whether a query writer can walk between entity concepts. Shared primitive value types do not provide such a path.
+
+## Run
+
+From the repository root, with the project Python environment:
+
+```sh
+python skills/rai-orm/tools/connectivity.py --model model.orm.yaml \
+  --db source.duckdb --digest workload.digest.yaml \
+  --out connectivity.json --proposals connectivity.proposals.yaml \
+  --fail-on-required-gap
+```
+
+Omit `--db` or `--digest` when unavailable. DuckDB is opened read-only. Exit 2 means a required gap remains; exit 1 means the check could not complete. Rejected proposals do not count as graph links; proposals present in `fact_types` do count, so a connected result describes model structure, not confirmed business semantics.
+
+## Procedure
+
+1. Record all entity source tables, including every table feeding a merged concept. Use `provenance.table` for a single table, `provenance.tables` for several, or explicit `source_bindings`. Record identifier columns and bound or dropped columns using the source-binding extension in `representation-format.md`. Missing bindings make reachability and coverage incomplete; repair them first.
+2. Run the tool. Review `components` (sizes, concepts, source tables), `isolated_concepts`, `relationships_per_concept`, and `required_gaps`. Each digest join is `merged`, `reachable`, or `required_gap`; merged tables need no extra link. A join involving an unbound table remains a required gap until its binding exists.
+3. Review `connectivity.proposals.yaml` as **one batch in Guided mode**. In **One-shot mode**, apply fact types as `status: proposed`. Keep the existing ids and evidence, archive rejected proposals in `rejected_proposals`, and skip archived ids on later reviews. Confirm business meaning before changing status. Never infer mandatory or uniqueness constraints merely from overlap.
+4. Required joins with partial overlap remain the best candidate for that gap. Preserve `partial: true`, both containment rates, distinct counts, shared count and null rates under `provenance.evidence`. Add the proposed link; account for unmatched rows when translating. A candidate classified `none` or not tested needs a focused probe and review before use; its proposal does not assert an FK. Where no overlap or meaning can be established, retain the gap as `missing-element` and document the evidence. Do not disguise it as `translation`.
+5. Validate the YAML, regenerate the verbalization and PyRel, and re-run. Continue until `verdict: connected` or **every remaining island has a justification in `ontology-notes.md`** identifying its concept ids, source tables, business separation and evidence. Justification never clears a workload-required gap: retain that verification failure until the path exists. Preserve `# REVIEW PROPOSAL` markers for proposed links in PyRel.
+
+For repairs, use only a digest extracted from the repair set. Check holdout reachability with a separate holdout digest, but never use its gaps, column pairs or proposals to choose repairs.
+
+## Candidate selection and cost
+
+- Entity nodes use object type ids; any pair of entity roles in a fact type supplies an undirected edge. Subtypes supply edges to their supertypes. N-ary facts count once per incident concept; a self relationship counts once, but leaves its concept isolated from other concepts. Tables feeding one concept remain one node.
+- Candidate pairs cross components. Include exact digest column tuples for each required gap first; then compatible columns whose normalized name similarity is at least 0.65 or whose key-like role is declared by PK pointers, `key_columns`, or uniqueness-role provenance. Unknown and unsupported type families are not coerced into matches. Numeric families can be compared to each other; strings, dates, timestamps, booleans, UUIDs and binary values require matching families.
+- Column type compatibility is checked before containment. Aggregate distinct counts and null rates are computed once per table; skip single-column probes when either column is all null/empty or both columns have only one distinct non-null value (`test_status: degenerate-columns`). These counts are retained for required gaps, without fabricated containment evidence. Composite keys still compare whole tuples, even when a member is constant.
+- `--max-comparisons 5000` is the default bound on distinct-set comparisons. Exact required-gap tuples come first, then other candidates between required-gap tables, then candidates involving isolated concepts, then the remaining pairs. Ordering within each group is deterministic. When eligible pairs remain beyond the cap, `summary.comparison_cap_reached` is `true` and `summary.candidates_untested` records their count. The report raises `COMPARISON_CAP_REACHED`; increase the cap or run a focused probe. Every required gap still gets a candidate entry, including those marked `comparison-cap`, even without data. Compatibility failures, absent data and probe errors carry a `test_status` and no fabricated overlap numbers. Reaching the exact budget with no eligible pairs remaining does not raise the warning.
+- DuckDB `INTERSECT` counts shared distinct values without transferring values to Python. Composite joins compare whole tuples in column order. Null rates count rows with any missing tuple member. Empty distinct sets have containment 0. Name similarity is a score, not data evidence.
+- Defaults: `fk-like` when either containment rate is at least `--fk-containment 0.98`; `partial` when either is at least `--partial-containment 0.30` but below the FK threshold; otherwise `none`. Rates describe overlap, not a declared constraint or proof of a business relationship.
+
+## Outputs and fallback
+
+`connectivity.json` holds a summary, component lists, relationships per concept, join checks, required gaps and candidates with count-only evidence. The candidate list retains only `fk-like` and `partial` matches, plus candidates referenced by a required gap or join check. Exploratory `none` candidates (including cap-skipped pairs) are counted in `summary.candidates_by_class` with all three keys (`fk-like`, `partial`, `none`), never listed. These counts cover compatible name/key-selected pairs and explicit gap requests, including degenerate or untested requests; incompatible exploratory pairs are excluded before selection. Referenced `none` candidates retain their evidence or skip status. Each gap's `best_candidate` and its join check's `candidate` point to the retained exact-column candidate. Verdict priority is `required-gaps`, then `islands`, then `connected`; exploratory FK-like matches do not clear a gap until a fact type is added to the model.
+
+`connectivity.proposals.yaml` has `version: 1` and `fact_types`, directly mergeable into the canonical model after review. It emits FK-like and required-gap proposals with `source: data`, `status: proposed` and source column pointers. An unbound table has no entity roles to propose: fix its binding first. Neither output contains data values, SQL literals, result rows or question text; tool errors also suppress exception text.
+
+If the tool is unavailable, enumerate entity-role pairs and subtype links, walk the graph, and check every digest join's table bindings. Use read-only distinct-set intersection and aggregate counts for prioritized column pairs; apply the same thresholds and budget. Emit the same counts and ids, record untested gaps, and follow the review and re-check procedure above.
