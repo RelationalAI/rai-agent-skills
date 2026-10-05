@@ -129,7 +129,7 @@ def test_update_keeps_order_and_advances_counter(tmp_path):
     assert state["skills_run"][-1]["rounds_done"] == 1
     assert state["last_stop_reason"] == "plateau"
     assert plan(state, tmp_path)["started_round"] == 7
-    assert state["budget"] == {"rounds_per_invocation": 3, "patience": 4, "until_pass": True}
+    assert state["budget"] == {"rounds_per_invocation": 3, "patience": 4, "until_pass": True, "refactor_rounds": 2}
 
 
 @pytest.mark.parametrize("damage,blocker", [("split", "SPLIT_CHANGED"), ("item_split", "ITEM_SPLIT_CHANGED"),
@@ -258,7 +258,7 @@ def test_current_all_pass_project_has_no_unnecessary_steps(tmp_path):
     (tmp_path / "workload.digest.yaml").write_text(yaml.safe_dump({"workload": {"n_items": 3}}))
     (tmp_path / "feedback.yaml").unlink()
     (tmp_path / "connectivity.json").write_text(json.dumps({"verdict": "connected"}))
-    (tmp_path / "compaction.after.json").write_text("{}")
+    (tmp_path / "compaction.after.json").write_text(json.dumps({"model_revision": revision(tmp_path, ARTIFACT_DEFAULTS)}))
     (tmp_path / "orm-report.json").write_text(json.dumps({"status": "all-pass"}))
     (tmp_path / "orm-report.md").write_text("# Synthetic report\n")
     state = initialize(tmp_path, dict(ARTIFACT_DEFAULTS), emitter="manual:step-10")
@@ -601,3 +601,126 @@ def test_readonly_bootstrap_preserves_workload_without_snapshot_write(tmp_path):
     (tmp_path / "items.json").write_text('[{"id":"q001","sql":"SELECT 1"}]', encoding="utf-8")
     assert cli(tmp_path, "plan", "--workload", "items.json").returncode == 0
     assert not (tmp_path / ".orm-workloads").exists()
+
+
+def test_independent_refactor_budget_and_free_assessment(tmp_path):
+    state = initialized(tmp_path, refactor_rounds=2)
+    initial = plan(state, tmp_path)
+    assert initial["steps"][1:] == ["connectivity", "rai-orm-refactor", "rai-orm-verify", "rai-orm-refactor", "report"]
+    update(state, tmp_path, "rai-orm-refactor", rounds_done=0)
+    update(state, tmp_path, "rai-orm-verify", rounds_done=5)
+    after_verify = plan(state, tmp_path)
+    assert after_verify["rounds_remaining_by_skill"] == {"rai-orm-verify": 0, "rai-orm-refactor": 2}
+    assert "rai-orm-verify" not in after_verify["steps"]
+    assert after_verify["steps"].count("rai-orm-refactor") == 2
+    update(state, tmp_path, "rai-orm-refactor", rounds_done=2, stop_reason="budget")
+    result = plan(state, tmp_path)
+    assert result["rounds_used_by_skill_this_invocation"] == {"rai-orm-verify": 5, "rai-orm-refactor": 2}
+    assert result["steps"].count("rai-orm-refactor") == 1  # Free assessment remains.
+    original = json.dumps(state, sort_keys=True)
+    with pytest.raises(UpdateBlocked):
+        update(state, tmp_path, "rai-orm-refactor", rounds_done=1)
+    assert json.dumps(state, sort_keys=True) == original
+    update(state, tmp_path, "rai-orm", start_invocation=True, refactor_rounds=3)
+    assert plan(state, tmp_path)["rounds_remaining_by_skill"] == {"rai-orm-verify": 5, "rai-orm-refactor": 3}
+
+
+def test_current_metrics_skip_only_assessment(tmp_path):
+    state = initialized(tmp_path)
+    metrics = tmp_path / "compaction.after.json"
+    metrics.write_text(json.dumps({"model_revision": plan(state, tmp_path)["baseline_model_revision"]}), encoding="utf-8")
+    result = plan(state, tmp_path)
+    assert not result["refactor_assessment"]
+    assert result["steps"][1:] == ["connectivity", "rai-orm-verify", "rai-orm-refactor", "report"]
+    metrics.write_text(json.dumps({"model_revision": "sha256:stale"}), encoding="utf-8")
+    assert plan(state, tmp_path)["refactor_assessment"]
+
+
+def test_refactor_budget_cli_init_update_plan(tmp_path):
+    project_files(tmp_path)
+    result = cli(tmp_path, "init", "--emitter", "manual:step-10", "--refactor-rounds", "3")
+    assert result.returncode == 0
+    assert json.loads(result.stdout)["budget"]["refactor_rounds"] == 3
+    result = cli(tmp_path, "update", "--skill", "rai-orm-refactor", "--rounds-done", "1", "--refactor-rounds", "4")
+    assert result.returncode == 0
+    before = (tmp_path / "orm-state.json").read_bytes()
+    result = cli(tmp_path, "plan", "--refactor-rounds", "6")
+    assert json.loads(result.stdout)["rounds_remaining_by_skill"]["rai-orm-refactor"] == 5
+    assert before == (tmp_path / "orm-state.json").read_bytes()
+    assert cli(tmp_path, "plan", "--refactor-rounds", "0").returncode != 0
+
+
+@pytest.mark.parametrize("artifact", ["repair_digest", "holdout_digest"])
+def test_emitter_names_external_split_digest(tmp_path, artifact):
+    from state import check_emitter
+    (tmp_path / "emit.py").write_text("pass\n", encoding="utf-8")
+    artifacts = {**ARTIFACT_DEFAULTS, artifact: "../outside.yaml"}
+    result = check_emitter(tmp_path, artifacts, "python emit.py", [{"path": "emit.py"}])
+    assert result["id"] == "EMITTER_UNVERIFIED"
+    assert result["artifact"] == artifact and result["path"] == "../outside.yaml"
+    assert "outside project folder" in result["reason"]
+
+
+@pytest.mark.parametrize("cause", ["sandbox", "timeout", "symlink", "oserror", "external-argument"])
+def test_emitter_specific_exception_reasons(tmp_path, monkeypatch, cause):
+    import state as module
+    import subprocess
+    (tmp_path / "emit.py").write_text("pass\n", encoding="utf-8")
+    command = "python emit.py"
+    if cause == "sandbox":
+        def unavailable(_):
+            raise ValueError("sandbox unavailable")
+        monkeypatch.setattr(module, "sandbox_prefix", unavailable)
+    else:
+        monkeypatch.setattr(module, "sandbox_prefix", lambda _: [])
+    if cause == "timeout":
+        def timeout(*args, **kwargs):
+            raise subprocess.TimeoutExpired("PRIVATE_COMMAND", 60)
+        monkeypatch.setattr(module.subprocess, "run", timeout)
+    if cause == "oserror":
+        def failure(*args, **kwargs):
+            raise PermissionError(13, "PRIVATE_CONTENTS")
+        monkeypatch.setattr(module.subprocess, "run", failure)
+    if cause == "symlink":
+        (tmp_path / "unsafe.py").symlink_to(tmp_path / "emit.py")
+    if cause == "external-argument":
+        command += " /outside/config.json"
+    result = module.check_emitter(tmp_path, dict(ARTIFACT_DEFAULTS), command, [{"path": "emit.py"}])
+    assert result["id"] == "EMITTER_UNVERIFIED"
+    assert "PRIVATE" not in json.dumps(result)
+    if cause == "sandbox":
+        assert result["reason"] == "sandbox unavailable"
+    elif cause == "timeout":
+        assert result["reason"] == "command timed out"
+    elif cause == "oserror":
+        assert result["errno"] == 13
+    else:
+        assert result["artifact"] == ("symlink" if cause == "symlink" else "command_argument")
+        if cause == "symlink":
+            assert result["path"] == "unsafe.py"
+
+
+def test_metrics_do_not_supply_unwritten_stop_reason(tmp_path):
+    from state import stop_reasons
+    initialized(tmp_path)
+    (tmp_path / "compaction.after.json").write_text('{"stopped_because":"invented"}', encoding="utf-8")
+    assert "refactor" not in stop_reasons(tmp_path, ARTIFACT_DEFAULTS)
+
+
+def test_invocation_archives_each_skill_and_until_pass_does_not_extend_refactor(tmp_path):
+    state = initialized(tmp_path, until_pass=True)
+    update(state, tmp_path, "rai-orm-verify", rounds_done=6)
+    update(state, tmp_path, "rai-orm-refactor", rounds_done=2)
+    with pytest.raises(UpdateBlocked):
+        update(state, tmp_path, "rai-orm-refactor", rounds_done=1)
+    update(state, tmp_path, "rai-orm", start_invocation=True)
+    assert state["invocation_rounds"][-1]["rounds_by_skill"] == {"rai-orm-verify": 6, "rai-orm-refactor": 2}
+    assert state["rounds_used_by_skill_this_invocation"] == {"rai-orm-verify": 0, "rai-orm-refactor": 0}
+
+
+def test_legacy_invocation_budget_is_not_reset_by_unrelated_update(tmp_path):
+    state = initialized(tmp_path)
+    state.pop("rounds_used_by_skill_this_invocation")
+    state["invocation_started_round"] = 4
+    update(state, tmp_path, "report")
+    assert plan(state, tmp_path)["rounds_used_this_invocation"] == 2

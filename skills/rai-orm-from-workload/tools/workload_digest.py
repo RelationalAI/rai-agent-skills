@@ -350,11 +350,16 @@ class Digest:
         return (row.get("table", ""), row.get("column", ""), tuple(row.get("columns", [])))
 
 
+class DuplicateItemID(ValueError):
+    pass
+
+
 def select_items(items: list[dict], ids: Path | None, split: str | None,
                  verification: Path | None) -> list[dict]:
     known = {row["id"] for row in items}
     if len(known) != len(items):
-        raise ValueError("workload item ids must be unique")
+        duplicate = next(identifier for identifier, count in Counter(row["id"] for row in items).items() if count > 1)
+        raise DuplicateItemID(f"duplicate workload item id: {duplicate}")
     selected = set(ids.read_text(encoding="utf-8").splitlines()) - {""} if ids else known
     if selected - known:
         raise ValueError("ids file contains unknown workload item ids")
@@ -373,12 +378,13 @@ def select_items(items: list[dict], ids: Path | None, split: str | None,
 def build_digest(path: Path, dialect: str = "sqlite", schema: Path | None = None,
                  kind: str | None = None, no_timestamp: bool = False, ids: Path | None = None,
                  split: str | None = None, verification: Path | None = None) -> dict:
-    items = read_items(path)
+    paths = [path] if isinstance(path, Path) else list(path)
+    items = [item for source in paths for item in read_items(source)]
     kind = kind or ("pairs" if any(i["sql"] for i in items) and any(i["question"] for i in items)
                     else "sql" if any(i["sql"] for i in items) else "questions")
     items = select_items(items, ids, split, verification)
     n_sql, n_questions = sum(bool(i["sql"]) for i in items), sum(bool(i["question"]) for i in items)
-    workload = {"kind": kind, "artifacts": [path.name]}
+    workload = {"kind": kind, "artifacts": [source.name for source in paths]}
     if kind != "questions":
         workload["dialect"] = dialect
     workload.update(n_items=len(items), n_sql=n_sql, n_questions=n_questions, n_parsed=0,
@@ -411,7 +417,7 @@ def build_digest(path: Path, dialect: str = "sqlite", schema: Path | None = None
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--input", type=Path, required=True)
+    parser.add_argument("--input", type=Path, required=True, action="append")
     parser.add_argument("--dialect", default="sqlite")
     parser.add_argument("--schema", type=Path)
     parser.add_argument("--kind", choices=("sql", "questions", "pairs"))
@@ -423,8 +429,11 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.split and not args.verification:
         parser.error("--split requires --verification")
-    result = build_digest(args.input, args.dialect, args.schema, args.kind, args.no_timestamp,
-                          args.ids, args.split, args.verification)
+    try:
+        result = build_digest(args.input, args.dialect, args.schema, args.kind, args.no_timestamp,
+                              args.ids, args.split, args.verification)
+    except DuplicateItemID as error:
+        parser.error(str(error))
     args.out.write_text(yaml.safe_dump(result, sort_keys=False, allow_unicode=True), encoding="utf-8")
     return 0
 

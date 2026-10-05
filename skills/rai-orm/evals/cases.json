@@ -73,6 +73,16 @@
         "The refusal explains the manual path and does not claim completion",
         "PYREL_REQUIRED names existing semantics-importing candidates; --model-py points at the existing file and never creates a second one"
       ]
+    },
+    {
+      "id": "O-R3",
+      "type": "round-order",
+      "pass_criteria": [
+        "connectivity, free refactor assessment, verify, refactor acceptance, report in order",
+        "current-revision metrics skip assessment",
+        "verify and refactor allowances are independent",
+        "legacy baseline recheck remains required"
+      ]
     }
   ],
   "running_evals": {

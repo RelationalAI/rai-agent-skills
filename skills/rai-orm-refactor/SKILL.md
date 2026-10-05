@@ -39,8 +39,8 @@ python tools/compaction_metrics.py --model /work/model.orm.yaml \
 |---|---|
 | Remove / merge | Every affected item has an existing-element path; domain facts and identity remain represented |
 | Keep | A needed step, identity, role, constraint or source population would be lost |
-| Accept batch | Modeling validation and regeneration succeed; verified pass counts do not drop |
-| Roll back | More regressions than fixes, either split loses passes, or the check cannot establish the same baseline |
+| Accept batch | Modeling validation and regeneration succeed; every unchanged baseline-passing id stays passing with unchanged oracle and weak accounting |
+| Roll back | Any unchanged baseline pass is lost, either split loses passes, or the check cannot establish the same baseline |
 
 ## Instructions
 
@@ -49,6 +49,8 @@ python tools/compaction_metrics.py --model /work/model.orm.yaml \
 **Dependencies:** Use `rai-pyrel-coding` and `rai-querying` for actual operator syntax, the original modeling skill for YAML representation and emission, and `rai-orm-verify` for the acceptance check. Read-only source access, split, oracle, weak matches and retry limits remain owned by `rai-orm-verify`.
 
 ### Step 1 — Measure and establish the baseline
+
+The router first invokes an **assessment only** pass after connectivity and before verification: measure and list suspects, make no model changes, and spend no rounds. Write `compaction.after.json` with `--model-revision` set to `baseline_model_revision` from `state.py plan`; a matching revision lets the router skip this assessment. Acceptance follows verification and has its own `refactor_rounds` allowance (default 2 per invocation).
 
 Run `tools/compaction_metrics.py` on the YAML; pass the verification report and digest when available. PyRel paths in the report resolve relative to that report. Load [compaction-metrics.md](references/compaction-metrics.md) to interpret counts and reason codes. Missing PyRel means support is unavailable, not zero.
 
@@ -80,11 +82,11 @@ Every proposal in `refactor-proposals.yaml` carries `provenance.origin: refactor
 
 Apply the reviewed/proposed batch in a candidate revision through `rai-orm-from-schema` SRP Step 9f or `rai-orm-from-text` CSDP Step 7f. Run that skill's representation validation, resolve dangling roles, subtype references, objectifications, references and constraints, then regenerate `model.verbalization.txt` and `model.py` through its translation step. Restore/recheck bindings for the regenerated model. Edit the YAML via this procedure, never patch `model.py` independently.
 
-Hand the candidate and same workload to `rai-orm-verify`. Re-run every item, including previous passes and the holdout. Saved rewrites may follow renamed elements; they cannot bypass the ontology through source tables. Keep the baseline oracle, split, exclusions and weak-pass accounting fixed. Changing a prior pass to an exclusion or unverified status is a loss, not preservation.
+Hand the candidate and same workload to `rai-orm-verify`. Re-run every item, including previous passes and the holdout. For removals, merges, flag replacements and renames, use the candidate-rewrite migration procedure in [refactor-patterns.md](references/refactor-patterns.md). Keep original passing files until candidate files verify equivalent; rewrites cannot bypass the ontology through source tables. Keep the baseline oracle, split, exclusions and weak-pass accounting fixed. Changing a prior pass to an exclusion or unverified status is a loss, not preservation.
 
-Accept only if total verified passes and each split's verified passes do not drop, and the verifier's regressions do not exceed fixes. Equality is allowed. This uses the verifier's regression rule with a per-split preservation guard. A scaffold alone cannot accept a batch. If verification fails, is incomplete, or downgrades the oracle, restore the snapshot including generated files, bindings and saved rewrites; record the rejected batch and counts. Verifier repairs cannot be used to silently reintroduce query-shaped concepts; reassess such a batch.
+Accept only if every unchanged baseline-passing id remains passing, with unchanged oracle, split and weak-pass accounting; also preserve total/per-split pass counts and exclusions. Equal totals cannot compensate for a lost pass (including a same-split pass swap). Run `python tools/acceptance.py --baseline baseline.verification.json --candidate candidate.verification.json`; acceptance requires exit 0 plus modeling validation and executed oracle checks. A scaffold alone cannot accept a batch. If verification fails, is incomplete, or downgrades the oracle, restore the snapshot including generated files, bindings and saved rewrites; record the rejected batch and counts. Verifier repairs cannot be used to silently reintroduce query-shaped concepts; reassess such a batch.
 
-Bound compaction to five batches by default; stop earlier when no supported proposal remains or two consecutive batches yield no accepted metric improvement. Share the verifier's existing repair-round budget rather than restarting it per batch. If either budget expires, report **budget exhausted** prominently with verified counts, residual classes and remaining suspects; do not imply completion.
+Bound compaction to `refactor_rounds` (default 2 attempts per invocation); stop earlier when no supported proposal remains or two consecutive batches yield no accepted metric improvement. Count accepted and rolled-back attempts with `state.py update --skill rai-orm-refactor --rounds-done 1`; assessment costs zero. Refactor never consumes verify rounds, nor verify refactor rounds. Do not reset the allowance per batch. If either budget expires, report **budget exhausted** prominently with verified counts, residual classes and remaining suspects; do not imply completion.
 
 ### Step 6 — Report before / after
 

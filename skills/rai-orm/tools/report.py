@@ -2,13 +2,15 @@
 """Produce deterministic ORM statistics and actionable, count-only issues."""
 
 import argparse
-import ast
 from collections import Counter
 import json
 from pathlib import Path
 import sys
 
 import yaml
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "rai-orm-refactor" / "tools"))
+from usage_scanner import workload_support
 
 from connectivity import analyze, bindings, read_yaml
 
@@ -17,30 +19,10 @@ STATUSES = ("pass", "fail", "unverified", "inexpressible", "oracle-error")
 
 
 def concept_usage(model, verification, base_dir):
-    """Read only saved PyRel paths listed in verification, never workload text."""
-    items = verification.get("items", [])
-    if not any(i.get("pyrel") for i in items):
-        return None
-    names = {o["name"]: o["id"] for o in model.get("object_types", []) if o["kind"] == "entity"}
-    usage = Counter()
-    for item in items:
-        if not item.get("pyrel"):
-            continue
-        try:
-            tree = ast.parse((Path(base_dir) / item["pyrel"]).read_text())
-        except (OSError, SyntaxError, UnicodeError):
-            # Incomplete files cannot support a singleton-use conclusion.
-            return None
-        aliases = {a.asname: a.name for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)
-                   for a in n.names if a.asname and a.name in names}
-        used = set()
-        for node in ast.walk(tree):
-            name = node.id if isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load) else (node.attr if isinstance(node, ast.Attribute) else None)
-            name = aliases.get(name, name)
-            if name in names:
-                used.add(names[name])
-        usage.update(used)
-    return usage
+    """Compatibility wrapper over the shared per-item usage scanner."""
+    entities = {o["id"]: o for o in model.get("object_types", []) if o["kind"] == "entity"}
+    _, support = workload_support(entities, verification, base_dir, None)
+    return None if support is None else Counter({eid: len(ids) for eid, ids in support.items()})
 
 
 def build_report(model, verification=None, connectivity=None, digest=None, base_dir="."):
@@ -97,9 +79,19 @@ def build_report(model, verification=None, connectivity=None, digest=None, base_
     if verification is not None:
         summary = verification.get("summary", {})
         items = verification.get("items", [])
-        total = verification.get("workload", {}).get("n_items", total or len(items))
-        total = max(total, len(items))
-        counts = Counter(i.get("status", "unverified") for i in items)
+        verification_total = verification.get("workload", {}).get("n_items", len(items))
+        digest_total = (digest or {}).get("workload", {}).get("n_items")
+        mismatch = verification_total != len(items) or (digest_total is not None and digest_total != verification_total)
+        total = max(total, verification_total, len(items))
+        if mismatch:
+            issue("WORKLOAD_COUNT_MISMATCH", "blocker", total,
+                  "Reconcile digest and verification item counts before reporting completion.",
+                  digest_items=digest_total, verification_items=verification_total, recorded_items=len(items))
+        unknown = sum(i.get("status", "unverified") not in STATUSES for i in items)
+        counts = Counter(i.get("status", "unverified") if i.get("status", "unverified") in STATUSES else "unverified" for i in items)
+        if unknown:
+            issue("UNKNOWN_ITEM_STATUS", "warning", unknown,
+                  "Resolve unknown item statuses; these items count as unverified.")
         for k in ("inexpressible", "oracle-error"):
             counts[k] = max(counts[k], summary.get("excluded", {}).get(k, 0))
         counts["unverified"] += max(0, total - sum(counts.values()))
@@ -127,7 +119,9 @@ def build_report(model, verification=None, connectivity=None, digest=None, base_
         holdout_rate = holdout_rate if holdout_rate is not None else pass_rate("holdout")
         stop = summary.get("stopped_because")
         status = "budget-exhausted" if stop == "budget" and (residual or counts["unverified"]) else ("residual-failures" if residual else ("unverified" if counts["unverified"] else "all-pass"))
-        invocations = [{key: invocation[key] for key in ("started_round", "rounds_run", "stopped_because")}
+        if mismatch and status == "all-pass":
+            status = "unverified"
+        invocations = [{key: invocation.get(key) for key in ("started_round", "rounds_run", "stopped_because")}
                        for invocation in verification.get("invocations", [])]
         rounds_total = max(max((r["round"] for r in rounds), default=0),
                            sum(i["rounds_run"] for i in invocations))
@@ -154,12 +148,14 @@ def build_report(model, verification=None, connectivity=None, digest=None, base_
         regressions = stats["verification"]["regressions"]
         if regressions:
             issue("REGRESSIONS", "warning", regressions, "Re-run saved passing PyRel files at rai-orm-verify Step 6 and review rollback decisions.")
-        usage = concept_usage(model, verification, base_dir)
-        if usage is not None:
-            singletons = sorted(k for k, v in usage.items() if v == 1)
+        entities = {o["id"]: o for o in model.get("object_types", []) if o["kind"] == "entity"}
+        coverage, support = workload_support(entities, verification, base_dir, digest)
+        if support is not None:
+            singletons = sorted(k for k, v in support.items() if len(v) == 1)
             if singletons:
                 issue("SINGLE_ITEM_CONCEPTS", "warning", len(singletons),
-                      "Review these concepts for query-shaped modeling against the schema and domain vocabulary.", concept_ids=singletons)
+                      "Review these concepts for query-shaped modeling against the schema and domain vocabulary.", concept_ids=singletons,
+                      coverage=coverage["status"], lower_bound=coverage["status"] != "complete")
         unverified = counts["unverified"]
     else:
         unverified = total
@@ -175,8 +171,14 @@ def build_report(model, verification=None, connectivity=None, digest=None, base_
     comparison_summary = connectivity.get("summary", {})
     if comparison_summary.get("comparison_cap_reached"):
         untested_links = comparison_summary.get("candidates_untested", 0)
+        priority_counts = "; ".join(
+            f"{label}: {comparison_summary[key]}" if key in comparison_summary else f"{label}: counts unavailable"
+            for key, label in (("required_gaps_untested", "untested required gaps"),
+                               ("isolated_concepts_untested", "untested isolated concepts")))
         issue("COMPARISON_CAP_REACHED", "warning", untested_links,
-              f"{untested_links} candidate links were not tested; raise --max-comparisons")
+              f"Comparison cap reached; {untested_links} candidate links remain untested. "
+              "Untested candidates are ranked after required-gap and isolated-concept pairs; "
+              "raise --max-comparisons only if required gaps or isolated concepts are still untested. " + priority_counts)
     gaps = len(connectivity.get("required_gaps", []))
     if gaps:
         issue("REQUIRED_JOIN_GAPS", "blocker", gaps, "Classify as missing-element at rai-orm-verify Step 4 and add proposed links with overlap evidence at Step 5.")
@@ -245,14 +247,14 @@ def main():
     parser.add_argument("--out-dir", default=".")
     args = parser.parse_args()
     try:
-        read_json = lambda p: json.loads(Path(p).read_text()) if p else None
+        read_json = lambda p: json.loads(Path(p).read_text(encoding="utf-8")) if p else None
         result = build_report(read_yaml(args.model), read_json(args.verification), read_json(args.connectivity),
                               read_yaml(args.digest) if args.digest else None,
                               Path(args.verification).parent if args.verification else Path(args.model).parent)
         target = Path(args.out_dir)
         target.mkdir(parents=True, exist_ok=True)
-        (target / "orm-report.json").write_text(json.dumps(result, sort_keys=True, indent=2) + "\n")
-        (target / "orm-report.md").write_text(markdown(result))
+        (target / "orm-report.json").write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+        (target / "orm-report.md").write_text(markdown(result), encoding="utf-8")
         return 0
     except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError):
         print("ORM report failed: check input structure and file access.", file=sys.stderr)

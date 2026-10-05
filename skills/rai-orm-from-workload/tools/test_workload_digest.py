@@ -360,3 +360,28 @@ def test_contributions_are_per_item_not_occurrence_and_keep_empty_items(tmp_path
     assert contributions["repeated"]["filter_columns"][0]["literal_cohorts"] == [{"items": ["repeated"], "count": 1}]
     assert all(not rows for rows in contributions["error"].values())
     assert all(not rows for rows in contributions["question"].values())
+
+
+def test_multiple_inputs_and_saved_split(tmp_path):
+    first, second = tmp_path / "pairs.json", tmp_path / "sql.json"
+    first.write_text(json.dumps([{"id": "p1", "question": "names", "sql": "SELECT name FROM asset"}]), encoding="utf-8")
+    second.write_text(json.dumps([{"id": "s1", "sql": "SELECT cost FROM asset"}]), encoding="utf-8")
+    out = tmp_path / "out.yaml"
+    single = run_digest(first, out)
+    single_bytes = out.read_bytes()
+    assert MODULE.build_digest(first, no_timestamp=True) == MODULE.build_digest([first], no_timestamp=True)
+    run_digest(first, out)
+    assert out.read_bytes() == single_bytes
+    merged = run_digest(first, out, "--input", second)
+    assert merged["workload"]["artifacts"] == ["pairs.json", "sql.json"]
+    assert merged["workload"]["n_items"] == 2
+    assert set(merged["item_contributions"]) == {"p1", "s1"}
+    assignments = tmp_path / "verification.json"
+    assignments.write_text(json.dumps({"items": [{"id": "p1", "split": "repair"}, {"id": "s1", "split": "holdout"}]}), encoding="utf-8")
+    split = run_digest(first, out, "--input", second, "--split", "repair", "--verification", assignments)
+    assert split["workload"]["n_items"] == 1
+    assert split["item_contributions"] == single["item_contributions"]
+    second.write_bytes(first.read_bytes())
+    result = subprocess.run([sys.executable, str(TOOL), "--input", str(first), "--input", str(second), "--out", str(out)], capture_output=True, text=True)
+    assert result.returncode != 0
+    assert "duplicate workload item id: p1" in result.stderr

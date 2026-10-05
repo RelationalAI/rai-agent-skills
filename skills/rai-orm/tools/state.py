@@ -11,6 +11,7 @@ import csv
 import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import re
 import shlex
@@ -121,6 +122,11 @@ def emitter_files(base, command, supplied=()):
     return [{"path": path, "sha256": file_hash(base / path)} for path in sorted(paths)]
 
 
+class UnsafeEmitterPath(ValueError):
+    def __init__(self, artifact, path):
+        self.artifact, self.path = artifact, path
+
+
 def check_emitter(base, artifacts, command, files):
     if command == "manual:step-10":
         return {"status": "manual"}
@@ -129,14 +135,22 @@ def check_emitter(base, artifacts, command, files):
     if not files or any(not (base / f["path"]).is_file() for f in files):
         return {"status": "blocked", "id": "EMITTER_UNVERIFIED", "reason": "emitter file missing or unregistered"}
     try:
+        keys = [key for key in ("model_yaml", "model_py", "digest", "repair_digest", "holdout_digest")
+                if key in artifacts]
+        for key, supplied in [(key, artifacts[key]) for key in keys] + [("emitter_file", f["path"]) for f in files]:
+            try:
+                (base / supplied).resolve().relative_to(base.resolve())
+            except ValueError:
+                raise UnsafeEmitterPath(key, os.path.relpath(base / supplied, base)) from None
         with tempfile.TemporaryDirectory(prefix="orm-emitter-") as directory:
             root = Path(directory)
             prefix = sandbox_prefix(root)
             project = root / "project"
             shutil.copytree(base, project, symlinks=True,
                             ignore=shutil.ignore_patterns(".git", ".venv", "__pycache__", ".orm-workloads"))
-            if any(p.is_symlink() for p in project.rglob("*")):
-                raise ValueError("symlink in project")
+            for p in sorted(project.rglob("*")):
+                if p.is_symlink():
+                    raise UnsafeEmitterPath("symlink", p.relative_to(project).as_posix())
             args = shlex.split(command)
             for index, arg in enumerate(args):
                 if Path(arg).is_absolute():
@@ -144,7 +158,7 @@ def check_emitter(base, artifacts, command, files):
                         args[index] = str(project / Path(arg).resolve().relative_to(base.resolve()))
                     except ValueError:
                         if index != 0:
-                            raise ValueError("external command argument")
+                            raise UnsafeEmitterPath("command_argument", os.path.relpath(arg, base)) from None
             keys = [key for key in ("model_yaml", "model_py", "digest", "repair_digest", "holdout_digest")
                     if key in artifacts]
             paths = {key: project / (base / artifacts[key]).resolve().relative_to(base.resolve()) for key in keys}
@@ -160,9 +174,18 @@ def check_emitter(base, artifacts, command, files):
             if changed or before["model_py"] is None:
                 return {"status": "blocked", "id": "EMITTER_NOT_IDEMPOTENT", "artifacts": changed}
             return {"status": "verified"}
-    except (OSError, ValueError, subprocess.TimeoutExpired):
+    except UnsafeEmitterPath as error:
         return {"status": "blocked", "id": "EMITTER_UNVERIFIED",
-                "reason": "sandbox unavailable, unsafe project paths, or command timed out"}
+                "reason": "unsafe project path: artifact outside project folder or symlink",
+                "artifact": error.artifact, "path": error.path}
+    except subprocess.TimeoutExpired:
+        return {"status": "blocked", "id": "EMITTER_UNVERIFIED", "reason": "command timed out"}
+    except OSError as error:
+        return {"status": "blocked", "id": "EMITTER_UNVERIFIED",
+                "reason": "sandbox or file operation failed", "errno": error.errno}
+    except ValueError as error:
+        return {"status": "blocked", "id": "EMITTER_UNVERIFIED",
+                "reason": "sandbox unavailable" if str(error) == "sandbox unavailable" else "invalid emitter command or project paths"}
 
 
 def fact_snapshot(base, artifacts):
@@ -304,17 +327,15 @@ def last_round(value):
 def stop_reasons(base, artifacts):
     connectivity = mapping(base / artifacts["connectivity"])
     report = mapping(base / artifacts["report"])
-    metrics = mapping(base / artifacts["refactor_metrics"])
     return {"connectivity": ("COMPARISON_CAP_REACHED" if connectivity.get("summary", {}).get("comparison_cap_reached")
                              else connectivity.get("verdict")),
-            "report": report.get("status"),
-            "refactor": metrics.get("stopped_because", metrics.get("summary", {}).get("stopped_because"))}
+            "report": report.get("status")}
 
 
 def initialize(base, artifacts, inputs=(), workloads=(), emitter=None, mode=None,
                rounds_per_invocation=5, patience=2, until_pass=False, skills=(), bindings=(),
-               emitter_paths=(), persist_inputs=True):
-    if rounds_per_invocation < 1 or patience < 1:
+               emitter_paths=(), persist_inputs=True, refactor_rounds=2):
+    if rounds_per_invocation < 1 or patience < 1 or refactor_rounds < 1:
         raise ValueError("positive budgets required")
     records = []
     seen = set()
@@ -365,11 +386,13 @@ def initialize(base, artifacts, inputs=(), workloads=(), emitter=None, mode=None
     reasons = stop_reasons(base, artifacts)
     stop = verification.get("summary", {}).get("stopped_because")
     return {"version": VERSION, "inputs": sorted(records, key=lambda record: record["path"]),
-            "mode": mode, "budget": {"rounds_per_invocation": rounds_per_invocation, "patience": patience, "until_pass": until_pass},
+            "mode": mode, "budget": {"rounds_per_invocation": rounds_per_invocation, "patience": patience, "until_pass": until_pass, "refactor_rounds": refactor_rounds},
             "model_revision": rev, "artifacts": artifacts, "emitter_command": emitter,
             "skills_run": [{"skill": skill, "rounds_done": counter if skill == "rai-orm-verify" else 0,
                             "stop_reason": stop if skill == "rai-orm-verify" else reasons.get("refactor" if skill == "rai-orm-refactor" else skill),
                             "model_revision": rev} for skill in skills],
+            "rounds_used_by_skill_this_invocation": {"rai-orm-verify": 0, "rai-orm-refactor": 0},
+            "invocation_rounds": [],
             "round_counters": {skill: counter if skill == "rai-orm-verify" else 0 for skill in skills},
             "artifact_hashes": {key: file_hash(base / path) for key, path in sorted(artifacts.items())},
             "artifact_stop_reasons": reasons, "verification_revision": verified_revision(verification),
@@ -593,13 +616,23 @@ def plan(state, base, feedback=()):
             not (base / artifacts["digest"]).is_file() and not state["artifact_hashes"].get("digest")
             and any(record["kind"] == "workload" for record in state["inputs"])):
         steps.append("rai-orm-from-workload")
+    budget = {"refactor_rounds": 2, **state["budget"]}
+    used = dict(state.get("rounds_used_by_skill_this_invocation", {
+        "rai-orm-verify": max(0, counter - state.get("invocation_started_round", counter + 1) + 1),
+        "rai-orm-refactor": 0}))
+    remaining = {"rai-orm-verify": max(0, budget["rounds_per_invocation"] - used.get("rai-orm-verify", 0)),
+                 "rai-orm-refactor": max(0, budget["refactor_rounds"] - used.get("rai-orm-refactor", 0))}
+    metrics = mapping(base / artifacts["refactor_metrics"])
+    metrics_current = metrics.get("model_revision") == current_revision
     if dirty or residual or not (base / artifacts["connectivity"]).is_file():
         steps.append("connectivity")
-    if dirty or residual:
-        if has_workload:
-            steps.append("rai-orm-verify")
+    assessment = not metrics_current
+    if assessment:
         steps.append("rai-orm-refactor")
-    elif not (base / artifacts["refactor_metrics"]).is_file():
+    if dirty or residual:
+        if has_workload and (remaining["rai-orm-verify"] or budget.get("until_pass")):
+            steps.append("rai-orm-verify")
+    if has_workload and remaining["rai-orm-refactor"] and (dirty or residual or assessment or metrics.get("suspects")):
         steps.append("rai-orm-refactor")
     if state.get("emitter_command") == "manual:step-10":
         steps.insert(0, "manual:step-10")
@@ -608,8 +641,10 @@ def plan(state, base, feedback=()):
     return {"version": VERSION, "steps": steps, "baseline_round": counter, "started_round": counter + 1,
             "baseline_model_revision": current_revision, "baseline_recheck": changed_model,
             "missing_item_ids": sorted(missing_ids),
-            "rounds_used_this_invocation": max(0, counter - state.get("invocation_started_round", counter + 1) + 1),
-            "budget": state["budget"], "mode": state["mode"], "frozen_passed_items": sorted(frozen),
+            "rounds_used_this_invocation": used.get("rai-orm-verify", 0),
+            "rounds_used_by_skill_this_invocation": used, "rounds_remaining_by_skill": remaining,
+            "refactor_assessment": assessment,
+            "budget": budget, "mode": state["mode"], "frozen_passed_items": sorted(frozen),
             "saved_pyrel": [{"id": item["id"], "path": item.get("pyrel"), "sha256": item.get("pyrel_sha256")}
                             for item in snapshot["items"] if item["id"] in frozen],
             "new_feedback_items": sorted(new_feedback.values(), key=lambda item: (item["id"], item["sha256"])),
@@ -623,7 +658,7 @@ def plan(state, base, feedback=()):
 
 def update(state, base, skill, rounds_done=0, stop_reason=None, emitter=None, feedback=(),
            accept_workload_delta=False, rounds_per_invocation=None, patience=None, until_pass=None,
-           accept_pyrel_paths=False, full_rebuild=False, start_invocation=False):
+           accept_pyrel_paths=False, full_rebuild=False, start_invocation=False, refactor_rounds=None):
     # Validate before changing the caller's manifest; failed acceptance is atomic.
     original_state = state
     state = copy.deepcopy(state)
@@ -663,17 +698,33 @@ def update(state, base, skill, rounds_done=0, stop_reason=None, emitter=None, fe
     blocked = [b for b in check["blockers"] if b["id"] in required]
     if blocked:
         raise UpdateBlocked(blocked)
+    if start_invocation:
+        state.setdefault("invocation_rounds", []).append({
+            "started_round": state.get("invocation_started_round", state["round_counters"].get("rai-orm-verify", 0) + 1),
+            "rounds_by_skill": dict(check["rounds_used_by_skill_this_invocation"])})
+    if "rounds_used_by_skill_this_invocation" not in state:
+        state["rounds_used_by_skill_this_invocation"] = dict(check["rounds_used_by_skill_this_invocation"])
+    if start_invocation:
+        state["rounds_used_by_skill_this_invocation"] = {"rai-orm-verify": 0, "rai-orm-refactor": 0}
+    state["budget"].setdefault("refactor_rounds", 2)
     if start_invocation or "invocation_started_round" not in state:
         state["invocation_started_round"] = state["round_counters"].get("rai-orm-verify", 0) + 1
     if rounds_done < 0:
         raise ValueError("negative rounds")
     if not NAME.fullmatch(skill) or (stop_reason is not None and not NAME.fullmatch(stop_reason)):
         raise ValueError("step metadata must be identifiers")
-    for key, value in (("rounds_per_invocation", rounds_per_invocation), ("patience", patience), ("until_pass", until_pass)):
+    for key, value in (("rounds_per_invocation", rounds_per_invocation), ("refactor_rounds", refactor_rounds), ("patience", patience), ("until_pass", until_pass)):
         if value is not None:
             if key != "until_pass" and value < 1:
                 raise ValueError("positive budgets required")
             state["budget"][key] = value
+    used = state["rounds_used_by_skill_this_invocation"]
+    allowance = {"rai-orm-verify": "rounds_per_invocation", "rai-orm-refactor": "refactor_rounds"}
+    if skill in allowance:
+        new_used = used.get(skill, 0) + rounds_done
+        if new_used > state["budget"][allowance[skill]] and not (skill == "rai-orm-verify" and state["budget"].get("until_pass")):
+            raise UpdateBlocked([{"id": "BUDGET_EXHAUSTED", "skill": skill}])
+        used[skill] = new_used
     if accept_workload_delta:
         # The agent has reviewed the delta, re-digested only added/changed ids,
         # and preserved surviving split assignments before advancing the hashes.
@@ -700,7 +751,7 @@ def update(state, base, skill, rounds_done=0, stop_reason=None, emitter=None, fe
     if skill == "rai-orm-verify":
         for binding in state.get("bindings", []):
             binding["sha256"] = file_hash(base / binding["path"])
-    state["rounds_used_this_invocation"] = max(0, counters.get("rai-orm-verify", 0) - state["invocation_started_round"] + 1)
+    state["rounds_used_this_invocation"] = used.get("rai-orm-verify", 0)
     state["model_revision"] = rev
     state["last_stop_reason"] = stop_reason
     state["artifact_hashes"] = {key: file_hash(base / path) for key, path in sorted(state["artifacts"].items())}
@@ -727,6 +778,7 @@ def main(argv=None):
     for command in ("init", "update", "plan"):
         p = sub.add_parser(command)
         p.add_argument("--state", default="orm-state.json")
+        p.add_argument("--refactor-rounds", type=int, default=2 if command == "init" else None)
         if command in {"init", "plan"}:
             for key, default in ARTIFACT_DEFAULTS.items():
                 p.add_argument("--" + key.replace("_", "-"), default=default)
@@ -762,7 +814,8 @@ def main(argv=None):
             result = initialize(base, artifacts, args.input, args.workload, getattr(args, "emitter", None), args.mode,
                                 getattr(args, "rounds_per_invocation", 5), getattr(args, "patience", 2),
                                 getattr(args, "until_pass", False), getattr(args, "skill", ()),
-                                args.binding, args.emitter_file, persist_inputs=args.command == "init")
+                                args.binding, args.emitter_file, persist_inputs=args.command == "init",
+                                refactor_rounds=args.refactor_rounds if args.refactor_rounds is not None else 2)
             if args.command == "init":
                 if target.exists():
                     raise ValueError("state already exists; use update")
@@ -774,11 +827,15 @@ def main(argv=None):
             if result.get("version") != VERSION:
                 raise ValueError("unsupported state version")
             if args.command == "plan":
+                if args.refactor_rounds is not None:
+                    if args.refactor_rounds < 1:
+                        raise ValueError("positive budgets required")
+                    result["budget"]["refactor_rounds"] = args.refactor_rounds
                 result = plan(result, base, args.feedback)
             else:
                 result = update(result, base, args.skill, args.rounds_done, args.stop_reason, args.emitter,
                                 args.feedback, args.accept_workload_delta, args.rounds_per_invocation, args.patience, args.until_pass,
-                                args.accept_pyrel_paths, args.full_rebuild, args.start_invocation)
+                                args.accept_pyrel_paths, args.full_rebuild, args.start_invocation, args.refactor_rounds)
                 target.write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")
         print(json.dumps(result, sort_keys=True, indent=2))
         return 0

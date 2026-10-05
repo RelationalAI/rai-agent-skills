@@ -107,7 +107,7 @@ For each item:
    - **Structural** — list the tables, columns and join edges of the SQL; each must be reached by the PyRel through a concept, a fact type and a relationship of the model.
    - **Verbalization** (`pairs`, `questions`) — state in one sentence what the PyRel returns, in the model's readings. For `pairs`, it must say what the question asks.
    - **User review** (`questions`) — see Step 3b.
-4. Save an accepted rewrite as `verification/<item id>.py`. Keep prior accepted rewrites intact while testing candidates; renamed-element adaptations are explicit candidate copies until accepted.
+4. Save an accepted rewrite as `verification/<item id>.py`. Keep prior accepted rewrites intact while testing candidates; removals, merges, flag replacements and renamed-element adaptations use separate candidate copies until verified equivalent; preserve the originals for rollback. Follow the candidate-rewrite migration procedure in rai-orm-refactor.
 
 An empty result on both sides is a weak match: mark the item `pass` with `weak: true`, and do not count it as evidence that a repair worked.
 
@@ -153,7 +153,7 @@ Names must come from the schema, the domain documentation, or the digest's terms
 
 After each model revision, re-run every item against the same split and oracle: new/unresolved rewrites and prior passes using their saved PyRel. Count a prior pass becoming excluded or `unverified` as a **regression**. A round that causes more regressions than it fixes is rolled back to the consistent snapshot, including saved rewrites and bindings; retain the attempted round and rollback evidence in history.
 
-For a `rai-orm-refactor` candidate, re-run the baseline workload including prior passes and sealed holdout. Report total/per-split passes, regressions, fixes, weak passes and exclusions. Accept only when total and each split's verified pass counts do not drop and regressions do not exceed fixes; otherwise restore the consistent snapshot. Share the remaining budget of this invocation across all refactor hand-backs; do not reset it for each batch. Keep holdout failure details/scaffolds out of proposal selection.
+For a `rai-orm-refactor` candidate, re-run the baseline workload including prior passes and sealed holdout. Report total/per-split passes, regressions, fixes, weak passes and exclusions. Accept only when every unchanged baseline-passing id stays passing with unchanged oracle, split and weak accounting, and total/per-split counts and exclusions are preserved. A same-split pass swap is a rejection even with equal totals; restore the consistent snapshot on failure. Use the acceptance gate and candidate-rewrite migration procedure in rai-orm-refactor. Charge hand-backs to its separate `refactor_rounds` allowance (default 2); never consume the verify allowance or reset either per batch. Keep holdout failure details/scaffolds out of proposal selection.
 
 ### Step 7 — Stop and report
 
@@ -161,9 +161,9 @@ Read `rounds_per_invocation` (default 5), `patience` (default 2) and `until_pass
 
 - every workload item, including holdout, is `pass`, `inexpressible` or `oracle-error`;
 - `patience` consecutive attempts do not increase repair-set verified passes (weak empty matches do not demonstrate improvement);
-- with `until_pass: false`, the budget of this invocation has run `rounds_per_invocation` repair/acceptance attempts.
+- with `until_pass: false`, the budget of this invocation has run `rounds_per_invocation` verify repair attempts.
 
-With `until_pass: true`, continue beyond the finite round allowance until the all-item terminal condition or patience stops the loop. Unreviewed questions remain `unverified`. Count attempted/rolled-back rounds and refactor acceptance rounds; baseline N+0 costs no repair round. A fresh invocation resets the allowance and patience streak while global round numbers continue. A sealed holdout failure may prevent all-pass but never supplies repair evidence.
+With `until_pass: true`, continue beyond the finite round allowance until the all-item terminal condition or patience stops the loop. Unreviewed questions remain `unverified`. Count attempted/rolled-back verify rounds here; record refactor acceptance attempts separately under `rai-orm-refactor`; baseline N+0 costs no repair round. A fresh invocation resets the allowance and patience streak while global round numbers continue. A sealed holdout failure may prevent all-pass but never supplies repair evidence.
 
 Write `model.verification.json`, retaining prior rounds, connectivity blocks, split assignments, pass metadata and saved PyRel paths. Append `invocations: [{started_round, rounds_run, stopped_because}]`; report rounds run in this invocation and in total. Use the [report format](references/report-format.md) for legacy migration and accounting. Record the finished step with `state.py update` from `rai-orm`.
 

@@ -1,6 +1,6 @@
 ---
 name: rai-orm
-description: Routes ORM 2 model building and incremental improvement from a schema, description, workload or existing ORM YAML with feedback, preserving verification state and reporting blockers; not for the modeling procedures, workload extraction, rewrite checks or compaction themselves.
+description: Routes ORM 2 model building and incremental improvement from a schema, description, workload or existing ORM YAML with feedback, preserving verification state and reporting blockers; not for modeling (rai-orm-from-schema, rai-orm-from-text), workload extraction (rai-orm-from-workload), rewrite checks (rai-orm-verify) or compaction (rai-orm-refactor).
 ---
 
 # ORM Modeling — Entry Point and Router
@@ -29,7 +29,7 @@ description: Routes ORM 2 model building and incremental improvement from a sche
 | `state.py` | Manifest, finished steps and deterministic resume plan | before intake; after each accepted step |
 | `report.py` | Statistics and actionable issues | route close |
 
-Default workload route: **`rai-orm-from-workload` → `rai-orm-from-schema` (+ connectivity) → `rai-orm-verify` ↔ `rai-orm-refactor` → report**. Refactor assessment may keep every concept; candidate batches return through the modeling skill and verification with the same invocation budget.
+Default workload route: **`rai-orm-from-workload` → `rai-orm-from-schema` (+ connectivity) → `rai-orm-verify` ↔ `rai-orm-refactor` → report**. Refactor assessment may keep every concept; candidate batches return through the modeling skill and verification using the separate refactor allowance.
 
 | Modality | Evidence | Verification oracle |
 |---|---|---|
@@ -65,7 +65,7 @@ Load [hot-start.md](references/hot-start.md) for the manifest, feedback conversi
 
 For a new build, collect only missing facts in one message: schema/DDL/CSV or description; workload modality and file; read-only data access; and whether evaluation items must be sealed from modeling. Pass only repair evidence to modeling.
 
-Ask the invocation budget questions together: rounds (`rounds_per_invocation`, default 5), consecutive rounds without pass-count improvement (`patience`, default 2), and whether to keep going until every item is `pass`, `inexpressible` or `oracle-error` (`until_pass`, default false). With `until_pass: true`, the round limit does not stop verification; patience still does. See the hot-start reference for accounting.
+Ask the invocation budget questions together: verify rounds (`rounds_per_invocation`, default 5), refactor acceptance rounds (`refactor_rounds`, default 2), consecutive rounds without pass-count improvement (`patience`, default 2), and whether to keep going until every item is `pass`, `inexpressible` or `oracle-error` (`until_pass`, default false). With `until_pass: true`, the round limit does not stop verification; patience still does. See the hot-start reference for accounting.
 
 ### Step 2 — Mode, chosen once
 
@@ -90,7 +90,7 @@ Hand modeling decisions to their owning skill. Reuse the recorded emitter to reg
 | modeling skill | `rai-orm-verify` | candidate artifacts, unchanged workload/split/oracle; accept only without total or per-split pass-count loss; otherwise restore snapshot |
 | accepted steps | state / report | counters, revision, paths, artifact stop reasons and processed feedback hashes |
 
-`rai-orm-verify` owns repair iterations and regression checks. Refactor acceptance shares that invocation budget, including holdout evaluation sealed from repair selection. Read [hot-start.md](references/hot-start.md) before accepting feedback or refactor batches.
+`rai-orm-verify` owns repair iterations and regression checks. Plan order is connectivity → rai-orm-refactor assessment → rai-orm-verify → rai-orm-refactor acceptance → report. Assessment only measures/lists suspects and costs no rounds; skip it when metrics record the current model revision. Refactor acceptance uses its separate `refactor_rounds` allowance, including holdout evaluation sealed from repair selection. Read [hot-start.md](references/hot-start.md) before accepting feedback or refactor batches.
 
 ### Step 5 — Close
 

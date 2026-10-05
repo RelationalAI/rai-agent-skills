@@ -147,7 +147,8 @@ def test_comparison_cap_warning():
     result = build_report(MODEL, connectivity=c)
     issue = next(i for i in result["issues"] if i["id"] == "COMPARISON_CAP_REACHED")
     assert issue["severity"] == "warning" and issue["count"] == 17
-    assert issue["next_action"] == "17 candidate links were not tested; raise --max-comparisons"
+    assert "raise --max-comparisons only if required gaps or isolated concepts are still untested" in issue["next_action"]
+    assert "counts unavailable" in issue["next_action"]
     assert issue["next_action"] in markdown(result)
     c["summary"]["comparison_cap_reached"] = False
     assert "COMPARISON_CAP_REACHED" not in {i["id"] for i in build_report(MODEL, connectivity=c)["issues"]}
@@ -210,3 +211,50 @@ def test_patience_is_not_inferred_across_invocations():
     v["invocations"] = [{"started_round": 1, "rounds_run": 1, "stopped_because": "budget"},
                         {"started_round": 2, "rounds_run": 1, "stopped_because": "budget"}]
     assert "PLATEAU" not in {i["id"] for i in build_report(MODEL, v)["issues"]}
+
+
+def test_in_progress_invocation():
+    v = verification()
+    v["invocations"] = [{"started_round": 1, "rounds_run": 2}]
+    result = build_report(MODEL, v)
+    assert result["statistics"]["verification"]["invocations"][0]["stopped_because"] is None
+
+
+def test_unknown_status_is_unverified_and_private():
+    v = {"items": [{"id": "a", "status": "PRIVATE_UNKNOWN"}]}
+    result = build_report(MODEL, v)
+    assert result["status"] == "unverified"
+    assert result["statistics"]["verification"]["items_by_status"]["unverified"] == 1
+    assert any(i["id"] == "UNKNOWN_ITEM_STATUS" for i in result["issues"])
+    assert "PRIVATE_UNKNOWN" not in json.dumps(result)
+
+
+@pytest.mark.parametrize("digest_count,verification_count,missing", [(3, 1, 2), (1, 3, 0)])
+def test_count_mismatch_never_all_pass(digest_count, verification_count, missing):
+    v = {"workload": {"n_items": verification_count},
+         "items": [{"id": str(i), "status": "pass"} for i in range(verification_count)]}
+    result = build_report(MODEL, v, digest={"workload": {"n_items": digest_count}})
+    assert result["status"] == "unverified"
+    assert result["statistics"]["verification"]["items_by_status"]["unverified"] == missing
+    assert any(i["id"] == "WORKLOAD_COUNT_MISMATCH" for i in result["issues"])
+
+
+def test_cap_priority_counts():
+    result = build_report(MODEL, connectivity={"summary": {
+        "comparison_cap_reached": True, "candidates_untested": 100,
+        "required_gaps_untested": 2, "isolated_concepts_untested": 3}})
+    action = next(i["next_action"] for i in result["issues"] if i["id"] == "COMPARISON_CAP_REACHED")
+    assert "untested required gaps: 2" in action and "untested isolated concepts: 3" in action
+    assert "counts unavailable" not in action
+
+
+def test_report_and_metrics_share_partial_usage_scanner(tmp_path):
+    from compaction_metrics import measure
+    (tmp_path / "a.py").write_text('from model import Alpha as A\nresult = A\n', encoding="utf-8")
+    (tmp_path / "bad.py").write_text('bad(\n', encoding="utf-8")
+    v = {"items": [{"id": "a", "pyrel": "a.py"}, {"id": "b", "pyrel": "bad.py"}]}
+    result = build_report(MODEL, v, base_dir=tmp_path)
+    m = measure(MODEL, v, verification_dir=tmp_path)
+    issue = next(i for i in result["issues"] if i["id"] == "SINGLE_ITEM_CONCEPTS")
+    assert issue["concept_ids"] == m["single_item_concepts"] == ["alpha"]
+    assert issue["coverage"] == m["support_coverage"]["status"] == "partial"
