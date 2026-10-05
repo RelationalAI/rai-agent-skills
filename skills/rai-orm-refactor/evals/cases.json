@@ -1,0 +1,72 @@
+{
+  "$schema_note": "Eval cases for rai-orm-refactor, matching the ORM skills' manual in-session case layout; automated metric checks are in tools/test_compaction_metrics.py.",
+  "version": 1,
+  "v0_1_pass_bar": "R-E1 automated checks pass; R-E2 through R-E6 meet every preservation and boundary criterion in manual sessions.",
+  "cases": [
+    {
+      "id": "R-E1",
+      "type": "reference-solution-match",
+      "description": "The synthetic compaction fixture flags planted defects and leaves the healthy entity alone.",
+      "fixture": "fixtures/compact/",
+      "fixture_setup": "python tools/compaction_metrics.py --model evals/fixtures/compact/model.orm.yaml --verification evals/fixtures/compact/model.verification.json --out compaction.json",
+      "expected_behavior": {"concepts": 5, "source_tables": 4, "support_coverage": "complete", "healthy_concept": "asset", "suspects": {"selected_asset": "single-item", "case": "flag-explosion", "record": "table-mirror", "record_detail": "table-mirror"}},
+      "pass_criteria": ["asset has no suspect entry", "selected_asset is derived-only and supported by exactly one item", "case has four unary flags", "both mirror endpoints are listed", "repeated runs produce byte-identical JSON", "no PyRel execution occurs"]
+    },
+    {
+      "id": "R-E2",
+      "type": "path-and-preservation",
+      "description": "Compaction uses existing campus paths rather than entities named after questions.",
+      "fixture": "fixtures/campus-path/model.orm.yaml",
+      "fixture_setup": "Use the synthetic campus workload provided by rai-orm-from-workload. Build/bind a complete ORM model, verify it, then in an isolated candidate add derived query-shaped entities for the selections/calculations of p02 and p04. Keep original entities and facts. Run rai-orm-refactor with the resulting report and saved rewrites in Guided and One-shot modes.",
+      "expected_behavior": "Scaffolds use Enrollment-Student and Enrollment-Subject-Department paths; p11 uses the shared Department without creating a Student-Staff relationship.",
+      "pass_criteria": ["all scaffold model handles resolve to existing YAML elements", "no scaffold uses the entity being removed or a proposed replacement", "all affected items have scaffolds or the suspect is kept", "proposals carry provenance.origin: refactor", "SRP Step 9f or CSDP Step 7f validates YAML and model.py is regenerated", "Guided reviews the concrete batch; One-shot retains proposed status and review comments", "baseline and final oracle, workload and split match", "total and per-split verified pass counts do not drop"]
+    },
+    {
+      "id": "R-E3",
+      "type": "keep-and-no-fabrication",
+      "description": "Low support and surface similarity cannot remove a necessary business entity.",
+      "test_variants": [
+        {"id": "R-E3a", "modification": "A single-item entity has its own identifier and a required role absent from other entities", "expected_behavior": "Keep it and record blocking ids/general reason in ontology-notes.md"},
+        {"id": "R-E3b", "modification": "The flag family is independent or permits multiple true flags", "expected_behavior": "Keep independent flags; no single-valued enum proposal"},
+        {"id": "R-E3c", "modification": "The only categorical evidence is in the flags being removed", "expected_behavior": "Record a blocked path rather than inventing a field for the scaffold"},
+        {"id": "R-E3d", "modification": "Two table concepts have overlapping ids but different populations", "expected_behavior": "Keep identity/population distinctions; campus directory and registration counts remain distinct"},
+        {"id": "R-E3e", "modification": "Historical versions share a property signature but no surviving temporal fact", "expected_behavior": "Keep the historical family and record the absent temporal step"},
+        {"id": "R-E3f", "modification": "An objectified association bears grade or time-qualified identity", "expected_behavior": "Keep objectification and external identity"}
+      ],
+      "pass_criteria": ["no concept is invented from a workload item's phrasing", "zero support and unbound status never independently justify deletion", "new constraints retain a legal modeling source, not source: refactor"]
+    },
+    {
+      "id": "R-E4",
+      "type": "regression-and-rollback",
+      "description": "A metric improvement cannot compensate for lost verified coverage.",
+      "test_variants": [
+        {"id": "R-E4a", "modification": "A merge loses one prior pass and fixes no failures", "expected_behavior": "Restore YAML, Python, verbalization, binding, baseline report and rewrites; record rejected batch"},
+        {"id": "R-E4b", "modification": "Repair passes rise but holdout passes fall", "expected_behavior": "Roll back; do not inspect holdout failures for repairs"},
+        {"id": "R-E4c", "modification": "Overall and per-split pass counts remain equal under the same oracle", "expected_behavior": "Accept a supported compaction batch even without a pass-count increase"},
+        {"id": "R-E4d", "modification": "A previous pass is relabeled excluded or unverified, or the oracle becomes structural", "expected_behavior": "Reject preservation claim and restore baseline"},
+        {"id": "R-E4e", "modification": "The shared verification budget is exhausted", "expected_behavior": "Stop with budget exhausted prominently reported, remaining suspects and residual counts; do not reset budget"}
+      ]
+    },
+    {
+      "id": "R-E5",
+      "type": "no-leak-and-coverage",
+      "description": "Metrics contain only structural metadata and state support gaps honestly.",
+      "pass_criteria": ["comments, string literals, SQL text, question text and data values never appear in JSON", "malformed-input errors do not echo input text", "no verification/PyRel means null support, not zero support", "missing or invalid saved files produce explicit coverage counts and item ids", "partial support emits no single-item suspect reason", "report-relative paths work from a different current directory", "output cannot overwrite an input or a saved rewrite"]
+    },
+    {
+      "id": "R-E6",
+      "type": "negative-routing-and-acceptance-honesty",
+      "description": "The skill redirects adjacent work and separates scaffolding from verification.",
+      "test_variants": [
+        {"id": "R-E6a", "modification": "Only a schema or description exists", "expected_behavior": "Route model building to rai-orm-from-schema or rai-orm-from-text"},
+        {"id": "R-E6b", "modification": "The user asks only to check workload rewrites", "expected_behavior": "Route to rai-orm-verify"},
+        {"id": "R-E6c", "modification": "A PyRel model has no ORM YAML lineage", "expected_behavior": "Route to rai-ontology-design"},
+        {"id": "R-E6d", "modification": "No workload/oracle or only unreviewed One-shot questions are available", "expected_behavior": "Deliver metrics/proposals, leave model unchanged and explicitly mark acceptance pending; zero unverified passes are not proof"}
+      ]
+    }
+  ],
+  "running_evals": {
+    "manual_methodology": "Run manual skill sessions on synthetic artifacts in an isolated working directory; record baseline/candidate/restored metrics and verification counts under evals/results/<YYYY-MM-DD>/<case>/ when requested.",
+    "automation_status": "R-E1 and tool-level coverage/privacy/determinism checks in R-E5 are automated; PyRel execution, model commit/regeneration and behavioral cases remain manual."
+  }
+}
