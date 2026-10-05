@@ -68,7 +68,7 @@ Skills compose in a natural workflow progression:
 - **Operations:** rai-cortex-integration, rai-health-skill
 - **Schema modeling:** rai-orm-from-schema
 - **Conceptual modeling from text:** rai-orm-from-text (Halpin CSDP)
-- **ORM with a workload:** rai-orm (router/resume) -> rai-orm-from-workload -> rai-orm-from-schema (+ connectivity; rai-orm-from-text for descriptions) -> rai-orm-verify <-> rai-orm-refactor -> report; compaction returns through the original modeling skill for validation/regeneration and verification, preserving total and per-split verified passes.
+- **ORM with a workload:** rai-orm (router/resume) -> rai-orm-from-workload -> rai-orm-from-schema (+ connectivity; rai-orm-from-text for descriptions) -> rai-orm-verify <-> rai-orm-refactor -> report; compaction returns through the original modeling skill for validation/regeneration and verification, preserving every baseline-passing id for refactor; ordinary verify repairs accept only when fixes exceed regressions, with explicit regression recording.
 
 ## Version Bumps
 

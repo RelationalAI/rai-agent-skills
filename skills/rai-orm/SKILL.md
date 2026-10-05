@@ -87,10 +87,10 @@ Hand modeling decisions to their owning skill. Reuse the recorded emitter to reg
 | feedback processing | modeling skill | `source: user-feedback` proposal batch and affected ids; same review/validation/emission path |
 | `rai-orm-verify` | `rai-orm-refactor` | YAML/PyRel/bindings, digest/workload, verification report and saved rewrites, mode and remaining budget of this invocation |
 | `rai-orm-refactor` | original modeling skill | `provenance.origin: refactor` proposals, affected ids, existing-element path scaffolds and rollback snapshot |
-| modeling skill | `rai-orm-verify` | candidate artifacts, unchanged workload/split/oracle; accept only without total or per-split pass-count loss; otherwise restore snapshot |
+| modeling skill | `rai-orm-verify` | candidate artifacts, unchanged workload/split/oracle; refactor preserves every baseline-passing id; ordinary verify rounds accept only when fixes exceed regressions, with `--accept-regressions`; otherwise restore snapshot |
 | accepted steps | state / report | counters, revision, paths, artifact stop reasons and processed feedback hashes |
 
-`rai-orm-verify` owns repair iterations and regression checks. Plan order is connectivity → rai-orm-refactor assessment → rai-orm-verify → rai-orm-refactor acceptance → report. Assessment only measures/lists suspects and costs no rounds; skip it when metrics record the current model revision. Refactor acceptance uses its separate `refactor_rounds` allowance, including holdout evaluation sealed from repair selection. Read [hot-start.md](references/hot-start.md) before accepting feedback or refactor batches.
+`rai-orm-verify` owns repair iterations and regression checks. Plan order is connectivity → `rai-orm-refactor:assess` → rai-orm-verify → `rai-orm-refactor:accept` → report. Assessment only measures/lists suspects and costs no rounds; skip it when metrics record the current model revision. Refactor acceptance uses its separate `refactor_rounds` allowance, including holdout evaluation sealed from repair selection. Read [hot-start.md](references/hot-start.md) before accepting feedback or refactor batches.
 
 ### Step 5 — Close
 

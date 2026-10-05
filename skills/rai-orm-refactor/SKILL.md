@@ -50,7 +50,7 @@ python tools/compaction_metrics.py --model /work/model.orm.yaml \
 
 ### Step 1 — Measure and establish the baseline
 
-The router first invokes an **assessment only** pass after connectivity and before verification: measure and list suspects, make no model changes, and spend no rounds. Write `compaction.after.json` with `--model-revision` set to `baseline_model_revision` from `state.py plan`; a matching revision lets the router skip this assessment. Acceptance follows verification and has its own `refactor_rounds` allowance (default 2 per invocation).
+The router first invokes an **assessment only** pass (`rai-orm-refactor:assess`) after connectivity and before verification: measure and list suspects, make no model changes, and spend no rounds. Write `compaction.after.json` with `--model-revision` set to `baseline_model_revision` from `state.py plan`; a matching revision lets the router skip this assessment. Acceptance (`rai-orm-refactor:accept`) follows verification and has its own `refactor_rounds` allowance (default 2 per invocation).
 
 Run `tools/compaction_metrics.py` on the YAML; pass the verification report and digest when available. PyRel paths in the report resolve relative to that report. Load [compaction-metrics.md](references/compaction-metrics.md) to interpret counts and reason codes. Missing PyRel means support is unavailable, not zero.
 
