@@ -184,9 +184,16 @@ def build_report(model, verification=None, connectivity=None, digest=None, base_
     if plan is not None:
         used = plan.get("rounds_used_by_skill_this_invocation", {}).get("rai-orm-refactor", 0)
         allowance = plan.get("budget", {}).get("refactor_rounds", 2)
-        suspects = (compaction or {}).get("suspects", [])
-        if used >= allowance and suspects:
-            issue("REFACTOR_BUDGET_EXHAUSTED", "blocker", len(suspects),
+        current = bool(compaction and plan.get("baseline_model_revision")
+                       and compaction.get("model_revision") == plan["baseline_model_revision"])
+        suspects = compaction.get("suspects", []) if current else None
+        if not current:
+            issue("REFACTOR_ASSESSMENT_REQUIRED", "blocker", 1,
+                  "Refactor work is unknown: run rai-orm-refactor assessment for the current model revision.")
+            if status == "all-pass":
+                status = "verified-refactor-unknown"
+        if used >= allowance and (suspects is None or suspects):
+            issue("REFACTOR_BUDGET_EXHAUSTED", "blocker", len(suspects) if suspects is not None else None,
                   "Resume rai-orm with a fresh refactor allowance and review remaining compaction suspects.")
             if status == "all-pass":
                 status = "verified-refactor-incomplete"
@@ -200,16 +207,19 @@ def markdown(report):
     lines = ([f"BUDGET_EXHAUSTED: {budget['count']} residual failures. Continue: {budget['next_action']}" +
               (f" Unverified items: {budget['unverified_items']}." if budget.get("unverified_items") else ""), ""] if budget else [])
     refactor = next((i for i in issues if i["id"] == "REFACTOR_BUDGET_EXHAUSTED"), None)
+    refactor_unknown = any(i["id"] == "REFACTOR_ASSESSMENT_REQUIRED" for i in issues)
     if refactor:
-        lines.insert(0, f"REFACTOR_BUDGET_EXHAUSTED: {refactor['count']} remaining suspects. Continue: {refactor['next_action']}")
+        remaining = "unknown" if refactor_unknown else refactor["count"]
+        lines.insert(0, f"REFACTOR_BUDGET_EXHAUSTED: {remaining} remaining suspects. Continue: {refactor['next_action']}")
     lines += ["# ORM statistics and issues", "", f"Status: {report['status']}", ""]
     stats = report["statistics"]
-    if refactor:
+    if refactor or refactor_unknown:
         v = stats["verification"]
         coverage = (f"{v['items_by_status']['pass']} passed; {v['residual_failures']} residual failures; "
                     f"{v['items_by_status']['unverified']} unverified." if v else "unknown.")
         lines += ["Verified workload coverage: " + coverage,
-                  f"Refactor work: incomplete; {refactor['count']} remaining suspects.", ""]
+                  ("Refactor work: unknown; current assessment required." if refactor_unknown else
+                   f"Refactor work: incomplete; {refactor['count']} remaining suspects."), ""]
     facts = stats["fact_types"]
     lines += [f"{stats['object_types']['entity']:,} concepts, {facts['entity_relationships']:,} relationships between concepts, "
               f"{facts['scalar_properties']:,} scalar properties, {facts['flags']:,} flags.",

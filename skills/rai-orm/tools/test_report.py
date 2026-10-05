@@ -267,8 +267,9 @@ def test_report_and_metrics_share_partial_usage_scanner(tmp_path):
 @pytest.mark.parametrize("used,allowance,suspects,exhausted", [(2, 2, 3, True), (3, 2, 1, True), (1, 2, 3, False), (2, 2, 0, False)])
 def test_refactor_budget_exhaustion(used, allowance, suspects, exhausted):
     v = {"items": [{"id": "q", "status": "pass"}]}
-    plan = {"budget": {"refactor_rounds": allowance}, "rounds_used_by_skill_this_invocation": {"rai-orm-refactor": used}}
-    result = build_report(MODEL, v, plan=plan, compaction={"suspects": [{}] * suspects})
+    plan = {"baseline_model_revision": "sha256:current", "budget": {"refactor_rounds": allowance},
+            "rounds_used_by_skill_this_invocation": {"rai-orm-refactor": used}}
+    result = build_report(MODEL, v, plan=plan, compaction={"model_revision": "sha256:current", "suspects": [{}] * suspects})
     text = markdown(result)
     assert result["status"] == ("verified-refactor-incomplete" if exhausted else "all-pass")
     issues = [i for i in result["issues"] if i["id"] == "REFACTOR_BUDGET_EXHAUSTED"]
@@ -283,8 +284,8 @@ def test_refactor_budget_exhaustion(used, allowance, suspects, exhausted):
 def test_refactor_plan_cli_and_both_budgets(tmp_path):
     (tmp_path / "model.yaml").write_text(yaml.safe_dump(MODEL), encoding="utf-8")
     (tmp_path / "verification.json").write_text(json.dumps(verification()), encoding="utf-8")
-    (tmp_path / "compaction.after.json").write_text(json.dumps({"suspects": [{"concept": "alpha"}]}), encoding="utf-8")
-    (tmp_path / "plan.json").write_text(json.dumps({"budget": {"refactor_rounds": 1}, "rounds_used_by_skill_this_invocation": {"rai-orm-refactor": 1}}), encoding="utf-8")
+    (tmp_path / "compaction.after.json").write_text(json.dumps({"model_revision": "sha256:current", "suspects": [{"concept": "alpha"}]}), encoding="utf-8")
+    (tmp_path / "plan.json").write_text(json.dumps({"baseline_model_revision": "sha256:current", "budget": {"refactor_rounds": 1}, "rounds_used_by_skill_this_invocation": {"rai-orm-refactor": 1}}), encoding="utf-8")
     args = [sys.executable, str(TOOL), "--model", str(tmp_path / "model.yaml"), "--verification", str(tmp_path / "verification.json"),
             "--plan", str(tmp_path / "plan.json"), "--out-dir", str(tmp_path)]
     assert subprocess.run(args, capture_output=True).returncode == 0
@@ -292,3 +293,37 @@ def test_refactor_plan_cli_and_both_budgets(tmp_path):
     assert result["status"] == "budget-exhausted"
     assert {"BUDGET_EXHAUSTED", "REFACTOR_BUDGET_EXHAUSTED"} <= {i["id"] for i in result["issues"]}
     assert (tmp_path / "orm-report.md").read_text(encoding="utf-8").startswith("REFACTOR_BUDGET_EXHAUSTED:")
+
+
+@pytest.mark.parametrize("used", [0, 2])
+@pytest.mark.parametrize("metrics", [None, {"suspects": []},
+                                    {"model_revision": "sha256:old", "suspects": []}])
+def test_missing_or_stale_refactor_metrics_are_unknown(tmp_path, used, metrics):
+    v = {"items": [{"id": "q", "status": "pass"}]}
+    plan = {"baseline_model_revision": "sha256:current", "refactor_assessment": True,
+            "budget": {"refactor_rounds": 2}, "rounds_used_by_skill_this_invocation": {"rai-orm-refactor": used}}
+    (tmp_path / "model.yaml").write_text(yaml.safe_dump(MODEL), encoding="utf-8")
+    (tmp_path / "verification.json").write_text(json.dumps(v), encoding="utf-8")
+    (tmp_path / "plan.json").write_text(json.dumps(plan), encoding="utf-8")
+    if metrics is not None:
+        (tmp_path / "compaction.after.json").write_text(json.dumps(metrics), encoding="utf-8")
+    args = [sys.executable, str(TOOL), "--model", str(tmp_path / "model.yaml"),
+            "--verification", str(tmp_path / "verification.json"),
+            "--plan", str(tmp_path / "plan.json"), "--out-dir", str(tmp_path)]
+    completed = subprocess.run(args, capture_output=True, text=True)
+    assert completed.returncode == 0, completed.stderr
+    result = json.loads((tmp_path / "orm-report.json").read_text(encoding="utf-8"))
+    assert result == build_report(MODEL, v, plan=plan, compaction=metrics, base_dir=tmp_path)
+    assert result["status"] == "verified-refactor-unknown"
+    rendered = (tmp_path / "orm-report.md").read_text(encoding="utf-8")
+    assert "Refactor work: unknown" in rendered
+    assert "0 remaining suspects" not in rendered
+    assert ("REFACTOR_BUDGET_EXHAUSTED" in rendered) == (used == 2)
+
+
+@pytest.mark.parametrize("skill,step", [("rai-orm", 5), ("rai-orm-verify", 7)])
+def test_closing_report_commands_use_fresh_plan(skill, step):
+    text = (TOOL.parents[2] / skill / "SKILL.md").read_text(encoding="utf-8")
+    closing = text.split(f"### Step {step} —", 1)[1].split("\n## ", 1)[0]
+    assert "state.py plan > orm-plan.json" in closing
+    assert "--plan orm-plan.json" in closing

@@ -738,6 +738,38 @@ def append_rounds(project, count):
     write_verification(project, edit)
 
 
+@pytest.mark.parametrize("verify_skill", [None, "rai-orm-verify"])
+def test_refactor_round_then_verify_refresh_charges_only_owner(tmp_path, verify_skill):
+    state = initialized(tmp_path, rounds_per_invocation=1)
+    append_rounds(tmp_path, 1)
+    if verify_skill:
+        write_verification(tmp_path, lambda v: v["rounds"][-1].update(skill=verify_skill))
+    update(state, tmp_path, "rai-orm-verify", rounds_done=1)
+    assert state["rounds_used_this_invocation"] == 1
+    append_rounds(tmp_path, 1)
+    write_verification(tmp_path, lambda v: v["rounds"][-1].update(skill="rai-orm-refactor"))
+    update(state, tmp_path, "rai-orm-refactor", rounds_done=1)
+    # Refactor checks can refresh the recorded evidence even after verify's allowance is spent.
+    write_verification(tmp_path, lambda v: v["items"][0].update(passed_at_round=7))
+    update(state, tmp_path, "rai-orm-verify")
+    result = plan(state, tmp_path)
+    assert result["rounds_used_by_skill_this_invocation"] == {"rai-orm-verify": 1, "rai-orm-refactor": 1}
+    assert state["verification_snapshot"]["items"][0]["passed_at_round"] == 7
+    assert result["baseline_round"] == 7
+    update(state, tmp_path, "rai-orm-verify", rounds_done=0)
+    assert plan(state, tmp_path) == result
+
+
+def test_mixed_history_charges_only_verify_rounds(tmp_path):
+    state = initialized(tmp_path)
+    append_rounds(tmp_path, 3)
+    write_verification(tmp_path, lambda v: v["rounds"][-2].update(skill="rai-orm-refactor"))
+    update(state, tmp_path, "rai-orm-refactor", rounds_done=1)
+    update(state, tmp_path, "rai-orm-verify", rounds_done=2)
+    assert state["rounds_used_by_skill_this_invocation"] == {"rai-orm-verify": 2, "rai-orm-refactor": 1}
+    assert plan(state, tmp_path)["baseline_round"] == 8
+
+
 def workload_state(project):
     rows = [{"id": f"q{i:03d}", "sql": f"SELECT {i}"} for i in range(1, 6)]
     (project / "items.json").write_text(json.dumps(rows), encoding="utf-8")
@@ -908,6 +940,43 @@ def test_refactor_cannot_accept_net_positive_pass_loss(tmp_path):
         update(state, tmp_path, "rai-orm-refactor", rounds_done=1, accept_regressions=True)
 
 
+@pytest.mark.parametrize("accept_regressions", [True, False])
+@pytest.mark.parametrize("fixes", [0, 1])
+def test_zero_regressions_flag_is_noop(tmp_path, accept_regressions, fixes):
+    state = initialized(tmp_path)
+    def edit(v):
+        if fixes:
+            item = v["items"][3]
+            item.update(status="pass", passed_at_round=6, pyrel="verification/q004.py")
+            (tmp_path / item["pyrel"]).write_text("result = Alpha\n", encoding="utf-8")
+        v["rounds"].append({"round": 6, "fixes": fixes, "regressions": 0})
+    write_verification(tmp_path, edit)
+    update(state, tmp_path, "rai-orm-verify", accept_regressions=accept_regressions)
+    assert state["rounds_used_this_invocation"] == 1
+    assert plan(state, tmp_path)["can_resume"]
+
+
+@pytest.mark.parametrize("weak,recorded_fixes", [(True, 2), (True, 0), (False, 2), (False, 3)])
+def test_regression_acceptance_counts_only_strong_fixes(tmp_path, weak, recorded_fixes):
+    state = initialized(tmp_path)
+    regression_round(tmp_path)
+    def edit(v):
+        for item in v["items"][3:]:
+            item["weak"] = weak
+        v["rounds"][-1]["fixes"] = recorded_fixes
+    write_verification(tmp_path, edit)
+    if weak or recorded_fixes != 2:
+        before = json.dumps(state, sort_keys=True)
+        with pytest.raises(UpdateBlocked) as error:
+            update(state, tmp_path, "rai-orm-verify", accept_regressions=True)
+        assert "REGRESSION_ACCEPTANCE_INVALID" in codes({"blockers": error.value.blockers})
+        assert json.dumps(state, sort_keys=True) == before
+    else:
+        update(state, tmp_path, "rai-orm-verify", accept_regressions=True)
+        assert state["regressed_items"] == ["q001"]
+        assert state["rounds_used_this_invocation"] == 1
+
+
 @pytest.mark.parametrize("supplied", [None, 0, 2, 3])
 def test_verify_round_charge_comes_from_history(tmp_path, supplied):
     state = initialized(tmp_path)
@@ -944,6 +1013,29 @@ def test_fact_metadata_accepts_real_declarations_without_changed_output(tmp_path
     else:
         assert "EMITTER_INCOMPLETE" not in codes(result)
         update(state, tmp_path, "connectivity")
+
+
+@pytest.mark.parametrize("output,emitted", [
+    ("# f10", False), ("# prefix_f1", False), ("# f1", True),
+    ("# Alpha links Betamax", False), ("# AnAlpha links Beta", False),
+    ("# Alpha links Beta", True), ("Alpha.links_beta = model.Property()", True),
+    ("links_beta = model.Property()", True), ("Alpha.links_beta_extra = model.Property()", False),
+])
+def test_regeneration_requires_whole_fact_tokens(tmp_path, output, emitted):
+    state = initialized(tmp_path)
+    model_path = tmp_path / "model.orm.yaml"
+    model = yaml.safe_load(model_path.read_text(encoding="utf-8"))
+    model["fact_types"] = [{"id": "f1", "reading": "Alpha links Beta",
+                            "pyrel": {"owner": "Alpha", "property": "links_beta", "type": "Property"}}]
+    model_path.write_text(yaml.safe_dump(model), encoding="utf-8")
+    (tmp_path / "model.py").write_text(output, encoding="utf-8")
+    assert ("EMITTER_INCOMPLETE" not in codes(plan(state, tmp_path))) == emitted
+    if emitted:
+        update(state, tmp_path, "connectivity")
+    else:
+        with pytest.raises(UpdateBlocked) as error:
+            update(state, tmp_path, "connectivity")
+        assert "EMITTER_INCOMPLETE" in codes({"blockers": error.value.blockers})
 
 
 @pytest.mark.parametrize("removed", [True, False])
