@@ -9,7 +9,7 @@ python tools/compaction_metrics.py --model model.orm.yaml \
   --verification model.verification.json --digest workload.digest.yaml --out compaction.json
 ```
 
-`--model` is required; other inputs are optional; `--out` defaults to `compaction.json`. Exit 0 means the report was written, 2 means invalid/unreadable input or unwritable output. Relative saved PyRel paths resolve beside the verification report; absolute paths are accepted. The tool refuses an output path that aliases an input or a listed rewrite. It measures representation-format YAML, not arbitrary PyRel models; use the modeling skill's full validator before acceptance.
+`--model-revision` optionally records the state plan revision to mark a current assessment. `--model` is required; other inputs are optional; `--out` defaults to `compaction.json`. Exit 0 means the report was written, 2 means invalid/unreadable input or unwritable output. Relative saved PyRel paths resolve beside the verification report; absolute paths are accepted. The tool refuses an output path that aliases an input or a listed rewrite. It measures representation-format YAML, not arbitrary PyRel models; use the modeling skill's full validator before acceptance.
 
 | JSON field | Meaning |
 |---|---|
@@ -19,7 +19,7 @@ python tools/compaction_metrics.py --model model.orm.yaml \
 | `properties_per_concept` | Incident fact type count and ids, including relationships and unary fact types; a repeated entity role counts the fact once |
 | `property_distribution` | Histogram: number of concepts with each incident-fact count; identifier shorthand is not an additional fact |
 | `unary_flags_per_concept` | Unary fact count and ids; binary Boolean-valued facts are excluded here but included in flag-explosion detection |
-| `unbound_concepts` | Entities with neither `provenance.table` nor `provenance.tables`; lack of a binding is not proof of derivation |
+| `unbound_concepts` | Entities without `provenance.table`, `provenance.tables` or explicit `source_bindings`; lack of a binding is not proof of derivation |
 | `derived_only_concepts` | Unbound entities explicitly marked `derivation: derived`; semiderived and unknown derivation are excluded |
 | `concept_support` | Per-entity distinct item count and item ids whose saved PyRel uses the entity's `name` or `id`; `null` when no PyRel can be scanned |
 | `support_coverage` | `complete`, `partial` or `unavailable`, scanned/expected counts, missing and syntax-invalid item ids; expected count is the largest of report item count, report workload count and digest workload count |
@@ -37,16 +37,17 @@ A property's structural signature includes arity, owner-role position, other rol
 
 Support uses Python AST name loads and attribute loads, plus used `from ... import Concept as Alias` aliases. Repeated mentions count once per item. Comments, string literals and unused imports do not count. The tool never executes imports. Dynamic string lookups, wildcard imports, indirect helper calls and transitive dependencies can be missed; unrelated Python variables with matching names can be counted. Check the actual saved query and generated model before deciding its uses. Syntax-invalid files are reported without their text.
 
-Complete coverage means every reported/expected item has a readable, parseable saved PyRel file, not that static name matching proves all dependencies. Missing accepted rewrites and failed items commonly make coverage partial. Single-item reason codes are emitted only for complete coverage; no scan emits `null`, not misleading zero support. Zero observed support never makes a concept a suspect by itself. A digest supplements table counts and expected item count; it cannot supply saved query usage or full item text.
+Complete coverage means every reported/expected item has a readable, parseable saved PyRel file, not that static name matching proves all dependencies. Missing accepted rewrites and failed items commonly make coverage partial. Single-item reason codes are emitted for complete and partial coverage; partial entries carry `coverage: partial`, `lower_bound: true` and priority 25, below complete evidence. They mean one observed supporting item, not proof of only one use; no scan emits `null`, not misleading zero support. Zero observed support never makes a concept a suspect by itself. A digest supplements table counts and expected item count; it cannot supply saved query usage or full item text.
 
 ## Default ranking and thresholds
 
 | Reason code | Default priority | Review test |
 |---|---|---|
-| `flag-explosion` | 100 | Four or more Boolean facts: can one categorical value type preserve the meanings? |
+| `flag-explosion` | 100 | Four or more Boolean facts, excluding source-membership unary facts (`*_appears_in_*` or provenance origin `source-membership`): can one categorical value type preserve the meanings? |
 | `duplicate-structure` | 80 | Same signature: are identity, grain, roles and time semantics also the same? |
 | `table-mirror` | 70 | Separate table concepts with a confirmed 1:1 link: does identity survive combining them? |
-| `single-item` | 50 | One item under a complete scan: can the concept be expressed through a path over business entities? |
+| `workload-derived` | 60 | Workload provenance with no declared table binding: inspect whether a path suffices. |
+| `single-item` | 50 (25 partial) | One observed item (a lower bound under partial coverage): can the concept be expressed through a path over business entities? |
 
 These are starting thresholds and ordering, not ontology rules or automatic deletion criteria. Independent Boolean facts may all be necessary; legitimate entities may have one query each; identical property shapes may represent distinct things. The CLI uses fixed defaults for reproducibility. Record any different review threshold in `ontology-notes.md` rather than implying the tool used it.
 

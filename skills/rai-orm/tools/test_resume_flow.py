@@ -61,8 +61,8 @@ def test_resume_flow(tmp_path):
     assert result["frozen_passed_items"] == ["q001", "q002", "q003"]
     assert [item["id"] for item in result["new_feedback_items"]] == ["f01"]
     assert result["new_feedback_items"][0]["source"] == "user-feedback"
-    assert result["steps"] == ["manual:step-10", "connectivity", "rai-orm-verify", "rai-orm-refactor", "report"]
-    assert result["budget"] == {"rounds_per_invocation": 5, "patience": 2, "until_pass": False}
+    assert result["steps"] == ["manual:step-10", "connectivity", "rai-orm-refactor", "rai-orm-verify", "rai-orm-refactor", "report"]
+    assert result["budget"] == {"rounds_per_invocation": 5, "patience": 2, "until_pass": False, "refactor_rounds": 2}
     assert result["can_resume"]
     assert first.stdout == cli(tmp_path, "plan").stdout
     assert originals == {name: (tmp_path / name).read_bytes() for name in originals}

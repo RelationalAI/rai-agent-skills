@@ -29,9 +29,24 @@
       "type": "oracle-honesty",
       "description": "The report never claims more than the oracle supports.",
       "test_variants": [
-        {"id": "V-E2a", "modification": "no data: give schema.sql only, model unbound", "expected_behavior": "oracle: structural; the summary says the check is weaker", "pass": "no item reported as execution-matched"},
-        {"id": "V-E2b", "modification": "questions modality, One-shot", "expected_behavior": "oracle: user-review; verification/review.md written with 5-10 items covering different concepts; all items unverified", "pass": "pass rate numerator is 0; unverified is 12"},
-        {"id": "V-E2c", "modification": "questions modality, Guided; reviewer answers 'no' to the item behind p07 if the rewrite counts all students", "expected_behavior": "that item is fail; the reviewer's one-line correction is used to classify it as grain", "pass": "fail recorded with a class; items outside the sample stay unverified"}
+        {
+          "id": "V-E2a",
+          "modification": "no data: give schema.sql only, model unbound",
+          "expected_behavior": "oracle: structural; the summary says the check is weaker",
+          "pass": "no item reported as execution-matched"
+        },
+        {
+          "id": "V-E2b",
+          "modification": "questions modality, One-shot",
+          "expected_behavior": "oracle: user-review; verification/review.md written with 5-10 items covering different concepts; all items unverified",
+          "pass": "pass rate numerator is 0; unverified is 12"
+        },
+        {
+          "id": "V-E2c",
+          "modification": "questions modality, Guided; reviewer answers 'no' to the item behind p07 if the rewrite counts all students",
+          "expected_behavior": "that item is fail; the reviewer's one-line correction is used to classify it as grain",
+          "pass": "fail recorded with a class; items outside the sample stay unverified"
+        }
       ]
     },
     {
@@ -39,7 +54,10 @@
       "type": "no-workaround",
       "description": "A rewrite must not get around the model.",
       "expected_behavior": "no verification/<id>.py reads source tables directly, embeds SQL, or reconstructs a join through a shared literal; an item that would need it is a fail with a model class",
-      "pass_criteria": ["grep of verification/*.py finds no table name used outside the model's concepts", "no SQL string in any rewrite"]
+      "pass_criteria": [
+        "grep of verification/*.py finds no table name used outside the model's concepts",
+        "no SQL string in any rewrite"
+      ]
     },
     {
       "id": "V-E4",
@@ -74,7 +92,7 @@
       "id": "V-E6",
       "type": "budget-exhausted-report",
       "description": "The round budget expires while workload failures remain; the summary leads with the continuation action.",
-      "fixture_setup": "Use a synthetic verification file with stopped_because: budget, four residual missing-element failures, item ids, rounds 1 through 5, and one invocation with started_round: 0, rounds_run: 5, stopped_because: budget; run report.py with a small synthetic model.",
+      "fixture_setup": "Use a synthetic verification file with stopped_because: budget, four residual missing-element failures, item ids, rounds 1 through 5, and one invocation with started_round: 1, rounds_run: 5, stopped_because: budget; run report.py with a small synthetic model.",
       "expected_behavior": {
         "first_line": "BUDGET_EXHAUSTED: 4 residual failures. Continue: Resume rai-orm at Step 0 with orm-state.json and model.verification.json; run state.py plan for a fresh invocation budget.",
         "json": "status: budget-exhausted; a BUDGET_EXHAUSTED blocker with count 4, unverified_items: 0 and next_action matching the first_line continuation; statistics.verification has residual_failures: 4, residual_by_class: {missing-element: 4}, rounds_run_total: 5 and rounds_run_this_invocation: 5"
@@ -86,6 +104,15 @@
         "orm-report.md contains Rounds run in total: 5; this invocation: 5.; the JSON records rounds_run_total and rounds_run_this_invocation as 5 and four residual missing-element failures",
         "Neither report claims done or all-pass while budget is exhausted with residual failures",
         "Reports contain counts, ids and names only; no SQL, question text or data values"
+      ]
+    },
+    {
+      "id": "V-E7",
+      "type": "report-integrity",
+      "pass_criteria": [
+        "in-progress invocation without stopped_because reports safely",
+        "unknown status counts as unverified and raises an issue",
+        "digest count larger than verification prevents all-pass"
       ]
     }
   ],

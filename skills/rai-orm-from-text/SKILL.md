@@ -239,6 +239,10 @@ The skill teaches Halpin's *posture*, not just his *procedure*. Key dialogue mov
 
 Full vocabulary and stuck-conversation rescues in [`references/halpin-posture.md`](references/halpin-posture.md) and [`references/dialogue-patterns.md`](references/dialogue-patterns.md).
 
+### Connectivity before hand-off
+
+After YAML validation and translation, run the connectivity procedure in rai-orm before verification or the final report. Use the repair digest when a split exists; holdout evidence never guides links. Apply accepted required-gap links through Step 7f, validate and regenerate, then recheck connectivity. In One-shot, only required-gap link proposals are auto-applied; list exploratory proposals for review. Record islands and unresolved gaps. Skill-built models register the `manual:step-10` emitter sentinel in state and follow rai-orm's manual regeneration checklist.
+
 ## Common Pitfalls
 
 | Mistake | Cause | Fix |

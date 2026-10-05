@@ -38,7 +38,7 @@ def test_planted_defects_and_healthy_concept(model):
     assert report["source_tables"] == 4
     assert report["derived_only_concepts"] == ["selected_asset"]
     assert report["support_coverage"]["status"] == "complete"
-    assert reasons(report, "selected_asset") == {"single-item"}
+    assert reasons(report, "selected_asset") == {"single-item", "workload-derived"}
     assert "flag-explosion" in reasons(report, "case")
     assert "table-mirror" in reasons(report, "record_detail")
     assert reasons(report, "asset") == set()
@@ -67,7 +67,9 @@ def test_partial_and_invalid_rewrites_are_explicit(model, tmp_path):
         "status": "partial", "saved_items": 1, "expected_items": 4,
         "missing_items": ["b", "d"], "invalid_items": ["c"]}
     assert report["single_item_concepts"] == ["selected_asset"]
-    assert not reasons(report, "selected_asset")
+    suspect = next(s for s in report["suspects"] if s["reason"] == "single-item")
+    assert suspect["coverage"] == "partial" and suspect["lower_bound"]
+    assert suspect["priority"] < MODULE.REASON_PRIORITY["single-item"]
 
 
 def test_support_counts_items_once_and_ignores_literals_comments_imports(model, tmp_path):
@@ -104,7 +106,8 @@ def test_empty_concepts_do_not_duplicate_and_unbound_is_not_derived(model):
     assert report["duplicate_structure_concepts"] == []
     assert report["unbound_concepts"] == ["asset", "selected_asset"]
     assert report["derived_only_concepts"] == ["selected_asset"]
-    assert report["suspects"] == []
+    assert reasons(report, "selected_asset") == {"workload-derived"}
+    assert not reasons(report, "asset")
 
 
 @pytest.mark.parametrize("change", ["composite", "proposed", "same-table", "shared-table"])
@@ -194,3 +197,52 @@ def test_unresolved_roles_fail(model):
     model["fact_types"][0]["roles"][0]["object_type"] = "missing"
     with pytest.raises(ValueError):
         MODULE.measure(model)
+
+
+def test_default_role_names_match_explicit_camelcase(model):
+    for fact in model["fact_types"]:
+        # Remove constraints referring to deliberately different explicit role names.
+        fact["constraints"] = []
+        for role in fact["roles"]:
+            obj = next(o for o in model["object_types"] if o["id"] == role["object_type"])
+            role["role_name"] = obj["name"][:1].lower() + obj["name"][1:]
+    expected = MODULE.measure(model)
+    for fact in model["fact_types"]:
+        for role in fact["roles"]:
+            del role["role_name"]
+    before = copy.deepcopy(model)
+    assert MODULE.measure(model) == expected
+    assert model == before
+
+
+def test_membership_flags_are_not_enum_suspects(model):
+    model["fact_types"] = [{"id": f"building_appears_in_{i}", "roles": [{"object_type": "case"}]} for i in range(6)]
+    result = MODULE.measure(model)
+    assert result["flag_explosions"] == []
+    assert next(r["count"] for r in result["unary_flags_per_concept"] if r["concept"] == "case") == 6
+
+
+def test_workload_provenance_with_table_binding_is_not_suspect(model):
+    selected = next(o for o in model["object_types"] if o["id"] == "selected_asset")
+    assert "workload-derived" in reasons(MODULE.measure(model), "selected_asset")
+    selected["provenance"]["table"] = "ASSET"
+    assert "workload-derived" not in reasons(MODULE.measure(model), "selected_asset")
+
+
+def test_explicit_source_binding_prevents_workload_derived_hint(model):
+    model["source_bindings"] = [{"table": "ASSET", "object_type": "selected_asset"}]
+    result = MODULE.measure(model)
+    assert "selected_asset" not in result["unbound_concepts"]
+    assert "workload-derived" not in reasons(result, "selected_asset")
+
+
+def test_default_role_names_resolve_constraints(model):
+    fact = model["fact_types"][-1]
+    objects = {o["id"]: o for o in model["object_types"]}
+    old_names = {r["role_name"]: objects[r["object_type"]]["name"][:1].lower() + objects[r["object_type"]]["name"][1:]
+                 for r in fact["roles"]}
+    for constraint in fact["constraints"]:
+        constraint["roles"] = [old_names[r] for r in constraint.get("roles", [])]
+    for role in fact["roles"]:
+        role.pop("role_name")
+    assert MODULE.measure(model)["table_mirrors"]
