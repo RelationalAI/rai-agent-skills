@@ -5,10 +5,10 @@ Load when closing an ORM route or verification loop, especially after plateau or
 ```sh
 python skills/rai-orm/tools/report.py --model model.orm.yaml \
   --verification model.verification.json --connectivity connectivity.json \
-  --digest workload.digest.yaml --out-dir .
+  --digest workload.digest.yaml --plan orm-plan.json --out-dir .
 ```
 
-All inputs except `--model` are optional. Missing connectivity is computed structurally from the model; data probes are not run by this tool. Missing verification means pass counts and rates are unknown, not zero failures or completion. With a digest, its entire workload is unverified until verification evidence exists.
+All inputs except `--model` are optional. `--plan PATH` reads the JSON printed by `state.py plan` and loads `compaction.after.json` beside the model for remaining suspects; refresh these artifacts before reporting. The plan supplies `budget.refactor_rounds` and `rounds_used_by_skill_this_invocation["rai-orm-refactor"]`. Missing compaction metrics are unknown, not proof that refactor finished. Missing connectivity is computed structurally from the model; data probes are not run by this tool. Missing verification means pass counts and rates are unknown, not zero failures or completion. With a digest, its entire workload is unverified until verification evidence exists.
 
 ## Output contract
 
@@ -25,6 +25,7 @@ Each issue has a fixed `id`, `severity` (`blocker`, `warning`, `info`), `count`,
 | Id | Trigger | Next action |
 |---|---|---|
 | `BUDGET_EXHAUSTED` | `stopped_because: budget` and residual failures or unverified items remain | Resume `rai-orm` at Step 0 with `orm-state.json` and `model.verification.json`; run `state.py plan` for a fresh invocation budget |
+| `REFACTOR_BUDGET_EXHAUSTED` | Refactor rounds used reach `budget.refactor_rounds` (default 2), and compaction metrics still list suspects | Resume with a fresh refactor allowance; blocker count is the number of remaining suspect entries |
 | `PLATEAU` | Explicit plateau stop; legacy reports without invocation boundaries also infer two non-improving rounds with residual failures | Review residual groups at Step 4 before another repair |
 | `UNVERIFIED_ITEMS` | Explicit unverified items or workload items with no record | Continue oracle checks or user review; report their share of the workload |
 | `HOLDOUT_GAP` | Repair pass rate exceeds holdout pass rate by more than 0.15 | Review whether repairs are fitted; keep holdout failures out of repair decisions |
@@ -38,7 +39,7 @@ Each issue has a fixed `id`, `severity` (`blocker`, `warning`, `info`), `count`,
 | `REGRESSIONS` | Recorded regressions > 0 | Re-run saved passes and review rollback decisions |
 | `SINGLE_ITEM_CONCEPTS` | A concept appears in exactly one saved workload PyRel file | Review for query-shaped modeling against schema and domain vocabulary |
 
-The singleton check runs only when `items[].pyrel` lists saved files. Paths resolve relative to `model.verification.json`. It parses Python AST identifiers and attributes matching entity names, including imported aliases, and counts each concept once per workload item. It reads no unlisted files and emits no literals. Use the shared compaction usage scanner. Missing/invalid files yield partial coverage: list single-item observations with `coverage: partial` and `lower_bound: true`; they do not prove exclusive use. Identifier matching is a heuristic; inspect the named concepts before changing the model.
+The singleton check runs only when `items[].pyrel` lists saved files. Paths resolve relative to `model.verification.json`. It parses Python AST identifiers and attributes matching entity names, including imported aliases, and counts each concept once per workload item. It reads no unlisted files and emits no literals. Both reporting and compaction use `rai-orm/tools/orm_usage.py`; the refactor scanner module provides compatibility exports without modifying the import path. Missing/invalid files yield partial coverage: list single-item observations with `coverage: partial` and `lower_bound: true`; they do not prove exclusive use. Identifier matching is a heuristic; inspect the named concepts before changing the model.
 
 ## Budget-first presentation
 
@@ -49,6 +50,8 @@ BUDGET_EXHAUSTED: 4 residual failures. Continue: Resume rai-orm at Step 0 with o
 ```
 
 The first line additionally gives `Unverified items: N.` when any remain, even if residual failures are zero. The budget issue counts residual failures and records unverified items separately. Show that line first in the user summary. JSON `status` is `budget-exhausted`, with a blocker issue and residual count. Neither file claims completion or all-pass in that state. Residual counts conservatively reconcile summary classes with recorded failed items, so an empty residual summary cannot hide failures.
+
+When the refactor allowance is exhausted with remaining suspects, the first line starts `REFACTOR_BUDGET_EXHAUSTED: N remaining suspects.` (ahead of verify-budget exhaustion if both apply). Show verified workload coverage and incomplete refactor work on separate lines. An otherwise `all-pass` report becomes `verified-refactor-incomplete`; existing failure statuses remain failures. Refactor attempts consume their own allowance, separate from verify rounds.
 
 Without budget failure, status is `residual-failures`, `required-gaps`, `unverified`, or `all-pass`, according to the evidence. `all-pass` refers only to verified supported items; exclusions, dropped columns and connectivity issues are still shown.
 

@@ -2,7 +2,7 @@
 
 > **Companion to [the text-first plan](../rai-orm-from-text/PLAN.md)** (now built alongside v1). This document is v1 — the structured-input skill: input is a relational schema (live DB, DDL file, CSV samples), output is an ORM YAML model and PyRel code.
 
-> **Scope discipline (revised 2026-04-29):** v1 matches the existing-skill pattern in this repo — `SKILL.md` + `references/` (markdown) + `examples/` (illustrative) + `evals/`. Claude does the work in-session by reading the skill and applying the rules, the same way `rai-ontology-design` works. **No Python package, no CLI, no MCP server, no pytest.** Items dropped from earlier drafts are preserved as stretch goals in [`../../notes/TODO.md`](../../notes/TODO.md) (S1–S7). The architecture decisions (YAML format, five-source provenance, alethic/deontic, SRP workflow, Halpin fidelity) all stay — only the packaging shrinks.
+> **Scope discipline (revised 2026-04-29):** v1 matches the existing-skill pattern in this repo — `SKILL.md` + `references/` (markdown) + `examples/` (illustrative) + `evals/`. Claude does the work in-session by reading the skill and applying the rules, the same way `rai-ontology-design` works. **No Python package, no CLI, no MCP server, no pytest.** Items dropped from earlier drafts are preserved as stretch goals in `../../notes/TODO.md` (historical note; not distributed) (S1–S7). The architecture decisions (YAML format, five-source provenance, alethic/deontic, SRP workflow, Halpin fidelity) all stay — only the packaging shrinks.
 
 ---
 
@@ -77,7 +77,7 @@ The "thing being taught" by the skill. Ten steps:
 
 How Claude executes this: reads the SRP from SKILL.md, follows step-by-step, runs ad-hoc Python or SQL via Bash for introspection and probing, applies the markdown-documented rules for constraint inference and translation. No bundled scripts.
 
-The locked v0.1 specification — full substeps, inputs/outputs per step, user-interaction surface, mode behavior, and antipattern catalog — is captured in [`notes/phase1-srp-workflow.md`](../../notes/phase1-srp-workflow.md). Phase 3 lifts from there into `references/srp-workflow.md`.
+The locked v0.1 specification — full substeps, inputs/outputs per step, user-interaction surface, mode behavior, and antipattern catalog — is captured in `notes/phase1-srp-workflow.md` (historical note; not distributed). Phase 3 lifts from there into `references/srp-workflow.md`.
 
 ---
 
@@ -224,7 +224,7 @@ fact_types:
 
 Every fact type and every constraint traces back to a specific schema element. This is what makes the YAML auditable: a reviewer can see *exactly why* the model claims each thing and click through to the source column.
 
-Full schema spec lives in `references/representation-format.md` (Phase 3 deliverable). The locked v0.1 spec — covering every Halpin ORM 2 construct, the inline-vs-top-level scope rule, all five-source provenance shapes, and resolutions to the Halpin open questions — is captured in [`notes/phase1-yaml-format.md`](../../notes/phase1-yaml-format.md) and is the source of truth Phase 3 lifts from.
+Full schema spec lives in `references/representation-format.md` (Phase 3 deliverable). The locked v0.1 spec — covering every Halpin ORM 2 construct, the inline-vs-top-level scope rule, all five-source provenance shapes, and resolutions to the Halpin open questions — is captured in `notes/phase1-yaml-format.md` (historical note; not distributed) and is the source of truth Phase 3 lifts from.
 
 ---
 
@@ -450,7 +450,7 @@ Same shape as `rai-ontology-design` (which has SKILL.md + references/ + examples
 - **Guizzardi-critique mention in scope text** — include one sentence pointing to OntoUML/DOLCE for users who need foundational ontology.
 - **Boundary aggressiveness** in "When NOT to use" text — permissive in v1, sharpen after benchmark.
 
-(Other deferred items — including `domain_library.yaml` and the over-engineering stretch goals S1–S7 — are tracked in [`../../notes/TODO.md`](../../notes/TODO.md).)
+(Other deferred items — including `domain_library.yaml` and the over-engineering stretch goals S1–S7 — are tracked in `../../notes/TODO.md` (historical note; not distributed).)
 
 ---
 

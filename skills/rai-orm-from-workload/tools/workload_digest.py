@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 from collections import Counter
 import csv
+import copy
 import io
 import json
 import re
@@ -30,7 +31,15 @@ def statements(text: str) -> list[str]:
     return [p.strip() for p in parts if re.sub(r"--[^\n]*|/\*[\s\S]*?\*/", "", p).strip()]
 
 
-def read_items(path: Path) -> list[dict]:
+def workload_item_id(row: dict, index: int, path: Path, multiple_inputs: bool = False) -> str:
+    """Shared with state init: preserve explicit ids; namespace generated ids across files."""
+    if "id" in row:
+        return str(row["id"])
+    generated = f"i{index:04d}"
+    return f"{path.stem}:{generated}" if multiple_inputs else generated
+
+
+def read_items(path: Path, multiple_inputs: bool = False) -> list[dict]:
     text = path.read_text(encoding="utf-8-sig")
     if path.suffix.lower() == ".json":
         rows = json.loads(text)
@@ -42,7 +51,7 @@ def read_items(path: Path) -> list[dict]:
         rows = list(csv.DictReader(io.StringIO(text)))
     else:
         rows = [{"question": q.strip()} for q in text.splitlines() if q.strip()]
-    return [{"id": str(r.get("id", f"i{i:04d}")),
+    return [{"id": workload_item_id(r, i, path, multiple_inputs),
              "sql": next((r[k] for k in ("sql", "output", "query_text", "query") if r.get(k)), None),
              "question": r.get("question") or r.get("input")} for i, r in enumerate(rows, 1)]
 
@@ -330,15 +339,26 @@ class Digest:
             result[section] = rows
         return result
 
+    def literal_cohorts(self, items: list[dict]) -> dict:
+        """Store count-only literal membership once per filter column."""
+        result = {}
+        for key, record in sorted(self.records["filter_columns"].items()):
+            cohorts = Counter(tuple(sorted(items[i]["id"] for i in members))
+                              for members in record.get("_literals", {}).values())
+            result[self.cohort_key(*key)] = [{"items": list(members), "count": count}
+                                            for members, count in sorted(cohorts.items())]
+        return result
+
+    @staticmethod
+    def cohort_key(table: str, column: str) -> str:
+        # JSON tuple encoding avoids collisions in quoted names containing dots.
+        return json.dumps([table, column], ensure_ascii=False, separators=(",", ":"))
+
     def contributions(self, items: list[dict]) -> dict:
         result = {row["id"]: self.sections(i) for i, row in enumerate(items)}
         for item in result.values():
             for row in item["filter_columns"]:
-                record = self.records["filter_columns"][(row["table"], row["column"])]
-                cohorts = Counter(tuple(sorted(items[i]["id"] for i in members))
-                                  for members in record.get("_literals", {}).values())
-                row["literal_cohorts"] = [{"items": list(members), "count": count}
-                                          for members, count in sorted(cohorts.items())]
+                row["literal_cohorts_key"] = self.cohort_key(row["table"], row["column"])
         return dict(sorted(result.items()))
 
     def name_key(self, row: dict) -> tuple:
@@ -379,7 +399,7 @@ def build_digest(path: Path, dialect: str = "sqlite", schema: Path | None = None
                  kind: str | None = None, no_timestamp: bool = False, ids: Path | None = None,
                  split: str | None = None, verification: Path | None = None) -> dict:
     paths = [path] if isinstance(path, Path) else list(path)
-    items = [item for source in paths for item in read_items(source)]
+    items = [item for source in paths for item in read_items(source, multiple_inputs=len(paths) > 1)]
     kind = kind or ("pairs" if any(i["sql"] for i in items) and any(i["question"] for i in items)
                     else "sql" if any(i["sql"] for i in items) else "questions")
     items = select_items(items, ids, split, verification)
@@ -412,8 +432,19 @@ def build_digest(path: Path, dialect: str = "sqlite", schema: Path | None = None
                 workload["skipped_non_select"] += 1
     workload["parse_errors"].sort()
     return {"version": 1, "workload": workload, **digest.sections(),
-            "item_contributions": digest.contributions(items)}
+            "item_contributions": digest.contributions(items),
+            "literal_cohorts": digest.literal_cohorts(items)}
 
+
+def dump_digest(digest: dict) -> str:
+    """Alias identical contribution rows in a copy; preserve aggregate-only bytes."""
+    output = copy.deepcopy(digest)
+    rows_by_value = {}
+    for item in output.get("item_contributions", {}).values():
+        for section, rows in item.items():
+            item[section] = [rows_by_value.setdefault(json.dumps(row, sort_keys=True), row)
+                             for row in rows]
+    return yaml.safe_dump(output, sort_keys=False, allow_unicode=True)
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
@@ -434,7 +465,7 @@ def main(argv: list[str] | None = None) -> int:
                               args.ids, args.split, args.verification)
     except DuplicateItemID as error:
         parser.error(str(error))
-    args.out.write_text(yaml.safe_dump(result, sort_keys=False, allow_unicode=True), encoding="utf-8")
+    args.out.write_text(dump_digest(result), encoding="utf-8")
     return 0
 
 

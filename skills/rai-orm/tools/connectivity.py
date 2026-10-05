@@ -84,8 +84,9 @@ def model_graph(model):
     for b in bindings(model):
         if b["object_type"] in entities:
             tables[b["table"]].add(b["object_type"])
-        keys[b["table"]].update(b["key_columns"])
-    # Uniqueness-role provenance also declares a key-like column.
+        if b["key_columns"]:
+            keys[b["table"]].add(tuple(b["key_columns"]))
+    # Keep each complete uniqueness constraint together; members are not keys.
     facts = {f["id"]: f for f in model.get("fact_types", [])}
     constraints = [(c, f) for f in facts.values() for c in f.get("constraints", [])]
     constraints += [(c, None) for c in model.get("constraints", [])]
@@ -95,11 +96,14 @@ def model_graph(model):
         refs = list(c.get("role_refs", []))
         if fact:
             refs += [{"fact_type": fact["id"], "role": r} for r in c.get("roles", [])]
+        key_parts = []
         for ref in refs:
             for role in facts.get(ref["fact_type"], {}).get("roles", []):
                 p = role.get("provenance", {})
                 if role.get("role_name") == ref["role"] and p.get("table") and p.get("column"):
-                    keys[p["table"]].add(p["column"])
+                    key_parts.append((p["table"], p["column"]))
+        if refs and len(key_parts) == len(refs) and len({t for t, _ in key_parts}) == 1:
+            keys[key_parts[0][0]].add(tuple(c for _, c in key_parts))
     return graph, entities, tables, relationships, keys
 
 
@@ -213,11 +217,14 @@ def analyze(model, digest=None, db=None, fk=0.98, partial=0.30, max_comparisons=
         table = resolve(side["table"])
         metadata = {c.casefold(): c for c in columns.get(table, {})}
         return {"table": table, "columns": [metadata.get(c.casefold(), c) for c in side["columns"]]}
-    keys = {t: {c.casefold() for c in cols} for t, cols in keys.items()}
+    keys = {t: {frozenset(c.casefold() for c in key) for key in tuples}
+            for t, tuples in keys.items()}
+    key_members = {t: set().union(*tuples) for t, tuples in keys.items()}
     def declared(side):
-        return bool(side["columns"]) and all(c.casefold() in keys.get(side["table"], set()) for c in side["columns"])
+        return frozenset(c.casefold() for c in side["columns"]) in keys.get(side["table"], set())
     def signature(left, right):
-        return tuple(sorted((s["table"], tuple(s["columns"])) for s in (left, right)))
+        return tuple(sorted((s["table"].casefold(), tuple(c.casefold() for c in s["columns"]))
+                            for s in (left, right)))
     def add(left, right, required=None):
         # Canonical sides ensure digest orientation cannot change evidence or ids.
         sides = sorted([left, right], key=lambda s: (s["table"], s["columns"]))
@@ -252,12 +259,13 @@ def analyze(model, digest=None, db=None, fk=0.98, partial=0.30, max_comparisons=
             for ca, cb in product(sorted(columns[ta]), sorted(columns[tb])):
                 if not columns[ta][ca] or columns[ta][ca] != columns[tb][cb]:
                     continue
-                if ca.casefold() not in keys.get(ta, set()) and cb.casefold() not in keys.get(tb, set()) and name_similarity(ca, cb) < 0.65:
+                if ca.casefold() not in key_members.get(ta, set()) and cb.casefold() not in key_members.get(tb, set()) and name_similarity(ca, cb) < 0.65:
                     continue
                 left, right = {"table": ta, "columns": [ca]}, {"table": tb, "columns": [cb]}
                 if signature(left, right) not in requests:
                     yield {"left": left, "right": right, "required_gaps": []}
     candidates, proposals, comparisons, untested = [], [], 0, 0
+    untested_gaps, untested_isolated = set(), set()
     by_class = Counter()
     gaps_by_id = {g["id"]: g for g in gaps}
     joins_by_id = {j["id"]: j for j in joins}
@@ -286,6 +294,8 @@ def analyze(model, digest=None, db=None, fk=0.98, partial=0.30, max_comparisons=
             elif comparisons >= max_comparisons:
                 test_status = "comparison-cap"
                 untested += 1
+                untested_gaps.update(r["required_gaps"])
+                untested_isolated.update((tables[left["table"]] | tables[right["table"]]) & set(isolated))
             else:
                 comparisons += 1
                 try:
@@ -333,6 +343,7 @@ def analyze(model, digest=None, db=None, fk=0.98, partial=0.30, max_comparisons=
               "components": len(groups), "largest_component": len(groups[0]) if groups else 0, "isolated": len(isolated),
               "value_comparisons": comparisons, "comparison_cap": max_comparisons,
               "comparison_cap_reached": untested > 0, "candidates_untested": untested,
+              "required_gaps_untested": len(untested_gaps), "isolated_concepts_untested": len(untested_isolated),
               "candidates_by_class": {k: by_class[k] for k in ("fk-like", "partial", "none")}},
               "components": components, "isolated_concepts": [{"id": n, "name": names[n]} for n in isolated],
               "relationships_per_concept": counts, "join_checks": joins, "required_gaps": gaps, "candidates": sorted(candidates, key=lambda r: r["id"]),

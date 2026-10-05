@@ -234,7 +234,7 @@ This is the only step with mandatory user interaction in Guided mode (Step 0's m
 
 ### Step 9g — Connectivity before hand-off
 
-Run `connectivity.py` from `rai-orm` with `--model model.orm.yaml`, adding `--db` and `--digest` when available. Follow the [connectivity procedure](../rai-orm/references/connectivity.md): review proposals as one batch in Guided mode; apply as `proposed` in One-shot mode. Re-run until the verdict is `connected` or every remaining island is justified in `ontology-notes.md`. Workload-required gaps remain model defects even if an island is justified. Preserve partial-overlap evidence and complete source bindings before Step 10.
+Run `connectivity.py` from `rai-orm` with `--model model.orm.yaml`, adding `--db` and `--digest` when available. Follow the [connectivity procedure](../rai-orm/references/connectivity.md): review proposals as one batch in Guided mode. In One-shot mode, apply only required-gap proposals as `proposed`; list exploratory proposals for review and never auto-apply them. Use the repair-set digest, never the holdout digest, to decide gaps and choose links. Re-run until the verdict is `connected` or every remaining island is justified in `ontology-notes.md`. Workload-required gaps remain model defects even if an island is justified. Preserve partial-overlap evidence and complete source bindings before Step 10.
 
 ### Step 10 — Translate to PyRel
 

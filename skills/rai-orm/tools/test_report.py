@@ -249,7 +249,11 @@ def test_cap_priority_counts():
 
 
 def test_report_and_metrics_share_partial_usage_scanner(tmp_path):
-    from compaction_metrics import measure
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("compaction_metrics", TOOL.parents[2] / "rai-orm-refactor" / "tools" / "compaction_metrics.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    measure = module.measure
     (tmp_path / "a.py").write_text('from model import Alpha as A\nresult = A\n', encoding="utf-8")
     (tmp_path / "bad.py").write_text('bad(\n', encoding="utf-8")
     v = {"items": [{"id": "a", "pyrel": "a.py"}, {"id": "b", "pyrel": "bad.py"}]}
@@ -258,3 +262,33 @@ def test_report_and_metrics_share_partial_usage_scanner(tmp_path):
     issue = next(i for i in result["issues"] if i["id"] == "SINGLE_ITEM_CONCEPTS")
     assert issue["concept_ids"] == m["single_item_concepts"] == ["alpha"]
     assert issue["coverage"] == m["support_coverage"]["status"] == "partial"
+
+
+@pytest.mark.parametrize("used,allowance,suspects,exhausted", [(2, 2, 3, True), (3, 2, 1, True), (1, 2, 3, False), (2, 2, 0, False)])
+def test_refactor_budget_exhaustion(used, allowance, suspects, exhausted):
+    v = {"items": [{"id": "q", "status": "pass"}]}
+    plan = {"budget": {"refactor_rounds": allowance}, "rounds_used_by_skill_this_invocation": {"rai-orm-refactor": used}}
+    result = build_report(MODEL, v, plan=plan, compaction={"suspects": [{}] * suspects})
+    text = markdown(result)
+    assert result["status"] == ("verified-refactor-incomplete" if exhausted else "all-pass")
+    issues = [i for i in result["issues"] if i["id"] == "REFACTOR_BUDGET_EXHAUSTED"]
+    assert bool(issues) == exhausted
+    if exhausted:
+        assert issues[0]["severity"] == "blocker" and issues[0]["count"] == suspects
+        assert text.splitlines()[0].startswith("REFACTOR_BUDGET_EXHAUSTED:")
+        assert "Verified workload coverage: 1 passed; 0 residual failures; 0 unverified." in text
+        assert f"Refactor work: incomplete; {suspects} remaining suspects." in text
+
+
+def test_refactor_plan_cli_and_both_budgets(tmp_path):
+    (tmp_path / "model.yaml").write_text(yaml.safe_dump(MODEL), encoding="utf-8")
+    (tmp_path / "verification.json").write_text(json.dumps(verification()), encoding="utf-8")
+    (tmp_path / "compaction.after.json").write_text(json.dumps({"suspects": [{"concept": "alpha"}]}), encoding="utf-8")
+    (tmp_path / "plan.json").write_text(json.dumps({"budget": {"refactor_rounds": 1}, "rounds_used_by_skill_this_invocation": {"rai-orm-refactor": 1}}), encoding="utf-8")
+    args = [sys.executable, str(TOOL), "--model", str(tmp_path / "model.yaml"), "--verification", str(tmp_path / "verification.json"),
+            "--plan", str(tmp_path / "plan.json"), "--out-dir", str(tmp_path)]
+    assert subprocess.run(args, capture_output=True).returncode == 0
+    result = json.loads((tmp_path / "orm-report.json").read_text(encoding="utf-8"))
+    assert result["status"] == "budget-exhausted"
+    assert {"BUDGET_EXHAUSTED", "REFACTOR_BUDGET_EXHAUSTED"} <= {i["id"] for i in result["issues"]}
+    assert (tmp_path / "orm-report.md").read_text(encoding="utf-8").startswith("REFACTOR_BUDGET_EXHAUSTED:")

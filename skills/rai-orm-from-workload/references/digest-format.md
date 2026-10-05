@@ -95,13 +95,15 @@ unresolved:                         # names in the SQL that the schema does not 
 
 ## Subset selection
 
-`--ids FILE` selects one workload item id per line (blank lines are ignored). `--split {repair,holdout} --verification model.verification.json` selects by `items[].id` and `items[].split` in the saved verification file, never by a fresh random split or the top-level split counts. Combined selectors intersect. Item ids must be unique; unknown requested ids, missing assignments and invalid assignments are errors. Generated ids retain their positions in the original workload, before selection.
+`--ids FILE` selects one workload item id per line (blank lines are ignored). `--split {repair,holdout} --verification model.verification.json` selects by `items[].id` and `items[].split` in the saved verification file, never by a fresh random split or the top-level split counts. Combined selectors intersect. Item ids must be unique; unknown requested ids, missing assignments and invalid assignments are errors. Generated ids retain their positions in the original workload, before selection. With repeated `--input`, generated ids use `<stem>:i0001`; explicit ids are never changed. A single input keeps `i0001`. The public `workload_item_id(row, index, path, multiple_inputs=False)` helper in `workload_digest.py` supplies the same rule for state initialization. Duplicate explicit ids or duplicate generated ids from equal stems remain errors.
 
 Selection happens before parsing and counting. Both `repair.digest.yaml` and `holdout.digest.yaml` have the same format and existing keys as a full digest; `workload` counts describe only selected items. An empty selection preserves the source modality and has no structural evidence. Use `--no-timestamp` for reproducible files or hashed artifacts.
 
 ## Per-item contributions
 
 New digests add `item_contributions`, keyed by sorted item id. Each entry contains the same structural sections as the aggregate (`tables`, `columns`, `join_edges`, `grain_keys`, `filter_columns`, `expressions`, and `unresolved` when a schema was supplied). Rows contain structural identifiers and counts only; no SQL, questions, literal values or hashes of literal values. Support and role/operator/kind/evidence counts are 0 or 1 per item, even if its SQL repeats the same evidence. SQL-free or unparseable items have empty sections; question-only digests have empty contribution mappings per item.
+
+The YAML writer uses deterministic anchors and aliases for identical contribution rows, preserving every per-item key and count while keeping large digests compact. Treat loaded evidence as immutable; copy a row before editing it because a YAML alias may share that row with another item. The public `build_digest` result has independent per-item records; `dump_digest` shares rows only in its serialization copy.
 
 Contribution join edges and expressions omit aggregate `je_*`/`ex_*` ids: those ids depend on support ordering. Match rows by structural identity (table; table + column; left/right table + column tuples; table + grain columns; or expression kind + redacted template).
 
@@ -117,13 +119,15 @@ item_contributions:
         support: 1
         operators: {eq: 1, in: 0, like: 0, range: 0, is_null: 0}
         distinct_literals: 2
-        literal_cohorts:
-          - {items: [q1], count: 1}
-          - {items: [q1, q2], count: 1}
+        literal_cohorts_key: '["SUBJECT","LEVEL"]'
+literal_cohorts:
+  '["SUBJECT","LEVEL"]':
+    - {items: [q1], count: 1}
+    - {items: [q1, q2], count: 1}
 ```
 
-`literal_cohorts` groups a filter column's literals by the set of item ids that use them, recording only the size of each group. Every contribution for that column repeats the column's complete cohort list, sorted by item-id tuple. This permits exact distinct-literal subtraction without retaining or hashing values: the example has one literal exclusive to q1 and one shared with q2. The per-item `distinct_literals` remains the number used by that item.
+`literal_cohorts` groups a filter column's literals by the set of item ids that use them, recording only the size of each group. The top-level mapping stores each column's complete cohort list once, sorted by item-id tuple. Each filter contribution references it with `literal_cohorts_key`, the compact JSON encoding of `[table, column]`; this avoids ambiguity for names containing dots. This permits exact distinct-literal subtraction without retaining or hashing values: the example has one literal exclusive to q1 and one shared with q2. The per-item `distinct_literals` remains the number used by that item.
 
-To remove a changed or deleted item's old evidence, subtract its support and counter fields from structurally matching aggregate rows, drop zero-support rows, and re-sort. For `kinds`, drop zero-count entries; retain documented zero entries for the other counters. Do **not** subtract per-item `distinct_literals` directly: remove the item's id from each cohort, discard empty cohorts, and sum their counts for the remaining column. Combine cohorts with identical remaining membership and update surviving contributions' cohort lists. Reassign aggregate join/expression ids after sorting and update any manual references to them. This subtraction needs only the stored contributions, not old query text. Counts alone cannot identify literal overlap with a newly changed query; rebuild affected filter evidence from current workload items before adding its distinct-literal evidence. Workload parse statistics and manually authored terms/alignments are outside these structural contributions and must be refreshed separately.
+To remove a changed or deleted item's old evidence, subtract its support and counter fields from structurally matching aggregate rows, drop zero-support rows, and re-sort. For `kinds`, drop zero-count entries; retain documented zero entries for the other counters. Do **not** subtract per-item `distinct_literals` directly: remove the item's id from each cohort, discard empty cohorts, and sum their counts for the remaining column. Combine cohorts with identical remaining membership and update the shared cohort list (surviving contribution keys stay unchanged). Reassign aggregate join/expression ids after sorting and update any manual references to them. This subtraction needs only the stored contributions, not old query text. Counts alone cannot identify literal overlap with a newly changed query; rebuild affected filter evidence from current workload items before adding its distinct-literal evidence. Workload parse statistics and manually authored terms/alignments are outside these structural contributions and must be refreshed separately.
 
-Legacy digests without `item_contributions` remain valid inputs, including for connectivity checks. Rebuild from the workload before trying to subtract item evidence; absence of contributions is not evidence of zero contribution.
+Legacy digests without `item_contributions` remain valid inputs, including for connectivity checks. Older contributions with inline `literal_cohorts` can use those lists directly. The aggregate sections and single-input output with contribution metadata removed remain byte-identical; only contribution storage changes. Rebuild from the workload before trying to subtract item evidence; absence of contributions is not evidence of zero contribution.

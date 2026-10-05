@@ -253,7 +253,7 @@ def test_uniqueness_uses_named_roles_not_scalar_constraint_provenance():
                              "provenance": {"table": "a", "column": "description"}}]}],
         "constraints": [{"type": "uniqueness", "role_refs": [{"fact_type": "scalar", "role": "owner"}],
                          "provenance": {"table": "a", "columns": ["description", "other"]}}]}
-    assert dict(model_graph(model)[4]) == {"a": {"id"}}
+    assert dict(model_graph(model)[4]) == {"a": {("id",)}}
 
 
 @pytest.mark.parametrize("distinct,rows,declared,expected", [
@@ -381,3 +381,90 @@ def test_repair_digest_excludes_holdout_required_gaps(tmp_path):
         gaps[mode] = {(g["left"]["table"], g["right"]["table"]) for g in result["required_gaps"]}
     assert gaps["repair"] == {("a", "b")}
     assert gaps["full"] == gaps["legacy"] == {("a", "b"), ("b", "c")}
+
+
+@pytest.mark.parametrize("key_source", ["binding", "provenance", "constraint"])
+def test_composite_key_members_are_not_unique(key_source):
+    model = {"object_types": [{"id": n, "name": n, "kind": "entity", "provenance": {"table": n}} for n in "ab"]}
+    columns = ["group_id", "member_id"]
+    if key_source == "binding":
+        model["source_bindings"] = [{"table": n, "object_type": n, "key_columns": columns} for n in "ab"]
+    elif key_source == "provenance":
+        for obj in model["object_types"]:
+            obj["provenance"]["pk_columns"] = columns
+    else:
+        model["fact_types"] = [{"id": n, "roles": [
+            {"object_type": n, "role_name": c, "provenance": {"table": n, "column": c}} for c in columns],
+            "constraints": [{"type": "uniqueness", "roles": columns}]} for n in "ab"]
+    digest = {"join_edges": [{"id": "tuple", "left": {"table": "a", "columns": columns},
+                              "right": {"table": "b", "columns": columns}}]}
+    with duckdb.connect() as db:
+        for n in "ab":
+            db.execute(f"CREATE TABLE {n} AS SELECT i // 10 AS group_id, i % 10 AS member_id FROM range(100) t(i)")
+        result, _ = analyze(model, digest, db)
+    singles = [c for c in result["candidates"] if len(c["left"]["columns"]) == 1]
+    assert len(singles) == 4
+    assert all(c["classification"] == "partial" for c in singles)
+    assert all(c["evidence"]["distinct_left"] == c["evidence"]["distinct_right"] == 10 for c in singles)
+    assert next(c for c in result["candidates"] if c["required_gaps"])["classification"] == "fk-like"
+
+
+@pytest.mark.parametrize("complete_key", [False, True])
+def test_separate_declared_keys_do_not_declare_a_tuple(complete_key):
+    model = {"object_types": [{"id": n, "name": n, "kind": "entity", "provenance": {"table": n}} for n in "ab"],
+             "source_bindings": [{"table": n, "object_type": n, "key_columns": [c]} for n in "ab" for c in ("x", "y")]}
+    if complete_key:
+        model["source_bindings"] = [{"table": "a", "object_type": "a", "key_columns": ["x", "y"]}]
+    digest = {"join_edges": [{"id": "tuple", "left": {"table": "a", "columns": ["x", "y"]},
+                              "right": {"table": "b", "columns": ["x", "y"]}}]}
+    with duckdb.connect() as db:
+        for n in "ab":
+            db.execute(f"CREATE TABLE {n} AS SELECT i % 10 AS x, i % 10 AS y FROM range(100) t(i)")
+        result, _ = analyze(model, digest, db)
+    assert next(c for c in result["candidates"] if c["required_gaps"])["classification"] == ("fk-like" if complete_key else "partial")
+
+
+def test_rejected_link_case_change_without_database():
+    model = {"object_types": [{"id": n, "name": n, "kind": "entity", "provenance": {"table": n}} for n in "ab"]}
+    digest = {"join_edges": [{"id": "gap", "left": {"table": "a", "columns": ["key"]},
+                             "right": {"table": "b", "columns": ["key"]}}]}
+    _, first = analyze(model, digest)
+    assert len(first["fact_types"]) == 1
+    model["rejected_proposals"] = first["fact_types"]
+    for side in ("left", "right"):
+        digest["join_edges"][0][side]["columns"] = ["KEY"]
+        digest["join_edges"][0][side]["table"] = digest["join_edges"][0][side]["table"].upper()
+    result, second = analyze(model, digest)
+    assert len(result["required_gaps"]) == 1
+    assert second["fact_types"] == []
+
+
+def test_cap_counts_distinct_required_gaps_and_isolated_concepts():
+    model = {"object_types": [{"id": n, "name": n, "kind": "entity", "provenance": {"table": n}} for n in "abc"]}
+    digest = {"join_edges": [{"id": str(i), "left": {"table": "a", "columns": ["key"]},
+                             "right": {"table": "b", "columns": ["key"]}} for i in range(2)]}
+    with duckdb.connect() as db:
+        for n in "abc":
+            db.execute(f"CREATE TABLE {n} AS SELECT i AS key FROM range(10) t(i)")
+        capped, _ = analyze(model, digest, db, max_comparisons=0)
+        partial, _ = analyze(model, digest, db, max_comparisons=1)
+        full, _ = analyze(model, digest, db, max_comparisons=3)
+    assert capped["summary"]["candidates_untested"] == 3
+    assert capped["summary"]["required_gaps_untested"] == 2
+    assert capped["summary"]["isolated_concepts_untested"] == 3
+    assert partial["summary"]["required_gaps_untested"] == 0
+    assert partial["summary"]["isolated_concepts_untested"] == 3
+    assert full["summary"]["required_gaps_untested"] == full["summary"]["isolated_concepts_untested"] == 0
+    from report import build_report
+    issue = next(i for i in build_report(model, connectivity=capped)["issues"] if i["id"] == "COMPARISON_CAP_REACHED")
+    assert "untested required gaps: 2" in issue["next_action"]
+    assert "untested isolated concepts: 3" in issue["next_action"]
+
+
+def test_schema_handoff_limits_one_shot_to_repair_gaps():
+    skill = (TOOL.parents[2] / "rai-orm-from-schema" / "SKILL.md").read_text(encoding="utf-8")
+    step = skill.split("### Step 9g", 1)[1].split("### Step 10", 1)[0]
+    assert "apply only required-gap proposals" in step
+    assert "list exploratory proposals for review and never auto-apply them" in step
+    assert "repair-set digest, never the holdout digest" in step
+    assert "../rai-orm/references/connectivity.md" in step
