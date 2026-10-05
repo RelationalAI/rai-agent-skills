@@ -12,7 +12,7 @@ One class per failed item. Classify from evidence: the difference between the tw
 
 **Signal:** a table, column or join in the SQL has no counterpart in the model: no object type, no fact type, or no relationship between two concepts that the SQL joins.
 **Repair:** add it to the YAML.
-- A missing join: add the fact type the join stands for. Run the inclusion probe first (SRP Step 5); record the rate in provenance. A join whose probe fails (few values match) is not a relationship; leave the item as residual.
+- A workload join with no graph path between its concepts is always a MODEL defect, never `translation`. Run the [connectivity check](../../rai-orm/references/connectivity.md) each round. Add the proposed fact type with its distinct counts, shared count, directional containment and null rates in `provenance.evidence`; use `source: data, status: proposed`. Preserve `partial: true` for partial overlap: it still supplies the best candidate for the required gap. Probe and review candidates classified `none` or untested before applying; absent evidence or rejected meaning leaves the item residual as `missing-element`. A join between tables bound to the same concept is merged and needs no extra link.
 - A dropped column: bind it, or record why it stays dropped.
 
 ## `grain`

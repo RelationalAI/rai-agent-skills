@@ -550,6 +550,60 @@ Object types and fact types added from workload evidence carry `provenance.origi
 
 Status rules: starts `proposed`; becomes `confirmed` only by user review (SRP Step 9b / CSDP Step 7b). A passing probe is recorded in `provenance.probe` and does not confirm by itself.
 
+## Data-tested fact proposals and source bindings
+
+This compatible extension adds optional metadata to **fact types**, reusing `provenance` for count-only evidence. `source: data` describes a data-tested fact proposal, not a seventh constraint-source category. Existing constraint sources and promotion rules are unchanged. Data-tested fact types begin `proposed`; confirmation follows user review. `partial: true` identifies a tested partial-overlap proposal and remains in its audit record after confirmation.
+
+```yaml
+fact_types:
+  - id: data_link_alpha_beta
+    reading: "{Alpha} relates to {Beta}"
+    roles:
+      - { object_type: alpha, role_name: left }
+      - { object_type: beta, role_name: right }
+    status: proposed                          # proposed | confirmed | rejected
+    source: data
+    partial: true                             # only when tested overlap is partial
+    provenance:
+      origin: data
+      left: { table: ALPHA_FEED, columns: [peer_key] }
+      right: { table: BETA_FEED, columns: [peer_key] }
+      required_gaps: [je_1]                    # digest join ids; empty for exploratory links
+      test_status: tested                     # tested | no-db | comparison-cap | incompatible-or-missing | probe-error
+      evidence:
+        distinct_left: 10
+        distinct_right: 10
+        shared_distinct: 6
+        containment_left: 0.6                 # shared / distinct_left
+        containment_right: 0.6                # shared / distinct_right
+        null_rate_left: 0.0
+        null_rate_right: 0.0
+        name_similarity: 1.0
+```
+
+Evidence fields other than `name_similarity` are absent when no successful data test ran. Empty sets have containment 0. Composite column lists are matched positionally as tuples. The tool emits no mandatory or uniqueness constraints from overlap alone. Fact readings are provisional; review their business meaning alongside the source column pointers. Rejected facts do not supply graph paths.
+
+Legacy `provenance.table`, `pk_column`, `column` and `columns` pointers remain valid. An entity fed by several tables may use `provenance.tables: [ALPHA_FEED, ALPHA_ARCHIVE]`; composite identifiers may use `provenance.pk_columns`. For exact coverage and key-like candidate selection, use this optional top-level binding inventory:
+
+```yaml
+source_bindings:
+  - table: ALPHA_FEED
+    object_type: alpha                        # entity id; several tables may use the same id
+    key_columns: [id]                         # declared/probed identifier columns, not an asserted FK
+    columns: [id, peer_key, label]             # all columns actually bound to the model
+    dropped_columns: [unused]                 # explicitly omitted columns; justify in ontology-notes.md
+  - table: ALPHA_ARCHIVE
+    object_type: alpha
+    key_columns: [id]
+    columns: [id, label]
+source:
+  columns:                                    # optional source inventory for unaccounted-column counts
+    - { table: ALPHA_FEED, columns: [id, peer_key, label, unused] }
+    - { table: ALPHA_ARCHIVE, columns: [id, label] }
+```
+
+Use schema spelling and qualify table names where needed. A role may also carry `provenance: { table, column }`; uniqueness role references then identify key-like columns. Source bindings record names only, never values or query text. A table may bind to several concepts; a digest join is reachable when at least one of its mapped concept pairs has a path, and merged when both tables feed the same concept. Review alternative bindings when that existential path does not match the intended join roles.
+
 ## Text-first extensions (text-conversation source.kind)
 
 When `source.kind: text-conversation` — used by the `rai-orm-from-text` skill — `provenance` blocks may include additional fields that trace each construct back to a dialogue turn. These fields are optional in the format but expected when the source kind is text-conversation:

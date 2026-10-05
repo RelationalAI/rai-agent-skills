@@ -1,6 +1,6 @@
 ---
 name: rai-orm-verify
-description: Verifies an ORM-derived PyRel model against a workload by rewriting each item — SQL query, natural-language question, or question+SQL pair — in PyRel, checking it (result match with the SQL on the source data, or user review of a sample when there is no SQL), and repairing the model through its ORM YAML until the workload can be rewritten. Use after an ORM model exists and the user has queries or questions it must answer — not for building the model (rai-orm-from-schema, rai-orm-from-text), extracting evidence before modeling (rai-orm-from-workload), or routine PyRel query writing (rai-querying).
+description: Verifies workload rewrites against an ORM-derived PyRel model, repairs defects through its YAML and reports connectivity and budget exhaustion when an existing model must answer SQL, questions or pairs; not for building models (rai-orm-from-schema, rai-orm-from-text), extracting workload evidence (rai-orm-from-workload), or routine query writing (rai-querying).
 ---
 
 # Workload Verification of an ORM Model
@@ -64,11 +64,12 @@ The report always names the oracle used. A structural or user-review pass is nev
 **Outputs:**
 - `model.verification.json` — format in [`references/report-format.md`](references/report-format.md).
 - `verification/<item id>.py` — the accepted PyRel for each item. These double as worked query examples for the model.
+- `connectivity.json`, `connectivity.proposals.yaml`, `orm-report.json`, `orm-report.md` — graph evidence, proposed links, and statistics with actionable issues.
 - A revised `model.orm.yaml`, `model.verbalization.txt` and `model.py` when repairs were made.
 
 ## Instructions
 
-**Required dependencies:** [`rai-pyrel-coding`](../rai-pyrel-coding/SKILL.md) and [`rai-querying`](../rai-querying/SKILL.md) for writing and running the PyRel. The modeling skill that produced the model, for committing repairs.
+**Required dependencies:** `rai-pyrel-coding` and `rai-querying` for writing and running the PyRel. The modeling skill that produced the model, for committing repairs.
 
 **Read-only rule:** the source data is never written. SQL from the workload is run only as a query, with a row cap and a time cap.
 
@@ -81,6 +82,8 @@ Pick the column of the oracle table from two facts: is the source data reachable
 With 30 or more items, set aside 20% as a **holdout** before anything is run: sort the item ids and take every fifth. The holdout is rewritten and checked like the rest, but its failures are never looked at when repairing the model. Its pass rate tells whether the repairs generalize or were fitted to the items. With fewer than 30 items there is no holdout; say so in the report.
 
 ### Step 3 — Rewrite and check
+
+At the start of **each round**, run `connectivity.py` from `rai-orm` with the current YAML and the repair-set digest; add read-only `--db` access when available. Follow the [connectivity procedure](../rai-orm/references/connectivity.md). Record components, isolated concept ids and required gap ids in that round's `connectivity` block. Check holdout reachability separately; never use holdout gaps or proposals to choose repairs. A repair-set workload join with no graph path is `missing-element`, even before its rewrite runs. A join between tables feeding the same concept is `merged`, not a gap.
 
 For each item:
 
@@ -121,7 +124,7 @@ Each `fail` gets one class from [`references/failure-classes.md`](references/fai
 | `naming` | The YAML: readings or role names hide the element from a reader of the question |
 | `semantics` | The rewrite or the YAML: NULL, duplicate, or join-kind behavior differs |
 
-Classify from the evidence (the diff of the two results, the element that could not be reached), not from the item's wording. When the class is unclear after one look, mark it `translation` and let the retry cap decide.
+Classify from the evidence (the diff of the two results, the element that could not be reached), not from the item's wording. Required connectivity gaps are always `missing-element`, never `translation`. For other unclear failures after one look, mark them `translation` and let the retry cap decide.
 
 ### Step 5 — Repair, generically
 
@@ -129,6 +132,7 @@ Group the repair-set failures by class and by the model element involved. Repair
 
 - State the defect without reference to any item: *"concepts fed by two tables cannot return the rows of one table"*, not *"question 17 needs TABLE_X"*.
 - Change `model.orm.yaml`. New object types and fact types carry `provenance.origin: workload`; new constraints carry `source: workload, status: proposed`. Provenance records the failure class and the number of items, never an item's text (see `representation-format.md`, `source: workload`).
+- For required connectivity gaps, add the data-tested link proposal with `source: data`, `status: proposed` and `provenance.evidence`. Preserve `partial: true` and overlap counts for partial candidates; probe and review untested or zero-overlap candidates before applying them. Re-run connectivity after repair. An unjustified missing path remains `missing-element`.
 - **Guided:** show the round's repairs as one batch for the user to accept or reject, as in SRP Step 9b. **One-shot:** apply them as `proposed`, with `# REVIEW PROPOSAL` in `model.py`.
 - Commit through the modeling skill's final step (SRP Step 9f or CSDP Step 7f), so the YAML validates, then regenerate `model.verbalization.txt` and `model.py`.
 
@@ -147,7 +151,7 @@ Stop when the first of these holds:
 - two rounds in a row raise the repair-set pass count by nothing;
 - the budget is reached (default 5 rounds).
 
-Write `model.verification.json` and tell the user, in counts: the oracle used; pass rate on the repair set and on the holdout; the residual failures by class; the repairs made per round; regressions. If the holdout rate is far below the repair-set rate, say that the repairs may be fitted to the items.
+Write `model.verification.json`, retaining every round's connectivity block and the saved PyRel paths. Run `report.py` from `rai-orm` with `--model model.orm.yaml --verification model.verification.json --connectivity connectivity.json`, adding `--digest` when available. Show `orm-report.md`; load the [statistics-and-issues format](../rai-orm/references/statistics-and-issues.md) for its issue triggers. When budget is exhausted with residual failures, **lead with its first `BUDGET_EXHAUSTED` line verbatim**, including the residual count and the exact step to continue. Keep the run incomplete; never claim done or all-pass. Also name the oracle and state its limits.
 
 ## Common Pitfalls
 
@@ -161,12 +165,14 @@ Write `model.verification.json` and tell the user, in counts: the oracle used; p
 | Calling a structural pass "verified" | No data was reachable | Report the oracle by name |
 | Marking unreviewed questions as passed | They ran without error | `unverified` until the user saw them |
 | Running workload SQL that writes | A log holds every statement | SELECT only, row cap, time cap |
+| Calling a required join gap a translation error | Retrying a rewrite against disconnected concepts | Classify `missing-element`; propose the link with overlap evidence. |
+| Burying budget exhaustion in statistics | Treating the stop as completion | Show the report's budget line first, with residual count and continuation step. |
 
 ## Examples
 
 | Example | Shows |
 |---|---|
-| [`evals/fixtures/campus/`](../rai-orm-from-workload/evals/fixtures/campus/) | A model with three planted defects (an undeclared join, a grain trap, a missing derived measure) and the workload that exposes them |
+| Campus fixture from `rai-orm-from-workload` | A model with three planted defects (an undeclared join, a grain trap, a missing derived measure) and the workload that exposes them; setup in [eval cases](evals/cases.json) |
 
 ## Reference files
 
@@ -175,3 +181,5 @@ Write `model.verification.json` and tell the user, in counts: the oracle used; p
 | [`references/failure-classes.md`](references/failure-classes.md) | Step 4 — classifying a failure and choosing the repair |
 | [`references/report-format.md`](references/report-format.md) | Step 7 — writing `model.verification.json` |
 | [`../rai-orm-from-schema/references/representation-format.md`](../rai-orm-from-schema/references/representation-format.md) | Step 5 — `source: workload` provenance |
+| [Connectivity procedure](../rai-orm/references/connectivity.md) | Every round — required gaps, data probes, batch proposals and re-check |
+| [Statistics and issues](../rai-orm/references/statistics-and-issues.md) | Step 7 — report generation and budget-first presentation |

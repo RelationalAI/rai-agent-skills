@@ -50,6 +50,41 @@
         "summary.stopped_because is one of all-pass, plateau, budget",
         "no more than 5 rounds"
       ]
+    },
+    {
+      "id": "V-E5",
+      "type": "required-join-gap",
+      "description": "A workload joins two source tables whose entity concepts are in different graph components.",
+      "fixture": "../../rai-orm-from-workload/evals/fixtures/campus/",
+      "fixture_setup": "Build the campus model without the digest, leaving the undeclared references absent. Extract a repair-set digest from workload.pairs.json. Run connectivity before rewriting each round.",
+      "expected_behavior": {
+        "classification": "missing-element; a join with no model path is never translation",
+        "repair": "Add a proposed fact type with directional containment, distinct counts, shared count and null rates in provenance.evidence. Preserve partial: true for partial overlap.",
+        "merged": "A join between two tables bound to the same entity concept is merged and not a required gap."
+      },
+      "pass_criteria": [
+        "connectivity.json records the required gap id, support and both join column lists",
+        "model.verification.json records components, isolated concept ids and required gap ids in every round",
+        "No retry or failure classification calls the absent path a translation defect",
+        "Re-running connectivity after adding the proposed link clears that required gap",
+        "Holdout gaps and proposals never guide repairs"
+      ]
+    },
+    {
+      "id": "V-E6",
+      "type": "budget-exhausted-report",
+      "description": "The round budget expires while workload failures remain; the summary leads with the continuation action.",
+      "fixture_setup": "Use a synthetic verification file with stopped_because: budget, four residual missing-element failures, and recorded rounds and item ids; run report.py with a small synthetic model.",
+      "expected_behavior": {
+        "first_line": "BUDGET_EXHAUSTED: 4 residual failures. Continue: Resume rai-orm-verify at Step 5 with model.verification.json; increase the round budget and re-run Step 6.",
+        "json": "status: budget-exhausted and a BUDGET_EXHAUSTED blocker with count 4"
+      },
+      "pass_criteria": [
+        "orm-report.md begins with the budget line, before any heading or statistics",
+        "The user-facing summary also begins with that line verbatim",
+        "Neither report claims done or all-pass while budget is exhausted with residual failures",
+        "Reports contain counts, ids and names only; no SQL, question text or data values"
+      ]
     }
   ],
   "running_evals": {
