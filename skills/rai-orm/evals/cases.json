@@ -20,8 +20,8 @@
         "state.py plan starts at round 6 and lists prior passed ids as frozen",
         "Original saved PyRel is retained until any explicit rename candidate is accepted",
         "The split is read from the previous report and never recomputed",
-        "A repair with more regressions than fixes restores the consistent snapshot",
-        "Refactor acceptance retains total and per-split verified passes and shares this invocation budget",
+        "A repair with regressions greater than or equal to fixes restores the consistent snapshot",
+        "Refactor acceptance preserves every baseline-passing id and uses its separate refactor_rounds allowance, default 2 per invocation",
         "No completion claim while a blocker issue stands",
         "Legacy verification without an exact revision match yields BASELINE_RECHECK_REQUIRED and can_resume: false",
         "First update records the invocation start; rounds_used_this_invocation excludes the baseline",
@@ -39,7 +39,7 @@
         "feedback": "Plan lists new structured feedback with source: user-feedback; the agent converts markdown into feedback.processed.yaml and shows that batch before applying",
         "repair": "Probe the candidate columns read-only; commit proposed fact types through the original modeling skill; reuse recorded emitter",
         "delta": "Unchanged workload and digest are retained; only newly added or changed item ids are re-digested if the workload changes; preserve an immutable old workload snapshot or per-item contributions; legacy subtraction without either requires the explicit full rebuild fallback",
-        "stop": "Connectivity before verify, refactor assessment after, then report; missing emitter blocks application"
+        "stop": "connectivity -> rai-orm-refactor:assess -> rai-orm-verify -> rai-orm-refactor:accept -> report; missing emitter blocks application"
       },
       "pass_criteria": [
         "Guided structured feedback is reviewed before application",
@@ -78,7 +78,7 @@
       "id": "O-R3",
       "type": "round-order",
       "pass_criteria": [
-        "connectivity, free refactor assessment, verify, refactor acceptance, report in order",
+        "connectivity, rai-orm-refactor:assess (free), verify, rai-orm-refactor:accept, report in order",
         "current-revision metrics skip assessment",
         "verify and refactor allowances are independent",
         "legacy baseline recheck remains required"

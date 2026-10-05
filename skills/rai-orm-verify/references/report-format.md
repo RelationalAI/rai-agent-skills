@@ -83,3 +83,5 @@ For example, an original invocation stopped at round 5 and a resume ran rounds 6
 ```
 
 The resumed baseline remains round 5 with the old model. Its three saved passes are the regression inventory; they are not three new translations. The fresh invocation may spend up to five attempts by default even though five were already spent in the original invocation.
+
+Ordinary repair acceptance differs from refactor: fixes must exceed regressions. Record each lost pass as `status: fail` with `regressed_at_round`, each fix with `passed_at_round`, and the round’s `fixes`/`regressions` counts. Use `state.py update --skill rai-orm-verify --accept-regressions` to accept that net improvement; otherwise baseline loss blocks update. The next plan lists each lost id as `REGRESSED_ITEM` until restored; exclusions cannot hide regressions. Equal or greater regressions require rollback. Verify round charges come from the last recorded round minus the previous counter; supplied `--rounds-done` must match. For a changed workload specification, record the current item `spec_hash` only after rechecking it; accepting a workload delta alone cannot renew its pass.

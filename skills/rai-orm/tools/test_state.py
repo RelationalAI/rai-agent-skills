@@ -92,7 +92,8 @@ def test_workload_delta_preserves_surviving_passes(tmp_path):
     verification_path = tmp_path / "model.verification.json"
     verification = json.loads(verification_path.read_text())
     verification["items"] = [item for item in verification["items"] if item["id"] != "q002"]
-    verification["items"][1]["status"] = "fail"  # Changed q003 no longer claims its old pass.
+    verification["items"][1]["status"] = "fail"  # Rechecked changed specification.
+    verification["items"][1]["spec_hash"] = item_hashes(workload)["q003"]
     verification["items"].append({"id": "q006", "status": "fail", "split": "repair"})
     verification_path.write_text(json.dumps(verification))
     update(state, tmp_path, "rai-orm-from-workload", accept_workload_delta=True)
@@ -234,7 +235,7 @@ def test_no_workload_does_not_schedule_verification(tmp_path):
     (tmp_path / "model.verification.json").unlink()
     (tmp_path / "workload.digest.yaml").unlink()
     state = initialize(tmp_path, dict(ARTIFACT_DEFAULTS), emitter="manual:step-10")
-    assert plan(state, tmp_path)["steps"] == ["manual:step-10", "connectivity", "rai-orm-refactor", "report"]
+    assert plan(state, tmp_path)["steps"] == ["manual:step-10", "connectivity", "rai-orm-refactor:assess", "report"]
 
 
 def test_missing_split_assignments_block_legacy_resume(tmp_path):
@@ -442,7 +443,8 @@ def test_registered_old_contributions_support_changed_query(tmp_path):
     state = initialize(tmp_path, dict(ARTIFACT_DEFAULTS), emitter="manual:step-10", workloads=["items.json"])
     record = state["inputs"][0]
     record.pop("snapshot_path")
-    assert record["item_contributions"] == digest["item_contributions"]
+    assert "item_contributions" not in record
+    assert record["item_contribution_hashes"]["q005"].startswith("sha256:")
     rows[-1]["sql"] = "SELECT 99"
     path.write_text(json.dumps(rows), encoding="utf-8")
     assert "WORKLOAD_FULL_REBUILD_REQUIRED" not in codes(plan(state, tmp_path))
@@ -453,7 +455,7 @@ def test_split_digest_artifacts_and_utf8_manifest(tmp_path):
     result = cli(tmp_path, "init", "--emitter", "manual:step-10", "--repair-digest", "réparation.yaml",
                  "--holdout-digest", "holdout.digest.yaml")
     assert result.returncode == 0
-    state = json.loads(result.stdout)
+    state = json.loads((tmp_path / "orm-state.json").read_text(encoding="utf-8"))
     assert state["artifacts"]["repair_digest"] == "réparation.yaml"
     assert state["artifacts"]["holdout_digest"] == "holdout.digest.yaml"
     (tmp_path / "orm-state.json").write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
@@ -477,6 +479,7 @@ def test_invocation_round_start_is_retained_and_explicitly_restarted(tmp_path):
     state = initialized(tmp_path)
     update(state, tmp_path, "connectivity")
     assert state["invocation_started_round"] == 6
+    append_rounds(tmp_path, 2)
     update(state, tmp_path, "rai-orm-verify", rounds_done=2)
     update(state, tmp_path, "report")
     assert plan(state, tmp_path)["rounds_used_this_invocation"] == 2
@@ -606,17 +609,18 @@ def test_readonly_bootstrap_preserves_workload_without_snapshot_write(tmp_path):
 def test_independent_refactor_budget_and_free_assessment(tmp_path):
     state = initialized(tmp_path, refactor_rounds=2)
     initial = plan(state, tmp_path)
-    assert initial["steps"][1:] == ["connectivity", "rai-orm-refactor", "rai-orm-verify", "rai-orm-refactor", "report"]
+    assert initial["steps"][1:] == ["connectivity", "rai-orm-refactor:assess", "rai-orm-verify", "rai-orm-refactor:accept", "report"]
     update(state, tmp_path, "rai-orm-refactor", rounds_done=0)
+    append_rounds(tmp_path, 5)
     update(state, tmp_path, "rai-orm-verify", rounds_done=5)
     after_verify = plan(state, tmp_path)
     assert after_verify["rounds_remaining_by_skill"] == {"rai-orm-verify": 0, "rai-orm-refactor": 2}
     assert "rai-orm-verify" not in after_verify["steps"]
-    assert after_verify["steps"].count("rai-orm-refactor") == 2
+    assert [s for s in after_verify["steps"] if s.startswith("rai-orm-refactor:")] == ["rai-orm-refactor:assess", "rai-orm-refactor:accept"]
     update(state, tmp_path, "rai-orm-refactor", rounds_done=2, stop_reason="budget")
     result = plan(state, tmp_path)
     assert result["rounds_used_by_skill_this_invocation"] == {"rai-orm-verify": 5, "rai-orm-refactor": 2}
-    assert result["steps"].count("rai-orm-refactor") == 1  # Free assessment remains.
+    assert [s for s in result["steps"] if s.startswith("rai-orm-refactor:")] == ["rai-orm-refactor:assess"]  # Free assessment remains.
     original = json.dumps(state, sort_keys=True)
     with pytest.raises(UpdateBlocked):
         update(state, tmp_path, "rai-orm-refactor", rounds_done=1)
@@ -631,7 +635,7 @@ def test_current_metrics_skip_only_assessment(tmp_path):
     metrics.write_text(json.dumps({"model_revision": plan(state, tmp_path)["baseline_model_revision"]}), encoding="utf-8")
     result = plan(state, tmp_path)
     assert not result["refactor_assessment"]
-    assert result["steps"][1:] == ["connectivity", "rai-orm-verify", "rai-orm-refactor", "report"]
+    assert result["steps"][1:] == ["connectivity", "rai-orm-verify", "rai-orm-refactor:accept", "report"]
     metrics.write_text(json.dumps({"model_revision": "sha256:stale"}), encoding="utf-8")
     assert plan(state, tmp_path)["refactor_assessment"]
 
@@ -709,6 +713,7 @@ def test_metrics_do_not_supply_unwritten_stop_reason(tmp_path):
 
 def test_invocation_archives_each_skill_and_until_pass_does_not_extend_refactor(tmp_path):
     state = initialized(tmp_path, until_pass=True)
+    append_rounds(tmp_path, 6)
     update(state, tmp_path, "rai-orm-verify", rounds_done=6)
     update(state, tmp_path, "rai-orm-refactor", rounds_done=2)
     with pytest.raises(UpdateBlocked):
@@ -724,3 +729,378 @@ def test_legacy_invocation_budget_is_not_reset_by_unrelated_update(tmp_path):
     state["invocation_started_round"] = 4
     update(state, tmp_path, "report")
     assert plan(state, tmp_path)["rounds_used_this_invocation"] == 2
+
+
+def append_rounds(project, count):
+    def edit(value):
+        start = max(r["round"] for r in value["rounds"]) + 1
+        value["rounds"].extend({"round": n} for n in range(start, start + count))
+    write_verification(project, edit)
+
+
+def workload_state(project):
+    rows = [{"id": f"q{i:03d}", "sql": f"SELECT {i}"} for i in range(1, 6)]
+    (project / "items.json").write_text(json.dumps(rows), encoding="utf-8")
+    return initialized(project, workloads=["items.json"]), rows
+
+
+def test_changed_pass_stays_invalid_after_delta_acceptance(tmp_path):
+    state, rows = workload_state(tmp_path)
+    old_spec = state["verification_snapshot"]["items"][0]["spec_hash"]
+    rows[0]["sql"] = "SELECT 99"
+    (tmp_path / "items.json").write_text(json.dumps(rows), encoding="utf-8")
+    update(state, tmp_path, "rai-orm-from-workload", accept_workload_delta=True)
+    update(state, tmp_path, "report")
+    result = plan(state, tmp_path)
+    assert {"id": "CHANGED_ITEM_RECHECK", "item_ids": ["q001"]} in result["blockers"]
+    assert result["baseline_recheck"] and not result["can_resume"]
+    assert "q001" not in result["frozen_passed_items"]
+    assert state["verification_snapshot"]["items"][0]["spec_hash"] == old_spec
+    with pytest.raises(UpdateBlocked):
+        update(state, tmp_path, "rai-orm-verify")
+    # Successful recheck explicitly associates its evidence with the new spec.
+    write_verification(tmp_path, lambda v: v["items"][0].update(spec_hash=item_hashes(tmp_path / "items.json")["q001"]))
+    update(state, tmp_path, "rai-orm-verify")
+    result = plan(state, tmp_path)
+    assert result["can_resume"] and not result["baseline_recheck"]
+    assert "q001" in result["frozen_passed_items"]
+
+
+def test_changed_specs_cannot_swap_split_assignments(tmp_path):
+    state, rows = workload_state(tmp_path)
+    rows[0]["sql"], rows[2]["sql"] = "SELECT 88", "SELECT 99"
+    (tmp_path / "items.json").write_text(json.dumps(rows), encoding="utf-8")
+    def swap(v):
+        v["items"][0]["split"], v["items"][2]["split"] = "holdout", "repair"
+    write_verification(tmp_path, swap)
+    with pytest.raises(UpdateBlocked) as error:
+        update(state, tmp_path, "rai-orm-from-workload", accept_workload_delta=True)
+    assert {b["item_id"] for b in error.value.blockers if b["id"] == "ITEM_SPLIT_CHANGED"} == {"q001", "q003"}
+
+
+@pytest.mark.parametrize("addition", [True, False])
+def test_unbalanced_workload_delta_accepts_counts_preserves_rule(tmp_path, addition):
+    state, rows = workload_state(tmp_path)
+    rows = rows + [{"id": "q006", "sql": "SELECT 6"}] if addition else rows[1:]
+    (tmp_path / "items.json").write_text(json.dumps(rows), encoding="utf-8")
+    def edit(v):
+        if addition:
+            v["items"].append({"id": "q006", "status": "fail", "split": "repair"})
+        else:
+            v["items"] = v["items"][1:]
+        v["split"]["repair"] += 1 if addition else -1
+        v["workload"] = {"n_items": len(rows)}
+    write_verification(tmp_path, edit)
+    (tmp_path / "workload.digest.yaml").write_text(yaml.safe_dump({"workload": {"n_items": len(rows)}}), encoding="utf-8")
+    with pytest.raises(UpdateBlocked):
+        update(state, tmp_path, "rai-orm-verify")
+    update(state, tmp_path, "rai-orm-from-workload", accept_workload_delta=True)
+    assert plan(state, tmp_path)["can_resume"]
+    write_verification(tmp_path, lambda v: v["split"].update(rule="new-rule"))
+    with pytest.raises(UpdateBlocked) as error:
+        update(state, tmp_path, "rai-orm-from-workload", accept_workload_delta=True)
+    assert "SPLIT_CHANGED" in codes({"blockers": error.value.blockers})
+
+
+@pytest.mark.parametrize("artifact", ["digest", "repair_digest", "holdout_digest"])
+def test_deleted_digest_remains_required_until_restored_or_retired(tmp_path, artifact):
+    project_files(tmp_path)
+    path = tmp_path / ARTIFACT_DEFAULTS[artifact]
+    if not path.exists():
+        path.write_text("workload: {n_items: 1}\n", encoding="utf-8")
+    original = path.read_bytes()
+    state = initialize(tmp_path, dict(ARTIFACT_DEFAULTS), emitter="manual:step-10")
+    path.unlink()
+    update(state, tmp_path, "report")
+    assert "DIGEST_REQUIRED" in codes(plan(state, tmp_path))
+    assert artifact in state["required_artifacts"]
+    path.write_bytes(original)
+    assert "DIGEST_REQUIRED" not in codes(plan(state, tmp_path))
+    path.unlink()
+    with pytest.raises(ValueError):
+        update(state, tmp_path, "report", retire_artifacts=[artifact])
+    update(state, tmp_path, "report", retire_artifacts=[artifact], retire_reason="Replaced by reviewed inventory")
+    update(state, tmp_path, "report")
+    assert "DIGEST_REQUIRED" not in codes(plan(state, tmp_path))
+    assert state["retired_artifacts"][artifact]["reason"] == "Replaced by reviewed inventory"
+
+
+def test_dependency_registration_merges_preserves_and_drops_cli(tmp_path):
+    project_files(tmp_path)
+    for name in ("helper.py", "extra.py", "bindings.py", "extra-bindings.py"):
+        (tmp_path / name).write_text("# dependency\n", encoding="utf-8")
+    assert cli(tmp_path, "init", "--emitter", "manual:step-10", "--emitter-file", "helper.py", "--binding", "bindings.py").returncode == 0
+    result = cli(tmp_path, "update", "--skill", "rai-orm", "--emitter", "manual:step-10", "--emitter-file", "extra.py", "--binding", "extra-bindings.py")
+    assert result.returncode == 0, result.stdout
+    manifest = lambda: json.loads((tmp_path / "orm-state.json").read_text(encoding="utf-8"))
+    saved = manifest()
+    assert [r["path"] for r in saved["emitter_files"]] == ["extra.py", "helper.py"]
+    assert [r["path"] for r in saved["bindings"]] == ["bindings.py", "extra-bindings.py"]
+    assert cli(tmp_path, "update", "--skill", "report").returncode == 0
+    assert manifest()["emitter_files"] == saved["emitter_files"]
+    assert manifest()["bindings"] == saved["bindings"]
+    assert cli(tmp_path, "update", "--skill", "rai-orm", "--emitter", "manual:step-10").returncode == 0
+    assert manifest()["emitter_files"] == saved["emitter_files"]
+    assert cli(tmp_path, "update", "--skill", "report", "--drop-emitter-file", "extra.py", "--drop-binding", "extra-bindings.py").returncode == 0
+    assert [r["path"] for r in manifest()["emitter_files"]] == ["helper.py"]
+    assert [r["path"] for r in manifest()["bindings"]] == ["bindings.py"]
+
+
+def regression_round(project, losses=1, corrupt=None):
+    def edit(v):
+        for item in v["items"][:losses]:
+            item.update(status="fail", regressed_at_round=6)
+        for item in v["items"][3:]:
+            item.update(status="pass", passed_at_round=6, pyrel=f"verification/{item['id']}.py")
+            (project / item["pyrel"]).write_text("result = Alpha\n", encoding="utf-8")
+        v["rounds"].append({"round": 6, "regressions": losses, "fixes": 2})
+        if corrupt == "marker":
+            v["items"][0].pop("regressed_at_round")
+        elif corrupt == "exclusion":
+            v["items"][0]["status"] = "inexpressible"
+        elif corrupt == "counts":
+            v["rounds"][-1]["fixes"] = 3
+    write_verification(project, edit)
+
+
+def test_verify_net_improvement_needs_flag_and_tracks_regressed_ids(tmp_path):
+    state = initialized(tmp_path)
+    regression_round(tmp_path)
+    before = json.dumps(state, sort_keys=True)
+    with pytest.raises(UpdateBlocked) as error:
+        update(state, tmp_path, "rai-orm-verify")
+    assert "BASELINE_PASS_LOST" in codes({"blockers": error.value.blockers})
+    assert json.dumps(state, sort_keys=True) == before
+    update(state, tmp_path, "rai-orm-verify", accept_regressions=True)
+    result = plan(state, tmp_path)
+    assert {"id": "REGRESSED_ITEM", "item_id": "q001"} in result["blockers"]
+    assert not result["can_resume"]
+    assert result["frozen_passed_items"] == ["q002", "q003", "q004", "q005"]
+    write_verification(tmp_path, lambda v: v["items"][0].update(status="oracle-error"))
+    with pytest.raises(UpdateBlocked):
+        update(state, tmp_path, "report")
+    with pytest.raises(UpdateBlocked):
+        update(state, tmp_path, "rai-orm-verify")
+    write_verification(tmp_path, lambda v: v["items"][0].update(status="pass", passed_at_round=7))
+    append_rounds(tmp_path, 1)
+    update(state, tmp_path, "rai-orm-verify")
+    assert plan(state, tmp_path)["can_resume"]
+    assert state["regressed_items"] == []
+
+
+@pytest.mark.parametrize("losses,corrupt", [(2, None), (1, "marker"), (1, "exclusion"), (1, "counts")])
+def test_invalid_regression_acceptance_refused(tmp_path, losses, corrupt):
+    state = initialized(tmp_path)
+    regression_round(tmp_path, losses, corrupt)
+    before = json.dumps(state, sort_keys=True)
+    with pytest.raises(UpdateBlocked) as error:
+        update(state, tmp_path, "rai-orm-verify", accept_regressions=True)
+    assert "REGRESSION_ACCEPTANCE_INVALID" in codes({"blockers": error.value.blockers})
+    assert json.dumps(state, sort_keys=True) == before
+
+
+def test_refactor_cannot_accept_net_positive_pass_loss(tmp_path):
+    state = initialized(tmp_path)
+    regression_round(tmp_path)
+    with pytest.raises(UpdateBlocked):
+        update(state, tmp_path, "rai-orm-refactor", rounds_done=1)
+    with pytest.raises(UpdateBlocked):
+        update(state, tmp_path, "rai-orm-refactor", rounds_done=1, accept_regressions=True)
+
+
+@pytest.mark.parametrize("supplied", [None, 0, 2, 3])
+def test_verify_round_charge_comes_from_history(tmp_path, supplied):
+    state = initialized(tmp_path)
+    append_rounds(tmp_path, 3)
+    if supplied not in {None, 3}:
+        before = json.dumps(state, sort_keys=True)
+        with pytest.raises(UpdateBlocked) as error:
+            update(state, tmp_path, "rai-orm-verify", rounds_done=supplied)
+        assert "ROUNDS_MISMATCH" in codes({"blockers": error.value.blockers})
+        assert json.dumps(state, sort_keys=True) == before
+    else:
+        update(state, tmp_path, "rai-orm-verify", rounds_done=supplied)
+        result = plan(state, tmp_path)
+        assert result["baseline_round"] == 8
+        assert result["rounds_used_by_skill_this_invocation"]["rai-orm-verify"] == 3
+        assert result["rounds_remaining_by_skill"]["rai-orm-verify"] == 2
+
+
+@pytest.mark.parametrize("declaration", ["Alpha.links_beta = model.Property()", "links_beta = model.Property()", "links_beta_extra = model.Property()", "Alpha.links_beta_extra = model.Property()"])
+def test_fact_metadata_accepts_real_declarations_without_changed_output(tmp_path, declaration):
+    state = initialized(tmp_path)
+    (tmp_path / "model.py").write_text(declaration, encoding="utf-8")
+    state["emitted_py_sha256"] = file_hash(tmp_path / "model.py")
+    model_path = tmp_path / "model.orm.yaml"
+    model = yaml.safe_load(model_path.read_text(encoding="utf-8"))
+    model["fact_types"] = [{"id": "fact_01", "reading": "Alpha links Beta", "pyrel": {"owner": "Alpha", "property": "links_beta", "type": "Property"}}]
+    model_path.write_text(yaml.safe_dump(model), encoding="utf-8")
+    result = plan(state, tmp_path)
+    if "extra" in declaration:
+        blocker = next(b for b in result["blockers"] if b["id"] == "EMITTER_INCOMPLETE")
+        assert blocker["missing_fact_ids"] == ["fact_01"]
+        with pytest.raises(UpdateBlocked):
+            update(state, tmp_path, "connectivity")
+    else:
+        assert "EMITTER_INCOMPLETE" not in codes(result)
+        update(state, tmp_path, "connectivity")
+
+
+@pytest.mark.parametrize("removed", [True, False])
+def test_removed_or_rejected_fact_requires_changed_python(tmp_path, removed):
+    project_files(tmp_path)
+    path = tmp_path / "model.orm.yaml"
+    model = yaml.safe_load(path.read_text(encoding="utf-8"))
+    model["fact_types"] = [{"id": "old_fact", "reading": "Alpha links Beta"}]
+    path.write_text(yaml.safe_dump(model), encoding="utf-8")
+    state = initialize(tmp_path, dict(ARTIFACT_DEFAULTS), emitter="manual:step-10")
+    if removed:
+        model["fact_types"] = []
+    else:
+        model["fact_types"][0]["status"] = "rejected"
+    path.write_text(yaml.safe_dump(model), encoding="utf-8")
+    assert "EMITTER_INCOMPLETE" in codes(plan(state, tmp_path))
+    with pytest.raises(UpdateBlocked):
+        update(state, tmp_path, "connectivity")
+    (tmp_path / "model.py").write_text("# Removed declaration\n", encoding="utf-8")
+    assert "EMITTER_INCOMPLETE" not in codes(plan(state, tmp_path))
+    update(state, tmp_path, "connectivity")
+
+
+@pytest.mark.parametrize("location", ["artifact", "input", "snapshot", "emitter", "binding", "saved_pyrel", "current_pyrel", "symlink"])
+def test_plan_never_reads_or_hashes_external_manifest_paths(tmp_path, monkeypatch, location):
+    import state as module
+    state = initialized(tmp_path)
+    outside = tmp_path.parent / "outside-secret.yaml"
+    outside.write_text("PRIVATE_CONTENT\n", encoding="utf-8")
+    if location == "artifact":
+        state["artifacts"]["digest"] = str(outside)
+    elif location == "input":
+        state["inputs"] = [{"kind": "workload", "path": str(outside)}]
+    elif location == "snapshot":
+        state["inputs"] = [{"kind": "workload", "path": "items.json", "snapshot_path": str(outside)}]
+    elif location in {"binding", "emitter"}:
+        state["bindings" if location == "binding" else "emitter_files"] = [{"path": str(outside)}]
+    elif location == "saved_pyrel":
+        state["verification_snapshot"]["items"][0]["pyrel"] = str(outside)
+    elif location == "current_pyrel":
+        write_verification(tmp_path, lambda v: v["items"][0].update(pyrel=str(outside)))
+    else:
+        (tmp_path / "linked.yaml").symlink_to(outside)
+        state["artifacts"]["digest"] = "linked.yaml"
+    original_read, original_hash = module.read, module.file_hash
+    def guarded(function):
+        def call(path):
+            path.resolve().relative_to(tmp_path.resolve())
+            return function(path)
+        return call
+    monkeypatch.setattr(module, "read", guarded(original_read))
+    monkeypatch.setattr(module, "file_hash", guarded(original_hash))
+    result = plan(state, tmp_path)
+    assert not result["can_resume"]
+    assert result["blockers"][0]["id"] == "PATH_OUTSIDE_PROJECT"
+    assert result["blockers"][0]["key"]
+    assert "PRIVATE_CONTENT" not in json.dumps(result)
+    with pytest.raises(UpdateBlocked):
+        update(state, tmp_path, "report")
+
+
+@pytest.mark.skipif(not Path("/usr/bin/sandbox-exec").is_file(), reason="sandbox-exec unavailable")
+@pytest.mark.parametrize("outside", [False, True, "home"])
+def test_real_sandbox_confines_emitter_reads(tmp_path, outside):
+    import sys
+    from state import check_emitter
+    project_files(tmp_path)
+    external = tmp_path.parent / "external-input.txt"
+    external.write_text("outside", encoding="utf-8")
+    path = str(Path(__file__).resolve()) if outside == "home" else str(external) if outside else "model.orm.yaml"
+    (tmp_path / "emit.py").write_text(
+        f"from pathlib import Path\nPath({path!r}).read_text(encoding='utf-8')\n"
+        "with open('/dev/null', 'w') as sink: sink.write('allowed')\n", encoding="utf-8")
+    result = check_emitter(tmp_path, dict(ARTIFACT_DEFAULTS), f"{sys.executable} emit.py", [{"path": "emit.py"}])
+    if outside:
+        assert result["id"] == "EMITTER_UNVERIFIED"
+        assert "PermissionError" in result["cause"], result
+    else:
+        assert result["status"] == "verified", result
+
+
+@pytest.mark.parametrize("argument", ["../secret", "--config=../secret"])
+def test_emitter_rejects_parent_traversal_arguments(tmp_path, monkeypatch, argument):
+    import state as module
+    project_files(tmp_path)
+    monkeypatch.setattr(module, "sandbox_prefix", lambda folder: [])
+    result = module.check_emitter(tmp_path, dict(ARTIFACT_DEFAULTS), "python emit.py " + argument, [{"path": "emit.py"}])
+    assert result["artifact"] == "command_argument"
+    assert result["id"] == "EMITTER_UNVERIFIED"
+
+
+def test_compact_manifest_and_cli_summary_for_643_items(tmp_path):
+    project_files(tmp_path)
+    model_path = tmp_path / "model.orm.yaml"
+    model = yaml.safe_load(model_path.read_text(encoding="utf-8"))
+    model["fact_types"] = [{"id": f"entity_{i}_has_a_long_property_name", "reading": f"Entity {i} has value"} for i in range(1803)]
+    model_path.write_text(yaml.safe_dump(model), encoding="utf-8")
+    rows = [{"id": f"q{i:04d}", "sql": f"SELECT {i}"} for i in range(643)]
+    (tmp_path / "items.json").write_text(json.dumps(rows), encoding="utf-8")
+    def edit(v):
+        v["items"] = [{"id": row["id"], "status": "fail", "split": "repair"} for row in rows]
+        v["split"] = {"repair": len(rows), "holdout": 0}
+        v["workload"] = {"n_items": len(rows)}
+    write_verification(tmp_path, edit)
+    digest = {"workload": {"n_items": len(rows)}, "item_contributions": {
+        row["id"]: {"large_evidence": ["PRIVATE_SENTINEL" * 50] * 5} for row in rows}}
+    (tmp_path / "workload.digest.yaml").write_text(yaml.safe_dump(digest), encoding="utf-8")
+    result = cli(tmp_path, "init", "--emitter", "manual:step-10", "--workload", "items.json")
+    assert result.returncode == 0, result.stderr
+    assert len(result.stdout.encode()) < 5000
+    manifest = (tmp_path / "orm-state.json").read_bytes()
+    assert len(manifest) < 300000
+    assert b'"item_contributions"' not in manifest
+    assert b'PRIVATE_SENTINEL' not in manifest
+    result = cli(tmp_path, "update", "--skill", "report")
+    assert result.returncode == 0, result.stderr
+    assert len(result.stdout.encode()) < 5000
+    assert len((tmp_path / "orm-state.json").read_bytes()) < 300000
+
+
+@pytest.mark.parametrize("damage", ["missing", "changed", "outside"])
+def test_emitted_fact_sidecar_is_required_and_confined(tmp_path, damage):
+    state = initialized(tmp_path)
+    record = state["emitted_facts"]
+    path = tmp_path / record["snapshot_path"]
+    if damage == "missing":
+        path.unlink()
+        expected = "EMITTED_FACTS_REQUIRED"
+    elif damage == "changed":
+        path.write_text('{"forged":"hash"}', encoding="utf-8")
+        expected = "EMITTED_FACTS_CHANGED"
+    else:
+        record["snapshot_path"] = "../outside.json"
+        expected = "PATH_OUTSIDE_PROJECT"
+    assert expected in codes(plan(state, tmp_path))
+    with pytest.raises(UpdateBlocked):
+        update(state, tmp_path, "report")
+
+
+def test_inline_legacy_fact_snapshot_still_supported(tmp_path):
+    from state import fact_snapshot
+    state = initialized(tmp_path)
+    state["emitted_facts"] = fact_snapshot(tmp_path, ARTIFACT_DEFAULTS)
+    assert plan(state, tmp_path)["can_resume"]
+    update(state, tmp_path, "report")
+    assert (tmp_path / state["emitted_facts"]["snapshot_path"]).is_file()
+
+
+def test_cli_accept_regressions_and_retire_artifact(tmp_path):
+    project_files(tmp_path)
+    assert cli(tmp_path, "init", "--emitter", "manual:step-10").returncode == 0
+    regression_round(tmp_path)
+    assert cli(tmp_path, "update", "--skill", "rai-orm-verify").returncode == 1
+    result = cli(tmp_path, "update", "--skill", "rai-orm-verify", "--accept-regressions")
+    assert result.returncode == 0, result.stdout
+    assert "REGRESSED_ITEM" in codes(json.loads(cli(tmp_path, "plan").stdout))
+    (tmp_path / "workload.digest.yaml").unlink()
+    result = cli(tmp_path, "update", "--skill", "report", "--retire-artifact", "digest", "--retire-reason", "Explicitly retired")
+    assert result.returncode == 0, result.stdout
+    assert "DIGEST_REQUIRED" not in codes(json.loads(cli(tmp_path, "plan").stdout))
