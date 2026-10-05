@@ -81,7 +81,7 @@ A sixth source, `workload`, exists only when a workload digest was given or `rai
 
 **Working principle:** propose, never assert. Every constraint that isn't lifted directly from DDL gets an explicit confidence path through Steps 6–9 before reaching the YAML as `confirmed`.
 
-**Resume:** When `rai-orm` supplies existing ORM YAML/state, preserve the model, digest, bindings, split, saved PyRel and round counters; follow its hot-start plan rather than repeating inventory/recovery. Inherit mode and budget of this invocation. Accept reviewed user-feedback/workload/refactor batches through Step 9f, validate, refresh verbalization, run Step 9g connectivity, and regenerate through Step 10 using the recorded project emitter command (never patch `model.py`); preserve/recheck bindings. User-feedback proposals keep `source: user-feedback` in their ledger while domain constraints use the existing `user-supplied` source; refactor object/fact changes retain bindings/evidence and `provenance.origin: refactor` with proposal/previous-origin/affected-id/support metadata. Workload-backed new constraints keep `source: workload`, never `source: refactor`. Return candidates to `rai-orm-verify` with the same split/oracle and remaining invocation budget; restore the consistent snapshot on failed acceptance. Missing YAML or emitter blocks incremental application; v0.1 does not import Python-only models.
+**Resume:** When `rai-orm` supplies existing ORM YAML/state, preserve the model, digest, bindings, split, saved PyRel and round counters; follow its hot-start plan rather than repeating inventory/recovery. Inherit mode and budget of this invocation. Accept reviewed user-feedback/workload/refactor batches through Step 9f, validate, refresh verbalization, run Step 9g connectivity, and regenerate through Step 10 using the sandbox-checked project emitter command or the `manual:step-10` sentinel and `rai-orm` hot-start checklist; point at the existing generated file, never create a second one, and preserve/recheck bindings. User-feedback proposals keep `source: user-feedback` in their ledger while domain constraints use the existing `user-supplied` source; refactor object/fact changes retain bindings/evidence and `provenance.origin: refactor` with proposal/previous-origin/affected-id/support metadata. Workload-backed new constraints keep `source: workload`, never `source: refactor`. Return candidates to `rai-orm-verify` with the same split/oracle and remaining invocation budget; restore the consistent snapshot on failed acceptance. Missing YAML or an unverified/missing emitter blocks incremental application; `manual:step-10` is accepted with its checklist; v0.1 does not import Python-only models.
 
 ### Step 0 — Interaction-mode opener
 
@@ -238,7 +238,7 @@ Run `connectivity.py` from `rai-orm` with `--model model.orm.yaml`, adding `--db
 
 ### Step 10 — Translate to PyRel
 
-Apply the four-tier rules from [`references/orm-to-pyrel.md`](references/orm-to-pyrel.md) to the finalized YAML. Output `model.py`:
+Apply the four-tier rules from [`references/orm-to-pyrel.md`](references/orm-to-pyrel.md) to the finalized YAML. Output `model.py` for a new build, or the recorded `model_py` file on resume:
 
 | Tier | Constructs | PyRel form |
 |---|---|---|
@@ -248,6 +248,10 @@ Apply the four-tier rules from [`references/orm-to-pyrel.md`](references/orm-to-
 | **Truly not translated** | Deontic constraints | `# DEONTIC NOTE:` comments |
 
 Output structure: header comment with strict-mode reminder, imports from `relationalai.semantics`, Concept declarations, Property/Relationship declarations, subtype rules, `model.require()` calls, deontic and review-flag comments.
+
+For skill-built models, record `emitter_command: "manual:step-10"` using `state.py init --emitter manual:step-10` (or `update --skill rai-orm-from-schema --emitter manual:step-10` for an existing manifest). `plan` accepts this sentinel and lists the regeneration checklist in `rai-orm`'s hot-start reference. Do not invent a real emitter step. On resume, output to the recorded `--model-py` path: point at the existing generated file, never create a second one.
+
+After applied fact changes, the generated file hash must change and every applied fact ID or reading must appear in Python, including an adjacent comment when needed. `EMITTER_INCOMPLETE` blocks acceptance if a project emitter skips the fact; add its declaration metadata `pyrel: {owner, property, kind, target}` using that emitter's schema, regenerate, and recheck bindings and saved passes. A real project emitter must first reproduce the unchanged Python without changing YAML/digests in the state's temporary sandbox check.
 
 ## Constraint Provenance and Validation Flow
 

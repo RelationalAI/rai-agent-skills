@@ -55,9 +55,11 @@ Pairs remain aligned in one artifact. Without reachable, bound data, SQL/pairs u
 
 ### Step 0 — Resume check
 
-Before intake, if `orm-state.json` or `model.orm.yaml` is in the working directory or named by the user, run `state.py plan` from this skill's `tools/`, using `--state` and `--model-yaml` for named paths. Follow its ordered steps and resolve its blockers before applying candidates. With YAML but no manifest, the read-only plan identifies bootstrap blockers; preserve the files, discover and record the project's emitter with `state.py init`, then plan again.
+Before intake, if `orm-state.json` or `model.orm.yaml` is in the working directory or named by the user, run `state.py plan` from this skill's `tools/`, using `--state` and `--model-yaml` for named paths. Follow its ordered steps and resolve its blockers before applying candidates. With YAML but no manifest, the read-only plan identifies bootstrap blockers; preserve the files, discover and sandbox-check the project's emitter with `state.py init --emitter`, then plan again. Skill-built models use `--emitter manual:step-10` and the hot-start regeneration checklist. Legacy verification without an exact revision match requires a passed-item baseline recheck before it counts as resumable.
 
-Load [hot-start.md](references/hot-start.md) for the manifest, feedback conversion, frozen passes, workload deltas, N+0 baseline and budget continuation. Reuse the saved split, digest, PyRel and counters. Inherit the mode and budget settings unless the user changes them. Convert feedback into proposals with `source: user-feedback`; Guided reviews the structured batch before application. An existing model skips new-model intake and construction.
+Register all existing artifact paths: `--model-yaml`, `--model-py`, `--digest`, `--repair-digest`, `--holdout-digest`, `--verification`, `--connectivity`, `--report`, `--report-markdown`, `--refactor-before`, `--refactor-metrics`. For `--model-py`, point at the existing generated file, never create a second one. Register source/workload files with repeated `--input`/`--workload`, bindings with `--binding`, and emitter dependencies with `--emitter-file`. The bootstrap blocker lists candidate Python files importing `relationalai.semantics`.
+
+Load [hot-start.md](references/hot-start.md) for the manifest, feedback conversion, frozen passes, workload deltas, N+0 baseline and budget continuation. Reuse the saved split, repair/holdout digests, PyRel and counters. Connectivity uses the repair digest; holdout only measures coverage. Reconcile verification IDs/counts with the workload and resolve regeneration, path, emitter and binding blockers before acceptance. Legacy deltas without old contributions/snapshots need the documented full rebuild fallback. Inherit the mode and budget settings unless the user changes them; record a fresh invocation once with `update --skill rai-orm --start-invocation` and report `rounds_used_this_invocation`. Convert feedback into proposals with `source: user-feedback`; Guided reviews the structured batch before application. In One-shot mode, only required-gap link proposals are applied automatically; exploratory proposals are listed for review and never auto-applied. An existing model skips new-model intake and construction.
 
 ### Step 1 — Intake
 
@@ -104,7 +106,7 @@ Use the report's separate `entity_relationships`, `scalar_properties` and `flags
 | Patching generated PyRel | Forgetting the project emitter | Edit YAML through the modeling skill and reuse the recorded command |
 | Resetting rounds or the split | Treating resume as a new build | Keep N+0 baseline, continue at N+1; fresh budget only for this invocation |
 | Rewriting old passes | Confusing regressions with new translations | Freeze saved PyRel; re-run it against candidates |
-| Re-digesting an entire changed workload | Ignoring item hashes | Review delta ids and replace only added/changed item evidence |
+| Subtracting changed evidence without its old version | Legacy hashes do not preserve source content | Use stored contributions/snapshots, or the explicit full rebuild fallback |
 | Modeling inside the router | Treating routing as modeling | Hand proposals to the owning skill |
 | Splitting pairs or leaking holdout evidence | Losing input boundaries | Preserve alignment; keep holdout out of repairs |
 | Asking mode again | Each skill has an opener | Inherit mode across the route |
