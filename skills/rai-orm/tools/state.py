@@ -1,17 +1,22 @@
 #!/usr/bin/env python3
 """Persist an ORM route and print a deterministic, content-free resume plan.
 
-Commands never execute the recorded emitter or mutate model/workload artifacts.
+Emitter checks execute only in an isolated temporary project copy.
 Paths are relative to the working directory (the manifest's parent).
 """
 
 import argparse
+import copy
 import csv
 import hashlib
 import io
 import json
 from pathlib import Path
 import re
+import shlex
+import shutil
+import subprocess
+import tempfile
 import sys
 
 import yaml
@@ -23,7 +28,8 @@ NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_.-]*$")
 ITEM_ID = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_.-]*$")
 ARTIFACT_DEFAULTS = {
     "model_yaml": "model.orm.yaml", "model_py": "model.py",
-    "digest": "workload.digest.yaml", "verification": "model.verification.json",
+    "digest": "workload.digest.yaml",
+    "repair_digest": "repair.digest.yaml", "holdout_digest": "holdout.digest.yaml", "verification": "model.verification.json",
     "connectivity": "connectivity.json", "report": "orm-report.json",
     "report_markdown": "orm-report.md", "refactor_before": "compaction.before.json",
     "refactor_metrics": "compaction.after.json",
@@ -45,7 +51,7 @@ def file_hash(path):
 def read(path):
     if not path.is_file():
         return None
-    value = yaml.safe_load(path.read_text())
+    value = yaml.safe_load(path.read_text(encoding="utf-8"))
     return value
 
 
@@ -68,8 +74,165 @@ def relative(path, base):
         return path.as_posix()
 
 
-def revision(base, artifacts):
-    return sha(canonical({key: file_hash(base / artifacts[key]) for key in ("model_yaml", "model_py")}))
+def revision(base, artifacts, bindings=()):
+    hashes = {key: file_hash(base / artifacts[key]) for key in ("model_yaml", "model_py")}
+    if bindings:
+        hashes["bindings"] = {relative(Path(b["path"]).resolve() if Path(b["path"]).is_absolute()
+                                      else Path(b["path"]), base): file_hash(base / b["path"])
+                              for b in bindings}
+    return sha(canonical(hashes))
+
+
+def verified_revision(value):
+    if value.get("model_revision"):
+        return value["model_revision"]
+    rounds = value.get("rounds", [])
+    return max(rounds, key=lambda row: int(row["round"])).get("model_revision") if rounds else None
+
+
+def preserve_workload(base, record):
+    """Keep private source bytes outside the content-free manifest, keyed by hash."""
+    source = base / record["path"]
+    target = base / ".orm-workloads" / (record["sha256"][7:] + source.suffix)
+    target.parent.mkdir(exist_ok=True)
+    if target.exists() and file_hash(target) != record["sha256"]:
+        raise ValueError("workload snapshot corrupted")
+    if not target.exists():
+        target.write_bytes(source.read_bytes())
+    record["snapshot_path"] = relative(target, base)
+
+
+def sandbox_prefix(folder):
+    # A temporary cwd alone is not a sandbox: emitters can use absolute paths.
+    if sys.platform != "darwin" or not Path("/usr/bin/sandbox-exec").is_file():
+        raise ValueError("sandbox unavailable")
+    profile = '(version 1)(allow default)(deny network*)(deny file-write*)' + \
+              '(allow file-write* (subpath ' + json.dumps(str(folder.resolve())) + '))'
+    return ["/usr/bin/sandbox-exec", "-p", profile]
+
+
+def emitter_files(base, command, supplied=()):
+    paths = set(supplied)
+    if command and command != "manual:step-10":
+        for token in shlex.split(command):
+            if token.endswith(".py"):
+                paths.add(relative(token, base))
+                break
+    return [{"path": path, "sha256": file_hash(base / path)} for path in sorted(paths)]
+
+
+def check_emitter(base, artifacts, command, files):
+    if command == "manual:step-10":
+        return {"status": "manual"}
+    if not command:
+        return {"status": "blocked", "id": "EMITTER_REQUIRED"}
+    if not files or any(not (base / f["path"]).is_file() for f in files):
+        return {"status": "blocked", "id": "EMITTER_UNVERIFIED", "reason": "emitter file missing or unregistered"}
+    try:
+        with tempfile.TemporaryDirectory(prefix="orm-emitter-") as directory:
+            root = Path(directory)
+            prefix = sandbox_prefix(root)
+            project = root / "project"
+            shutil.copytree(base, project, symlinks=True,
+                            ignore=shutil.ignore_patterns(".git", ".venv", "__pycache__", ".orm-workloads"))
+            if any(p.is_symlink() for p in project.rglob("*")):
+                raise ValueError("symlink in project")
+            args = shlex.split(command)
+            for index, arg in enumerate(args):
+                if Path(arg).is_absolute():
+                    try:
+                        args[index] = str(project / Path(arg).resolve().relative_to(base.resolve()))
+                    except ValueError:
+                        if index != 0:
+                            raise ValueError("external command argument")
+            keys = [key for key in ("model_yaml", "model_py", "digest", "repair_digest", "holdout_digest")
+                    if key in artifacts]
+            paths = {key: project / (base / artifacts[key]).resolve().relative_to(base.resolve()) for key in keys}
+            before = {key: file_hash(path) for key, path in paths.items()}
+            result = subprocess.run(prefix + args, cwd=project, stdout=subprocess.DEVNULL,
+                                    stderr=subprocess.DEVNULL, timeout=60,
+                                    env={"PATH": str(Path(sys.executable).parent) + ":/usr/bin:/bin",
+                                         "HOME": str(root), "TMPDIR": str(root), "PYTHONDONTWRITEBYTECODE": "1"})
+            if result.returncode:
+                return {"status": "blocked", "id": "EMITTER_UNVERIFIED", "reason": "sandbox command failed",
+                        "returncode": result.returncode}
+            changed = sorted(key for key, path in paths.items() if file_hash(path) != before[key])
+            if changed or before["model_py"] is None:
+                return {"status": "blocked", "id": "EMITTER_NOT_IDEMPOTENT", "artifacts": changed}
+            return {"status": "verified"}
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return {"status": "blocked", "id": "EMITTER_UNVERIFIED",
+                "reason": "sandbox unavailable, unsafe project paths, or command timed out"}
+
+
+def fact_snapshot(base, artifacts):
+    return {str(f["id"]): sha(canonical(f)) for f in mapping(base / artifacts["model_yaml"]).get("fact_types", [])
+            if f.get("status") != "rejected"}
+
+
+def regeneration_blockers(state, base):
+    previous = state.get("emitted_facts", {})
+    current = fact_snapshot(base, state["artifacts"])
+    applied_ids = {key for key, hashed in current.items() if previous.get(key) != hashed}
+    applied = [f for f in mapping(base / state["artifacts"]["model_yaml"]).get("fact_types", [])
+               if str(f["id"]) in applied_ids]
+    if not applied:
+        return []
+    output = base / state["artifacts"]["model_py"]
+    text = output.read_text(encoding="utf-8") if output.is_file() else ""
+    missing = [str(f["id"]) for f in applied
+               if str(f["id"]) not in text and not (f.get("reading") and f["reading"] in text)]
+    if missing or file_hash(output) == state.get("emitted_py_sha256"):
+        return [{"id": "EMITTER_INCOMPLETE", "fact_ids": sorted(str(f["id"]) for f in applied),
+                 "missing_fact_ids": missing,
+                 "action": "Add emitter declaration metadata pyrel: {owner, property, kind, target}; regenerate."}]
+    return []
+
+
+def inventory(base, records):
+    hashes, blockers = {}, []
+    for record in records:
+        if record["kind"] != "workload":
+            continue
+        try:
+            current = item_hashes(base / record["path"])
+        except (OSError, ValueError, TypeError, UnicodeError, yaml.YAMLError):
+            blockers.append({"id": "WORKLOAD_INVALID", "path": record["path"]})
+            continue
+        overlap = set(hashes) & set(current)
+        if overlap:
+            blockers.append({"id": "DUPLICATE_WORKLOAD_ID", "item_ids": sorted(overlap)})
+        hashes.update(current)
+    return hashes, blockers
+
+
+def reconciliation(base, artifacts, records, verification, snapshot):
+    hashes, blockers = inventory(base, records)
+    items = verification.get("items", [])
+    ids = [str(item["id"]) for item in items]
+    if len(ids) != len(set(ids)):
+        blockers.append({"id": "DUPLICATE_VERIFICATION_ID"})
+    tracked = any(r["kind"] == "workload" for r in records)
+    expected = set(hashes) if tracked else {str(item["id"]) for item in snapshot.get("items", [])}
+    missing, extra = expected - set(ids), set(ids) - expected
+    if missing:
+        blockers.append({"id": "VERIFICATION_ITEMS_MISSING", "item_ids": sorted(missing)})
+    if tracked and extra:
+        blockers.append({"id": "VERIFICATION_ITEMS_REMOVED", "item_ids": sorted(extra)})
+    counts = {"verification": verification.get("workload", {}).get("n_items"),
+              "digest": mapping(base / artifacts["digest"]).get("workload", {}).get("n_items")}
+    if tracked:
+        counts["inventory"] = len(hashes)
+    for source, count in sorted(counts.items()):
+        if count is not None and count != len(ids):
+            blockers.append({"id": "WORKLOAD_COUNT_MISMATCH", "source": source,
+                             "expected": count, "actual": len(ids)})
+    for split, count in (verification.get("split") or {}).items():
+        if split in {"repair", "holdout"} and isinstance(count, int):
+            actual = sum(item.get("split") == split for item in items)
+            if count != actual:
+                blockers.append({"id": "SPLIT_COUNT_MISMATCH", "split": split, "expected": count, "actual": actual})
+    return hashes, missing, blockers
 
 
 def sql_statements(text):
@@ -149,7 +312,8 @@ def stop_reasons(base, artifacts):
 
 
 def initialize(base, artifacts, inputs=(), workloads=(), emitter=None, mode=None,
-               rounds_per_invocation=5, patience=2, until_pass=False, skills=()):
+               rounds_per_invocation=5, patience=2, until_pass=False, skills=(), bindings=(),
+               emitter_paths=(), persist_inputs=True):
     if rounds_per_invocation < 1 or patience < 1:
         raise ValueError("positive budgets required")
     records = []
@@ -157,16 +321,22 @@ def initialize(base, artifacts, inputs=(), workloads=(), emitter=None, mode=None
     for kind, paths in (("input", inputs), ("workload", workloads)):
         for supplied in paths:
             path = relative(supplied, base)
-            if path in seen or not (base / path).is_file():
+            if path in seen or (kind != "workload" and not (base / path).is_file()):
                 raise ValueError("missing or duplicate input")
             seen.add(path)
             record = {"path": path, "kind": kind, "sha256": file_hash(base / path)}
             if kind == "workload":
-                record["item_hashes"] = item_hashes(base / path)
+                try:
+                    record["item_hashes"] = item_hashes(base / path)
+                    contributions = mapping(base / artifacts["digest"]).get("item_contributions", {})
+                    if isinstance(contributions, dict):
+                        record["item_contributions"] = {i: contributions[i] for i in sorted(record["item_hashes"])
+                                                        if i in contributions}
+                    if persist_inputs:
+                        preserve_workload(base, record)
+                except (OSError, ValueError, TypeError, UnicodeError, yaml.YAMLError):
+                    record["item_hashes"] = {}
             records.append(record)
-    all_ids = [identifier for record in records for identifier in record.get("item_hashes", {})]
-    if len(all_ids) != len(set(all_ids)):
-        raise ValueError("item ids must be unique across workloads")
     verification = mapping(base / artifacts["verification"])
     counter = last_round(verification)
     model = mapping(base / artifacts["model_yaml"])
@@ -188,7 +358,10 @@ def initialize(base, artifacts, inputs=(), workloads=(), emitter=None, mode=None
             skills.append("rai-orm-refactor")
         if (base / artifacts["report"]).is_file():
             skills.append("report")
-    rev = revision(base, artifacts)
+    binding_records = [{"path": relative(p, base), "sha256": file_hash(base / p)} for p in sorted(bindings)]
+    rev = revision(base, artifacts, binding_records)
+    files = emitter_files(base, emitter, emitter_paths)
+    emitter_check = check_emitter(base, artifacts, emitter, files)
     reasons = stop_reasons(base, artifacts)
     stop = verification.get("summary", {}).get("stopped_because")
     return {"version": VERSION, "inputs": sorted(records, key=lambda record: record["path"]),
@@ -199,28 +372,46 @@ def initialize(base, artifacts, inputs=(), workloads=(), emitter=None, mode=None
                             "model_revision": rev} for skill in skills],
             "round_counters": {skill: counter if skill == "rai-orm-verify" else 0 for skill in skills},
             "artifact_hashes": {key: file_hash(base / path) for key, path in sorted(artifacts.items())},
-            "artifact_stop_reasons": reasons, "verification_revision": rev,
+            "artifact_stop_reasons": reasons, "verification_revision": verified_revision(verification),
+            "bindings": binding_records, "emitter_files": files, "emitter_check": emitter_check,
+            "emitted_facts": fact_snapshot(base, artifacts), "emitted_py_sha256": file_hash(base / artifacts["model_py"]),
             "verification_snapshot": verification_snapshot(base, artifacts["verification"]),
             "last_stop_reason": stop, "feedback_processed": []}
 
 
+class FeedbackInvalid(ValueError):
+    def __init__(self, item_index, field):
+        self.item_index, self.field = item_index, field
+
+
+class UpdateBlocked(ValueError):
+    def __init__(self, blockers):
+        self.blockers = blockers
+
+
 def feedback_items(path):
-    value = mapping(path)
+    try:
+        value = mapping(path)
+    except (OSError, ValueError, UnicodeError, yaml.YAMLError):
+        raise FeedbackInvalid(None, "document") from None
     if value.get("version") != 1 or not isinstance(value.get("items"), list):
-        raise ValueError("invalid feedback version or items")
+        raise FeedbackInvalid(None, "version" if value.get("version") != 1 else "items")
     result = []
-    for item in value["items"]:
-        if not isinstance(item, dict) or item.get("kind") not in KINDS:
-            raise ValueError("invalid feedback kind")
+    for item_index, item in enumerate(value["items"]):
+        if not isinstance(item, dict) or not isinstance(item.get("kind"), str) or item["kind"] not in KINDS:
+            raise FeedbackInvalid(item_index, "kind")
         kind = item["kind"]
         required = {"missing_link": ("from", "to"), "wrong_grain": ("concept",), "merge": ("concepts",),
                     "split": ("concept",), "rename": ("from", "to"), "failing_item": ("ids",),
                     "compact": ("concept",), "note": ()}[kind]
         if any(key not in item for key in required):
-            raise ValueError("missing feedback target")
+            raise FeedbackInvalid(item_index, next(key for key in required if key not in item))
         # Unknown fields, including note text, contribute only to its fingerprint.
         # Thus arbitrary prose cannot leak through tool output.
-        fingerprint = sha(canonical(item))
+        try:
+            fingerprint = sha(canonical(item))
+        except (ValueError, TypeError):
+            raise FeedbackInvalid(item_index, "item") from None
         projected = {"id": item.get("id", "feedback_" + fingerprint[7:19]), "kind": kind,
                      "sha256": fingerprint, "source": "user-feedback", "status": "proposed"}
         for key in ("from", "to", "concept", "concepts", "ids"):
@@ -228,35 +419,52 @@ def feedback_items(path):
                 values = item[key] if isinstance(item[key], list) else [item[key]]
                 pattern = ITEM_ID if key == "ids" else NAME
                 if not values or any(not isinstance(v, str) or not pattern.fullmatch(v) for v in values):
-                    raise ValueError("invalid feedback target")
+                    raise FeedbackInvalid(item_index, key)
                 if key in {"concepts", "ids"} and not isinstance(item[key], list):
-                    raise ValueError("list required")
+                    raise FeedbackInvalid(item_index, key)
                 projected[key] = sorted(values) if isinstance(item[key], list) else item[key]
         if not isinstance(projected["id"], str) or not ITEM_ID.fullmatch(projected["id"]):
-            raise ValueError("invalid feedback id")
+            raise FeedbackInvalid(item_index, "id")
         if kind == "merge" and len(projected["concepts"]) < 2:
-            raise ValueError("merge requires two concepts")
+            raise FeedbackInvalid(item_index, "concepts")
         result.append(projected)
     if len({item["id"] for item in result}) != len(result):
-        raise ValueError("duplicate feedback id")
+        raise FeedbackInvalid(next(i for i, item in enumerate(result) if item["id"] in {r["id"] for r in result[:i]}), "id")
     return sorted(result, key=lambda item: item["id"])
 
 
 def plan(state, base, feedback=()):
     if state.get("version") != VERSION:
         raise ValueError("unsupported state version")
-    artifacts = state["artifacts"]
+    artifacts = {**ARTIFACT_DEFAULTS, **state["artifacts"]}
     blockers = []
     def block(code, **details):
         blockers.append({"id": code, **details})
     if not (base / artifacts["model_yaml"]).is_file():
         block("YAML_REQUIRED", path=artifacts["model_yaml"])
     if not (base / artifacts["model_py"]).is_file():
-        block("PYREL_REQUIRED", path=artifacts["model_py"])
+        block("PYREL_REQUIRED", path=artifacts["model_py"], candidates=sorted(
+            relative(p, base) for p in base.glob("*.py")
+            if "relationalai.semantics" in p.read_text(encoding="utf-8")))
     if not state.get("emitter_command"):
         block("EMITTER_REQUIRED")
-    if state["artifact_hashes"].get("digest") and not (base / artifacts["digest"]).is_file():
-        block("DIGEST_REQUIRED", path=artifacts["digest"])
+    elif state["emitter_command"] != "manual:step-10":
+        check = state.get("emitter_check", {"id": "EMITTER_UNVERIFIED", "reason": "no sandbox check recorded"})
+        if check.get("status") != "verified":
+            blockers.append({key: value for key, value in check.items() if key != "status"})
+        for record in state.get("emitter_files", []):
+            hashed = file_hash(base / record["path"])
+            if hashed is None:
+                block("EMITTER_MISSING", path=record["path"])
+            elif hashed != record["sha256"]:
+                block("EMITTER_CHANGED", path=record["path"])
+    for record in state.get("bindings", []):
+        if not (base / record["path"]).is_file():
+            block("BINDING_MISSING", path=record["path"])
+    blockers.extend(regeneration_blockers(state, base))
+    for key in ("digest", "repair_digest", "holdout_digest"):
+        if state["artifact_hashes"].get(key) and not (base / artifacts[key]).is_file():
+            block("DIGEST_REQUIRED", path=artifacts[key])
     verification = mapping(base / artifacts["verification"])
     snapshot = state["verification_snapshot"]
     if snapshot.get("items") and not verification:
@@ -266,8 +474,9 @@ def plan(state, base, feedback=()):
     if snapshot.get("oracle") and snapshot["oracle"] != verification.get("oracle"):
         block("ORACLE_CHANGED")
     current_items = {item["id"]: item for item in verification.get("items", [])}
-    if len(current_items) != len(verification.get("items", [])):
-        block("DUPLICATE_VERIFICATION_ID")
+    workload_hashes, missing_ids, inventory_blockers = reconciliation(
+        base, artifacts, state["inputs"], verification, snapshot)
+    blockers.extend(inventory_blockers)
     if verification and (not verification.get("split") or
                          any(item.get("split") not in {"repair", "holdout"} for item in verification.get("items", []))):
         block("SPLIT_ASSIGNMENTS_REQUIRED")
@@ -283,7 +492,18 @@ def plan(state, base, feedback=()):
         if record["kind"] != "workload":
             block("INPUT_CHANGED", path=record["path"])
             continue
-        old, current = record["item_hashes"], item_hashes(path)
+        try:
+            old, current = record["item_hashes"], item_hashes(path)
+        except (OSError, ValueError, TypeError, UnicodeError, yaml.YAMLError):
+            if not any(b["id"] == "WORKLOAD_INVALID" and b["path"] == record["path"] for b in blockers):
+                block("WORKLOAD_INVALID", path=record["path"])
+            continue
+        affected = (set(old) - set(current)) | {i for i in set(old) & set(current) if old[i] != current[i]}
+        preserved = record.get("snapshot_path")
+        if affected and (not preserved or file_hash(base / preserved) != record["sha256"]):
+            contributions = record.get("item_contributions", {})
+            if not isinstance(contributions, dict) or not affected <= set(contributions):
+                block("WORKLOAD_FULL_REBUILD_REQUIRED", path=record["path"], item_ids=sorted(affected))
         new_ids.update(set(current) - set(old))
         removed_ids.update(set(old) - set(current))
         changed_ids.update(identifier for identifier in set(old) & set(current) if old[identifier] != current[identifier])
@@ -300,13 +520,17 @@ def plan(state, base, feedback=()):
             block("BASELINE_PASS_LOST", item_id=item["id"])
         if current.get("split") != item.get("split"):
             block("ITEM_SPLIT_CHANGED", item_id=item["id"])
-        saved_path = item.get("pyrel")
-        saved = (base / artifacts["verification"]).parent / saved_path if saved_path else None
-        if saved is None or not saved.is_file():
+        saved_path, current_path = item.get("pyrel"), current.get("pyrel")
+        parent = (base / artifacts["verification"]).parent
+        saved = (parent / saved_path).resolve() if saved_path else None
+        referenced = (parent / current_path).resolve() if current_path else None
+        if saved != referenced:
+            block("PASSED_PYREL_PATH_CHANGED", item_id=item["id"])
+        if referenced is None or not referenced.is_file():
             block("PASSED_PYREL_MISSING", item_id=item["id"])
         else:
-            current_hash = file_hash(saved)
-            if item.get("pyrel_sha256") != current_hash or (
+            current_hash = file_hash(referenced)
+            if (item.get("pyrel_sha256") is not None and item["pyrel_sha256"] != current_hash) or (
                     current.get("pyrel_sha256") is not None and current["pyrel_sha256"] != current_hash):
                 block("PASSED_PYREL_CHANGED", item_id=item["id"])
     # Check every surviving assignment, including sealed holdout failures.
@@ -331,17 +555,36 @@ def plan(state, base, feedback=()):
         if path.suffix.lower() == ".md":
             block("FEEDBACK_NEEDS_STRUCTURE", path=path_name)
             continue
-        for item in feedback_items(path):
+        try:
+            items = feedback_items(path)
+        except FeedbackInvalid as error:
+            block("FEEDBACK_INVALID", path=path_name, item_index=error.item_index, field=error.field)
+            continue
+        concepts = {obj["name"] for obj in mapping(base / artifacts["model_yaml"]).get("object_types", [])}
+        known_ids = set(workload_hashes) | set(current_items)
+        for item in items:
+            targets = []
+            for key in ("from", "to", "concept", "concepts", "ids"):
+                if key not in item or (item["kind"] == "rename" and key == "to") or (item["kind"] == "split" and key == "concepts"):
+                    continue
+                values = item[key] if isinstance(item[key], list) else [item[key]]
+                targets.extend(v for v in values if v not in (known_ids if key == "ids" else concepts))
+            if targets:
+                block("FEEDBACK_TARGET_UNKNOWN", path=path_name, item_id=item["id"], targets=sorted(targets))
+                continue
             if item["sha256"] not in processed_items:
                 new_feedback[item["sha256"]] = item
-    current_revision = revision(base, artifacts)
+    current_revision = revision(base, artifacts, state.get("bindings", []))
     counter = max(state["round_counters"].get("rai-orm-verify", 0), last_round(verification))
     residual = any(item.get("status") not in {"pass", "inexpressible", "oracle-error"}
                    for item in verification.get("items", []))
-    changed_model = current_revision != state.get("verification_revision", state["model_revision"])
+    changed_model = (current_revision != state.get("verification_revision") or
+                     bool(verification and verified_revision(verification) != current_revision))
+    if changed_model and verification:
+        block("BASELINE_RECHECK_REQUIRED", item_ids=sorted(frozen))
     stale = sorted(key for key, path in artifacts.items()
                    if file_hash(base / path) != state["artifact_hashes"].get(key))
-    dirty = changed_model or bool(new_feedback) or bool(changed_inputs) or "digest" in stale or not verification
+    dirty = changed_model or bool(new_feedback) or bool(changed_inputs) or bool({"digest", "repair_digest"} & set(stale)) or bool(inventory_blockers) or not verification
     digest = mapping(base / artifacts["digest"])
     has_workload = bool(verification or any(record["kind"] == "workload" for record in state["inputs"])
                         or digest.get("workload", {}).get("n_items"))
@@ -358,10 +601,14 @@ def plan(state, base, feedback=()):
         steps.append("rai-orm-refactor")
     elif not (base / artifacts["refactor_metrics"]).is_file():
         steps.append("rai-orm-refactor")
+    if state.get("emitter_command") == "manual:step-10":
+        steps.insert(0, "manual:step-10")
     if steps or stale or any(not (base / artifacts[key]).is_file() for key in ("report", "report_markdown")):
         steps.append("report")
     return {"version": VERSION, "steps": steps, "baseline_round": counter, "started_round": counter + 1,
             "baseline_model_revision": current_revision, "baseline_recheck": changed_model,
+            "missing_item_ids": sorted(missing_ids),
+            "rounds_used_this_invocation": max(0, counter - state.get("invocation_started_round", counter + 1) + 1),
             "budget": state["budget"], "mode": state["mode"], "frozen_passed_items": sorted(frozen),
             "saved_pyrel": [{"id": item["id"], "path": item.get("pyrel"), "sha256": item.get("pyrel_sha256")}
                             for item in snapshot["items"] if item["id"] in frozen],
@@ -375,13 +622,53 @@ def plan(state, base, feedback=()):
 
 
 def update(state, base, skill, rounds_done=0, stop_reason=None, emitter=None, feedback=(),
-           accept_workload_delta=False, rounds_per_invocation=None, patience=None, until_pass=None):
+           accept_workload_delta=False, rounds_per_invocation=None, patience=None, until_pass=None,
+           accept_pyrel_paths=False, full_rebuild=False, start_invocation=False):
+    # Validate before changing the caller's manifest; failed acceptance is atomic.
+    original_state = state
+    state = copy.deepcopy(state)
+    artifacts = {**ARTIFACT_DEFAULTS, **state["artifacts"]}
+    state["artifacts"] = artifacts
+    verification = mapping(base / artifacts["verification"])
+    if emitter is not None:
+        state["emitter_command"] = emitter
+        state["emitter_files"] = emitter_files(base, emitter)
+        state["emitter_check"] = check_emitter(base, artifacts, emitter, state["emitter_files"])
+    check = plan(state, base, feedback)
+    required = {"WORKLOAD_INVALID", "DUPLICATE_WORKLOAD_ID", "DUPLICATE_VERIFICATION_ID",
+                "VERIFICATION_ITEMS_MISSING", "VERIFICATION_ITEMS_REMOVED", "WORKLOAD_COUNT_MISMATCH",
+                "SPLIT_COUNT_MISMATCH", "EMITTER_INCOMPLETE", "EMITTER_MISSING", "EMITTER_CHANGED"}
+    if feedback:
+        required.update({"FEEDBACK_INVALID", "FEEDBACK_TARGET_UNKNOWN", "FEEDBACK_MISSING"})
+    if accept_workload_delta and not full_rebuild:
+        required.add("WORKLOAD_FULL_REBUILD_REQUIRED")
+    if skill == "rai-orm-verify" or accept_workload_delta:
+        required.update({"PASSED_PYREL_PATH_CHANGED", "PASSED_PYREL_CHANGED", "PASSED_PYREL_MISSING",
+                         "BASELINE_PASS_LOST", "ITEM_SPLIT_CHANGED", "SPLIT_CHANGED", "ORACLE_CHANGED",
+                         "SPLIT_ASSIGNMENTS_REQUIRED"})
+        if accept_pyrel_paths:
+            required -= {"PASSED_PYREL_PATH_CHANGED", "PASSED_PYREL_CHANGED"}
+        if skill == "rai-orm-verify" and verified_revision(verification) != revision(base, artifacts, state.get("bindings", [])):
+            required.add("BASELINE_RECHECK_REQUIRED")
+            check["blockers"].append({"id": "BASELINE_RECHECK_REQUIRED", "reason": "record current model_revision after rechecking"})
+    if accept_pyrel_paths:
+        for item in verification.get("items", []):
+            if item.get("status") == "pass":
+                referenced = (base / artifacts["verification"]).parent / item.get("pyrel", "")
+                if not referenced.is_file() or item.get("pyrel_sha256") != file_hash(referenced):
+                    check["blockers"].append({"id": "PYREL_ACCEPTANCE_UNVERIFIED", "item_id": item["id"]})
+        required.add("PYREL_ACCEPTANCE_UNVERIFIED")
+        if skill != "rai-orm-verify":
+            raise UpdateBlocked([{"id": "PYREL_ACCEPTANCE_UNVERIFIED"}])
+    blocked = [b for b in check["blockers"] if b["id"] in required]
+    if blocked:
+        raise UpdateBlocked(blocked)
+    if start_invocation or "invocation_started_round" not in state:
+        state["invocation_started_round"] = state["round_counters"].get("rai-orm-verify", 0) + 1
     if rounds_done < 0:
         raise ValueError("negative rounds")
     if not NAME.fullmatch(skill) or (stop_reason is not None and not NAME.fullmatch(stop_reason)):
         raise ValueError("step metadata must be identifiers")
-    if emitter is not None:
-        state["emitter_command"] = emitter
     for key, value in (("rounds_per_invocation", rounds_per_invocation), ("patience", patience), ("until_pass", until_pass)):
         if value is not None:
             if key != "until_pass" and value < 1:
@@ -394,7 +681,10 @@ def update(state, base, skill, rounds_done=0, stop_reason=None, emitter=None, fe
             if record["kind"] == "workload":
                 record["sha256"] = file_hash(base / record["path"])
                 record["item_hashes"] = item_hashes(base / record["path"])
-    rev = revision(base, state["artifacts"])
+                preserve_workload(base, record)
+                # Old contributions must never be reused for a newly accepted source version.
+                record.pop("item_contributions", None)
+    rev = revision(base, state["artifacts"], state.get("bindings", []))
     state["skills_run"].append({"skill": skill, "rounds_done": rounds_done, "stop_reason": stop_reason, "model_revision": rev})
     counters = state["round_counters"]
     counters[skill] = counters.get(skill, 0) + rounds_done
@@ -405,6 +695,12 @@ def update(state, base, skill, rounds_done=0, stop_reason=None, emitter=None, fe
     if accept_workload_delta:
         state["verification_snapshot"] = verification_snapshot(base, state["artifacts"]["verification"])
     record_missing_pyrel_hashes(base, state["artifacts"]["verification"], state["verification_snapshot"]["items"])
+    state["emitted_facts"] = fact_snapshot(base, artifacts)
+    state["emitted_py_sha256"] = file_hash(base / artifacts["model_py"])
+    if skill == "rai-orm-verify":
+        for binding in state.get("bindings", []):
+            binding["sha256"] = file_hash(base / binding["path"])
+    state["rounds_used_this_invocation"] = max(0, counters.get("rai-orm-verify", 0) - state["invocation_started_round"] + 1)
     state["model_revision"] = rev
     state["last_stop_reason"] = stop_reason
     state["artifact_hashes"] = {key: file_hash(base / path) for key, path in sorted(state["artifacts"].items())}
@@ -420,7 +716,9 @@ def update(state, base, skill, rounds_done=0, stop_reason=None, emitter=None, fe
             entry["item_hashes"] = sorted(item["sha256"] for item in feedback_items(path))
         processed[entry["sha256"]] = entry
     state["feedback_processed"] = sorted(processed.values(), key=lambda entry: (entry["path"], entry["sha256"]))
-    return state
+    original_state.clear()
+    original_state.update(state)
+    return original_state
 
 
 def main(argv=None):
@@ -434,6 +732,8 @@ def main(argv=None):
                 p.add_argument("--" + key.replace("_", "-"), default=default)
             p.add_argument("--input", action="append", default=[])
             p.add_argument("--workload", action="append", default=[])
+            p.add_argument("--binding", action="append", default=[])
+            p.add_argument("--emitter-file", action="append", default=[])
             p.add_argument("--mode", choices=("guided", "one-shot"))
         if command in {"init", "update"}:
             p.add_argument("--emitter")
@@ -448,19 +748,25 @@ def main(argv=None):
             p.add_argument("--rounds-done", type=int, default=0)
             p.add_argument("--stop-reason")
             p.add_argument("--accept-workload-delta", action="store_true")
+            p.add_argument("--accept-pyrel-paths", action="store_true")
+            p.add_argument("--full-rebuild", action="store_true")
+            p.add_argument("--start-invocation", action="store_true")
     args = parser.parse_args(argv)
     target = Path(args.state).resolve()
     base = target.parent
     try:
         if args.command == "init" or (args.command == "plan" and not target.exists()):
+            if args.command == "init" and target.exists():
+                raise ValueError("state already exists; use update")
             artifacts = {key: relative(getattr(args, key), base) for key in ARTIFACT_DEFAULTS}
             result = initialize(base, artifacts, args.input, args.workload, getattr(args, "emitter", None), args.mode,
                                 getattr(args, "rounds_per_invocation", 5), getattr(args, "patience", 2),
-                                getattr(args, "until_pass", False), getattr(args, "skill", ()))
+                                getattr(args, "until_pass", False), getattr(args, "skill", ()),
+                                args.binding, args.emitter_file, persist_inputs=args.command == "init")
             if args.command == "init":
                 if target.exists():
                     raise ValueError("state already exists; use update")
-                target.write_text(json.dumps(result, sort_keys=True, indent=2) + "\n")
+                target.write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")
             else:
                 result = plan(result, base, args.feedback)
         else:
@@ -471,10 +777,14 @@ def main(argv=None):
                 result = plan(result, base, args.feedback)
             else:
                 result = update(result, base, args.skill, args.rounds_done, args.stop_reason, args.emitter,
-                                args.feedback, args.accept_workload_delta, args.rounds_per_invocation, args.patience, args.until_pass)
-                target.write_text(json.dumps(result, sort_keys=True, indent=2) + "\n")
+                                args.feedback, args.accept_workload_delta, args.rounds_per_invocation, args.patience, args.until_pass,
+                                args.accept_pyrel_paths, args.full_rebuild, args.start_invocation)
+                target.write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")
         print(json.dumps(result, sort_keys=True, indent=2))
         return 0
+    except UpdateBlocked as error:
+        print(json.dumps({"blockers": error.blockers, "can_resume": False}, sort_keys=True))
+        return 1
     except (OSError, ValueError, KeyError, TypeError, AttributeError, UnicodeError, yaml.YAMLError):
         # Never print exceptions: parsers include snippets of private input.
         print(json.dumps({"error": "STATE_INPUT_INVALID"}, sort_keys=True), file=sys.stderr)

@@ -8,6 +8,8 @@ import sys
 import pytest
 import yaml
 
+from state import ARTIFACT_DEFAULTS, revision
+
 
 TOOL = Path(__file__).with_name("state.py")
 
@@ -36,7 +38,7 @@ def project_files(project):
         else:
             item["class"] = "missing-element"
         items.append(item)
-    value = {"version": 1, "oracle": "structural", "split": {"repair": 4, "holdout": 1},
+    value = {"model_revision": revision(project, ARTIFACT_DEFAULTS), "version": 1, "oracle": "structural", "split": {"repair": 4, "holdout": 1},
              "rounds": [{"round": i, "repair_pass": 2, "holdout_pass": 1} for i in range(6)],
              "items": items, "summary": {"stopped_because": "budget"},
              "invocations": [{"started_round": 1, "rounds_run": 5, "stopped_because": "budget"}]}
@@ -50,7 +52,7 @@ def test_resume_flow(tmp_path):
     project_files(tmp_path)
     originals = {name: (tmp_path / name).read_bytes() for name in
                  ("model.orm.yaml", "model.py", "workload.digest.yaml", "model.verification.json")}
-    initialized = cli(tmp_path, "init", "--emitter", "python emit.py --model model.orm.yaml --out model.py")
+    initialized = cli(tmp_path, "init", "--emitter", "manual:step-10")
     assert initialized.returncode == 0, initialized.stderr
     first = cli(tmp_path, "plan")
     assert first.returncode == 0, first.stderr
@@ -59,7 +61,7 @@ def test_resume_flow(tmp_path):
     assert result["frozen_passed_items"] == ["q001", "q002", "q003"]
     assert [item["id"] for item in result["new_feedback_items"]] == ["f01"]
     assert result["new_feedback_items"][0]["source"] == "user-feedback"
-    assert result["steps"] == ["connectivity", "rai-orm-verify", "rai-orm-refactor", "report"]
+    assert result["steps"] == ["manual:step-10", "connectivity", "rai-orm-verify", "rai-orm-refactor", "report"]
     assert result["budget"] == {"rounds_per_invocation": 5, "patience": 2, "until_pass": False}
     assert result["can_resume"]
     assert first.stdout == cli(tmp_path, "plan").stdout
@@ -78,9 +80,11 @@ def test_legacy_resume_cli(tmp_path, damage, blocker):
     verification = project_files(tmp_path)
     (tmp_path / "feedback.yaml").unlink()
     verification_path = tmp_path / "model.verification.json"
+    verification.pop("model_revision")
+    verification_path.write_text(json.dumps(verification), encoding="utf-8")
     original = verification_path.read_bytes()
     assert all("pyrel_sha256" not in item for item in verification["items"])
-    initialized = cli(tmp_path, "init", "--emitter", "python emit.py", "--skill", "rai-orm-verify")
+    initialized = cli(tmp_path, "init", "--emitter", "manual:step-10", "--skill", "rai-orm-verify")
     assert initialized.returncode == 0, initialized.stderr
     manifest = json.loads(initialized.stdout)
     saved = manifest["verification_snapshot"]["items"][:3]
@@ -96,6 +100,9 @@ def test_legacy_resume_cli(tmp_path, damage, blocker):
     result = json.loads(planned.stdout)
     assert result["started_round"] == max(row["round"] for row in verification["rounds"]) + 1
     assert result["frozen_passed_items"] == ["q001", "q002", "q003"]
-    assert result["can_resume"] == (blocker is None)
-    assert result["blockers"] == ([] if blocker is None else [{"id": blocker, "item_id": "q001"}])
+    assert not result["can_resume"]
+    assert result["baseline_recheck"]
+    assert "BASELINE_RECHECK_REQUIRED" in {b["id"] for b in result["blockers"]}
+    if blocker:
+        assert {"id": blocker, "item_id": "q001"} in result["blockers"]
     assert verification_path.read_bytes() == original
