@@ -248,12 +248,14 @@ def regeneration_blockers(state, base):
         return []
     output = base / state["artifacts"]["model_py"]
     text = output.read_text(encoding="utf-8") if output.is_file() else ""
+    def token_present(value):
+        return bool(value and re.search(r"(?<!\w)" + re.escape(str(value)) + r"(?!\w)", text))
+
     def emitted(fact):
         metadata = fact.get("pyrel") or {}
         prop = metadata.get("property") if isinstance(metadata, dict) else None
         # A whole property identifier also matches Owner.property declarations.
-        return (str(fact["id"]) in text or bool(fact.get("reading") and fact["reading"] in text)
-                or bool(prop and re.search(r"(?<!\w)" + re.escape(prop) + r"(?!\w)", text)))
+        return token_present(fact["id"]) or token_present(fact.get("reading")) or token_present(prop)
     missing = sorted(str(f["id"]) for f in applied if not emitted(f))
     if missing or (removed and file_hash(output) == state.get("emitted_py_sha256")):
         return [{"id": "EMITTER_INCOMPLETE", "fact_ids": sorted(applied_ids | removed),
@@ -828,7 +830,12 @@ def update(state, base, skill, rounds_done=None, stop_reason=None, emitter=None,
         state.setdefault("retired_artifacts", {})[key] = {"reason": retire_reason}
         state["required_artifacts"] = [k for k in state["required_artifacts"] if k != key]
     if skill == "rai-orm-verify":
-        charge = last_round(verification) - state["round_counters"].get(skill, 0)
+        previous_round = state["round_counters"].get(skill, 0)
+        # Keep the v1 global cursor; exclude checks owned by another skill.
+        # Unlabelled legacy rounds (including gaps in history) still charge verify.
+        other_rounds = {int(r["round"]) for r in verification.get("rounds", [])
+                        if int(r["round"]) > previous_round and r.get("skill", skill) != skill}
+        charge = last_round(verification) - previous_round - len(other_rounds)
         if charge < 0 or (rounds_done is not None and rounds_done != charge):
             raise UpdateBlocked([{"id": "ROUNDS_MISMATCH", "recorded": charge, "supplied": rounds_done}])
         rounds_done = charge
@@ -844,13 +851,13 @@ def update(state, base, skill, rounds_done=None, stop_reason=None, emitter=None,
         current = {i["id"]: i for i in verification.get("items", [])}
         lost = {i for i in previous if previous[i].get("status") == "pass" and current.get(i, {}).get("status") != "pass"}
         rounds = {r["round"]: r for r in verification.get("rounds", [])}
-        valid = bool(lost)
+        valid = True
         for identifier in lost:
             item = current.get(identifier, {})
             number = item.get("regressed_at_round")
             row = rounds.get(number, {})
             regressions = sum(current.get(i, {}).get("regressed_at_round") == number for i in lost)
-            fixes = sum(i.get("status") == "pass" and i.get("passed_at_round") == number
+            fixes = sum(i.get("status") == "pass" and not i.get("weak") and i.get("passed_at_round") == number
                         and previous.get(i["id"], {}).get("status") != "pass" for i in current.values())
             valid &= (item.get("status") == "fail" and isinstance(number, int)
                       and number > state["round_counters"].get(skill, 0)
