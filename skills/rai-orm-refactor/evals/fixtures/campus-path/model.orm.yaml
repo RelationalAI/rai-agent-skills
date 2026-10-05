@@ -1,0 +1,319 @@
+version: 1
+source:
+  kind: ddl-file
+  introspected_at: '2026-10-05T00:00:00Z'
+  mode: one-shot
+  scope:
+    tables:
+    - STUDENT
+    - STAFF
+    - SUBJECT
+    - DEPARTMENT
+    - ENROLLMENT
+  workload:
+    kind: pairs
+    n_items: 12
+object_types:
+- id: student
+  name: Student
+  kind: entity
+  reference:
+    mode: popular
+    value_type: identifier
+  provenance:
+    origin: table-with-pk
+    table: STUDENT
+- id: staff
+  name: Staff
+  kind: entity
+  reference:
+    mode: popular
+    value_type: identifier
+  provenance:
+    origin: table-with-pk
+    table: STAFF
+- id: subject
+  name: Subject
+  kind: entity
+  reference:
+    mode: popular
+    value_type: identifier
+  provenance:
+    origin: table-with-pk
+    table: SUBJECT
+- id: department
+  name: Department
+  kind: entity
+  reference:
+    mode: popular
+    value_type: code
+  provenance:
+    origin: table-with-pk
+    table: DEPARTMENT
+- id: enrollment
+  name: Enrollment
+  kind: entity
+  reference:
+    mode: external
+  provenance:
+    origin: junction-table
+    table: ENROLLMENT
+- id: identifier
+  name: Identifier
+  kind: value
+  primitive: Integer
+- id: code
+  name: Code
+  kind: value
+  primitive: String
+- id: name
+  name: Name
+  kind: value
+  primitive: String
+- id: title
+  name: Title
+  kind: value
+  primitive: String
+- id: level
+  name: Level
+  kind: value
+  primitive: String
+- id: term
+  name: Term
+  kind: value
+  primitive: String
+- id: grade
+  name: Grade
+  kind: value
+  primitive: Integer
+fact_types:
+- id: student_has_full_name
+  reading: '{Student} has full_name {Name}'
+  roles:
+  - object_type: student
+    role_name: student
+  - object_type: name
+    role_name: full_name
+  constraints:
+  - type: uniqueness
+    roles:
+    - student
+    source: workload
+    status: proposed
+    rationale: Functional role in the synthetic path inventory.
+    provenance:
+      workload_kind: pairs
+      evidence: verification
+      support: 1
+      n_items: 12
+- id: student_has_home_department
+  reading: '{Student} has home_department {Department}'
+  roles:
+  - object_type: student
+    role_name: student
+  - object_type: department
+    role_name: home_department
+  constraints:
+  - type: uniqueness
+    roles:
+    - student
+    source: workload
+    status: proposed
+    rationale: Functional role in the synthetic path inventory.
+    provenance:
+      workload_kind: pairs
+      evidence: verification
+      support: 1
+      n_items: 12
+- id: staff_has_department
+  reading: '{Staff} has department {Department}'
+  roles:
+  - object_type: staff
+    role_name: staff
+  - object_type: department
+    role_name: department
+  constraints:
+  - type: uniqueness
+    roles:
+    - staff
+    source: workload
+    status: proposed
+    rationale: Functional role in the synthetic path inventory.
+    provenance:
+      workload_kind: pairs
+      evidence: verification
+      support: 1
+      n_items: 12
+- id: subject_has_title
+  reading: '{Subject} has title {Title}'
+  roles:
+  - object_type: subject
+    role_name: subject
+  - object_type: title
+    role_name: title
+  constraints:
+  - type: uniqueness
+    roles:
+    - subject
+    source: workload
+    status: proposed
+    rationale: Functional role in the synthetic path inventory.
+    provenance:
+      workload_kind: pairs
+      evidence: verification
+      support: 1
+      n_items: 12
+- id: subject_has_level
+  reading: '{Subject} has level {Level}'
+  roles:
+  - object_type: subject
+    role_name: subject
+  - object_type: level
+    role_name: level
+  constraints:
+  - type: uniqueness
+    roles:
+    - subject
+    source: workload
+    status: proposed
+    rationale: Functional role in the synthetic path inventory.
+    provenance:
+      workload_kind: pairs
+      evidence: verification
+      support: 1
+      n_items: 12
+- id: subject_has_department
+  reading: '{Subject} has department {Department}'
+  roles:
+  - object_type: subject
+    role_name: subject
+  - object_type: department
+    role_name: department
+  constraints:
+  - type: uniqueness
+    roles:
+    - subject
+    source: workload
+    status: proposed
+    rationale: Functional role in the synthetic path inventory.
+    provenance:
+      workload_kind: pairs
+      evidence: verification
+      support: 1
+      n_items: 12
+- id: department_has_name
+  reading: '{Department} has name {Name}'
+  roles:
+  - object_type: department
+    role_name: department
+  - object_type: name
+    role_name: name
+  constraints:
+  - type: uniqueness
+    roles:
+    - department
+    source: workload
+    status: proposed
+    rationale: Functional role in the synthetic path inventory.
+    provenance:
+      workload_kind: pairs
+      evidence: verification
+      support: 1
+      n_items: 12
+- id: enrollment_has_student
+  reading: '{Enrollment} has student {Student}'
+  roles:
+  - object_type: enrollment
+    role_name: enrollment
+  - object_type: student
+    role_name: student
+  constraints:
+  - type: uniqueness
+    roles:
+    - enrollment
+    source: workload
+    status: proposed
+    rationale: Functional role in the synthetic path inventory.
+    provenance:
+      workload_kind: pairs
+      evidence: verification
+      support: 1
+      n_items: 12
+- id: enrollment_has_subject
+  reading: '{Enrollment} has subject {Subject}'
+  roles:
+  - object_type: enrollment
+    role_name: enrollment
+  - object_type: subject
+    role_name: subject
+  constraints:
+  - type: uniqueness
+    roles:
+    - enrollment
+    source: workload
+    status: proposed
+    rationale: Functional role in the synthetic path inventory.
+    provenance:
+      workload_kind: pairs
+      evidence: verification
+      support: 1
+      n_items: 12
+- id: enrollment_has_term
+  reading: '{Enrollment} has term {Term}'
+  roles:
+  - object_type: enrollment
+    role_name: enrollment
+  - object_type: term
+    role_name: term
+  constraints:
+  - type: uniqueness
+    roles:
+    - enrollment
+    source: workload
+    status: proposed
+    rationale: Functional role in the synthetic path inventory.
+    provenance:
+      workload_kind: pairs
+      evidence: verification
+      support: 1
+      n_items: 12
+- id: enrollment_has_grade
+  reading: '{Enrollment} has grade {Grade}'
+  roles:
+  - object_type: enrollment
+    role_name: enrollment
+  - object_type: grade
+    role_name: grade
+  constraints:
+  - type: uniqueness
+    roles:
+    - enrollment
+    source: workload
+    status: proposed
+    rationale: Functional role in the synthetic path inventory.
+    provenance:
+      workload_kind: pairs
+      evidence: verification
+      support: 1
+      n_items: 12
+constraints:
+- type: uniqueness
+  scope: external
+  object_type: enrollment
+  preferred: true
+  role_refs:
+  - fact_type: enrollment_has_student
+    role: student
+  - fact_type: enrollment_has_subject
+    role: subject
+  - fact_type: enrollment_has_term
+    role: term
+  source: explicit
+  status: confirmed
+  provenance:
+    table: ENROLLMENT
+    columns:
+    - LEARNER_NO
+    - SUBJECT_ID
+    - TERM
+    constraint_type: PK

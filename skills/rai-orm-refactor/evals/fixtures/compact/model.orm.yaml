@@ -1,0 +1,75 @@
+version: 1
+source:
+  kind: ddl-file
+  introspected_at: "2026-10-05T00:00:00Z"
+  mode: one-shot
+  scope: {tables: [ASSET, CASE, RECORD, RECORD_DETAIL]}
+object_types:
+  - id: asset
+    name: Asset
+    kind: entity
+    reference: {mode: popular, value_type: identifier}
+    provenance: {origin: table-with-pk, table: ASSET, pk_column: ID}
+  - id: selected_asset
+    name: SelectedAsset
+    kind: entity
+    reference: {mode: popular, value_type: identifier}
+    derivation: derived
+    derivation_rule: "An Asset selected by a comparison on its cost."
+    provenance: {origin: workload}
+  - id: case
+    name: Case
+    kind: entity
+    reference: {mode: popular, value_type: identifier}
+    provenance: {origin: table-with-pk, table: CASE, pk_column: ID}
+  - id: record
+    name: Record
+    kind: entity
+    reference: {mode: popular, value_type: identifier}
+    provenance: {origin: table-with-pk, table: RECORD, pk_column: ID}
+  - id: record_detail
+    name: RecordDetail
+    kind: entity
+    reference: {mode: popular, value_type: identifier}
+    provenance: {origin: table-with-pk, table: RECORD_DETAIL, pk_column: ID}
+  - {id: identifier, name: Identifier, kind: value, primitive: Integer}
+  - {id: label, name: Label, kind: value, primitive: String}
+  - {id: cost, name: Cost, kind: value, primitive: Float}
+fact_types:
+  - id: asset_has_label
+    reading: "{Asset} has {Label}"
+    roles: [{object_type: asset, role_name: asset}, {object_type: label, role_name: label}]
+  - id: asset_has_cost
+    reading: "{Asset} has {Cost}"
+    roles: [{object_type: asset, role_name: asset}, {object_type: cost, role_name: cost}]
+  - id: selected_asset_has_cost
+    reading: "{SelectedAsset} has {Cost}"
+    roles: [{object_type: selected_asset, role_name: selected_asset}, {object_type: cost, role_name: cost}]
+  - id: case_is_pending
+    reading: "{Case} is pending"
+    roles: [{object_type: case, role_name: case}]
+  - id: case_is_active
+    reading: "{Case} is active"
+    roles: [{object_type: case, role_name: case}]
+  - id: case_is_closed
+    reading: "{Case} is closed"
+    roles: [{object_type: case, role_name: case}]
+  - id: case_is_archived
+    reading: "{Case} is archived"
+    roles: [{object_type: case, role_name: case}]
+  - id: record_has_detail
+    reading: "{Record} has {RecordDetail}"
+    roles: [{object_type: record, role_name: record}, {object_type: record_detail, role_name: detail}]
+    constraints:
+      - type: uniqueness
+        roles: [record]
+        preferred: true
+        source: explicit
+        status: confirmed
+        provenance: {table: RECORD_DETAIL, column: ID, constraint_type: UNIQUE}
+      - type: uniqueness
+        roles: [detail]
+        source: explicit
+        status: confirmed
+        provenance: {table: RECORD_DETAIL, column: ID, constraint_type: PK}
+constraints: []

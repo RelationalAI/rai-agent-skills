@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "workload": {"kind": "sql", "n_items": 3},
+  "oracle": "structural",
+  "mode": "one-shot",
+  "split": {"repair": 3, "holdout": 0},
+  "rounds": [{"round": 0, "repair_pass": 3, "holdout_pass": 0, "regressions": 0}],
+  "repairs": [],
+  "items": [
+    {"id": "q001", "split": "repair", "status": "pass", "pyrel": "verification/q001.py"},
+    {"id": "q002", "split": "repair", "status": "pass", "pyrel": "verification/q002.py"},
+    {"id": "q003", "split": "repair", "status": "pass", "pyrel": "verification/q003.py"}
+  ],
+  "summary": {"repair_pass_rate": 1, "holdout_pass_rate": 0, "weak_passes": 0,
+              "excluded": {}, "residual_by_class": {}, "stopped_because": "all-pass"}
+}
