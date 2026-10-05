@@ -81,6 +81,8 @@ A sixth source, `workload`, exists only when a workload digest was given or `rai
 
 **Working principle:** propose, never assert. Every constraint that isn't lifted directly from DDL gets an explicit confidence path through Steps 6–9 before reaching the YAML as `confirmed`.
 
+**Resume:** When `rai-orm` supplies existing ORM YAML/state, preserve the model, digest, bindings, split, saved PyRel and round counters; follow its hot-start plan rather than repeating inventory/recovery. Inherit mode and budget of this invocation. Accept reviewed user-feedback/workload/refactor batches through Step 9f, validate, refresh verbalization, run Step 9g connectivity, and regenerate through Step 10 using the recorded project emitter command (never patch `model.py`); preserve/recheck bindings. User-feedback proposals keep `source: user-feedback` in their ledger while domain constraints use the existing `user-supplied` source; refactor object/fact changes retain bindings/evidence and `provenance.origin: refactor` with proposal/previous-origin/affected-id/support metadata. Workload-backed new constraints keep `source: workload`, never `source: refactor`. Return candidates to `rai-orm-verify` with the same split/oracle and remaining invocation budget; restore the consistent snapshot on failed acceptance. Missing YAML or emitter blocks incremental application; v0.1 does not import Python-only models.
+
 ### Step 0 — Interaction-mode opener
 
 Before introspecting anything, ask the user:

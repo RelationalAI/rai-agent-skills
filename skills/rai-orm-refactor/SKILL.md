@@ -120,4 +120,5 @@ State accepted/kept/rolled-back proposals, baseline and final pass counts for ea
 | [compaction-metrics.md](references/compaction-metrics.md) | Step 1 — metric definitions, scan limits and default thresholds |
 | [orm-path-scaffold.md](references/orm-path-scaffold.md) | Step 3 — grammar, operators, existing-element audit and worked paths |
 | [refactor-patterns.md](references/refactor-patterns.md) | Steps 2–4 — choose a pattern and its preservation tests |
-| [INTEGRATION-NOTES.md](references/INTEGRATION-NOTES.md) | Wiring this skill into the router, modeling provenance and workflow chain |
+
+See [rai-orm](../rai-orm/SKILL.md) for the router's existing refactor wiring.

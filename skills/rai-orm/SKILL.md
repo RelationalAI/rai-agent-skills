@@ -1,6 +1,6 @@
 ---
 name: rai-orm
-description: Entry point for building an ORM 2 conceptual model and its PyRel translation from whatever the user has — a relational schema, a domain description, and optionally a workload (SQL query logs, natural-language questions, or question+SQL pairs) — by choosing the route through the ORM skills and sequencing them. Use when the user wants an ORM-staged model and it is not yet clear which ORM skill applies, or when a workload is available to drive and verify the model — not for the modeling procedures themselves (rai-orm-from-schema, rai-orm-from-text), workload evidence extraction (rai-orm-from-workload), or the PyRel rewrite check (rai-orm-verify).
+description: Routes ORM 2 model building and incremental improvement from a schema, description, workload or existing ORM YAML with feedback, preserving verification state and reporting blockers; not for the modeling procedures, workload extraction, rewrite checks or compaction themselves.
 ---
 
 # ORM Modeling — Entry Point and Router
@@ -8,115 +8,121 @@ description: Entry point for building an ORM 2 conceptual model and its PyRel tr
 
 ## Summary
 
-**What:** A thin router over the ORM skills. It finds out which inputs the user has, picks one route, sets the interaction mode once, and runs the skills of that route in order. It does no modeling of its own: every modeling decision is made inside the skill that owns it.
+**What:** Chooses the ORM route, interaction mode and invocation budget, then sequences the owning skills. An existing model resumes from its saved artifacts rather than intake.
 
-**When to use:**
-- The user wants an ORM 2 model (and its PyRel translation) and has not said which ORM skill to use
-- The user has a workload — SQL query logs, natural-language questions, or question+SQL pairs — besides a schema or a description
-- The user wants proof that the model can answer their questions, not only that it loads
+**When to use:** The user wants an ORM model and PyRel translation, proof of workload coverage, or improvement of existing ORM YAML using feedback.
 
-**When NOT to use:**
-- The route is already known and has no workload — go straight to `rai-orm-from-schema` or `rai-orm-from-text`
-- Greenfield builds that go direct to PyRel without an ORM stage — see `rai-build-starter-ontology`
-- Enriching or reviewing a PyRel model that already loads and queries — see `rai-ontology-design`
-- Deciding which reasoner answers a business question — see `rai-discovery`
+**When NOT to use:** A known modeling route without a workload belongs to `rai-orm-from-schema` or `rai-orm-from-text`; direct PyRel building belongs to `rai-build-starter-ontology`; reviewing PyRel without ORM YAML belongs to `rai-ontology-design`; choosing a reasoner belongs to `rai-discovery`.
 
-**Overview:**
-1. Intake — list what the user has
-2. Choose the mode once (Guided or One-shot)
-3. Pick the route from the routing table
-4. Run the skills of the route in order, passing each one's outputs to the next
-5. Close with one summary across the route
+**Overview:** Resume check → intake if needed → inherited mode and invocation budget → route → run and record steps → report.
 
 ## Quick Reference
 
-**The ORM skills:**
-
-| Skill | Job | Runs |
+| Skill / tool | Job | Runs |
 |---|---|---|
-| `rai-orm-from-schema` | Schema Recovery Procedure (SRP): schema → ORM model → PyRel | modeling |
-| `rai-orm-from-text` | Halpin's CSDP as a dialogue: description → ORM model → PyRel | modeling |
-| `rai-orm-from-workload` | Workload → `workload.digest.yaml`, evidence the modeling skills take as proposals | before modeling |
-| `rai-orm-verify` | Rewrites the workload in PyRel against the model and repairs the model until it can | after modeling |
+| `rai-orm-from-workload` | Workload → digest of evidence, consumed as proposals | before new modeling; only delta items on resume |
+| `rai-orm-from-schema` | Schema Recovery Procedure (SRP): schema → ORM YAML → PyRel | schema modeling; commit repair batches |
+| `rai-orm-from-text` | Halpin's CSDP: description → ORM YAML → PyRel | text modeling; commit repair batches |
+| `connectivity.py` | Entity paths, required joins and data-tested link proposals | after modeling; each verification round |
+| `rai-orm-verify` | Rewrite, check and repair workload coverage | after modeling; regression acceptance |
+| `rai-orm-refactor` | Compact using existing-element paths, retaining verified coverage | after verification; assess drift, apply supported compaction |
+| `state.py` | Manifest, finished steps and deterministic resume plan | before intake; after each accepted step |
+| `report.py` | Statistics and actionable issues | route close |
 
-**Workload modalities:**
+Default workload route: **`rai-orm-from-workload` → `rai-orm-from-schema` (+ connectivity) → `rai-orm-verify` ↔ `rai-orm-refactor` → report**. Refactor assessment may keep every concept; candidate batches return through the modeling skill and verification with the same invocation budget.
 
-| Modality | What the user gives | Used as evidence for | Verification oracle |
-|---|---|---|---|
-| `sql` | Query logs, no questions | joins, row grain, enum-like filters, repeated expressions | the SQL result on the source data |
-| `questions` | Natural-language questions, no SQL | business terms, synonyms, expected concepts | the user reviews a sample |
-| `pairs` | Question+SQL pairs, kept together | all of the above plus which phrase means which column, join or filter | the SQL result, plus the question's wording |
+| Modality | Evidence | Verification oracle |
+|---|---|---|
+| `sql` | joins, grain, filter columns, expressions | SQL result on source data |
+| `questions` | terms, synonyms, expected concepts | user review of a sample |
+| `pairs` | both plus alignment within each pair | SQL result and question meaning |
 
-Pairs are never split into separate question and SQL lists. The alignment between the two halves is the part neither half carries alone.
-
-**Routing table:**
+Pairs remain aligned in one artifact. Without reachable, bound data, SQL/pairs use the structural oracle.
 
 | The user has | Route |
 |---|---|
-| Schema (live DB, DDL, CSV), no workload | `rai-orm-from-schema` |
-| Description only, no schema, no workload | `rai-orm-from-text` |
-| Schema + workload (any modality) | `rai-orm-from-workload` → `rai-orm-from-schema` → `rai-orm-verify` |
-| Description + questions, no schema | `rai-orm-from-text` (questions enter CSDP Step 1 as artifacts) → `rai-orm-verify` |
-| Schema + description | `rai-orm-from-schema`; the description is offered at SRP Step 9d as user-supplied rules |
-| SQL or pairs, but no schema | Ask for the DDL or a connection. A model is not recovered from queries alone in v0.1. |
-| A PyRel model that already loads | Not an ORM route — see `rai-ontology-design` |
+| Existing ORM model plus feedback | `state.py plan` → affected proposals → connectivity → `rai-orm-verify` ↔ `rai-orm-refactor` → report |
+| Existing ORM YAML with query-shaped concepts, flag explosions, table mirrors or duplicated families | `rai-orm-refactor` → original modeling skill final commit/regeneration → `rai-orm-verify` acceptance → report |
+| Schema + workload | default workload route above |
+| Schema, no workload | `rai-orm-from-schema` (+ connectivity) → report |
+| Description + questions, no schema | `rai-orm-from-text` (questions as CSDP artifacts) → connectivity → `rai-orm-verify` ↔ `rai-orm-refactor` → report |
+| Description only | `rai-orm-from-text` → connectivity → report |
+| Schema + description | `rai-orm-from-schema`; description enters SRP Step 9d as user-supplied rules |
+| SQL or pairs without schema | Obtain DDL or a connection; v0.1 does not recover models from queries alone |
+| Only a PyRel model | v0.1 does not import Python into ORM YAML; use the manual path in the hot-start reference or `rai-ontology-design` |
 
 ## Instructions
 
+### Step 0 — Resume check
+
+Before intake, if `orm-state.json` or `model.orm.yaml` is in the working directory or named by the user, run `state.py plan` from this skill's `tools/`, using `--state` and `--model-yaml` for named paths. Follow its ordered steps and resolve its blockers before applying candidates. With YAML but no manifest, the read-only plan identifies bootstrap blockers; preserve the files, discover and record the project's emitter with `state.py init`, then plan again.
+
+Load [hot-start.md](references/hot-start.md) for the manifest, feedback conversion, frozen passes, workload deltas, N+0 baseline and budget continuation. Reuse the saved split, digest, PyRel and counters. Inherit the mode and budget settings unless the user changes them. Convert feedback into proposals with `source: user-feedback`; Guided reviews the structured batch before application. An existing model skips new-model intake and construction.
+
 ### Step 1 — Intake
 
-Ask once, in one message, which of these the user has. Do not ask about items the user already mentioned.
+For a new build, collect only missing facts in one message: schema/DDL/CSV or description; workload modality and file; read-only data access; and whether evaluation items must be sealed from modeling. Pass only repair evidence to modeling.
 
-> *To pick the right path I need to know what you have:*
-> - *a schema: a live database connection, a DDL file, or CSV samples?*
-> - *a written description of the domain, a glossary, or documentation?*
-> - *a workload: SQL queries people run, questions people ask, or questions with their SQL?*
-> - *is the data reachable, so queries can be run read-only?*
-
-Record the answers. Two of them change later behavior:
-- **Is the data reachable?** It decides the verification oracle in `rai-orm-verify` (execution match, or a structural check).
-- **Will part of the workload be used later to evaluate the model or a system built on it?** If yes, only the remaining part may be given to the ORM skills. Say so and ask the user to hand over only that part.
+Ask the invocation budget questions together: rounds (`rounds_per_invocation`, default 5), consecutive rounds without pass-count improvement (`patience`, default 2), and whether to keep going until every item is `pass`, `inexpressible` or `oracle-error` (`until_pass`, default false). With `until_pass: true`, the round limit does not stop verification; patience still does. See the hot-start reference for accounting.
 
 ### Step 2 — Mode, chosen once
 
-Ask the Guided / One-shot question of the first modeling skill on the route (SRP Step 0 or CSDP Step 0). Default to Guided. The choice holds for the whole route: each skill on the route records it in `source.mode` and skips its own Step 0.
+Choose Guided or One-shot once, default Guided. Every owning skill inherits it in `source.mode` and skips its own mode opener. Resume inherits the manifest's mode.
 
 ### Step 3 — Route
 
-Pick the first matching row of the routing table and tell the user the route in one line before starting, for example: *"Route: workload evidence, then schema recovery, then the PyRel rewrite check."*
+Choose the first matching route and state it in one line. Initialize the manifest for a new project once paths, inputs and emitter are known; record each finished step in order with `state.py update`. Never overwrite an existing manifest with `init`.
 
 ### Step 4 — Run the route
 
-Run each skill to completion before the next. Hand-offs:
+Hand modeling decisions to their owning skill. Reuse the recorded emitter to regenerate `model.py` from YAML; preserve/recheck source bindings. Validate and re-run connectivity after model changes. `--max-comparisons` defaults to 5000; `COMPARISON_CAP_REACHED` means some candidate links remain untested.
 
 | From | To | What is passed |
 |---|---|---|
-| `rai-orm-from-workload` | `rai-orm-from-schema` | `workload.digest.yaml` (optional SRP input) |
-| `rai-orm-from-workload` | `rai-orm-from-text` | the digest's `terms` (CSDP Step 1 artifacts) |
-| `rai-orm-from-schema` / `rai-orm-from-text` | `rai-orm-verify` | `model.orm.yaml`, `model.py`, and the same workload file |
-| `rai-orm-verify` | the modeling skill | model defects, as proposals with `source: workload`, committed through SRP Step 9f or CSDP Step 7f |
+| `rai-orm-from-workload` | modeling skill | repair-set digest; text modeling uses terms as artifacts |
+| modeling skill | connectivity / `rai-orm-verify` | YAML, generated PyRel, bindings, same workload and inherited state |
+| `rai-orm-verify` | modeling skill | generic defect proposals with `source: workload`; commit at SRP Step 9f or CSDP Step 7f |
+| feedback processing | modeling skill | `source: user-feedback` proposal batch and affected ids; same review/validation/emission path |
+| `rai-orm-verify` | `rai-orm-refactor` | YAML/PyRel/bindings, digest/workload, verification report and saved rewrites, mode and remaining budget of this invocation |
+| `rai-orm-refactor` | original modeling skill | `provenance.origin: refactor` proposals, affected ids, existing-element path scaffolds and rollback snapshot |
+| modeling skill | `rai-orm-verify` | candidate artifacts, unchanged workload/split/oracle; accept only without total or per-split pass-count loss; otherwise restore snapshot |
+| accepted steps | state / report | counters, revision, paths, artifact stop reasons and processed feedback hashes |
 
-The loop between `rai-orm-verify` and the modeling skill is owned by `rai-orm-verify`; this skill only starts it.
+`rai-orm-verify` owns repair iterations and regression checks. Refactor acceptance shares that invocation budget, including holdout evaluation sealed from repair selection. Read [hot-start.md](references/hot-start.md) before accepting feedback or refactor batches.
 
 ### Step 5 — Close
 
-One summary for the route: the model's counts (object types, fact types, constraints by source), and, when a workload was given, the verification result (items rewritten in PyRel, items verified, residual by failure class). State plainly what was not verified.
+Run `report.py` from this skill's `tools/` with `--model model.orm.yaml`, adding `--verification model.verification.json`, `--connectivity connectivity.json` and `--digest workload.digest.yaml` when available. Show `orm-report.md`. If it starts with `BUDGET_EXHAUSTED`, print that line verbatim first, give the residual count and exact continuation steps from the hot-start reference, and keep the route incomplete. State the invocation's rounds and rounds run in total, oracle and unverified items. Never say “done” while a blocker issue stands.
+
+Use the report's separate `entity_relationships`, `scalar_properties` and `flags` counts. When compaction ran, include before/after concept and flag counts, support coverage, accepted/kept/rolled-back proposals, per-split verified passes, residual classes and remaining suspects. Record report and connectivity paths and stop reasons with `state.py update`. Load [connectivity.md](references/connectivity.md) for islands/required joins and [statistics-and-issues.md](references/statistics-and-issues.md) for issue interpretation.
 
 ## Common Pitfalls
 
 | Mistake | Cause | Fix |
 |---|---|---|
-| Modeling inside this skill | Treating the router as a procedure | Hand off; this skill has no Step that edits the YAML |
-| Splitting pairs into two lists | Treating pairs as two inputs | Pass the pairs file as is, with modality `pairs` |
-| Asking the mode question at every skill | Each skill has its own Step 0 | Ask once at Step 2; later skills inherit it |
-| Feeding evaluation items to the modeling | The user gave the whole file | Ask at intake; pass only the part not held back for evaluation |
-| Skipping `rai-orm-verify` because the model loads | "Loads and lints" taken as done | With a workload, the route ends at the rewrite check |
+| Starting intake on an existing model | Ignoring saved work | Run Step 0 before routing |
+| Patching generated PyRel | Forgetting the project emitter | Edit YAML through the modeling skill and reuse the recorded command |
+| Resetting rounds or the split | Treating resume as a new build | Keep N+0 baseline, continue at N+1; fresh budget only for this invocation |
+| Rewriting old passes | Confusing regressions with new translations | Freeze saved PyRel; re-run it against candidates |
+| Re-digesting an entire changed workload | Ignoring item hashes | Review delta ids and replace only added/changed item evidence |
+| Modeling inside the router | Treating routing as modeling | Hand proposals to the owning skill |
+| Splitting pairs or leaking holdout evidence | Losing input boundaries | Preserve alignment; keep holdout out of repairs |
+| Asking mode again | Each skill has an opener | Inherit mode across the route |
+| Calling loading or budget exhaustion completion | Ignoring acceptance and blockers | Verify workload, print budget line first, report remaining blockers |
 
 ## Examples
 
 | Situation | Route taken |
 |---|---|
-| A warehouse with DDL, no declared keys, and a query history export | `rai-orm-from-workload` (`sql`) → `rai-orm-from-schema` → `rai-orm-verify` (execution match) |
-| A warehouse with DDL and 100 golden question+SQL pairs | `rai-orm-from-workload` (`pairs`) → `rai-orm-from-schema` → `rai-orm-verify` (execution match, 20% of the pairs held out of the repair loop) |
-| A domain description and a list of questions the business wants answered | `rai-orm-from-text` → `rai-orm-verify` (user reviews a sample) |
-| A DDL file only | `rai-orm-from-schema` |
+| Synthetic DDL and query history | default workload route with execution match when bound |
+| Description and questions | text modeling → connectivity → verify ↔ refactor → report; name review limits |
+| DDL only | schema modeling (+ connectivity) → report |
+| Existing campus model stopped at round 5, missing-link feedback | [Worked resume](references/hot-start.md#worked-example-campus): N+0 baseline at 5, next repair 6, saved passes and split retained |
+
+## Reference files
+
+| File | When to load |
+|---|---|
+| [Hot start](references/hot-start.md) | Step 0, feedback, invocation budgets or continuing after exhaustion |
+| [Connectivity](references/connectivity.md) | Before hand-off or when islands/required joins remain |
+| [Statistics and issues](references/statistics-and-issues.md) | Route close, especially budget exhaustion |

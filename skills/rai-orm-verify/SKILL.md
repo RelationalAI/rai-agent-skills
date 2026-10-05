@@ -22,8 +22,8 @@ description: Verifies workload rewrites against an ORM-derived PyRel model, repa
 - Reviewing a PyRel model that did not come through an ORM YAML — see `rai-ontology-design`
 
 **Overview:**
-1. Take the model, the workload, and decide the oracle
-2. Split the workload into a repair set and a holdout
+1. Resume saved verification state when present; otherwise take the model/workload and decide the oracle
+2. Preserve the existing repair/holdout split; create it only for a new workload
 3. Rewrite each item in PyRel and check it
 4. Classify the failures
 5. Repair the model through the YAML, generically
@@ -60,6 +60,7 @@ The report always names the oracle used. A structural or user-review pass is nev
 - `model.orm.yaml` and `model.py` (and the data binding, when there is one).
 - The workload file, in one modality (`sql`, `questions`, `pairs`). The same file that was given to `rai-orm-from-workload`, when that skill ran.
 - Read-only access to the source data, when it exists.
+- On resume: `orm-state.json`, prior `model.verification.json`, its saved PyRel and the recorded project emitter command. Inherit mode, oracle, split and invocation budget from state.
 
 **Outputs:**
 - `model.verification.json` — format in [`references/report-format.md`](references/report-format.md).
@@ -73,21 +74,29 @@ The report always names the oracle used. A structural or user-review pass is nev
 
 **Read-only rule:** the source data is never written. SQL from the workload is run only as a query, with a row cap and a time cap.
 
+### Resume mode — before Step 1
+
+When verification/state already exists, use `rai-orm`'s resume plan and hot-start protocol. Read the previous verification report before writing anything: retain all rounds and repairs, append an invocation entry, and continue repair numbers from the last global round N at N+1. Establish N+0 as the unchanged model baseline at round N; baseline checks consume no repair round. Snapshot YAML, generated artifacts, bindings, report and saved rewrites together. Inherit the saved oracle and mode; a weaker oracle needs explicit resolution, not silent replacement.
+
+Keep every prior `pass` and its accepted PyRel as the baseline regression inventory. Validate saved paths before candidates. Reset only the invocation's attempt allowance and patience streak. Resume at classification/repair of unresolved items; skip workload extraction and split construction for unchanged inputs. For workload deltas, preserve surviving assignments and old rounds under `rai-orm`'s delta protocol.
+
 ### Step 1 — Oracle
 
 Pick the column of the oracle table from two facts: is the source data reachable, and is `model.py` bound to it (it defines its concepts from the source tables, so a PyRel query returns real rows)? The ORM skills emit an unbound `model.py`; binding it is done with `rai-pyrel-coding`'s data loading before this skill runs. If either is missing, use the structural column and tell the user that the check is weaker.
 
 ### Step 2 — Repair set and holdout
 
-With 30 or more items, set aside 20% as a **holdout** before anything is run: sort the item ids and take every fifth. The holdout is rewritten and checked like the rest, but its failures are never looked at when repairing the model. Its pass rate tells whether the repairs generalize or were fitted to the items. With fewer than 30 items there is no holdout; say so in the report.
+On resume, read `split` and every `items[].split` from the previous file and **never recompute the split**. Count-only legacy splits are recoverable only from saved item assignments; missing assignments block repair until the original split is restored.
+
+For a new workload only, with 30 or more items, set aside 20% as a **holdout** before anything is run: sort the item ids and take every fifth. The holdout is rewritten and checked like the rest, but its failures are never looked at when repairing the model. Its pass rate tells whether the repairs generalize or were fitted to the items. With fewer than 30 items there is no holdout; say so in the report.
 
 ### Step 3 — Rewrite and check
 
-At the start of **each round**, run `connectivity.py` from `rai-orm` with the current YAML and the repair-set digest; add read-only `--db` access when available. Follow the [connectivity procedure](../rai-orm/references/connectivity.md). Record components, isolated concept ids and required gap ids in that round's `connectivity` block. Check holdout reachability separately; never use holdout gaps or proposals to choose repairs. A repair-set workload join with no graph path is `missing-element`, even before its rewrite runs. A join between tables feeding the same concept is `merged`, not a gap.
+At the start of **each round**, run `connectivity.py` from `rai-orm` with the current YAML and the repair-set digest; add read-only `--db` access when available. Follow the connectivity procedure in `rai-orm`; use its recorded connectivity path and `--max-comparisons` (default 5000). Record components, isolated concept ids and required gap ids in that round's `connectivity` block. Check holdout reachability separately; never use holdout gaps or proposals to choose repairs. A repair-set workload join with no graph path is `missing-element`, even before its rewrite runs. A join between tables feeding the same concept is `merged`, not a gap.
 
 For each item:
 
-1. Write the PyRel against `model.py`. For `sql`, the SQL is the specification. For `pairs`, the question is the specification and the SQL says what the answer's columns and meaning are. For `questions`, the question is all there is.
+1. For a prior `pass`, load its saved PyRel unchanged and run it only as a regression check; do not create a fresh translation. For unresolved/new items, write the PyRel against `model.py`. For `sql`, the SQL is the specification. For `pairs`, the question is the specification and the SQL says what the answer's columns and meaning are. For `questions`, the question is all there is.
 2. Run it. On an error, fix the PyRel and retry, at most 4 runs per item per round.
 3. Check it:
    - **Execution match** — run the SQL read-only and compare the two result sets:
@@ -98,7 +107,7 @@ For each item:
    - **Structural** — list the tables, columns and join edges of the SQL; each must be reached by the PyRel through a concept, a fact type and a relationship of the model.
    - **Verbalization** (`pairs`, `questions`) — state in one sentence what the PyRel returns, in the model's readings. For `pairs`, it must say what the question asks.
    - **User review** (`questions`) — see Step 3b.
-4. Save an accepted rewrite as `verification/<item id>.py`.
+4. Save an accepted rewrite as `verification/<item id>.py`. Keep prior accepted rewrites intact while testing candidates; renamed-element adaptations are explicit candidate copies until accepted.
 
 An empty result on both sides is a weak match: mark the item `pass` with `weak: true`, and do not count it as evidence that a repair worked.
 
@@ -134,7 +143,7 @@ Group the repair-set failures by class and by the model element involved. Repair
 - Change `model.orm.yaml`. New object types and fact types carry `provenance.origin: workload`; new constraints carry `source: workload, status: proposed`. Provenance records the failure class and the number of items, never an item's text (see `representation-format.md`, `source: workload`).
 - For required connectivity gaps, add the data-tested link proposal with `source: data`, `status: proposed` and `provenance.evidence`. Preserve `partial: true` and overlap counts for partial candidates; probe and review untested or zero-overlap candidates before applying them. Re-run connectivity after repair. An unjustified missing path remains `missing-element`.
 - **Guided:** show the round's repairs as one batch for the user to accept or reject, as in SRP Step 9b. **One-shot:** apply them as `proposed`, with `# REVIEW PROPOSAL` in `model.py`.
-- Commit through the modeling skill's final step (SRP Step 9f or CSDP Step 7f), so the YAML validates, then regenerate `model.verbalization.txt` and `model.py`.
+- Commit through the modeling skill's final step (SRP Step 9f or CSDP Step 7f), so the YAML validates, then regenerate `model.verbalization.txt` and `model.py` with the recorded project emitter command. Reuse that command and restore/recheck bindings; a missing emitter blocks repairs.
 
 A group with a single item is repaired only when the defect is plainly general. Otherwise it is left as residual and reported.
 
@@ -142,21 +151,30 @@ Names must come from the schema, the domain documentation, or the digest's terms
 
 ### Step 6 — Re-run
 
-After each model revision, re-run every item: failures, and items that passed before (their saved PyRel may need to follow a renamed element). An item that passed and now fails is a **regression**; a round that causes more regressions than it fixes is rolled back.
+After each model revision, re-run every item against the same split and oracle: new/unresolved rewrites and prior passes using their saved PyRel. Count a prior pass becoming excluded or `unverified` as a **regression**. A round that causes more regressions than it fixes is rolled back to the consistent snapshot, including saved rewrites and bindings; retain the attempted round and rollback evidence in history.
+
+For a `rai-orm-refactor` candidate, re-run the baseline workload including prior passes and sealed holdout. Report total/per-split passes, regressions, fixes, weak passes and exclusions. Accept only when total and each split's verified pass counts do not drop and regressions do not exceed fixes; otherwise restore the consistent snapshot. Share the remaining budget of this invocation across all refactor hand-backs; do not reset it for each batch. Keep holdout failure details/scaffolds out of proposal selection.
 
 ### Step 7 — Stop and report
 
-Stop when the first of these holds:
-- every repair-set item is `pass`, `inexpressible` or `oracle-error`;
-- two rounds in a row raise the repair-set pass count by nothing;
-- the budget is reached (default 5 rounds).
+Read `rounds_per_invocation` (default 5), `patience` (default 2) and `until_pass` (default false) from state. Stop when the first applicable condition holds:
 
-Write `model.verification.json`, retaining every round's connectivity block and the saved PyRel paths. Run `report.py` from `rai-orm` with `--model model.orm.yaml --verification model.verification.json --connectivity connectivity.json`, adding `--digest` when available. Show `orm-report.md`; load the [statistics-and-issues format](../rai-orm/references/statistics-and-issues.md) for its issue triggers. When budget is exhausted with residual failures, **lead with its first `BUDGET_EXHAUSTED` line verbatim**, including the residual count and the exact step to continue. Keep the run incomplete; never claim done or all-pass. Also name the oracle and state its limits.
+- every workload item, including holdout, is `pass`, `inexpressible` or `oracle-error`;
+- `patience` consecutive attempts do not increase repair-set verified passes (weak empty matches do not demonstrate improvement);
+- with `until_pass: false`, the budget of this invocation has run `rounds_per_invocation` repair/acceptance attempts.
+
+With `until_pass: true`, continue beyond the finite round allowance until the all-item terminal condition or patience stops the loop. Unreviewed questions remain `unverified`. Count attempted/rolled-back rounds and refactor acceptance rounds; baseline N+0 costs no repair round. A fresh invocation resets the allowance and patience streak while global round numbers continue. A sealed holdout failure may prevent all-pass but never supplies repair evidence.
+
+Write `model.verification.json`, retaining prior rounds, connectivity blocks, split assignments, pass metadata and saved PyRel paths. Append `invocations: [{started_round, rounds_run, stopped_because}]`; report rounds run in this invocation and in total. Use the [report format](references/report-format.md) for legacy migration and accounting. Record the finished step with `state.py update` from `rai-orm`.
+
+Run `report.py` from `rai-orm` with `--model model.orm.yaml --verification model.verification.json --connectivity connectivity.json`, adding `--digest` when available (use recorded paths). Show `orm-report.md` and follow `rai-orm`'s statistics-and-issues reference. When the budget of this invocation is exhausted with residual failures, **lead with the first `BUDGET_EXHAUSTED` line verbatim**, including residual count and continuation action. Use `rai-orm`'s hot-start continuation protocol for the fresh invocation. Keep the run incomplete while blocker issues remain; name the oracle and its limits.
 
 ## Common Pitfalls
 
 | Mistake | Cause | Fix |
 |---|---|---|
+| Resetting split or round numbers on resume | Treating a fresh invocation budget as a new model | Read the prior file; use N+0 baseline and N+1 next repair |
+| Rewriting passed items on resume | Retrying every translation | Reuse saved PyRel as regression checks; snapshot candidate adaptations |
 | Patching `model.py` | It is the file that runs | Repair the YAML and regenerate |
 | A clever query that works around the model | Wanting the item to pass | That is a model failure; classify and repair |
 | A repair that names an item | Fixing the symptom | State the defect without the item; repair the group |
@@ -180,6 +198,6 @@ Write `model.verification.json`, retaining every round's connectivity block and 
 |---|---|
 | [`references/failure-classes.md`](references/failure-classes.md) | Step 4 — classifying a failure and choosing the repair |
 | [`references/report-format.md`](references/report-format.md) | Step 7 — writing `model.verification.json` |
-| [`../rai-orm-from-schema/references/representation-format.md`](../rai-orm-from-schema/references/representation-format.md) | Step 5 — `source: workload` provenance |
-| [Connectivity procedure](../rai-orm/references/connectivity.md) | Every round — required gaps, data probes, batch proposals and re-check |
-| [Statistics and issues](../rai-orm/references/statistics-and-issues.md) | Step 7 — report generation and budget-first presentation |
+| [Resume accounting](references/report-format.md#resume-and-invocation-accounting) | Before a resumed invocation — preserve split, history and saved passes |
+
+Load `rai-orm` for hot-start, connectivity and statistics-and-issues procedures; load `rai-orm-from-schema` for the representation format and workload provenance.

@@ -33,7 +33,7 @@ def verification(stop="budget"):
 def test_budget_exhausted_leads_and_never_claims_done():
     result = build_report(MODEL, verification())
     text = markdown(result)
-    assert text.splitlines()[0].startswith("BUDGET_EXHAUSTED: 1 residual failures. Continue: Resume rai-orm-verify at Step 5")
+    assert text.splitlines()[0].startswith("BUDGET_EXHAUSTED: 1 residual failures. Continue: Resume rai-orm at Step 0")
     assert result["status"] == "budget-exhausted"
     assert result["issues"][0]["id"] == "BUDGET_EXHAUSTED"
     assert result["issues"][0]["severity"] == "blocker"
@@ -170,3 +170,43 @@ def test_fact_categories_and_business_headline():
     assert "n-ary fact types: 1" in text and "Fact types:" not in text
     stats["fact_types"]["scalar_properties"] = 1945
     assert "1,945 scalar properties" in markdown(result)
+
+
+def test_resumed_round_accounting_and_privacy():
+    v = verification()
+    v["rounds"].extend({"round": i, "repair_pass": 1, "holdout_pass": 0} for i in range(3, 8))
+    v["invocations"] = [{"started_round": 1, "rounds_run": 5, "stopped_because": "budget"},
+                        {"started_round": 6, "rounds_run": 2, "stopped_because": "plateau",
+                         "question": "PRIVATE_SENTINEL"}]
+    result = build_report(MODEL, v)
+    stats = result["statistics"]["verification"]
+    assert stats["rounds_run_total"] == 7
+    assert stats["rounds_run_this_invocation"] == 2
+    assert "Rounds run in total: 7; this invocation: 2." in markdown(result)
+    assert "PRIVATE_" not in json.dumps(result) + markdown(result)
+
+
+def test_legacy_rounds_exclude_baseline():
+    result = build_report(MODEL, verification())
+    assert result["statistics"]["verification"]["rounds_run_total"] == 2
+    assert result["statistics"]["verification"]["rounds_run_this_invocation"] is None
+    assert "unknown (legacy report)" in markdown(result)
+
+
+def test_unreviewed_items_keep_invocation_budget_stop_prominent():
+    v = {"workload": {"n_items": 1}, "items": [{"id": "q1", "status": "unverified", "split": "repair"}],
+         "invocations": [{"started_round": 1, "rounds_run": 5, "stopped_because": "budget"}],
+         "summary": {"stopped_because": "budget", "residual_by_class": {}}}
+    result = build_report(MODEL, v)
+    assert result["status"] == "budget-exhausted"
+    first_line = markdown(result).splitlines()[0]
+    assert first_line.startswith("BUDGET_EXHAUSTED: 0 residual failures.")
+    assert "Unverified items: 1." in first_line
+    assert result["issues"][0]["unverified_items"] == 1
+
+
+def test_patience_is_not_inferred_across_invocations():
+    v = verification()
+    v["invocations"] = [{"started_round": 1, "rounds_run": 1, "stopped_because": "budget"},
+                        {"started_round": 2, "rounds_run": 1, "stopped_because": "budget"}]
+    assert "PLATEAU" not in {i["id"] for i in build_report(MODEL, v)["issues"]}

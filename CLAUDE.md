@@ -66,9 +66,9 @@ Skills compose in a natural workflow progression:
 - **Reasoning router:** rai-discovery (classifies questions, routes to the appropriate reasoner)
 - **Reasoners:** rai-querying, rai-graph-analysis, rai-prescriptive-problem-formulation -> rai-prescriptive-solver-management -> rai-prescriptive-results-interpretation
 - **Operations:** rai-cortex-integration, rai-health-skill
-- **Schema modeling (in development):** rai-orm-from-schema
-- **Conceptual modeling from text (in development):** rai-orm-from-text (Halpin CSDP)
-- **ORM with a workload (in development):** rai-orm (router) -> rai-orm-from-workload -> rai-orm-from-schema or rai-orm-from-text -> rai-orm-verify
+- **Schema modeling:** rai-orm-from-schema
+- **Conceptual modeling from text:** rai-orm-from-text (Halpin CSDP)
+- **ORM with a workload:** rai-orm (router/resume) -> rai-orm-from-workload -> rai-orm-from-schema (+ connectivity; rai-orm-from-text for descriptions) -> rai-orm-verify <-> rai-orm-refactor -> report; compaction returns through the original modeling skill for validation/regeneration and verification, preserving total and per-split verified passes.
 
 ## Version Bumps
 
