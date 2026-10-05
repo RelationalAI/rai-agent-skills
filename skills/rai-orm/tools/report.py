@@ -9,8 +9,8 @@ import sys
 
 import yaml
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "rai-orm-refactor" / "tools"))
-from usage_scanner import workload_support
+# Shared static scanner; also consumed by rai-orm-refactor via its compatibility module.
+from orm_usage import workload_support
 
 from connectivity import analyze, bindings, read_yaml
 
@@ -18,14 +18,7 @@ from connectivity import analyze, bindings, read_yaml
 STATUSES = ("pass", "fail", "unverified", "inexpressible", "oracle-error")
 
 
-def concept_usage(model, verification, base_dir):
-    """Compatibility wrapper over the shared per-item usage scanner."""
-    entities = {o["id"]: o for o in model.get("object_types", []) if o["kind"] == "entity"}
-    _, support = workload_support(entities, verification, base_dir, None)
-    return None if support is None else Counter({eid: len(ids) for eid, ids in support.items()})
-
-
-def build_report(model, verification=None, connectivity=None, digest=None, base_dir="."):
+def build_report(model, verification=None, connectivity=None, digest=None, base_dir=".", plan=None, compaction=None):
     connectivity = connectivity if connectivity is not None else analyze(model, digest)[0]
     objects = Counter(o["kind"] for o in model.get("object_types", []))
     kinds = {o["id"]: o["kind"] for o in model.get("object_types", [])}
@@ -188,8 +181,17 @@ def build_report(model, verification=None, connectivity=None, digest=None, base_
         issue("DROPPED_COLUMNS", "warning", len(dropped), "Bind dropped source columns or record their justification in ontology-notes.md.")
     if verification is None:
         stats["verification"] = None
+    if plan is not None:
+        used = plan.get("rounds_used_by_skill_this_invocation", {}).get("rai-orm-refactor", 0)
+        allowance = plan.get("budget", {}).get("refactor_rounds", 2)
+        suspects = (compaction or {}).get("suspects", [])
+        if used >= allowance and suspects:
+            issue("REFACTOR_BUDGET_EXHAUSTED", "blocker", len(suspects),
+                  "Resume rai-orm with a fresh refactor allowance and review remaining compaction suspects.")
+            if status == "all-pass":
+                status = "verified-refactor-incomplete"
     return {"version": 1, "status": status, "statistics": stats,
-            "issues": sorted(issues, key=lambda i: (i["id"] != "BUDGET_EXHAUSTED", {"blocker": 0, "warning": 1, "info": 2}[i["severity"]], i["id"]))}
+            "issues": sorted(issues, key=lambda i: (i["id"] != "REFACTOR_BUDGET_EXHAUSTED", i["id"] != "BUDGET_EXHAUSTED", {"blocker": 0, "warning": 1, "info": 2}[i["severity"]], i["id"]))}
 
 
 def markdown(report):
@@ -197,8 +199,17 @@ def markdown(report):
     budget = next((i for i in issues if i["id"] == "BUDGET_EXHAUSTED"), None)
     lines = ([f"BUDGET_EXHAUSTED: {budget['count']} residual failures. Continue: {budget['next_action']}" +
               (f" Unverified items: {budget['unverified_items']}." if budget.get("unverified_items") else ""), ""] if budget else [])
+    refactor = next((i for i in issues if i["id"] == "REFACTOR_BUDGET_EXHAUSTED"), None)
+    if refactor:
+        lines.insert(0, f"REFACTOR_BUDGET_EXHAUSTED: {refactor['count']} remaining suspects. Continue: {refactor['next_action']}")
     lines += ["# ORM statistics and issues", "", f"Status: {report['status']}", ""]
     stats = report["statistics"]
+    if refactor:
+        v = stats["verification"]
+        coverage = (f"{v['items_by_status']['pass']} passed; {v['residual_failures']} residual failures; "
+                    f"{v['items_by_status']['unverified']} unverified." if v else "unknown.")
+        lines += ["Verified workload coverage: " + coverage,
+                  f"Refactor work: incomplete; {refactor['count']} remaining suspects.", ""]
     facts = stats["fact_types"]
     lines += [f"{stats['object_types']['entity']:,} concepts, {facts['entity_relationships']:,} relationships between concepts, "
               f"{facts['scalar_properties']:,} scalar properties, {facts['flags']:,} flags.",
@@ -244,13 +255,17 @@ def main():
     parser.add_argument("--verification")
     parser.add_argument("--connectivity")
     parser.add_argument("--digest")
+    parser.add_argument("--plan", help="JSON from state.py plan; reads compaction.after.json beside the model")
     parser.add_argument("--out-dir", default=".")
     args = parser.parse_args()
     try:
         read_json = lambda p: json.loads(Path(p).read_text(encoding="utf-8")) if p else None
+        metrics = Path(args.model).parent / "compaction.after.json"
         result = build_report(read_yaml(args.model), read_json(args.verification), read_json(args.connectivity),
                               read_yaml(args.digest) if args.digest else None,
-                              Path(args.verification).parent if args.verification else Path(args.model).parent)
+                              Path(args.verification).parent if args.verification else Path(args.model).parent,
+                              plan=read_json(args.plan),
+                              compaction=read_json(metrics) if args.plan and metrics.is_file() else None)
         target = Path(args.out_dir)
         target.mkdir(parents=True, exist_ok=True)
         (target / "orm-report.json").write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")

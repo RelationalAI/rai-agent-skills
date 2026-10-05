@@ -2,6 +2,7 @@
 
 import ast
 import importlib.util
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -115,6 +116,9 @@ def test_determinism_expected_digest_and_sorting(campus, tmp_path):
     assert outputs[0].read_bytes() == outputs[1].read_bytes()
     expected = FIXTURE.parent.parent / "expected" / "campus.sql.digest.yaml"
     assert outputs[0].read_bytes() == expected.read_bytes()
+    # Frozen aggregate bytes from before contribution compaction.
+    aggregate = {k: v for k, v in campus.items() if k not in {"item_contributions", "literal_cohorts"}}
+    assert hashlib.sha256(MODULE.dump_digest(aggregate).encode("utf-8")).hexdigest() == "52ef886f5f41a920961d140b0c676217620af0b826be6a24dcd861aef364db08"
     assert "generated_at" not in campus["workload"]
     digest = MODULE.Digest(MODULE.Schema(None, "sqlite"), "sqlite")
     for section in ("tables", "columns", "join_edges", "grain_keys", "filter_columns", "expressions"):
@@ -335,7 +339,7 @@ def test_contributions_subtract_without_old_query_text(tmp_path, change):
                         if field == "kinds":
                             row[field] = {k: v for k, v in row[field].items() if v}
                 if "distinct_literals" in row:
-                    row["distinct_literals"] = sum(c["count"] for c in part["literal_cohorts"] if set(c["items"]) - {"gone"})
+                    row["distinct_literals"] = sum(c["count"] for c in original["literal_cohorts"][part["literal_cohorts_key"]] if set(c["items"]) - {"gone"})
             if row["support"]:
                 remaining.append(row)
         remaining.sort(key=lambda r: (-r["support"], identity(r)))
@@ -357,7 +361,7 @@ def test_contributions_are_per_item_not_occurrence_and_keep_empty_items(tmp_path
     assert list(contributions) == ["error", "question", "repeated"]
     assert contributions["repeated"]["tables"] == [{"table": "A", "support": 1}]
     assert contributions["repeated"]["filter_columns"][0]["operators"]["eq"] == 1
-    assert contributions["repeated"]["filter_columns"][0]["literal_cohorts"] == [{"items": ["repeated"], "count": 1}]
+    assert result["literal_cohorts"][contributions["repeated"]["filter_columns"][0]["literal_cohorts_key"]] == [{"items": ["repeated"], "count": 1}]
     assert all(not rows for rows in contributions["error"].values())
     assert all(not rows for rows in contributions["question"].values())
 
@@ -385,3 +389,48 @@ def test_multiple_inputs_and_saved_split(tmp_path):
     result = subprocess.run([sys.executable, str(TOOL), "--input", str(first), "--input", str(second), "--out", str(out)], capture_output=True, text=True)
     assert result.returncode != 0
     assert "duplicate workload item id: p1" in result.stderr
+
+
+@pytest.mark.parametrize("suffix,content", [(".sql", "SELECT id FROM a;"), (".json", '[{"sql":"SELECT id FROM a"}]'), (".csv", "sql\nSELECT id FROM a\n"), (".txt", "Which items?\n")])
+def test_multiple_implicit_id_inputs(suffix, content, tmp_path):
+    paths = [tmp_path / (n + suffix) for n in ("first", "second")]
+    for path in paths:
+        path.write_text(content, encoding="utf-8")
+    single = MODULE.build_digest(paths[0], no_timestamp=True)
+    merged = MODULE.build_digest(paths, no_timestamp=True)
+    assert set(single["item_contributions"]) == {"i0001"}
+    assert set(merged["item_contributions"]) == {"first:i0001", "second:i0001"}
+    assignments = tmp_path / "verification.json"
+    assignments.write_text(json.dumps({"items": [{"id": "first:i0001", "split": "repair"}, {"id": "second:i0001", "split": "holdout"}]}), encoding="utf-8")
+    repair = MODULE.build_digest(paths, no_timestamp=True, split="repair", verification=assignments)
+    assert set(repair["item_contributions"]) == {"first:i0001"}
+    assert MODULE.workload_item_id({"id": "explicit"}, 1, paths[0], True) == "explicit"
+
+
+def test_cohorts_stored_once_and_size_scales_linearly(tmp_path):
+    source = tmp_path / "items.json"
+    source.write_text(json.dumps([{"id": f"q{i:04d}", "sql": f"SELECT x FROM a WHERE x IN ({i}, 9999)"} for i in range(400)]), encoding="utf-8")
+    result = MODULE.build_digest(source, no_timestamp=True)
+    assert len(result["literal_cohorts"]) == 1
+    cohorts = next(iter(result["literal_cohorts"].values()))
+    assert len(cohorts) == 401
+    for item in result["item_contributions"].values():
+        row = item["filter_columns"][0]
+        assert "literal_cohorts" not in row
+        assert row["literal_cohorts_key"] in result["literal_cohorts"]
+        assert row["distinct_literals"] == 2
+    assert len(yaml.safe_dump(result).encode("utf-8")) < 400_000
+    assert MODULE.Digest.cohort_key("a.b", "c") != MODULE.Digest.cohort_key("a", "b.c")
+
+
+def test_yaml_aliases_compact_contributions_without_changing_counts(tmp_path):
+    source = tmp_path / "items.json"
+    source.write_text(json.dumps([{"id": f"q{i:04d}", "sql": "SELECT a.x FROM a JOIN b ON a.x=b.x WHERE a.x=1"} for i in range(400)]), encoding="utf-8")
+    result = MODULE.build_digest(source, no_timestamp=True)
+    before = json.dumps(result, sort_keys=True)
+    encoded = MODULE.dump_digest(result)
+    assert encoded == MODULE.dump_digest(result)
+    assert len(encoded) < len(yaml.safe_dump(result)) / 2
+    assert yaml.safe_load(encoded) == result
+    assert json.dumps(result, sort_keys=True) == before
+    assert result["item_contributions"]["q0000"]["columns"][0] is not result["item_contributions"]["q0001"]["columns"][0]

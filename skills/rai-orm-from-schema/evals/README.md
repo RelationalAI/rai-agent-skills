@@ -2,7 +2,7 @@
 
 A walkthrough for running the skill end-to-end against the three benchmark fixtures, capturing outputs, and validating against the expected reference solutions.
 
-> **Caveat:** the reference solutions in `expected/` are Claude-drafted DRAFTS pending the reviewer's line-by-line review per the Phase 1.3 lock. Until reviewed, treat them as targets-to-iterate-against, not as authoritative ground truth. See [`notes/review-list.md`](../../../notes/review-list.md) for the open review items.
+> **Caveat:** the reference solutions in `expected/` are Claude-drafted DRAFTS pending the reviewer's line-by-line review per the Phase 1.3 lock. Until reviewed, treat them as targets-to-iterate-against, not as authoritative ground truth. See `notes/review-list.md` (historical note; not distributed) for the open review items.
 
 ---
 

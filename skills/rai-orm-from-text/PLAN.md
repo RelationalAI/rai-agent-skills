@@ -469,7 +469,7 @@ Same shape as the schema skill, plus `USAGE.md` + `evals/README.md` (lessons fro
 - **`rai-orm-core` promotion ordering** — v1 shipped without promoting shared assets (references stay in `skills/rai-orm-from-schema/references/`). v2 Phase 1.9 promotes them. **Decision needed:** does v1 get re-pointed at `rai-orm-core` after promotion (touches a v1-SENSITIVE skill that's awaiting validation), or does v2 reference them via `../rai-orm-from-schema/references/` until v1 is v1-STABLE? Recommended: **promote then re-point both skills atomically as part of Phase 1.9** — keeps the architecture clean. the reviewer confirms during v2 kickoff.
 - **Inherited issues from v1** (L1–L5 in Lessons section) — resolve at the source during Phase 1.9 or carry forward into v2's reference solutions.
 
-(Other deferred items — `domain_library.yaml`, the over-engineering stretch goals — tracked in [`../../notes/TODO.md`](../../notes/TODO.md).)
+(Other deferred items — `domain_library.yaml`, the over-engineering stretch goals — tracked in `../../notes/TODO.md` (historical note; not distributed).)
 
 ---
 

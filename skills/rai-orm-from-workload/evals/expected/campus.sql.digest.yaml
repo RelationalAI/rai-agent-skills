@@ -210,11 +210,11 @@ join_edges:
   kinds:
     inner: 4
 - id: je_2
-  left: &id010
+  left: &id018
     table: DEPARTMENT
     columns:
     - CODE
-  right: &id011
+  right: &id019
     table: SUBJECT
     columns:
     - DEPT_CODE
@@ -223,11 +223,11 @@ join_edges:
   kinds:
     inner: 2
 - id: je_3
-  left: &id005
+  left: &id006
     table: ENROLLMENT
     columns:
     - LEARNER_NO
-  right: &id006
+  right: &id007
     table: STUDENT
     columns:
     - ID
@@ -236,11 +236,11 @@ join_edges:
   kinds:
     inner: 2
 - id: je_4
-  left: &id018
+  left: &id044
     table: DEPARTMENT
     columns:
     - CODE
-  right: &id019
+  right: &id045
     table: STUDENT
     columns:
     - HOME_DEPT
@@ -249,11 +249,11 @@ join_edges:
   kinds:
     inner: 1
 - id: je_5
-  left: &id013
+  left: &id034
     table: ENROLLMENT
     columns:
     - LEARNER_NO
-  right: &id014
+  right: &id035
     table: STUDENT_DIRECTORY
     columns:
     - ID
@@ -262,11 +262,11 @@ join_edges:
   kinds:
     inner: 1
 - id: je_6
-  left: &id016
+  left: &id040
     table: STAFF
     columns:
     - DEPT_CODE
-  right: &id017
+  right: &id041
     table: STUDENT
     columns:
     - HOME_DEPT
@@ -276,7 +276,7 @@ join_edges:
     inner: 1
 grain_keys:
 - table: DEPARTMENT
-  columns: &id012
+  columns: &id020
   - NAME
   support: 3
   evidence:
@@ -284,7 +284,7 @@ grain_keys:
     count_distinct: 0
     distinct: 0
 - table: STUDENT
-  columns: &id007
+  columns: &id008
   - FULL_NAME
   support: 3
   evidence:
@@ -308,7 +308,7 @@ grain_keys:
     count_distinct: 1
     distinct: 0
 - table: STUDENT_DIRECTORY
-  columns: &id015
+  columns: &id036
   - EMAIL
   support: 1
   evidence:
@@ -350,18 +350,20 @@ expressions:
 - id: ex_1
   kind: aggregate-ratio
   template: SUM(CASE WHEN ENROLLMENT.GRADE >= ? THEN ? ELSE ? END) * ? / COUNT(*)
-  tables: &id008
+  tables: &id015
   - ENROLLMENT
-  columns: &id009
+  columns: &id016
   - ENROLLMENT.GRADE
   support: 2
 unresolved: []
 item_contributions:
   p01:
     tables:
-    - table: ENROLLMENT
+    - &id005
+      table: ENROLLMENT
       support: 1
-    - table: SUBJECT
+    - &id009
+      table: SUBJECT
       support: 1
     columns:
     - table: ENROLLMENT
@@ -374,7 +376,8 @@ item_contributions:
         group: 0
         order: 0
         aggregate: 1
-    - table: ENROLLMENT
+    - &id010
+      table: ENROLLMENT
       column: SUBJECT_ID
       support: 1
       roles:
@@ -384,7 +387,8 @@ item_contributions:
         group: 0
         order: 0
         aggregate: 0
-    - table: SUBJECT
+    - &id011
+      table: SUBJECT
       column: ID
       support: 1
       roles:
@@ -394,7 +398,8 @@ item_contributions:
         group: 0
         order: 0
         aggregate: 0
-    - table: SUBJECT
+    - &id012
+      table: SUBJECT
       column: TITLE
       support: 1
       roles:
@@ -405,7 +410,8 @@ item_contributions:
         order: 0
         aggregate: 0
     join_edges:
-    - left: *id001
+    - &id013
+      left: *id001
       right: *id002
       declared_fk: true
       support: 1
@@ -419,7 +425,8 @@ item_contributions:
         group_by: 0
         count_distinct: 1
         distinct: 0
-    - table: SUBJECT
+    - &id014
+      table: SUBJECT
       columns: *id004
       support: 1
       evidence:
@@ -431,12 +438,13 @@ item_contributions:
     unresolved: []
   p02:
     tables:
-    - table: ENROLLMENT
-      support: 1
-    - table: STUDENT
+    - *id005
+    - &id031
+      table: STUDENT
       support: 1
     columns:
-    - table: ENROLLMENT
+    - &id033
+      table: ENROLLMENT
       column: LEARNER_NO
       support: 1
       roles:
@@ -466,7 +474,8 @@ item_contributions:
         group: 0
         order: 0
         aggregate: 0
-    - table: STUDENT
+    - &id037
+      table: STUDENT
       column: ID
       support: 1
       roles:
@@ -477,15 +486,16 @@ item_contributions:
         order: 0
         aggregate: 0
     join_edges:
-    - left: *id005
-      right: *id006
+    - &id038
+      left: *id006
+      right: *id007
       declared_fk: false
       support: 1
       kinds:
         inner: 1
     grain_keys:
     - table: STUDENT
-      columns: *id007
+      columns: *id008
       support: 1
       evidence:
         group_by: 0
@@ -502,20 +512,16 @@ item_contributions:
         range: 0
         is_null: 0
       distinct_literals: 1
-      literal_cohorts:
-      - items:
-        - p02
-        count: 1
+      literal_cohorts_key: '["ENROLLMENT","TERM"]'
     expressions: []
     unresolved: []
   p03:
     tables:
-    - table: ENROLLMENT
-      support: 1
-    - table: SUBJECT
-      support: 1
+    - *id005
+    - *id009
     columns:
-    - table: ENROLLMENT
+    - &id017
+      table: ENROLLMENT
       column: GRADE
       support: 1
       roles:
@@ -525,53 +531,16 @@ item_contributions:
         group: 0
         order: 0
         aggregate: 1
-    - table: ENROLLMENT
-      column: SUBJECT_ID
-      support: 1
-      roles:
-        select: 0
-        filter: 0
-        join: 1
-        group: 0
-        order: 0
-        aggregate: 0
-    - table: SUBJECT
-      column: ID
-      support: 1
-      roles:
-        select: 0
-        filter: 0
-        join: 1
-        group: 0
-        order: 0
-        aggregate: 0
-    - table: SUBJECT
-      column: TITLE
-      support: 1
-      roles:
-        select: 1
-        filter: 0
-        join: 0
-        group: 1
-        order: 0
-        aggregate: 0
+    - *id010
+    - *id011
+    - *id012
     join_edges:
-    - left: *id001
-      right: *id002
-      declared_fk: true
-      support: 1
-      kinds:
-        inner: 1
+    - *id013
     grain_keys:
-    - table: SUBJECT
-      columns: *id004
-      support: 1
-      evidence:
-        group_by: 1
-        count_distinct: 0
-        distinct: 0
+    - *id014
     filter_columns:
-    - table: ENROLLMENT
+    - &id021
+      table: ENROLLMENT
       column: GRADE
       support: 1
       operators:
@@ -581,28 +550,25 @@ item_contributions:
         range: 1
         is_null: 0
       distinct_literals: 1
-      literal_cohorts:
-      - items:
-        - p03
-        - p04
-        count: 1
+      literal_cohorts_key: '["ENROLLMENT","GRADE"]'
     expressions:
-    - kind: aggregate-ratio
+    - &id022
+      kind: aggregate-ratio
       template: SUM(CASE WHEN ENROLLMENT.GRADE >= ? THEN ? ELSE ? END) * ? / COUNT(*)
-      tables: *id008
-      columns: *id009
+      tables: *id015
+      columns: *id016
       support: 1
     unresolved: []
   p04:
     tables:
-    - table: DEPARTMENT
+    - &id023
+      table: DEPARTMENT
       support: 1
-    - table: ENROLLMENT
-      support: 1
-    - table: SUBJECT
-      support: 1
+    - *id005
+    - *id009
     columns:
-    - table: DEPARTMENT
+    - &id024
+      table: DEPARTMENT
       column: CODE
       support: 1
       roles:
@@ -612,7 +578,8 @@ item_contributions:
         group: 0
         order: 0
         aggregate: 0
-    - table: DEPARTMENT
+    - &id025
+      table: DEPARTMENT
       column: NAME
       support: 1
       roles:
@@ -622,27 +589,10 @@ item_contributions:
         group: 1
         order: 0
         aggregate: 0
-    - table: ENROLLMENT
-      column: GRADE
-      support: 1
-      roles:
-        select: 1
-        filter: 1
-        join: 0
-        group: 0
-        order: 0
-        aggregate: 1
-    - table: ENROLLMENT
-      column: SUBJECT_ID
-      support: 1
-      roles:
-        select: 0
-        filter: 0
-        join: 1
-        group: 0
-        order: 0
-        aggregate: 0
-    - table: SUBJECT
+    - *id017
+    - *id010
+    - &id026
+      table: SUBJECT
       column: DEPT_CODE
       support: 1
       roles:
@@ -652,98 +602,40 @@ item_contributions:
         group: 0
         order: 0
         aggregate: 0
-    - table: SUBJECT
-      column: ID
-      support: 1
-      roles:
-        select: 0
-        filter: 0
-        join: 1
-        group: 0
-        order: 0
-        aggregate: 0
+    - *id011
     join_edges:
-    - left: *id010
-      right: *id011
+    - &id027
+      left: *id018
+      right: *id019
       declared_fk: false
       support: 1
       kinds:
         inner: 1
-    - left: *id001
-      right: *id002
-      declared_fk: true
-      support: 1
-      kinds:
-        inner: 1
+    - *id013
     grain_keys:
-    - table: DEPARTMENT
-      columns: *id012
+    - &id028
+      table: DEPARTMENT
+      columns: *id020
       support: 1
       evidence:
         group_by: 1
         count_distinct: 0
         distinct: 0
     filter_columns:
-    - table: ENROLLMENT
-      column: GRADE
-      support: 1
-      operators:
-        eq: 0
-        in: 0
-        like: 0
-        range: 1
-        is_null: 0
-      distinct_literals: 1
-      literal_cohorts:
-      - items:
-        - p03
-        - p04
-        count: 1
+    - *id021
     expressions:
-    - kind: aggregate-ratio
-      template: SUM(CASE WHEN ENROLLMENT.GRADE >= ? THEN ? ELSE ? END) * ? / COUNT(*)
-      tables: *id008
-      columns: *id009
-      support: 1
+    - *id022
     unresolved: []
   p05:
     tables:
-    - table: DEPARTMENT
-      support: 1
-    - table: SUBJECT
-      support: 1
+    - *id023
+    - *id009
     columns:
-    - table: DEPARTMENT
-      column: CODE
-      support: 1
-      roles:
-        select: 0
-        filter: 0
-        join: 1
-        group: 0
-        order: 0
-        aggregate: 0
-    - table: DEPARTMENT
-      column: NAME
-      support: 1
-      roles:
-        select: 1
-        filter: 0
-        join: 0
-        group: 1
-        order: 0
-        aggregate: 0
-    - table: SUBJECT
-      column: DEPT_CODE
-      support: 1
-      roles:
-        select: 0
-        filter: 0
-        join: 1
-        group: 0
-        order: 0
-        aggregate: 0
-    - table: SUBJECT
+    - *id024
+    - *id025
+    - *id026
+    - &id029
+      table: SUBJECT
       column: LEVEL
       support: 1
       roles:
@@ -754,22 +646,12 @@ item_contributions:
         order: 0
         aggregate: 0
     join_edges:
-    - left: *id010
-      right: *id011
-      declared_fk: false
-      support: 1
-      kinds:
-        inner: 1
+    - *id027
     grain_keys:
-    - table: DEPARTMENT
-      columns: *id012
-      support: 1
-      evidence:
-        group_by: 1
-        count_distinct: 0
-        distinct: 0
+    - *id028
     filter_columns:
-    - table: SUBJECT
+    - &id030
+      table: SUBJECT
       column: LEVEL
       support: 1
       operators:
@@ -779,57 +661,24 @@ item_contributions:
         range: 0
         is_null: 0
       distinct_literals: 1
-      literal_cohorts:
-      - items:
-        - p05
-        count: 1
-      - items:
-        - p06
-        - p09
-        count: 1
+      literal_cohorts_key: '["SUBJECT","LEVEL"]'
     expressions: []
     unresolved: []
   p06:
     tables:
-    - table: SUBJECT
-      support: 1
+    - *id009
     columns:
-    - table: SUBJECT
-      column: LEVEL
-      support: 1
-      roles:
-        select: 0
-        filter: 1
-        join: 0
-        group: 0
-        order: 0
-        aggregate: 0
+    - *id029
     join_edges: []
     grain_keys: []
     filter_columns:
-    - table: SUBJECT
-      column: LEVEL
-      support: 1
-      operators:
-        eq: 1
-        in: 0
-        like: 0
-        range: 0
-        is_null: 0
-      distinct_literals: 1
-      literal_cohorts:
-      - items:
-        - p05
-        count: 1
-      - items:
-        - p06
-        - p09
-        count: 1
+    - *id030
     expressions: []
     unresolved: []
   p07:
     tables:
-    - table: STUDENT_DIRECTORY
+    - &id032
+      table: STUDENT_DIRECTORY
       support: 1
     columns: []
     join_edges: []
@@ -839,8 +688,7 @@ item_contributions:
     unresolved: []
   p08:
     tables:
-    - table: STUDENT
-      support: 1
+    - *id031
     columns: []
     join_edges: []
     grain_keys: []
@@ -849,33 +697,12 @@ item_contributions:
     unresolved: []
   p09:
     tables:
-    - table: ENROLLMENT
-      support: 1
-    - table: STUDENT_DIRECTORY
-      support: 1
-    - table: SUBJECT
-      support: 1
+    - *id005
+    - *id032
+    - *id009
     columns:
-    - table: ENROLLMENT
-      column: LEARNER_NO
-      support: 1
-      roles:
-        select: 0
-        filter: 0
-        join: 1
-        group: 0
-        order: 0
-        aggregate: 0
-    - table: ENROLLMENT
-      column: SUBJECT_ID
-      support: 1
-      roles:
-        select: 0
-        filter: 0
-        join: 1
-        group: 0
-        order: 0
-        aggregate: 0
+    - *id033
+    - *id010
     - table: STUDENT_DIRECTORY
       column: EMAIL
       support: 1
@@ -896,74 +723,32 @@ item_contributions:
         group: 0
         order: 0
         aggregate: 0
-    - table: SUBJECT
-      column: ID
-      support: 1
-      roles:
-        select: 0
-        filter: 0
-        join: 1
-        group: 0
-        order: 0
-        aggregate: 0
-    - table: SUBJECT
-      column: LEVEL
-      support: 1
-      roles:
-        select: 0
-        filter: 1
-        join: 0
-        group: 0
-        order: 0
-        aggregate: 0
+    - *id011
+    - *id029
     join_edges:
-    - left: *id013
-      right: *id014
+    - left: *id034
+      right: *id035
       declared_fk: false
       support: 1
       kinds:
         inner: 1
-    - left: *id001
-      right: *id002
-      declared_fk: true
-      support: 1
-      kinds:
-        inner: 1
+    - *id013
     grain_keys:
     - table: STUDENT_DIRECTORY
-      columns: *id015
+      columns: *id036
       support: 1
       evidence:
         group_by: 0
         count_distinct: 0
         distinct: 1
     filter_columns:
-    - table: SUBJECT
-      column: LEVEL
-      support: 1
-      operators:
-        eq: 1
-        in: 0
-        like: 0
-        range: 0
-        is_null: 0
-      distinct_literals: 1
-      literal_cohorts:
-      - items:
-        - p05
-        count: 1
-      - items:
-        - p06
-        - p09
-        count: 1
+    - *id030
     expressions: []
     unresolved: []
   p10:
     tables:
-    - table: ENROLLMENT
-      support: 1
-    - table: STUDENT
-      support: 1
+    - *id005
+    - *id031
     columns:
     - table: ENROLLMENT
       column: GRADE
@@ -975,17 +760,9 @@ item_contributions:
         group: 0
         order: 0
         aggregate: 1
-    - table: ENROLLMENT
-      column: LEARNER_NO
-      support: 1
-      roles:
-        select: 0
-        filter: 0
-        join: 1
-        group: 0
-        order: 0
-        aggregate: 0
-    - table: STUDENT
+    - *id033
+    - &id039
+      table: STUDENT
       column: FULL_NAME
       support: 1
       roles:
@@ -995,26 +772,13 @@ item_contributions:
         group: 1
         order: 0
         aggregate: 0
-    - table: STUDENT
-      column: ID
-      support: 1
-      roles:
-        select: 0
-        filter: 0
-        join: 1
-        group: 0
-        order: 0
-        aggregate: 0
+    - *id037
     join_edges:
-    - left: *id005
-      right: *id006
-      declared_fk: false
-      support: 1
-      kinds:
-        inner: 1
+    - *id038
     grain_keys:
-    - table: STUDENT
-      columns: *id007
+    - &id042
+      table: STUDENT
+      columns: *id008
       support: 1
       evidence:
         group_by: 1
@@ -1027,8 +791,7 @@ item_contributions:
     tables:
     - table: STAFF
       support: 1
-    - table: STUDENT
-      support: 1
+    - *id031
     columns:
     - table: STAFF
       column: DEPT_CODE
@@ -1050,17 +813,9 @@ item_contributions:
         group: 0
         order: 0
         aggregate: 1
-    - table: STUDENT
-      column: FULL_NAME
-      support: 1
-      roles:
-        select: 1
-        filter: 0
-        join: 0
-        group: 1
-        order: 0
-        aggregate: 0
-    - table: STUDENT
+    - *id039
+    - &id043
+      table: STUDENT
       column: HOME_DEPT
       support: 1
       roles:
@@ -1071,75 +826,52 @@ item_contributions:
         order: 0
         aggregate: 0
     join_edges:
-    - left: *id016
-      right: *id017
+    - left: *id040
+      right: *id041
       declared_fk: false
       support: 1
       kinds:
         inner: 1
     grain_keys:
-    - table: STUDENT
-      columns: *id007
-      support: 1
-      evidence:
-        group_by: 1
-        count_distinct: 0
-        distinct: 0
+    - *id042
     filter_columns: []
     expressions: []
     unresolved: []
   p12:
     tables:
-    - table: DEPARTMENT
-      support: 1
-    - table: STUDENT
-      support: 1
+    - *id023
+    - *id031
     columns:
-    - table: DEPARTMENT
-      column: CODE
-      support: 1
-      roles:
-        select: 0
-        filter: 0
-        join: 1
-        group: 0
-        order: 0
-        aggregate: 0
-    - table: DEPARTMENT
-      column: NAME
-      support: 1
-      roles:
-        select: 1
-        filter: 0
-        join: 0
-        group: 1
-        order: 0
-        aggregate: 0
-    - table: STUDENT
-      column: HOME_DEPT
-      support: 1
-      roles:
-        select: 0
-        filter: 0
-        join: 1
-        group: 0
-        order: 0
-        aggregate: 0
+    - *id024
+    - *id025
+    - *id043
     join_edges:
-    - left: *id018
-      right: *id019
+    - left: *id044
+      right: *id045
       declared_fk: false
       support: 1
       kinds:
         inner: 1
     grain_keys:
-    - table: DEPARTMENT
-      columns: *id012
-      support: 1
-      evidence:
-        group_by: 1
-        count_distinct: 0
-        distinct: 0
+    - *id028
     filter_columns: []
     expressions: []
     unresolved: []
+literal_cohorts:
+  '["ENROLLMENT","GRADE"]':
+  - items:
+    - p03
+    - p04
+    count: 1
+  '["ENROLLMENT","TERM"]':
+  - items:
+    - p02
+    count: 1
+  '["SUBJECT","LEVEL"]':
+  - items:
+    - p05
+    count: 1
+  - items:
+    - p06
+    - p09
+    count: 1
