@@ -167,8 +167,8 @@ def test_declared_key_role_enables_dissimilar_names():
     model = {"object_types": [{"id": n.lower(), "name": n, "kind": "entity", "provenance": {"table": n + "_FEED"}} for n in ("Alpha", "Beta")],
              "source_bindings": [{"table": "Alpha_FEED", "object_type": "alpha", "key_columns": ["identifier"]}]}
     with duckdb.connect() as db:
-        db.execute('CREATE TABLE "Alpha_FEED" AS SELECT i AS identifier FROM range(2) t(i)')
-        db.execute('CREATE TABLE "Beta_FEED" AS SELECT i AS xyz FROM range(2) t(i)')
+        db.execute('CREATE TABLE "Alpha_FEED" AS SELECT i AS identifier FROM range(10) t(i)')
+        db.execute('CREATE TABLE "Beta_FEED" AS SELECT i AS xyz FROM range(10) t(i)')
         result, _ = analyze(model, db=db)
         assert result["candidates"][0]["classification"] == "fk-like"
         assert result["candidates"][0]["evidence"]["name_similarity"] < 0.65
@@ -219,7 +219,7 @@ def test_isolated_candidates_precede_other_components_and_exact_cap():
              "fact_types": [{"id": n, "roles": [{"object_type": n}, {"object_type": n + "2"}]} for n in ("a", "b")]}
     with duckdb.connect() as db:
         for name in ("a", "a2", "b", "b2", "z"):
-            db.execute(f'CREATE TABLE "{name}" AS SELECT i AS peer_key FROM range(2) t(i)')
+            db.execute(f'CREATE TABLE "{name}" AS SELECT i AS peer_key FROM range(10) t(i)')
         result, _ = analyze(model, db=db, max_comparisons=1)
         assert len(result["candidates"]) == 1
         first = result["candidates"][0]
@@ -239,3 +239,145 @@ def test_isolated_candidates_precede_other_components_and_exact_cap():
         assert capped["summary"]["candidates_untested"] == 8
         assert capped["candidates"][0]["test_status"] == "comparison-cap"
         assert capped["required_gaps"][0]["best_candidate"] == capped["candidates"][0]["id"]
+
+
+def test_uniqueness_uses_named_roles_not_scalar_constraint_provenance():
+    from connectivity import model_graph
+    model = {"object_types": [
+        {"id": "a", "name": "A", "kind": "entity", "provenance": {"table": "a", "pk_column": "id"}},
+        {"id": "value", "name": "Value", "kind": "value"}],
+        "fact_types": [{"id": "scalar", "roles": [
+            {"object_type": "a", "role_name": "owner", "provenance": {"table": "a", "column": "id"}},
+            {"object_type": "value", "role_name": "value", "provenance": {"table": "a", "column": "description"}}],
+            "constraints": [{"type": "uniqueness", "roles": ["owner"],
+                             "provenance": {"table": "a", "column": "description"}}]}],
+        "constraints": [{"type": "uniqueness", "role_refs": [{"fact_type": "scalar", "role": "owner"}],
+                         "provenance": {"table": "a", "columns": ["description", "other"]}}]}
+    assert dict(model_graph(model)[4]) == {"a": {"id"}}
+
+
+@pytest.mark.parametrize("distinct,rows,declared,expected", [
+    (5, 100, False, None), (5, 100, True, None),
+    (10, 100, False, "partial"), (10, 100, True, "fk-like"),
+    (98, 100, False, "fk-like"), (97, 100, False, "partial"),
+])
+def test_cardinality_and_unique_side(distinct, rows, declared, expected):
+    model = {"object_types": [{"id": n, "name": n, "kind": "entity", "provenance": {"table": n}}
+                              for n in ("a", "b")],
+             "source_bindings": [{"table": "a", "object_type": "a", "key_columns": ["KEY"] if declared else []}]}
+    digest = {"join_edges": [{"id": "required", "left": {"table": "a", "columns": ["key"]},
+                             "right": {"table": "b", "columns": ["key"]}}]}
+    with duckdb.connect() as db:
+        for n in ("a", "b"):
+            db.execute(f'CREATE TABLE {n} AS SELECT i % {distinct} AS key FROM range({rows}) t(i)')
+        result, proposals = analyze(model, db=db)
+        assert [c["classification"] for c in result["candidates"]] == ([expected] if expected else [])
+        assert bool(proposals["fact_types"]) == (expected == "fk-like")
+        if distinct < 10:
+            assert result["summary"]["value_comparisons"] == 0
+            required, _ = analyze(model, digest, db)
+            assert required["candidates"][0]["classification"] == ("fk-like" if declared else "partial")
+            assert required["summary"]["value_comparisons"] == 1
+
+
+@pytest.mark.parametrize("arity", [2, 3])
+def test_objectification_reaches_entity_roles(arity):
+    roles = list("abc"[:arity])
+    model = {"object_types": [{"id": n, "name": n, "kind": "entity", "provenance": {"table": n}}
+                              for n in roles + ["enrollment"]] + [{"id": "scalar", "kind": "value"}],
+             "fact_types": [{"id": "enrolled", "objectified_as": "enrollment",
+                             "roles": [{"object_type": n} for n in roles + ["scalar"]]}]}
+    digest = {"join_edges": [{"id": n, "left": {"table": "enrollment", "columns": [n]},
+                             "right": {"table": n, "columns": ["id"]}} for n in roles]}
+    result, _ = analyze(model, digest)
+    assert result["summary"]["isolated"] == 0
+    assert result["summary"]["relationships"] == 1
+    assert all(c["relationships"] == 1 for c in result["relationships_per_concept"])
+    assert result["required_gaps"] == []
+    assert all(j["status"] == "reachable" for j in result["join_checks"])
+    model["fact_types"][0]["status"] = "rejected"
+    assert len(analyze(model, digest)[0]["required_gaps"]) == arity
+
+
+def test_mixed_case_digest_deduplicates_metadata_columns(fixture):
+    model, _, db_path = fixture
+    digest = {"join_edges": [{"id": "upper", "left": {"table": "alpha_feed", "columns": ["PEER_KEY"]},
+                             "right": {"table": "beta_feed", "columns": ["Peer_Key"]}},
+                            {"id": "lower", "left": {"table": "BETA_FEED", "columns": ["peer_key"]},
+                             "right": {"table": "ALPHA_FEED", "columns": ["peer_key"]}}]}
+    with duckdb.connect(str(db_path), read_only=True) as db:
+        result, proposals = analyze(model, digest, db)
+        candidates = [c for c in result["candidates"] if c["required_gaps"]]
+        assert len(candidates) == 1
+        assert candidates[0]["required_gaps"] == ["lower", "upper"]
+        assert candidates[0]["classification"] == "fk-like"
+        assert candidates[0]["left"]["columns"] == ["peer_key"]
+        automatic = [p for p in proposals["fact_types"] if p["provenance"]["required_gaps"]]
+        exploratory = [p for p in proposals["fact_types"] if not p["provenance"]["required_gaps"]]
+        assert len(automatic) == len(exploratory) == 1
+        assert automatic[0]["provenance"]["left"]["table"] == "ALPHA_FEED"
+
+
+@pytest.mark.parametrize("location", ["rejected_proposals", "fact_types", "ids", "renamed"])
+def test_rejected_link_is_not_proposed_again(fixture, location):
+    model, _, db_path = fixture
+    with duckdb.connect(str(db_path), read_only=True) as db:
+        _, first = analyze(model, db=db)
+        rejected = first["fact_types"][0]
+        original_id = rejected["id"]
+        rejected["status"] = "rejected"
+        if location == "ids":
+            model["rejected_proposals"] = [original_id]
+        elif location == "renamed":
+            rejected["id"] = "archived-custom-id"
+            for side in ("left", "right"):
+                rejected["provenance"][side]["columns"] = [c.upper() for c in rejected["provenance"][side]["columns"]]
+            model["rejected_proposals"] = [rejected]
+        else:
+            model[location] = [rejected]
+        result, second = analyze(model, db=db)
+    assert result["summary"]["components"] == 2
+    assert len(second["fact_types"]) == len(first["fact_types"]) - 1
+    assert original_id not in {p["id"] for p in second["fact_types"]}
+
+
+def test_read_yaml_explicit_utf8(tmp_path, monkeypatch):
+    from connectivity import read_yaml
+    path = tmp_path / "model.yaml"
+    path.write_text("name: Εγγραφή\n", encoding="utf-8")
+    original = Path.read_text
+    def read(self, *args, **kwargs):
+        assert kwargs.get("encoding") == "utf-8"
+        return original(self, *args, **kwargs)
+    monkeypatch.setattr(Path, "read_text", read)
+    assert read_yaml(path) == {"name": "Εγγραφή"}
+
+
+def test_repair_digest_excludes_holdout_required_gaps(tmp_path):
+    digest_tool = TOOL.parents[2] / "rai-orm-from-workload" / "tools" / "workload_digest.py"
+    workload = tmp_path / "workload.json"
+    workload.write_text(json.dumps([
+        {"id": "repair", "sql": "SELECT a.id FROM a JOIN b ON a.id = b.id"},
+        {"id": "holdout", "sql": "SELECT b.id FROM b JOIN c ON b.id = c.id"}]), encoding="utf-8")
+    verification = tmp_path / "model.verification.json"
+    verification.write_text(json.dumps({"items": [{"id": n, "split": n} for n in ("repair", "holdout")]}), encoding="utf-8")
+    model = tmp_path / "model.orm.yaml"
+    model.write_text(yaml.safe_dump({"object_types": [
+        {"id": n, "name": n, "kind": "entity", "provenance": {"table": n}} for n in "abc"]}), encoding="utf-8")
+    gaps = {}
+    for mode in ("repair", "full", "legacy"):
+        digest = tmp_path / (mode + ".digest.yaml")
+        if mode != "legacy":
+            args = [sys.executable, str(digest_tool), "--input", str(workload), "--out", str(digest), "--no-timestamp"]
+            if mode == "repair":
+                args += ["--split", "repair", "--verification", str(verification)]
+            assert subprocess.run(args, capture_output=True).returncode == 0
+        else:
+            old = yaml.safe_load((tmp_path / "full.digest.yaml").read_text(encoding="utf-8"))
+            old.pop("item_contributions")
+            digest.write_text(yaml.safe_dump(old), encoding="utf-8")
+        assert cli(tmp_path, model, digest=digest).returncode == 0
+        result = json.loads((tmp_path / "connectivity.json").read_text(encoding="utf-8"))
+        gaps[mode] = {(g["left"]["table"], g["right"]["table"]) for g in result["required_gaps"]}
+    assert gaps["repair"] == {("a", "b")}
+    assert gaps["full"] == gaps["legacy"] == {("a", "b"), ("b", "c")}

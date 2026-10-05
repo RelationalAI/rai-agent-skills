@@ -84,7 +84,7 @@ def test_campus_expressions_filters_grain(campus):
 
 def test_questions_only(tmp_path):
     result = run_digest(FIXTURE / "workload.questions.txt", tmp_path / "questions.yaml")
-    assert list(result) == ["workload"]
+    assert list(result) == ["workload", "item_contributions"]
     assert result["workload"]["kind"] == "questions"
     assert result["workload"]["n_items"] == 12
     assert result["workload"]["n_questions"] == 12
@@ -241,10 +241,122 @@ def test_filter_operators_expression_redaction_and_timestamp(tmp_path):
 
 def test_module_limits():
     source = TOOL.read_text()
-    assert len(source.splitlines()) < 400
+    assert len(source.splitlines()) < 475
     tree = ast.parse(source)
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             assert node.end_lineno - node.lineno + 1 < 50, node.name
             assert node.returns is not None, node.name
             assert all(arg.annotation is not None for arg in node.args.args if arg.arg != "self"), node.name
+
+
+def test_saved_splits_and_ids_select_before_extraction(tmp_path):
+    source = tmp_path / "workload.json"
+    source.write_text(json.dumps([
+        {"id": "r", "sql": "SELECT a.id FROM a JOIN b ON a.id=b.id"},
+        {"id": "h", "sql": "SELECT b.id FROM b JOIN c ON b.id=c.id"},
+        {"id": "r2", "sql": "SELECT a.id FROM a JOIN b ON a.id=b.id"}]), encoding="utf-8")
+    verification = tmp_path / "model.verification.json"
+    verification.write_text(json.dumps({"split": {"repair": 999, "holdout": 0}, "items": [
+        {"id": "h", "split": "holdout"}, {"id": "r2", "split": "repair"}, {"id": "r", "split": "repair"}]}), encoding="utf-8")
+    repair = run_digest(source, tmp_path / "repair.digest.yaml", "--split", "repair", "--verification", verification)
+    holdout = run_digest(source, tmp_path / "holdout.digest.yaml", "--split", "holdout", "--verification", verification)
+    assert set(repair["item_contributions"]) == {"r", "r2"}
+    assert set(holdout["item_contributions"]) == {"h"}
+    assert [(e["left"]["table"], e["right"]["table"], e["support"]) for e in repair["join_edges"]] == [("A", "B", 2)]
+    assert [(e["left"]["table"], e["right"]["table"]) for e in holdout["join_edges"]] == [("B", "C")]
+    ids = tmp_path / "ids.txt"
+    ids.write_text("h\nr2\n", encoding="utf-8")
+    subset = run_digest(source, tmp_path / "subset.yaml", "--ids", ids, "--split", "repair", "--verification", verification)
+    assert subset["workload"]["n_items"] == subset["join_edges"][0]["support"] == 1
+    assert set(subset["item_contributions"]) == {"r2"}
+    ids.write_text("\n", encoding="utf-8")
+    empty = run_digest(source, tmp_path / "empty.yaml", "--ids", ids)
+    assert empty["workload"]["kind"] == "sql"
+    assert empty["workload"]["n_items"] == 0
+    assert empty["join_edges"] == []
+
+
+@pytest.mark.parametrize("failure", ["missing-file", "missing-assignment", "bad-assignment", "duplicate-assignment", "unknown-id", "duplicate-id"])
+def test_subset_rejects_invalid_selection(tmp_path, failure):
+    source = tmp_path / "queries.json"
+    source.write_text('[{"id":"q","sql":"SELECT x FROM a"}]', encoding="utf-8")
+    verification = tmp_path / "verification.json"
+    rows = [{"id": "q", "split": "repair"}]
+    if failure == "missing-assignment":
+        rows = []
+    elif failure == "bad-assignment":
+        rows[0]["split"] = "new"
+    elif failure == "duplicate-assignment":
+        rows *= 2
+    elif failure == "duplicate-id":
+        source.write_text('[{"id":"q","sql":"SELECT x FROM a"},{"id":"q","sql":"SELECT x FROM b"}]', encoding="utf-8")
+    verification.write_text(json.dumps({"items": rows}), encoding="utf-8")
+    flags = ["--split", "repair"]
+    if failure != "missing-file":
+        flags += ["--verification", str(verification)]
+    if failure == "unknown-id":
+        ids = tmp_path / "ids.txt"
+        ids.write_text("missing\n", encoding="utf-8")
+        flags += ["--ids", str(ids)]
+    out = tmp_path / "out.yaml"
+    result = subprocess.run([sys.executable, str(TOOL), "--input", str(source), "--out", str(out), *flags], capture_output=True)
+    assert result.returncode != 0
+    assert not out.exists()
+
+
+@pytest.mark.parametrize("change", ["removed", "changed"])
+def test_contributions_subtract_without_old_query_text(tmp_path, change):
+    source = tmp_path / "items.json"
+    rows = [{"id": "gone", "sql": "SELECT a.id + 42 FROM a LEFT JOIN b ON a.id=b.id WHERE a.x IN ('private-a', 'private-shared') GROUP BY a.id"},
+            {"id": "stay", "sql": "SELECT a.id + 99 FROM a JOIN b ON a.id=b.id WHERE a.x IN ('private-b', 'private-shared') GROUP BY a.id"},
+            {"id": "also-stay", "sql": "SELECT a.x FROM a WHERE a.x = 'private-shared'"}]
+    source.write_text(json.dumps(rows), encoding="utf-8")
+    original = run_digest(source, tmp_path / "original.yaml")
+    source.write_text(json.dumps(rows[1:] + ([{"id": "gone", "sql": "SELECT y FROM c WHERE y = 7"}] if change == "changed" else [])), encoding="utf-8")
+    ids = tmp_path / "ids.txt"
+    ids.write_text("stay\nalso-stay\n", encoding="utf-8")
+    expected = run_digest(source, tmp_path / "expected.yaml", "--ids", ids)
+    # This subtraction uses only the stored digest and item id; old SQL is gone.
+    removed = original["item_contributions"]["gone"]
+    identity = MODULE.Digest(MODULE.Schema(None, "sqlite"), "sqlite").name_key
+    for section in removed:
+        contributions = {identity(row): row for row in removed[section]}
+        remaining = []
+        for row in original[section]:
+            row = {k: v.copy() if isinstance(v, dict) else v for k, v in row.items() if k != "id"}
+            part = contributions.get(identity(row))
+            if part:
+                row["support"] -= part["support"]
+                for field in ("roles", "operators", "evidence", "kinds"):
+                    if field in row:
+                        for name, count in part[field].items():
+                            row[field][name] -= count
+                        if field == "kinds":
+                            row[field] = {k: v for k, v in row[field].items() if v}
+                if "distinct_literals" in row:
+                    row["distinct_literals"] = sum(c["count"] for c in part["literal_cohorts"] if set(c["items"]) - {"gone"})
+            if row["support"]:
+                remaining.append(row)
+        remaining.sort(key=lambda r: (-r["support"], identity(r)))
+        assert remaining == [{k: v for k, v in row.items() if k != "id"} for row in expected[section]]
+    encoded = yaml.safe_dump(original)
+    assert "private-" not in encoded
+    assert "SELECT " not in encoded
+    assert "42" not in encoded and "99" not in encoded
+
+
+def test_contributions_are_per_item_not_occurrence_and_keep_empty_items(tmp_path):
+    source = tmp_path / "items.json"
+    source.write_text(json.dumps([
+        {"id": "repeated", "sql": "SELECT x FROM a WHERE x=123; SELECT x FROM a WHERE x=123"},
+        {"id": "question", "question": "Which items?"},
+        {"id": "error", "sql": "SELECT FROM"}]), encoding="utf-8")
+    result = run_digest(source, tmp_path / "digest.yaml")
+    contributions = result["item_contributions"]
+    assert list(contributions) == ["error", "question", "repeated"]
+    assert contributions["repeated"]["tables"] == [{"table": "A", "support": 1}]
+    assert contributions["repeated"]["filter_columns"][0]["operators"]["eq"] == 1
+    assert contributions["repeated"]["filter_columns"][0]["literal_cohorts"] == [{"items": ["repeated"], "count": 1}]
+    assert all(not rows for rows in contributions["error"].values())
+    assert all(not rows for rows in contributions["question"].values())

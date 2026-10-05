@@ -81,6 +81,8 @@ Run the digest tool:
 python tools/workload_digest.py --input <workload file> --dialect <dialect> [--schema schema.sql] --out workload.digest.yaml
 ```
 
+For a saved verification split, add `--split repair --verification model.verification.json` and write `repair.digest.yaml`. Use `--split holdout` separately for evaluation. The tool reads each item's saved assignment; it never recomputes the split. Alternatively, `--ids selected.ids` selects one item id per line; combined with `--split`, it selects their intersection. Missing split assignments and unknown ids are errors. Selection happens before extraction, so holdout evidence cannot enter a repair digest.
+
 It parses each statement and counts, across items:
 - **Tables and columns**, with the role each column plays (select, filter, join, group, order, aggregate).
 - **Join edges**: the pair of tables and the column pairs of each equality join, from `JOIN … ON`, `USING`, and equality predicates in `WHERE` between two tables. `support` is the number of items that use the edge.
@@ -89,6 +91,8 @@ It parses each statement and counts, across items:
 - **Expressions**: arithmetic, CASE, date-part and aggregate-ratio expressions with their literals replaced by placeholders, grouped by the resulting template.
 
 Statements that do not parse are counted and listed by item id, never dropped silently. Non-SELECT statements are counted and skipped.
+
+The digest also records `item_contributions`: per-item structural counts for removing stale evidence after an item changes or disappears. Load [`references/digest-format.md`](references/digest-format.md) for subtraction rules and count-only distinct-literal bookkeeping. Legacy digests without contributions remain readable; rebuild them before subtracting item evidence.
 
 When the tool cannot run, do the same extraction by reading the SQL, and record `workload.extraction: manual` in the digest.
 
