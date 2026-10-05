@@ -18,14 +18,14 @@ Statistics include entity/value object types and `statistics.fact_types` split i
 
 Statistics also include inline and top-level constraints by source, status and their combination; relationships per concept; components and isolated concepts; covered tables and bound/dropped column counts. Coverage uses `source_bindings`, legacy provenance pointers and both column tuples of applied data-link facts. `source.scope.tables` supplies the explicit table inventory; `source.columns` supplies the optional column inventory. Wildcard scope is unknown, not proof of complete coverage. Missing column inventory yields `columns_unaccounted: null`. A bound column takes precedence over a dropped pointer for the same table/column.
 
-With verification, statistics also include per-round repair/holdout passes, repair group counts, regressions, residual failures by class, rates, and counts for `pass`, `fail`, `unverified`, `inexpressible`, `oracle-error`. Each repair entry counts as one group. Per-round connectivity is retained when recorded in the verification file. Missing item records within `workload.n_items` count as unverified. Pass rates use the verification summary, or recorded item statuses by split when summary rates are absent.
+With verification, statistics include `rounds_run_total`, `rounds_run_this_invocation` and a count-only `invocations` list; the Markdown states cumulative rounds separately from the budget of this invocation. Legacy reports use the last global round as the total (baseline 0 excluded) and say the invocation count is unknown. With verification, statistics also include per-round repair/holdout passes, repair group counts, regressions, residual failures by class, rates, and counts for `pass`, `fail`, `unverified`, `inexpressible`, `oracle-error`. Each repair entry counts as one group. Per-round connectivity is retained when recorded in the verification file. Missing item records within `workload.n_items` count as unverified. Pass rates use the verification summary, or recorded item statuses by split when summary rates are absent.
 
 Each issue has a fixed `id`, `severity` (`blocker`, `warning`, `info`), `count`, and `next_action`; some add numeric evidence or concept ids. Blockers sort first, with budget exhaustion ahead of every other issue.
 
 | Id | Trigger | Next action |
 |---|---|---|
-| `BUDGET_EXHAUSTED` | `stopped_because: budget` and residual failures > 0 | Resume `rai-orm-verify` at Step 5 using saved verification state, increase the round budget, re-run Step 6 |
-| `PLATEAU` | Explicit plateau stop, or two consecutive non-improving repair rounds with residual failures | Review residual groups at Step 4 before another repair |
+| `BUDGET_EXHAUSTED` | `stopped_because: budget` and residual failures or unverified items remain | Resume `rai-orm-verify` at Step 5 using saved verification state, run `rai-orm` Step 0 and `state.py plan` with a fresh invocation budget |
+| `PLATEAU` | Explicit plateau stop; legacy reports without invocation boundaries also infer two non-improving rounds with residual failures | Review residual groups at Step 4 before another repair |
 | `UNVERIFIED_ITEMS` | Explicit unverified items or workload items with no record | Continue oracle checks or user review; report their share of the workload |
 | `HOLDOUT_GAP` | Repair pass rate exceeds holdout pass rate by more than 0.15 | Review whether repairs are fitted; keep holdout failures out of repair decisions |
 | `ISLANDS` | More than one component | Review link proposals and justify remaining islands |
@@ -42,13 +42,13 @@ The singleton check runs only when `items[].pyrel` lists saved files. Paths reso
 
 ## Budget-first presentation
 
-When residual failures remain at budget exhaustion, the **first line** of `orm-report.md` is:
+When residual failures or unverified items remain at exhaustion of the budget of this invocation, the **first line** of `orm-report.md` is:
 
 ```text
-BUDGET_EXHAUSTED: 4 residual failures. Continue: Resume rai-orm-verify at Step 5 with model.verification.json; increase the round budget and re-run Step 6.
+BUDGET_EXHAUSTED: 4 residual failures. Continue: Resume rai-orm at Step 0 with orm-state.json and model.verification.json; run state.py plan for a fresh invocation budget.
 ```
 
-Show that line first in the user summary. JSON `status` is `budget-exhausted`, with a blocker issue and residual count. Neither file claims completion or all-pass in that state. Residual counts conservatively reconcile summary classes with recorded failed items, so an empty residual summary cannot hide failures.
+The first line additionally gives `Unverified items: N.` when any remain, even if residual failures are zero. The budget issue counts residual failures and records unverified items separately. Show that line first in the user summary. JSON `status` is `budget-exhausted`, with a blocker issue and residual count. Neither file claims completion or all-pass in that state. Residual counts conservatively reconcile summary classes with recorded failed items, so an empty residual summary cannot hide failures.
 
 Without budget failure, status is `residual-failures`, `required-gaps`, `unverified`, or `all-pass`, according to the evidence. `all-pass` refers only to verified supported items; exclusions, dropped columns and connectivity issues are still shown.
 

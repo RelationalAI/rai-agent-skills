@@ -9,6 +9,7 @@ Written at Step 7, next to `model.orm.yaml`. Counts, ids, class names and model 
   "oracle": "execution-match",
   "mode": "guided",
   "split": { "repair": 87, "holdout": 22, "rule": "every fifth id, sorted" },
+  "invocations": [{ "started_round": 1, "rounds_run": 1, "stopped_because": "plateau" }],
   "rounds": [
     { "round": 0, "model_revision": "sha256:…", "repair_pass": 13, "holdout_pass": 3,
       "by_class": { "grain": 46, "missing-element": 9, "translation": 12, "semantics": 7 },
@@ -36,7 +37,7 @@ Written at Step 7, next to `model.orm.yaml`. Counts, ids, class names and model 
     "repair_pass_rate": 0.70, "holdout_pass_rate": 0.64, "weak_passes": 2,
     "excluded": { "inexpressible": 3, "oracle-error": 1 },
     "residual_by_class": { "translation": 15, "semantics": 7, "grain": 4 },
-    "stopped_because": "plateau"
+    "stopped_because": "plateau", "rounds_run_total": 1
   }
 }
 ```
@@ -49,11 +50,36 @@ Written at Step 7, next to `model.orm.yaml`. Counts, ids, class names and model 
 4. For `user-review`, `unverified` items are not in the numerator of any pass rate; `summary` also carries `"reviewed": <n>` and `"unverified": <n>`.
 5. `repairs[].defect` and `repairs[].change` are stated without reference to any item. `items` is a count.
 6. `stopped_because` is one of `all-pass`, `plateau`, `budget`.
-7. Round 0 is the model as received. A report with only round 0 means no repair was made.
+7. Round 0 is the initial model as received. A resumed invocation uses existing round N as its N+0 baseline and starts attempts at N+1; a baseline is not a repair attempt. Preserve historical rounds, including rolled-back attempts with their acceptance/rollback evidence.
 8. Every round carries `connectivity`: component count, isolated entity ids, and required digest join ids from the repair-set check. Keep holdout connectivity separate from repair decisions; optional `holdout_connectivity` has the same shape and supplies evaluation only. Full components, table bindings, support and overlap evidence live in `connectivity.json` and proposed fact provenance.
 9. `items[].pyrel` records saved files relative to this JSON file. It is the only file inventory used for the singleton concept check in the statistics report.
-10. `stopped_because: budget` with residual failures is incomplete. Never label it done or all-pass. Step 7 runs `report.py` and leads the user summary with the first `BUDGET_EXHAUSTED` line from `orm-report.md`, including residual count and continuation step.
+10. `stopped_because: budget` means the budget of this invocation stopped with residual failures, and is incomplete. Never label it done or all-pass. Step 7 runs `report.py` and leads the user summary with the first `BUDGET_EXHAUSTED` line from `orm-report.md`, including residual count and continuation step.
 
 ## Statistics and issues artifacts
 
-Step 7 also emits `orm-report.json` and `orm-report.md` using `report.py` from `rai-orm`. Load the [statistics-and-issues format](../../rai-orm/references/statistics-and-issues.md) for statistics, fixed issue ids, severity, actions, privacy rules and the exact budget-first line. These artifacts complement the per-item verification log; they do not replace it. Always show the Markdown report and name the verification oracle.
+Step 7 also emits `orm-report.json` and `orm-report.md` using `report.py` from `rai-orm`. Load the statistics-and-issues reference in `rai-orm` for statistics, fixed issue ids, severity, actions, privacy rules and the exact budget-first line. These artifacts complement the per-item verification log; they do not replace it. Always show the Markdown report and name the verification oracle.
+
+## Resume and invocation accounting
+
+- `invocations` is an append-only ordered list of `{started_round, rounds_run, stopped_because}`. `started_round` is the next repair-round number, even when `rounds_run` is 0. Baseline N+0 is existing round N; attempts span N+1 through N+`rounds_run`. Each invocation ends with `all-pass`, `plateau` or `budget` under Step 7. `summary.stopped_because` names the latest invocation's stop.
+- Record `summary.rounds_run_total` as the sum of invocation attempts (baseline checks excluded). Round numbers stay global and monotonic, including rejected attempts. The report states the latest invocation's rounds and rounds run in total, instead of describing the cumulative history as a fresh budget.
+- Legacy reports without `invocations` retain their round list. Seed one legacy entry with `started_round: 1`, `rounds_run: N` (last recorded round, assuming the original baseline is 0), and the old stop reason before appending the new invocation. Do not invent individual prior invocations when their boundaries were not saved. Document a legacy partial-history limit if the original baseline is missing.
+- Read `split` and `items[].split` from the previous file; never recompute them on resume. The split object holds counts/rule; the item records are the authoritative assignments. For a workload delta, archive removed ids, keep surviving assignments and record genuinely new assignments once. Historical split evidence is retained with the archived snapshot.
+- Prior `pass` items keep `pyrel`, `passed_at_round`, `weak` and their oracle evidence. Run the accepted PyRel only as regression checks; test explicit rename adaptations as candidate files before replacing accepted paths. A prior pass cannot be relabeled as an exclusion to hide a regression.
+- Append resumed round connectivity blocks as before. Optional invocation `baseline_check` records count-only rechecks of round N when source/model changes require them; do not overwrite round N's original evidence or charge it as an attempt.
+- Settings come from `orm-state.json`: `rounds_per_invocation` 5, `patience` 2 and `until_pass` false by default. `until_pass: true` ignores the finite round cap until all items are terminal or patience is reached; it does not reset global counters, relax holdout isolation or convert `unverified` to pass.
+- Refactor acceptance shares the budget of this invocation. Record total/per-split passes, regressions, fixes, weak passes and exclusions. Reject any total/per-split pass-count drop or more regressions than fixes, restoring YAML/Python/bindings/report/rewrites together; retain the attempted round and rejection evidence in the final log.
+
+For example, an original invocation stopped at round 5 and a resume ran rounds 6 and 7:
+
+```json
+{
+  "invocations": [
+    {"started_round": 1, "rounds_run": 5, "stopped_because": "budget"},
+    {"started_round": 6, "rounds_run": 2, "stopped_because": "all-pass"}
+  ],
+  "summary": {"stopped_because": "all-pass", "rounds_run_total": 7}
+}
+```
+
+The resumed baseline remains round 5 with the old model. Its three saved passes are the regression inventory; they are not three new translations. The fresh invocation may spend up to five attempts by default even though five were already spent in the original invocation.

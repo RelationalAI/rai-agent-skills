@@ -126,15 +126,22 @@ def build_report(model, verification=None, connectivity=None, digest=None, base_
         repair_rate = repair_rate if repair_rate is not None else pass_rate("repair")
         holdout_rate = holdout_rate if holdout_rate is not None else pass_rate("holdout")
         stop = summary.get("stopped_because")
-        status = "budget-exhausted" if stop == "budget" and residual else ("residual-failures" if residual else ("unverified" if counts["unverified"] else "all-pass"))
-        stats["verification"] = {"rounds": rounds, "regressions": sum(r["regressions"] for r in rounds),
+        status = "budget-exhausted" if stop == "budget" and (residual or counts["unverified"]) else ("residual-failures" if residual else ("unverified" if counts["unverified"] else "all-pass"))
+        invocations = [{key: invocation[key] for key in ("started_round", "rounds_run", "stopped_because")}
+                       for invocation in verification.get("invocations", [])]
+        rounds_total = max(max((r["round"] for r in rounds), default=0),
+                           sum(i["rounds_run"] for i in invocations))
+        stats["verification"] = {"rounds": rounds, "invocations": invocations,
+                                 "rounds_run_total": rounds_total,
+                                 "rounds_run_this_invocation": invocations[-1]["rounds_run"] if invocations else None,
+                                 "regressions": sum(r["regressions"] for r in rounds),
                                  "residual_failures": residual, "residual_by_class": dict(sorted(residual_by_class.items())),
                                  "items_by_status": {k: counts[k] for k in STATUSES},
                                  "repair_pass_rate": repair_rate, "holdout_pass_rate": holdout_rate}
-        if stop == "budget" and residual:
+        if stop == "budget" and (residual or counts["unverified"]):
             issue("BUDGET_EXHAUSTED", "blocker", residual,
-                  "Resume rai-orm-verify at Step 5 with model.verification.json; increase the round budget and re-run Step 6.")
-        if stop == "plateau" or (len(rounds) >= 3 and rounds[-1]["repair_pass"] <= rounds[-2]["repair_pass"] <= rounds[-3]["repair_pass"] and residual):
+                  "Resume rai-orm at Step 0 with orm-state.json and model.verification.json; run state.py plan for a fresh invocation budget.", unverified_items=counts["unverified"])
+        if stop == "plateau" or (not invocations and len(rounds) >= 3 and rounds[-1]["repair_pass"] <= rounds[-2]["repair_pass"] <= rounds[-3]["repair_pass"] and residual):
             issue("PLATEAU", "warning", residual, "Review grouped residual failures at rai-orm-verify Step 4 before another repair round.")
         if repair_rate is not None and holdout_rate is not None and repair_rate - holdout_rate > 0.15 + 1e-12:
             issue("HOLDOUT_GAP", "warning", verification.get("split", {}).get("holdout", 0),
@@ -186,7 +193,8 @@ def build_report(model, verification=None, connectivity=None, digest=None, base_
 def markdown(report):
     issues = report["issues"]
     budget = next((i for i in issues if i["id"] == "BUDGET_EXHAUSTED"), None)
-    lines = ([f"BUDGET_EXHAUSTED: {budget['count']} residual failures. Continue: {budget['next_action']}", ""] if budget else [])
+    lines = ([f"BUDGET_EXHAUSTED: {budget['count']} residual failures. Continue: {budget['next_action']}" +
+              (f" Unverified items: {budget['unverified_items']}." if budget.get("unverified_items") else ""), ""] if budget else [])
     lines += ["# ORM statistics and issues", "", f"Status: {report['status']}", ""]
     stats = report["statistics"]
     facts = stats["fact_types"]
@@ -207,7 +215,10 @@ def markdown(report):
         lines += ["", "Dropped columns: " + ", ".join(c["table"] + "." + c["column"] for c in stats["sources"]["dropped_columns"]) + "."]
     v = stats["verification"]
     if v:
-        lines += ["", "## Verification", "", "| Round | Repair passes | Holdout passes | Repairs | Regressions | Components | Isolated ids | Required gap ids |", "|---|---:|---:|---:|---:|---:|---|---|"]
+        latest = v["rounds_run_this_invocation"]
+        lines += ["", "## Verification", "",
+                  f"Rounds run in total: {v['rounds_run_total']}; this invocation: {latest if latest is not None else 'unknown (legacy report)'}.",
+                  "", "| Round | Repair passes | Holdout passes | Repairs | Regressions | Components | Isolated ids | Required gap ids |", "|---|---:|---:|---:|---:|---:|---|---|"]
         for r in v["rounds"]:
             c = r.get("connectivity")
             lines.append(f"| {r['round']} | {r['repair_pass']} | {r['holdout_pass']} | {r['repairs']} | {r['regressions']} | " +

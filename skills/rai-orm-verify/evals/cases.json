@@ -74,14 +74,16 @@
       "id": "V-E6",
       "type": "budget-exhausted-report",
       "description": "The round budget expires while workload failures remain; the summary leads with the continuation action.",
-      "fixture_setup": "Use a synthetic verification file with stopped_because: budget, four residual missing-element failures, and recorded rounds and item ids; run report.py with a small synthetic model.",
+      "fixture_setup": "Use a synthetic verification file with stopped_because: budget, four residual missing-element failures, item ids, rounds 1 through 5, and one invocation with started_round: 0, rounds_run: 5, stopped_because: budget; run report.py with a small synthetic model.",
       "expected_behavior": {
-        "first_line": "BUDGET_EXHAUSTED: 4 residual failures. Continue: Resume rai-orm-verify at Step 5 with model.verification.json; increase the round budget and re-run Step 6.",
-        "json": "status: budget-exhausted and a BUDGET_EXHAUSTED blocker with count 4"
+        "first_line": "BUDGET_EXHAUSTED: 4 residual failures. Continue: Resume rai-orm at Step 0 with orm-state.json and model.verification.json; run state.py plan for a fresh invocation budget.",
+        "json": "status: budget-exhausted; a BUDGET_EXHAUSTED blocker with count 4, unverified_items: 0 and next_action matching the first_line continuation; statistics.verification has residual_failures: 4, residual_by_class: {missing-element: 4}, rounds_run_total: 5 and rounds_run_this_invocation: 5"
       },
       "pass_criteria": [
         "orm-report.md begins with the budget line, before any heading or statistics",
         "The user-facing summary also begins with that line verbatim",
+        "The BUDGET_EXHAUSTED blocker has count 4, unverified_items 0 and the same continuation action as the first line",
+        "orm-report.md contains Rounds run in total: 5; this invocation: 5.; the JSON records rounds_run_total and rounds_run_this_invocation as 5 and four residual missing-element failures",
         "Neither report claims done or all-pass while budget is exhausted with residual failures",
         "Reports contain counts, ids and names only; no SQL, question text or data values"
       ]
