@@ -1,5 +1,6 @@
 """Synthetic report stop conditions, statistics, privacy, and CLI checks."""
 
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -327,3 +328,99 @@ def test_closing_report_commands_use_fresh_plan(skill, step):
     closing = text.split(f"### Step {step} —", 1)[1].split("\n## ", 1)[0]
     assert "state.py plan > orm-plan.json" in closing
     assert "--plan orm-plan.json" in closing
+
+
+def test_round_connectivity_strings_byte_identical():
+    v = verification()
+    v["rounds"][0]["connectivity"] = {
+        "components": 2, "isolated": ["beta", "alpha"], "required_gaps": ["je_2", "je_1"]}
+    result = build_report(MODEL, v)
+    # Captured from the pre-R6 implementation, including whitespace and final newlines.
+    outputs = [json.dumps(result, sort_keys=True, indent=2) + "\n", markdown(result)]
+    assert [hashlib.sha256(s.encode("utf-8")).hexdigest() for s in outputs] == [
+        "e80eeee3a529e2e45da4a29b1e946e86ce7d458efe4411d56322b4deea16ec20",
+        "80a0346e6088974b889b4adf0e84e15bef507195d41511547a2aabc82c0929b4"]
+
+
+@pytest.mark.parametrize("field", ["isolated", "required_gaps"])
+@pytest.mark.parametrize("entries", [
+    [{"id": "beta", "name": "Ignored"}, {"id": "alpha"}],
+    [{"name": "beta"}, {"name": "alpha"}],
+], ids=["id", "name"])
+def test_round_connectivity_objects(field, entries):
+    v = verification()
+    v["rounds"][0]["connectivity"] = {field: entries}
+    result = build_report(MODEL, v)
+    assert result["statistics"]["verification"]["rounds"][0]["connectivity"][field] == ["alpha", "beta"]
+    assert result["statistics"].get("rounds_unparsed_connectivity", 0) == 0
+    assert "alpha, beta" in markdown(result)
+
+
+@pytest.mark.parametrize("field", ["isolated", "required_gaps"])
+@pytest.mark.parametrize("count", [0, 31])
+def test_round_connectivity_integer_count(field, count):
+    v = verification()
+    v["rounds"][0]["connectivity"] = {field: count}
+    result = build_report(MODEL, v)
+    c = result["statistics"]["verification"]["rounds"][0]["connectivity"]
+    assert c[field] == [] and c[field + "_count"] == count
+    assert result["statistics"].get("rounds_unparsed_connectivity", 0) == 0
+    assert f"{count} (count)" in markdown(result)
+
+
+@pytest.mark.parametrize("field", ["isolated", "required_gaps"])
+@pytest.mark.parametrize("entry", [["PRIVATE_VALUE"], {}, {"id": None, "name": "PRIVATE_VALUE"},
+                                  3, None, True])
+def test_round_connectivity_malformed_entry(field, entry):
+    v = verification()
+    v["rounds"][0]["connectivity"] = {field: ["beta", entry, {"id": "alpha"}]}
+    result = build_report(MODEL, v)
+    assert result["statistics"]["verification"]["rounds"][0]["connectivity"][field] == ["alpha", "beta"]
+    assert result["statistics"]["rounds_unparsed_connectivity"] == 1
+    assert "PRIVATE_VALUE" not in json.dumps(result) + markdown(result)
+
+
+@pytest.mark.parametrize("block", [None, [], "PRIVATE_VALUE", 3,
+    {"isolated": None, "required_gaps": {"id": "PRIVATE_VALUE"}, "components": []}])
+def test_round_connectivity_malformed_optional_block(block):
+    v = verification()
+    v["rounds"][0]["connectivity"] = block
+    result = build_report(MODEL, v)
+    assert result["statistics"]["rounds_unparsed_connectivity"] == (3 if isinstance(block, dict) else 1)
+    assert "PRIVATE_VALUE" not in json.dumps(result) + markdown(result)
+
+
+@pytest.mark.parametrize("flag,payload,path,category", [
+    ("verification", {"rounds": "PRIVATE_VALUE"}, "rounds", "expected list"),
+    ("verification", {"rounds": [{}]}, "rounds[0].round", "missing key"),
+    ("verification", {"items": None}, "items", "expected list"),
+    ("connectivity", {"components": "PRIVATE_VALUE"}, "connectivity.components", "expected list"),
+    ("connectivity", {"components": [{}]}, "connectivity.components[0].id", "missing key"),
+    ("plan", {"budget": "PRIVATE_VALUE"}, "plan.budget", "expected mapping"),
+    ("digest", {"workload": {"n_items": "PRIVATE_VALUE"}}, "digest.workload.n_items", "expected integer"),
+    ("digest", {"join_edges": [{}]}, "digest.join_edges[0].id", "missing key"),
+])
+def test_report_input_error_key_path(tmp_path, flag, payload, path, category):
+    model = tmp_path / "model.yaml"
+    model.write_text(yaml.safe_dump(MODEL), encoding="utf-8")
+    source = tmp_path / "input.json"
+    source.write_text(json.dumps(payload), encoding="utf-8")
+    completed = subprocess.run([sys.executable, str(TOOL), "--model", str(model),
+        "--" + flag, str(source), "--out-dir", str(tmp_path)], capture_output=True, text=True)
+    assert completed.returncode == 1
+    assert completed.stderr == f"ORM report failed: {path}: {category}\n"
+
+
+@pytest.mark.parametrize("flag", ["verification", "connectivity", "plan", "digest"])
+@pytest.mark.parametrize("problem,category", [("missing", "file access"), ("syntax", "invalid syntax"),
+                                            ("encoding", "invalid encoding"), ("root", "expected mapping")])
+def test_report_input_read_error(tmp_path, flag, problem, category):
+    model = tmp_path / "model.yaml"
+    model.write_text(yaml.safe_dump(MODEL), encoding="utf-8")
+    source = tmp_path / "PRIVATE_FILENAME"
+    if problem != "missing":
+        source.write_bytes({"syntax": b'{"PRIVATE_VALUE": [', "encoding": b'\xff', "root": b'[]'}[problem])
+    completed = subprocess.run([sys.executable, str(TOOL), "--model", str(model),
+        "--" + flag, str(source), "--out-dir", str(tmp_path)], capture_output=True, text=True)
+    assert completed.returncode == 1
+    assert completed.stderr == f"ORM report failed: {flag}: {category}\n"

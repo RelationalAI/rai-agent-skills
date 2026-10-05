@@ -3,6 +3,7 @@
 
 import argparse
 from collections import Counter
+from collections.abc import Mapping
 import json
 from pathlib import Path
 import sys
@@ -18,7 +19,98 @@ from connectivity import analyze, bindings, read_yaml
 STATUSES = ("pass", "fail", "unverified", "inexpressible", "oracle-error")
 
 
+class ReportInputError(ValueError):
+    """A schema path and fixed category, never an input value."""
+
+
+def check_shape(value, schema, path):
+    """Check consumed fields only; ! marks required keys, * map values."""
+    expected = dict if isinstance(schema, dict) else list if isinstance(schema, list) else schema
+    if not isinstance(value, expected) or (isinstance(value, bool) and expected == int):
+        category = {dict: "mapping", list: "list", int: "integer", str: "string"}.get(expected, "number")
+        raise ReportInputError(f"{path}: expected {category}")
+    if isinstance(schema, dict):
+        for field, child in schema.items():
+            if field == "*":
+                for item in value.values():
+                    check_shape(item, child, f"{path}.*")
+                continue
+            key = field.rstrip("!")
+            child_path = f"{path}.{key}" if path else key
+            if key in value:
+                check_shape(value[key], child, child_path)
+            elif field.endswith("!"):
+                raise ReportInputError(f"{child_path}: missing key")
+    elif isinstance(schema, list):
+        for index, item in enumerate(value):
+            check_shape(item, schema[0], f"{path}[{index}]")
+
+
+def check_inputs(verification, connectivity, digest, plan, compaction):
+    # Round connectivity is optional evidence, normalized separately below.
+    if verification is not None:
+        check_shape(verification, {
+            "workload": {"n_items": int}, "split": {"holdout": int},
+            "items": [{"id!": str, "status": str, "class": str, "split": str, "pyrel": str}],
+            "repairs": [{"round!": int}],
+            "rounds": [{"round!": int, "repair_pass": int, "holdout_pass": int, "regressions": int}],
+            "invocations": [{"rounds_run!": int}],
+            "summary": {"excluded": {"inexpressible": int, "oracle-error": int},
+                        "residual_by_class": {"*": int},
+                        "repair_pass_rate": (int, float, type(None)),
+                        "holdout_pass_rate": (int, float, type(None))}}, "")
+        ids = [item["id"] for item in verification.get("items", [])]
+        if len(set(ids)) != len(ids):
+            raise ReportInputError("items: duplicate ids")
+    if connectivity is not None:
+        check_shape(connectivity, {
+            "relationships_per_concept": [{"id!": str, "name!": str, "relationships!": int}],
+            "components": [{"id!": str, "size!": int, "concepts!": [{"name!": str}], "tables!": [str]}],
+            "isolated_concepts": [{"name!": str}], "required_gaps": list,
+            "summary": {"candidates_untested": int, "required_gaps_untested": int,
+                        "isolated_concepts_untested": int}}, "connectivity")
+    if digest is not None:
+        side = {"table!": str, "columns!": [str]}
+        check_shape(digest, {"workload": {"n_items": int},
+                            "join_edges": [{"id!": str, "left!": side, "right!": side}]}, "digest")
+    if plan is not None:
+        check_shape(plan, {"budget": {"refactor_rounds": int},
+                          "rounds_used_by_skill_this_invocation": {"rai-orm-refactor": int}}, "plan")
+    if compaction is not None:
+        check_shape(compaction, {"suspects": list}, "compaction")
+
+
+def round_connectivity(block):
+    """Return normalized optional evidence and the number of skipped values."""
+    if not isinstance(block, Mapping):
+        return None, 1
+    result, unparsed = {}, 0
+    components = block.get("components", 0)
+    if type(components) is not int:
+        components, unparsed = 0, 1
+    result["components"] = components
+    for field in ("isolated", "required_gaps"):
+        result[field] = []
+        entries = block.get(field, [])
+        if type(entries) is int:
+            result[field + "_count"] = entries
+            continue
+        if not isinstance(entries, list):
+            unparsed += 1
+            continue
+        for entry in entries:
+            if isinstance(entry, Mapping):
+                entry = entry.get("id", entry.get("name"))
+            if isinstance(entry, str):
+                result[field].append(entry)
+            else:
+                unparsed += 1
+        result[field].sort()
+    return result, unparsed
+
+
 def build_report(model, verification=None, connectivity=None, digest=None, base_dir=".", plan=None, compaction=None):
+    check_inputs(verification, connectivity, digest, plan, compaction)
     connectivity = connectivity if connectivity is not None else analyze(model, digest)[0]
     objects = Counter(o["kind"] for o in model.get("object_types", []))
     kinds = {o["id"]: o["kind"] for o in model.get("object_types", [])}
@@ -99,10 +191,11 @@ def build_report(model, verification=None, connectivity=None, digest=None, base_
                            "holdout_pass": r.get("holdout_pass", 0), "repairs": repairs[r["round"]],
                            "regressions": r.get("regressions", 0)})
             if "connectivity" in r:
-                c = r["connectivity"]
-                rounds[-1]["connectivity"] = {"components": c.get("components", 0),
-                                              "isolated": sorted(c.get("isolated", [])),
-                                              "required_gaps": sorted(c.get("required_gaps", []))}
+                c, unparsed = round_connectivity(r["connectivity"])
+                if c is not None:
+                    rounds[-1]["connectivity"] = c
+                if unparsed:
+                    stats["rounds_unparsed_connectivity"] = stats.get("rounds_unparsed_connectivity", 0) + unparsed
         repair_rate = summary.get("repair_pass_rate")
         holdout_rate = summary.get("holdout_pass_rate")
         def pass_rate(split):
@@ -244,8 +337,10 @@ def markdown(report):
                   "", "| Round | Repair passes | Holdout passes | Repairs | Regressions | Components | Isolated ids | Required gap ids |", "|---|---:|---:|---:|---:|---:|---|---|"]
         for r in v["rounds"]:
             c = r.get("connectivity")
+            def entries(field):
+                return f"{c[field + '_count']} (count)" if field + "_count" in c else ", ".join(c[field])
             lines.append(f"| {r['round']} | {r['repair_pass']} | {r['holdout_pass']} | {r['repairs']} | {r['regressions']} | " +
-                         (f"{c['components']} | {', '.join(c['isolated'])} | {', '.join(c['required_gaps'])} |" if c else "unknown | unknown | unknown |"))
+                         (f"{c['components']} | {entries('isolated')} | {entries('required_gaps')} |" if c else "unknown | unknown | unknown |"))
         lines += ["", "Items by status: " + ", ".join(f"{k}={n}" for k, n in v["items_by_status"].items()) + ".",
                   f"Repair pass rate: {v['repair_pass_rate']}; holdout pass rate: {v['holdout_pass_rate']}.",
                   "Residual failures by class: " + ", ".join(f"{k}={n}" for k, n in v["residual_by_class"].items()) + "."]
@@ -259,6 +354,22 @@ def markdown(report):
     return "\n".join(lines) + "\n"
 
 
+def read_input(path, key, yaml_input=False):
+    if path is None:
+        return None
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+        value = yaml.safe_load(text) if yaml_input else json.loads(text)
+    except UnicodeError:
+        raise ReportInputError(f"{key}: invalid encoding") from None
+    except OSError:
+        raise ReportInputError(f"{key}: file access") from None
+    except (ValueError, yaml.YAMLError):
+        raise ReportInputError(f"{key}: invalid syntax") from None
+    check_shape(value, dict, key)
+    return value
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", required=True)
@@ -268,21 +379,27 @@ def main():
     parser.add_argument("--plan", help="JSON from state.py plan; reads compaction.after.json beside the model")
     parser.add_argument("--out-dir", default=".")
     args = parser.parse_args()
+    path = "model"
     try:
-        read_json = lambda p: json.loads(Path(p).read_text(encoding="utf-8")) if p else None
         metrics = Path(args.model).parent / "compaction.after.json"
-        result = build_report(read_yaml(args.model), read_json(args.verification), read_json(args.connectivity),
-                              read_yaml(args.digest) if args.digest else None,
+        result = build_report(read_yaml(args.model), read_input(args.verification, "verification"),
+                              read_input(args.connectivity, "connectivity"), read_input(args.digest, "digest", True),
                               Path(args.verification).parent if args.verification else Path(args.model).parent,
-                              plan=read_json(args.plan),
-                              compaction=read_json(metrics) if args.plan and metrics.is_file() else None)
+                              plan=read_input(args.plan, "plan"),
+                              compaction=read_input(metrics, "compaction") if args.plan and metrics.is_file() else None)
+        path = "out_dir"
         target = Path(args.out_dir)
         target.mkdir(parents=True, exist_ok=True)
         (target / "orm-report.json").write_text(json.dumps(result, sort_keys=True, indent=2) + "\n", encoding="utf-8")
         (target / "orm-report.md").write_text(markdown(result), encoding="utf-8")
         return 0
-    except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError):
-        print("ORM report failed: check input structure and file access.", file=sys.stderr)
+    except ReportInputError as error:
+        print(f"ORM report failed: {error}", file=sys.stderr)
+        return 1
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, yaml.YAMLError) as error:
+        category = ("file access" if isinstance(error, OSError) else
+                    "missing key" if isinstance(error, KeyError) else "invalid structure")
+        print(f"ORM report failed: {path}: {category}", file=sys.stderr)
         return 1
 
 
