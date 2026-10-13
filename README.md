@@ -46,6 +46,7 @@ The skills in this repo instruct your agent **how to use the `relationalai` Pyth
 | 18 | [rai-orm-from-workload](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-orm-from-workload) | Workload evidence | Extract count-only SQL/question/pair evidence with per-item contributions and saved repair/holdout selection; evidence informs proposals, never pruning |
 | 19 | [rai-orm-verify](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-orm-verify) | Model verification | Check PyRel workload rewrites with a named oracle, repair generic defects and recheck saved passes while preserving splits, history and explicit regression acceptance |
 | 20 | [rai-orm-refactor](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-orm-refactor) | ORM compaction | Assess compaction suspects, then verify existing-element path proposals under a separate allowance; accept only while preserving every unchanged baseline pass |
+| 21 | [rai-orm-conventions](https://github.com/RelationalAI/rai-agent-skills/tree/main/skills/rai-orm-conventions) | ORM conventions | Steer rai-orm toward a business-entity model for question answering: profile the source, draft entity plan, domain notes and feedback, give Step 10 translation rules and lint the generated PyRel |
 
 ## Prerequisites
 **Requires `relationalai` (PyRel) v1.0.14+**
