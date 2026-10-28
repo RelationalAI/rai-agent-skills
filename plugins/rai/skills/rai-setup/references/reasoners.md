@@ -63,7 +63,6 @@ reasoners:
     size: HIGHMEM_X64_S
     settings:
       gurobi:
-        enabled: true
         license_secret_name: solvers.secrets.gurobi_license
         external_access_integration: gurobi_integration
 ```
