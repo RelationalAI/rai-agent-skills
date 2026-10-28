@@ -52,9 +52,22 @@ reasoners:
 
 Gurobi requires three Snowflake objects and a named prescriptive engine:
 
-1. **Snowflake secret** holding the Gurobi license key (e.g., `SOLVERS.SECRETS.GUROBI_LICENSE`)
-2. **External access integration** allowing the engine to reach the Gurobi license server (e.g., `gurobi_integration`)
-3. **A named prescriptive engine** — without `name`, PyRel uses an anonymous engine that does not receive the solver settings
+1. **Snowflake secret** holding a valid Gurobi license key (e.g., `SOLVERS.SECRETS.GUROBI_LICENSE`); preserve the key's whitespace and line breaks
+2. **Network rule** allowing egress to `token.gurobi.com:443` (e.g., `SOLVERS.NETWORKING.GUROBI_NETWORK_RULE`, with `MODE = EGRESS` and `TYPE = HOST_PORT`)
+3. **External access integration** referencing that network rule and enabled with `ENABLED = true` (e.g., `gurobi_integration`)
+4. **A named prescriptive engine** — without `name`, PyRel uses an anonymous engine that does not receive the solver settings
+
+After creating the Snowflake objects, grant the `RELATIONALAI` native app access to them:
+
+```sql
+GRANT USAGE ON DATABASE solvers TO APPLICATION RELATIONALAI;
+GRANT USAGE ON SCHEMA solvers.secrets TO APPLICATION RELATIONALAI;
+GRANT READ ON SECRET solvers.secrets.gurobi_license TO APPLICATION RELATIONALAI;
+GRANT USAGE ON SCHEMA solvers.networking TO APPLICATION RELATIONALAI;
+GRANT USAGE ON INTEGRATION gurobi_integration TO APPLICATION RELATIONALAI;
+```
+
+Use the database, schema, secret, and integration names from your setup. For object creation SQL, see [Gurobi licensing and enablement](https://docs.relational.ai/build/guides/reasoning/prescriptive/backends/gurobi/#licensing-and-enablement). Setup requires the appropriate Snowflake privileges (`CREATE SECRET`, `CREATE NETWORK RULE`, `CREATE EXTERNAL ACCESS INTEGRATION`, and authority to issue the grants above).
 
 ```yaml
 reasoners:
@@ -71,6 +84,7 @@ If `problem.solve("gurobi")` returns `Solver 'gurobi' is not enabled or not prop
 - The `name` field is set and the engine exists (`rai reasoners:list --type Prescriptive`)
 - The secret exists (`SHOW SECRETS IN SCHEMA SOLVERS.SECRETS`)
 - The integration exists and is enabled (`DESCRIBE INTEGRATION gurobi_integration`)
+- The native app has the grants above, especially `READ` on the secret and `USAGE` on the integration (`SHOW GRANTS TO APPLICATION RELATIONALAI`)
 
 For solver selection guidance, see `rai-prescriptive-problem`.
 
