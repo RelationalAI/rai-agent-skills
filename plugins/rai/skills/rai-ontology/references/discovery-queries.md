@@ -1,66 +1,16 @@
-# Discovery and EDA Queries
+# Graph tier tracing by node type
 
-SQL for Step 2 of the Greenfield Build Workflow — run these via the `snow` CLI or a Snowpark session before identifying concepts. The multiplicity results feed Step 4's Property-vs-Relationship decisions; the subtype discovery feeds Step 3.
+**One query lives here — the only Step 2 discovery `rai explore schema` does not cover.** Everything else the old EDA pass did by hand (column inventory and types, row counts, PK uniqueness, FK cardinality and multiplicity, null rates, value distributions, subtype counts, numeric ranges, broken-edge counts) is in `schema.json`. See [schema-json.md](schema-json.md).
 
-## Snowpark session for discovery
+## What the command cannot tell you
 
-```python
-from relationalai.config import SnowflakeConnection, create_config
-from snowflake import snowpark
+`graph_topology.edge_type_pairs[].entity_type` is a **table name** — the target table shared by both FKs of a co-targeted pair. So the command answers *"which tables are joined by edge tables, and how many edges"*.
 
-session: snowpark.Session = create_config().get_session(SnowflakeConnection)
-session.sql("""
-    SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE,
-           NUMERIC_PRECISION, NUMERIC_SCALE
-    FROM <database>.INFORMATION_SCHEMA.COLUMNS
-    WHERE TABLE_SCHEMA = '<schema>'
-    ORDER BY TABLE_NAME, ORDINAL_POSITION
-""").show()
-```
+It cannot answer *"which kinds of node connect to which"* when node kind is a **TYPE column value** on a single node table. A `NODES` table holding `TYPE` values `PLANT`, `WAREHOUSE`, `STORE`, joined by one `EDGES` table, produces exactly one table-level pair (`NODES → NODES`) while hiding a three-tier supply chain. That tier structure is what reveals hidden layers, missing connections, and whether an intermediate concept is needed to bridge tiers.
 
-Keep this result available through Step 6 — `DATA_TYPE` and `NUMERIC_SCALE` are the authoritative source for every RAI property type.
+## The query
 
-## Basic EDA
-
-```sql
--- Row count and PK uniqueness
-SELECT COUNT(*), COUNT(DISTINCT <pk_col>) FROM <database>.<schema>.<table>;
-
--- FK cardinality
-SELECT COUNT(DISTINCT <fk_col>), COUNT(*) FROM <database>.<schema>.<table>;
-
--- Null rate
-SELECT COUNT(*) AS total, COUNT(<col>) AS non_null,
-    ROUND(1 - COUNT(<col>) / COUNT(*), 2) AS null_rate
-FROM <database>.<schema>.<table>;
-
--- Value distribution for enum/category columns
-SELECT <col>, COUNT(*) AS cnt FROM <database>.<schema>.<table>
-GROUP BY <col> ORDER BY cnt DESC LIMIT 20;
-
--- Subtype discovery: TYPE/CATEGORY/CLASS columns with few values that
--- partition entities into fundamentally different kinds
--- e.g., BUSINESS_TYPE with values 'Supplier','Customer' → subtypes of Business
-SELECT <type_col>, COUNT(*) AS cnt,
-    ROUND(COUNT(*) * 100.0 / SUM(COUNT(*)) OVER (), 1) AS pct
-FROM <database>.<schema>.<table>
-GROUP BY <type_col> ORDER BY cnt DESC;
-
--- Relationship multiplicity: determine 1:1, 1:N, or M:N
--- Run for each FK — Step 4's Property-vs-Relationship choice depends on this
-SELECT
-    ROUND(COUNT(*) * 1.0 / NULLIF(COUNT(DISTINCT <fk_col>), 0), 2) AS avg_rows_per_fk,
-    MAX(cnt) AS max_rows_per_fk
-FROM (
-    SELECT <fk_col>, COUNT(*) AS cnt
-    FROM <database>.<schema>.<table>
-    GROUP BY <fk_col>
-);
-```
-
-## Graph / network topology tracing
-
-When the data describes a network (nodes connected by edges via FK chains), trace the full path before identifying concepts — this reveals hidden layers, missing connections, and whether intermediate concepts are needed to bridge tiers:
+Run this before Step 3 when the data describes a network **and** node kind lives in a column rather than in separate tables:
 
 ```sql
 -- What node types connect to what? Reveals tiers and layers.
@@ -69,14 +19,23 @@ FROM <edge_table> e
 JOIN <node_table> source ON e.SOURCE_ID = source.ID
 JOIN <node_table> dest ON e.DEST_ID = dest.ID
 GROUP BY from_type, to_type ORDER BY edges DESC;
-
--- Check for NULL FKs that create invisible network gaps
-SELECT COUNT(*) AS broken_edges FROM <edge_table>
-WHERE DEST_ID IS NULL OR SOURCE_ID IS NULL;
 ```
 
-## Type validation pull (Step 5)
+Substitute the real column names from `schema.json`: the edge table is the one `graph_topology` named, its two FK columns are its `fk_candidates` entries sharing a target, and the type column is the low-`distinct_count` column on the node table whose `value_distribution` lists the kinds.
 
-Re-use the Step 2 `INFORMATION_SCHEMA.COLUMNS` pull above (optionally filtered with `AND TABLE_NAME IN (...)`); `DATA_TYPE` and `NUMERIC_SCALE` are the columns that drive the type mapping.
+Run it through the same connection the command used — `snow` CLI, or a Snowpark session:
 
-Always run this before writing property declarations — a single type mismatch raises `TyperError` at query time and blocks ALL queries on the model without naming the offending property.
+```python
+from relationalai.config import SnowflakeConnection, create_config
+from snowflake import snowpark
+
+session: snowpark.Session = create_config().get_session(SnowflakeConnection)
+session.sql("<query above>").show()
+```
+
+## Reading the result
+
+- **A tier chain** (`PLANT → WAREHOUSE`, `WAREHOUSE → STORE`, and no `PLANT → STORE`) means the network has ordered layers. Model the tiers as subtypes of the node concept, and check whether each hop needs its own relationship.
+- **A missing pair** you expected is a data gap — raise it with the user rather than modelling the hop.
+- **A pair with a small count** next to large ones is often a data-quality artifact, not a real tier.
+- **`broken_edges` in `schema.json` is non-zero** — NULL FKs are excluded from these joins, so this query's totals will not sum to the edge table's `row_count`. Reconcile the two before concluding an edge type is absent.

@@ -41,7 +41,7 @@ model.define(Slot.new(position=std.common.range(1, K + 1)))
 Book = model.Concept("Book", identify_by={"id": Integer})
 Book.revenue = model.Property(f"{Book} has {Integer:revenue}")
 
-# Integer revenue — MiniZinc requires Problem(model, Integer); a single Float would coerce to MIP.
+# Integer revenue — MiniZinc requires Problem(model, Integer); a Float decision or Float data in an expression fails.
 book_data = pd.DataFrame(
     [(1, 30), (2, 25), (3, 18), (4, 12), (5, 8), (6, 5)],
     columns=["id", "revenue"],
@@ -86,8 +86,14 @@ problem.satisfy(model.where(Si.position < Sj.position).require(Si.x_choice <= Sj
 # --- Objective: maximize total slot revenue ---
 problem.maximize(sum(Slot.x_value))
 
-problem.solve("minizinc", time_limit_sec=30)
-problem.solve_info().display()
+TIME_LIMIT_SEC = 30
+problem.solve("minizinc", time_limit_sec=TIME_LIMIT_SEC)
+si = problem.solve_info()
+si.display()
+if si.termination_status != "OPTIMAL":
+    raise SystemExit(f"No solution to extract: {si.termination_status} {si.error}")
+if (si.solve_time_sec or 0) >= TIME_LIMIT_SEC:  # MiniZinc also reports a cut-off incumbent as OPTIMAL
+    print("Time limit reached: best slate found, not proven optimal")
 
 print("\nFinal slate (sentinel = 'no book'):")
 model.select(Slot.position, Slot.x_choice, Slot.x_value).inspect()

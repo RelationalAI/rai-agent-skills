@@ -1,13 +1,3 @@
-# Table of Contents
-
-- [Solver-Specific Parameters](#solver-specific-parameters)
-- [Diagnostics by Solver (duals, basis, conflict / IIS)](#diagnostics-by-solver-duals-basis-conflict--iis)
-- [Solve Pipeline](#solve-pipeline)
-- [Re-Solve Behavior](#re-solve-behavior-sdk--103)
-- [Warm Starting](#warm-starting)
-
----
-
 # Solver Parameters and Advanced Solve Topics
 
 ## Solver-Specific Parameters
@@ -40,17 +30,14 @@ problem.solve("ipopt", time_limit_sec=60, max_iter=1000, tol=1e-8, mu_strategy="
 
 **Prefer first-class parameters** over solver-specific equivalents: use `time_limit_sec` (not HiGHS `time_limit` or Gurobi `TimeLimit`), `relative_gap_tolerance` (not `mip_rel_gap` or `MIPGap`), `solution_limit` (not MiniZinc-specific kwargs).
 
-### `solution_limit` semantics (MiniZinc multi-solution mode)
+### `solution_limit` semantics
 
-`solution_limit=K` is a `solve(...)` kwarg, not a `solve_for(...)` kwarg. It enables multi-solution enumeration in MiniZinc:
+`solution_limit=K` is a `solve(...)` kwarg, not a `solve_for(...)` kwarg. The service passes it to the solver (Ipopt refuses it with `OTHER_ERROR`) and returns at most K of the points the solver reports:
 
-- **`OPTIMAL`** = the search exhausted the feasible space with at most K solutions found.
-- **`SOLUTION_LIMIT`** = the search stopped at K with more feasible solutions remaining.
-- The returned set is **up to K distinct feasible** solutions — NOT top-K-optimal, NOT ranked, NOT diversity-maximized.
+- **MiniZinc** (`Problem(model, Integer)`): up to K **distinct feasible** solutions, not top-K-optimal, ranked or diversity-maximized. `SOLUTION_LIMIT` = it found K (more may remain). `OPTIMAL` = it stopped with fewer: either the search finished, or `time_limit_sec` cut it off after at least one solution, since MiniZinc reports `TIME_LIMIT` only when it found none. If `si.solve_time_sec` reached the limit, the set may be incomplete, and the same holds for an optimization run: a 200-item knapsack cut off at 3 s reported `OPTIMAL` at 62741, against a true optimum of 65946 (relationalai 1.33.0).
+- **HiGHS**: one point, and the limit can stop a MIP search early, once K improving solutions have been found. A 60-item knapsack that solves `OPTIMAL` at 1077 ends `SOLUTION_LIMIT` at 1074 with `solution_limit=1` (relationalai 1.33.0). To get alternatives from HiGHS, re-solve with the previous solution excluded instead.
 
-**MAX_WITNESSES sizing rule:** for a stable, deterministic enumeration that terminates with `OPTIMAL`, size K **above** the expected feasible-set size. If K < feasible-set size, you get a `SOLUTION_LIMIT` cut-off whose order is solver-dependent — fine for K-of-many enumeration, problematic when downstream tests expect a deterministic full set.
-
-For the extraction pattern (`Variable.values(sol_index, value_ref)` + `populate=False`), see [csp-formulation.md](../../rai-prescriptive-problem/references/csp-formulation.md) § 4.
+**Sizing K for audit / witness enumeration:** size K **above** the expected feasible-set size, and `time_limit_sec` above the run time, so the search ends `OPTIMAL` because it finished. A `SOLUTION_LIMIT` cut-off returns a solver-dependent subset: fine for K-of-many sampling, wrong when downstream checks expect the full set. Extraction loop: [solution-extraction-details.md](solution-extraction-details.md) > Multiple Solutions.
 
 **When to tune parameters:**
 - Solver hits time limit -> increase `time_limit_sec`, or tighten formulation first
@@ -58,27 +45,6 @@ For the extraction pattern (`Variable.values(sol_index, value_ref)` + `populate=
 - Solver struggles to find any feasible solution -> `MIPFocus=1` (Gurobi), or relax constraints
 - Large LP is slow -> try `presolve="on"`, increase `threads`
 - NLP converges to poor local optimum -> try different `start=` values, adjust `mu_strategy`
-
-### Complexity and time estimates
-
-Rough heuristics for estimating solve time based on problem size and type:
-
-| Problem class | Variable count | Estimated time | Confidence |
-|---|---|---|---|
-| LP (no integers) | < 1,000 | ~1s | High |
-| LP | 1,000–10,000 | ~5s | Medium |
-| LP | 10,000+ | ~30s | Low |
-| MIP/IP | < 100 | ~2s | Medium |
-| MIP/IP | 100–1,000 | ~30s | Medium |
-| MIP/IP | 1,000–10,000 | ~5 min | Low |
-| MIP/IP | 10,000+ | ~30 min | Very low |
-
-**Key insight:** MIP solve time depends heavily on problem structure (LP relaxation tightness, symmetry, constraint topology), not just size. A 500-variable TSP can take longer than a 5,000-variable LP. These are rough lower bounds — actual times can vary 10x or more.
-
-**When to recommend time limit increases:**
-- Default 60s is appropriate for most problems under 5,000 variables
-- For 5,000+ variable MIPs, suggest 300–600s
-- If solver hits time limit with gap > 5%, suggest increasing limit or simplifying the formulation
 
 ## Diagnostics by Solver (duals, basis, conflict / IIS)
 
@@ -90,21 +56,15 @@ Rough heuristics for estimating solve time based on problem size and type:
 | `basis_status` | Simplex-based solve (HiGHS, Gurobi) | Interior-point (Ipopt) — no simplex basis |
 | Conflict / IIS (`in_conflict`, `*_in_conflict`) | Solver supports a conflict / IIS routine | Unsupported solver → `solve_info().conflict_status == "NOT_SUPPORTED"` |
 
-- **MIP → no duals.** Request `sensitivity=True` only on LP/QP. On a MIP the marginal attributes come back empty and a warning fires; use scenario sweeps instead.
-- **Ipopt (interior-point) → no basis.** Marginals are populated, but `basis_status` is absent — there's no simplex vertex. Use a simplex solver (HiGHS, Gurobi) if you need the basis.
-- **IIS is solver-dependent.** When a backend can't compute a conflict, `conflict_status` is `"NOT_SUPPORTED"` (and `"FAILED"` carries a reason on the shared `error` channel — `solve_info().error`, a `tuple[str, ...]`); manual bisection is the fallback. Reading the populated attributes lives in `rai-prescriptive-results` > Sensitivity & conflict attributes.
+On a MIP use scenario sweeps instead of duals. A `"FAILED"` conflict carries its reason on `solve_info().error`; for `NOT_SUPPORTED` / `FAILED`, bisection is the fallback ([conflict-analysis.md](conflict-analysis.md)). Reading the populated attributes: SKILL.md > Sensitivity & conflict attributes.
 
 ## Solve Pipeline
 
 Solving requires network connectivity — `problem.solve()` dispatches to the RAI solver service, which runs the selected backend (HiGHS, Gurobi, Ipopt, MiniZinc) and returns results. There is no local solver.
 
-## Re-Solve Behavior (SDK >= 1.0.3)
-
-Re-solving the same `Problem` instance is safe. After adding more constraints / variables / objective terms, calling `problem.solve()` again re-runs the solver and updates variable values. If the second solve fails, previous results remain intact — no degraded state. One exception: the diagnostic flags (`sensitivity=` / `conflict=`) pin the `Problem`'s result schema — plain and diagnostic solves can't mix on one instance, and a re-solve may add but never drop a requested family (each raises a `ValueError`). Build a fresh `Problem` to change regime; see [formulation-display.md](../../rai-prescriptive-problem/references/formulation-display.md) > Re-solving the Same Problem.
-
 ## Warm Starting
 
-For nonlinear solvers like Ipopt, provide initial values via the `start=` parameter in `solve_for()` to guide convergence toward a good local optimum:
+`start=` on `solve_for()` sets initial values: HiGHS, Gurobi and Ipopt use them as a warm start, and MiniZinc silently ignores them. For Ipopt they steer convergence toward a good local optimum:
 
 ```python
 # Standalone variable with warm start (Rosenbrock example)

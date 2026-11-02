@@ -1,12 +1,12 @@
-# Pattern: standalone Property (not on concept), model.union() for multi-component objective
+# Pattern: standalone Property (not on concept), added cost totals
 # Key ideas: Property(f"day {Integer:t} has {Float:val}") creates a concept-free variable;
-# model.union() combines disjoint cost terms into one summable expression; self-join on
+# Add separately keyed sums, with an empty-total default on each; self-join on
 # LTLSegment refs for piecewise cost decomposition.
 
 from relationalai.semantics import Float, Integer, Model, String, std, sum
 from relationalai.semantics.reasoners.prescriptive import Problem
 
-model = Model("standalone_property_union_objective")
+model = Model("standalone_property_added_objective")
 
 # --- Ontology (abbreviated) ---
 ResourceGroup = model.Concept("ResourceGroup", identify_by={"name": String})
@@ -65,26 +65,31 @@ problem.solve_for(
 LTLSegment1 = LTLSegment.ref()
 LTLSegment2 = LTLSegment.ref()
 
-# --- model.union() for multi-component objective ---
+# --- Add separately aggregated objective components ---
 inv_cost_rate = 0.001
 fast_fixed_cost = 2000.0
 
-total_inv_cost = inv_cost_rate * sum(x_inv).where(ResourceGroup.x_inv(t, x_inv), t > ResourceGroup.inv_start_t)
+total_inv_cost = inv_cost_rate * sum(ResourceGroup, t, x_inv).where(ResourceGroup.x_inv(t, x_inv), t > ResourceGroup.inv_start_t)
 
-total_fast_cost = fast_fixed_cost * sum(y_bin_fast).where(bin_fast(Integer.ref(), y_bin_fast))
+total_fast_cost = fast_fixed_cost * sum(t, y_bin_fast).where(bin_fast(t, y_bin_fast))
 
-total_ltl_rem_cost = LTLSegment.cost * sum(x_rem_ltl).per(LTLSegment).where(
-    LTLSegment.x_rem_ltl(Integer.ref(), x_rem_ltl)
+total_ltl_rem_cost = LTLSegment.cost * sum(t, x_rem_ltl).per(LTLSegment).where(
+    LTLSegment.x_rem_ltl(t, x_rem_ltl)
 )
 
 # Self-join: previous segment's limit * current segment's binary
-total_ltl_bin_cost = (LTLSegment1.cost * LTLSegment1.limit) * sum(y_bin_ltl_ref).per(LTLSegment1).where(
-    LTLSegment2.y_bin_ltl(Integer.ref(), y_bin_ltl_ref),
+total_ltl_bin_cost = (LTLSegment1.cost * LTLSegment1.limit) * sum(LTLSegment2, t, y_bin_ltl_ref).per(LTLSegment1).where(
+    LTLSegment2.y_bin_ltl(t, y_bin_ltl_ref),
     LTLSegment1.seg == LTLSegment2.seg - 1,
 )
 
-# model.union() combines all 4 disjoint cost terms into one summable expression
-total_cost = sum(model.union(total_inv_cost, total_fast_cost, total_ltl_rem_cost, total_ltl_bin_cost))
+# Name the inner group key in each outer sum; add all four defaulted totals.
+total_cost = (
+    (total_inv_cost | 0.0)
+    + (total_fast_cost | 0.0)
+    + (sum(LTLSegment, total_ltl_rem_cost) | 0.0)
+    + (sum(LTLSegment1, total_ltl_bin_cost) | 0.0)
+)
 problem.minimize(total_cost)
 
 problem.solve("highs", time_limit_sec=60)

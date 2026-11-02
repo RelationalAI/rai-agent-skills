@@ -10,6 +10,8 @@ Quick symptom→fix lookup. Load when SKILL.md § Known Limitations & Runtime Tr
 |---|---|---|
 | `no time column defined in data tables` | Temporal setup is incomplete. Typical causes: missing `at {Type:<slot>}` in the `Train`/`Val`/`Test` relationship signature, time column not bound in `define(Train(Source, train.<time_col>, ...))`, or the column is not a true `DATE`/`TIMESTAMP*` type (`rai-predictive-modeling` § Auto-Discovery step 8 has the full type list and probes) | Below — full fallback |
 
+Use this fallback only after the temporal setup is complete and the job still errors. Do not skip `has_time_column=True` because the column is `DATE` rather than `TIMESTAMP`, or because the task tables are already split by time.
+
 **Fallback (works for both):** drop `time_col=`, set `has_time_column=False`, drop `temporal_strategy=`, drop the date arg from `Train`/`Val`/`Test` Relationships. Keep the temporal split in pandas:
 
 ```python
@@ -108,3 +110,16 @@ Long-running predictive jobs are usually fine, not stuck. Use this ladder before
    A new experiment row appears within ~60 seconds of a `RUNNING` train job. If the job is `RUNNING` for several minutes and `SHOW EXPERIMENTS` shows no new run, the worker accepted the job but is failing silently before artifact creation — escalate via the QUEUED runbook (suspend + resume the predictive reasoner, then re-instantiate `GNN(...)`).
 
 If all three checks look healthy and the run is still long, it's a real long run — let it continue, or scale the engine up (see `rai-predictive-modeling` § Engine sizing) on the next attempt.
+
+---
+
+## RelFM (flat and relational)
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `ValueError` constructing relational `RelFM` on a graph with a self-referential FK | `_reject_self_referential_fks` blocks graphs where a real FK column points back at its own concept (e.g. `Edge.new(src=Employee, dst=Employee.manager)`) — RelFM's Deep Feature Synthesis walks the FK graph depth-first with no base case for revisiting a table, so it would recurse forever | Restructure the edge to drop the self-referential FK column, or use `GNN` instead (message passing has no such restriction) |
+| `ValueError` on `source_concept`/`context`/`domain` identity when constructing `RelFM` or `RelFMTabular`'s predictor mode | Both require the concept to be identified by **one `identify_by` column** (composite identities with 2+ columns are rejected) | Add a unique ID column in Snowflake (see relfm-flat-mode.md § Tables with no unique column; enable change tracking on it), or fall back to `GNN` (hash-based identity, no restriction) |
+| Leakage warning surfaces in `relfm_forecast.get_status()["warnings"]`, not a hard failure | A `RelFMTabular` forecaster's `domain` date falls *inside* `context`'s own date range — the model has effectively already seen the true value for that date | Check `get_status()["warnings"]` explicitly when building forecast domains programmatically; trim `context`'s date range or the `domain` window so they don't overlap |
+| `RelFM`/`RelFMTabular` job never touches a training pipeline, `fit()`/`load()`/`register_model()` don't exist on these classes | Both are zero-shot in-context learning estimators — every construction with a given `context` is a fresh inference setup, there is no trained-model artifact to reuse across sessions | Don't look for a register/load workflow for RelFM; re-construct with the same `context` each session, or persist predictions downstream via the same `write_pandas` pattern as GNN (see § Using Predictions Downstream) |
+
+Full param tables, identity rules, and worked examples: [relfm-flat-mode.md](relfm-flat-mode.md), [relfm-relational-mode.md](relfm-relational-mode.md).

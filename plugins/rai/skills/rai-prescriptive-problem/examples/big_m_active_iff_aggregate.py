@@ -123,7 +123,7 @@ if si.termination_status in ("OPTIMAL", "SOLUTION_LIMIT"):
     n = si.num_points or 0
     print(
         f"\nFound {n} feasible hub configurations"
-        f" (status={si.termination_status}; OPTIMAL = search exhausted, SOLUTION_LIMIT = stopped at K):"
+        f" (status={si.termination_status}; SOLUTION_LIMIT = stopped at K; OPTIMAL = fewer found, complete unless the 30 s limit hit):"
     )
     val = Integer.ref()
     for sol_idx in range(n):

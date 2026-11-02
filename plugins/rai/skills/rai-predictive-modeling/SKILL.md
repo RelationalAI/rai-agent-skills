@@ -21,6 +21,7 @@ description: Build graph neural network (GNN) models — concepts, Snowflake dat
 **When NOT to use:**
 - Training, predictions, evaluation, model management -- see `rai-predictive-training`
 - Graph algorithms (centrality, community detection) -- see `rai-graph-analysis`
+- Zero-shot / no-training-step prediction with `RelFM` -- the `Graph`/`PropertyTransformer` setup below also feeds `RelFM` directly (see `rai-predictive-training` § RelFM); single-table `RelFMTabular` needs no graph at all, see `rai-predictive-training`'s `references/relfm-flat-mode.md`
 
 **Overview:** 6 steps: imports -> concepts -> populate -> task relationships -> graph -> features
 
@@ -144,7 +145,7 @@ Additional type imports as needed: `Date`, `DateTime`, `Float`.
 
 ## Define and Populate Concepts
 
-> **User-input boundary:** the only things you need from the user are the 3 inputs in [`references/auto-discovery.md`](references/auto-discovery.md) -- source table FQNs, task table FQNs, and the experiment tracking database and schema. Auto-derive PKs, FKs, columns, types, edges, task type, and timestamp candidates from Snowflake schema introspection. Use the in-skill `get_table_schema(table_name, database, schema)` helper in `references/auto-discovery.md` as the default schema source before any manual SQL fallback. Don't ask the user for column-level details.
+> **User-input boundary:** the only things you need from the user are the 3 inputs in [`references/auto-discovery.md`](references/auto-discovery.md) -- source table FQNs, task table FQNs, and the experiment tracking database and schema. Auto-derive PKs, FKs, columns, types, edges, task type, and timestamp candidates from Snowflake schema introspection. Use the in-skill `get_table_schema(table_name, database, schema)` helper in `references/auto-discovery.md` as the default schema source before any manual SQL fallback. Don't ask the user for column-level details. The discovery summary names the connected database, the estimator (`RelFM` or `GNN`), and the task type without being asked.
 
 Two concept categories show up in a GNN pipeline, distinguished by their role in the graph:
 
@@ -159,7 +160,7 @@ Two concept categories show up in a GNN pipeline, distinguished by their role in
 
 ### Graph (node) Concepts
 
-The `identify_by` key names must exist as columns in the Snowflake table. Column-name matching is **case-insensitive** in both `identify_by` keys and property accesses -- a Snowflake column `FOO_BAR` can be referenced as `Concept.foo_bar`, `Concept.FOO_BAR`, or any other casing. Spelling still has to match exactly. Check `INFORMATION_SCHEMA.COLUMNS` or run `DESCRIBE TABLE` to confirm the columns before writing `identify_by` or property accesses.
+The `identify_by` key names must exist as columns in the Snowflake table. Column-name matching is **case-insensitive** in both `identify_by` keys and property accesses -- a Snowflake column `FOO_BAR` can be referenced as `Concept.foo_bar`, `Concept.FOO_BAR`, or any other casing. Spelling still has to match exactly. Check `INFORMATION_SCHEMA.COLUMNS` or run `DESCRIBE TABLE` to confirm the columns before writing `identify_by` or property accesses. Type each key from that column's `DATA_TYPE` (`NUMBER` scale 0 → `Integer`, other `NUMBER` / `FLOAT` → `Float`, `VARCHAR`/`TEXT` → `String`, `DATE` → `Date`, `TIMESTAMP*` → `DateTime`). Do not use `Any` for a concept key when the type is known. `Any` is only for a relationship slot whose type is genuinely unknown (`{Any:ts}`, `{Any:label}`).
 
 ```python
 User = Concept("User", identify_by={"user_id": Integer})
@@ -187,7 +188,7 @@ The GNN pipeline expects pre-existing train/val/test split tables in Snowflake. 
 
 **Split to match the prediction question.** When the task is a forecast — predicting a future period from past data — build the splits **temporally**: train on the earliest periods, validate on the next, test on the most recent, so the model is always scored on a period it has not seen. A random shuffle-and-slice (e.g. 80/10/10 by row) puts the same time range in every split, leaking seasonal and period-level signal into training — the validation metric looks healthy but reflects interpolation within a seen period, and the model degrades on a genuinely future one. A random split is right only when rows are exchangeable (the question has no time dimension).
 
-`has_time_column` and the `at {…}` clause are a separate concern: they make the *relationship* time-aware for the model but do **not** partition the data — the split is decided entirely by which rows you place in each task table. A forecast needs both: temporally-partitioned task tables *and* the time-aware relationship.
+A `DATE` or `TIMESTAMP*` column on a task table (`DATE`, `TIMESTAMP`, `TIMESTAMP_NTZ`, `TIMESTAMP_LTZ`, `TIMESTAMP_TZ`, `DATETIME`) makes the task temporal. Treat it as temporal even when the rows are already split by time: relationships use `at {Type:<slot>}`, `PropertyTransformer` sets `time_col=` for that column, and the estimator is constructed with `has_time_column=True`. A `DATE` column counts; it does not need a time of day. `has_time_column` makes the relationship time-aware for the model and does **not** itself partition train/val/test — the split is still which rows sit in each task table.
 
 `PropertyTransformer` and the task-table pattern also work with concepts populated from local data via `model.data(df)` -- not just `Table(...).to_schema()`. Useful when some concept data lives in local CSVs (e.g. optimizer parameters) while the graph comes from Snowflake.
 
@@ -197,7 +198,7 @@ The GNN pipeline expects pre-existing train/val/test split tables in Snowflake. 
 
 Relationships encode the task structure using a template string with three parts:
 - **Head** = source concept (the concept being predicted on)
-- **"at" clause** = timestamp field (required if the task table contains a time column, otherwise omit)
+- **"at" clause** = timestamp field (required when the task table has a `DATE` or `TIMESTAMP*` column; omit only when it has neither)
 - **"has" clause** = label (classification/regression) or target concept (link prediction)
 
 For per-task-type Relationship Arity Rules and full code examples, see [references/task-relationships.md](references/task-relationships.md).
@@ -248,6 +249,10 @@ Bref = B.ref()
 define(BB1Edge.new(src=B, dst=Bref)).where(B.field1 == Bref.id)
 define(BB2Edge.new(src=B, dst=Bref)).where(B.field2 == Bref.id)
 ```
+
+### Reuse for RelFM (no training step)
+
+Everything above -- `Graph`, `Edge` definitions, `PropertyTransformer` -- is consumed identically by relational `RelFM`, not just `GNN`. If the goal is zero-shot prediction rather than a trained model, skip `rai-predictive-training`'s `fit()` step entirely and construct `RelFM(graph=..., property_transformer=..., context=Train, validation=Validation, task_type=...)` directly -- see `rai-predictive-training`'s [references/relfm-relational-mode.md](../rai-predictive-training/references/relfm-relational-mode.md). Restrictions to flag before building the graph, if RelFM is the target: RelFM cannot use a self-referential foreign key, and it cannot use a cycle that runs through several concepts. DFS feature synthesis has no base case for revisiting a table. The constructor rejects the self-referential case only, so do not write a multi-concept cycle — name the edges that close it and ask which one to drop. RelFM also does not support the `text` `PropertyTransformer` type (drop free-text fields instead).
 
 ---
 

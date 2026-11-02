@@ -12,7 +12,7 @@ Demonstrates:
     - `Group.placed == 1`: exactly `replicas` placed — all of them.
   Anything in between (e.g., 2 of 3 placed) is infeasible.
 - 2D binary assignment matrix `Member.in_slot(Slot, x)` coupled to a per-member 0/1
-  placement indicator `Member.placed` via `sum(x).per(Member) == Member.placed`.
+  placement indicator `Member.placed` via `sum(Slot, x).per(Member) == Member.placed`.
 - Per-group placement indicator `Group.placed` decision variable.
 - Objective: maximize total groups placed (linear in `Group.placed`).
 
@@ -83,12 +83,12 @@ problem.solve_for(Group.placed, type="bin", name=["g_placed", Group.id])
 
 # --- Coupling: per-member assignment row sum == placement indicator ---
 problem.satisfy(
-    model.where(Member.in_slot(Slot, x)).require(sum(x).per(Member) == Member.placed)
+    model.where(Member.in_slot(Slot, x)).require(sum(Slot, x).per(Member) == Member.placed)
 )
 
 # --- Slot capacity ---
 problem.satisfy(
-    model.where(Member.in_slot(Slot, x)).require(sum(x).per(Slot) <= Slot.capacity)
+    model.where(Member.in_slot(Slot, x)).require(sum(Member, x).per(Slot) <= Slot.capacity)
 )
 
 # --- Gang atomicity IC (the focal pattern) ---

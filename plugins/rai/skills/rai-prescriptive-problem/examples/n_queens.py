@@ -43,4 +43,7 @@ problem.satisfy(no_attacks, name=["no_attack", Qi.row, Qj.row])
 
 # --- Solve ---
 problem.solve("minizinc", time_limit_sec=30)
+si = problem.solve_info()
+if si.termination_status != "OPTIMAL":
+    raise SystemExit(f"No solution to extract: {si.termination_status} {si.error}")
 model.select(Queen.row, Queen.column).inspect()

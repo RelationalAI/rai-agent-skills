@@ -38,7 +38,9 @@ Selection.x_assigned = Property(f"{Selection} is {Float:assigned}")
 model.define(Selection.new(slot=Slot))
 
 SelectionRef = Selection.ref()
-penalty_per_unmet = 20
+# Above 252 (the longest task, 6 h, at the top overtime rate, 28.0 * 1.5), which bounds the
+# overtime any one assignment can add, so demand goes unmet only when no assignment can serve it
+penalty_per_unmet = 400
 
 # --- Sample data ---
 worker_data = model.data(
@@ -151,6 +153,13 @@ total_hours = (
 )
 problem.satisfy(model.require(Worker.x_excess_hours >= total_hours - Worker.standard_hours))
 
+# Constraint: served hours come from assigned workers (without this link, served is free
+# and unmet demand never binds)
+assigned_hours = (
+    sum(SelectionRef.x_assigned * SelectionRef.slot.task.duration).where(SelectionRef.slot.task == Task).per(Task)
+)
+problem.satisfy(model.require(Task.x_served <= assigned_hours))
+
 # Constraint: unmet demand >= workload - served (soft constraint via penalty)
 problem.satisfy(model.require(Task.x_unmet >= Task.workload - Task.x_served))
 
@@ -160,3 +169,7 @@ unmet_penalty = penalty_per_unmet * sum(Task.x_unmet)
 problem.minimize(excess_cost + unmet_penalty)
 
 problem.solve("highs", time_limit_sec=60)
+si = problem.solve_info()
+if si.termination_status != "OPTIMAL":
+    raise SystemExit(f"No solution to extract: {si.termination_status} {si.error}")
+model.select(Task.name, Task.workload, Task.x_served, Task.x_unmet).inspect()

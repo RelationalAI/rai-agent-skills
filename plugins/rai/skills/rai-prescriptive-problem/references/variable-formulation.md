@@ -3,14 +3,10 @@
 - [Variable Principles](#variable-principles)
   - [Choosing variable type](#choosing-variable-type)
   - [solve_for parameter reference](#solve_for-parameter-reference)
-  - [Bounds guidance](#bounds-guidance)
-  - [Deriving bounds from data](#deriving-bounds-from-data)
   - [Variable bounds from data vs literals](#variable-bounds-from-data-vs-literals)
-  - [Granularity](#granularity)
   - [Sparse variable creation with where=[]](#sparse-variable-creation-with-where)
   - [Decision variable x_ prefix convention](#decision-variable-x_-prefix-convention)
   - [Naming conventions](#naming-conventions)
-  - [Self-check: variables](#self-check-variables)
 - [Advanced Variable Patterns](#advanced-variable-patterns)
   - [Multi-argument properties as variables](#multi-argument-properties-as-variables)
   - [Standalone properties as variables](#standalone-properties-as-variables)
@@ -19,26 +15,13 @@
   - [Conditional fixing from data](#conditional-fixing-from-data)
   - [Piecewise-linear (PWL) modeling](#piecewise-linear-pwl-modeling)
   - [Derived properties for intermediate computations](#derived-properties-for-intermediate-computations)
-  - [Config-driven parameterization and constraint tiers](#config-driven-parameterization-and-constraint-tiers)
+  - [Config-driven parameterization](#config-driven-parameterization)
 - [Scenario and Parameterization Patterns](#scenario-and-parameterization-patterns)
 <!-- /TOC -->
 
 ## Variable Context Integration
 
-**Your suggestions should be inspired by BOTH the base model structure AND any user inputs.**
-
-**1. Start with the Base Model:**
-- Examine the concepts, properties, and relationships in the model
-- Identify which properties naturally represent decisions (quantity, assigned, amount, etc.)
-- Understand what optimization problems this model is designed to support
-
-**2. Layer in User Goals (if provided):**
-If the user provided goals (look for WHAT USER IS SOLVING FOR, USER'S REQUIREMENTS AND LIMITS, HOW USER MEASURES SUCCESS):
-- Parse their input to understand their specific needs
-- Identify values, options, or limits they mentioned (e.g., "budget is $10K", "options are A, B, C")
-- Align your suggestions with both the model's capabilities AND the user's stated goals
-
-**3. Identify the Primary Decision Variable FIRST:**
+**1. Identify the Primary Decision Variable FIRST:**
 
 Before suggesting auxiliary or aggregation variables, identify the **primary decision entity** — the concept where the core decision actually lives. Always suggest the primary variable on that entity first. Aggregation or tracking variables on parent dimensions are secondary.
 
@@ -51,7 +34,7 @@ Before suggesting auxiliary or aggregation variables, identify the **primary dec
 
 **Why this matters:** Suggesting only aggregation-level variables (e.g., total per channel, total per campaign) without the leaf-level variable makes the formulation incomplete — the solver needs individual decisions to optimize, and aggregate constraints reference sums of those individual decisions.
 
-**4. Decision Criteria for Variable Pattern Selection:**
+**2. Decision Criteria for Variable Pattern Selection:**
 
 **Choose the simplest pattern that works.** Extended property is the default; cross-product is the exception. Unnecessary cross-products explode entity counts and slow solves.
 
@@ -74,7 +57,7 @@ WHICH PATTERN TO USE:
 
 **Key heuristic:** If the model has Operation/Pipeline/Route/Edge concepts connecting entities, put flow/quantity variables directly on those concepts. Do NOT create a new FlowDecision concept — the existing concept already has the right entity granularity.
 
-**5. Entity Creation Strategy (Problem-Type Dependent):**
+**3. Entity Creation Strategy (Problem-Type Dependent):**
 
 The entity creation strategy for cross-product concepts depends on the **problem type**:
 
@@ -93,12 +76,6 @@ The entity creation strategy for cross-product concepts depends on the **problem
 - Use **shared dimension grounding** — one entity per unique dimension value
 - `model.define(UnmetDemand.new(sku=Demand.sku))` — one per unique demanded SKU
 
-**Decision rule:**
-- If the problem asks "which pairings to select/assign" → full cross-product (assignment)
-- If the problem asks "how much to flow along existing paths" → relationship-grounded (flow)
-- If the problem aggregates by a dimension → shared dimension grounding
-- If no relationship exists between A and B → full cross-product (no choice)
-
 ```python
 # ASSIGNMENT: Full cross-product (all possible pairings)
 model.define(WorkerShift.new(worker=Worker, shift=Shift))
@@ -112,13 +89,13 @@ model.define(TaskAssignment.new(task=Task, sprint=Sprint)).where(
 model.define(UnmetDemand.new(sku=Demand.sku))  # One per unique SKU
 ```
 
-**Warning:** Full cross-product of table-backed concepts can produce N*M entities. For large entity counts (>100 on each side), consider if the problem truly requires all pairings or if a relationship filter is appropriate.
+**Warning:** A bare cross-product `model.define(X.new(a=A, b=B))` produces N*M entities, whether A and B are populated from tables or from `model.data(...)`. For large entity counts (>100 on each side), consider if the problem truly requires all pairings or if a relationship filter is appropriate.
 
-**6. Slack Variables for Feasibility:**
+**4. Slack Variables for Feasibility:**
 
-When the problem involves **minimizing cost/distance/time subject to demand or requirement constraints**, you MUST suggest a slack/unmet-demand variable. Without it, if supply < demand the solver returns INFEASIBLE instead of a useful partial solution.
+When the problem involves **minimizing cost/distance/time subject to demand or requirement constraints**, add a slack/unmet-demand variable. Without it, if supply < demand the solver returns INFEASIBLE instead of a useful partial solution. Complete example (variable, constraint and penalty): "Demand satisfaction with slack via shared dimension" in [constraint-formulation.md](constraint-formulation.md).
 
-Pattern: Create a slack concept from the demand/requirement dimension with a continuous variable (lower=0). Include in both the demand constraint (supply + slack >= demand) and the objective (original_cost + PENALTY * sum(slack)).
+Pattern: Create a slack concept from the demand/requirement dimension with a continuous variable (lower=0). Include in both the demand constraint (supply + slack >= demand) and the objective (original_cost + PENALTY * (sum(UnmetDemand.x_quantity) | 0.0)).
 
 ```python
 UnmetDemand = model.Concept("UnmetDemand")
@@ -126,16 +103,12 @@ UnmetDemand.sku = model.Property(f"{UnmetDemand} for {SKU:sku}")
 UnmetDemand.x_quantity = model.Property(f"{UnmetDemand} of {Float:quantity}")
 model.define(UnmetDemand.new(sku=Demand.sku))
 # Include in constraint: inflow + slack >= demand
-# Include in objective: cost + PENALTY * sum(slack)
+# Include in objective: cost + PENALTY * (sum(UnmetDemand.x_quantity) | 0.0)
 ```
-
-**Entity Creation Rules (check context before choosing):**
-1. **Check if concepts are TABLE-BACKED**: If so, bare `model.define(X.new(a=A, b=B))` produces 0 entities — a junction table or filtered `.where()` is required.
-2. **Bare cross-product** (`model.define(X.new(a=A, b=B))`) only works for inline (non-table-backed) concepts with small entity counts.
 
 For v1 entity creation syntax (junction table patterns, filtered cross-products, `.where()` vs `.new()` kwargs), see `rai-pyrel` > Data Loading Patterns and templates for complete working examples.
 
-**7. Multi-Index Variables on Existing Concepts (Prefer Over Cross-Product Concepts):**
+**5. Multi-Index Variables on Existing Concepts (Prefer Over Cross-Product Concepts):**
 
 When a decision variable is naturally indexed by an existing concept plus one or more dimensions, use a **multi-argument property** on the existing concept. Do NOT create a cross-product concept just to carry a variable.
 
@@ -164,23 +137,7 @@ problem.solve_for(
 **Decision rule for multi-index vs cross-product:**
 - If the decision naturally belongs on one concept but is indexed by another → **multi-index property** (e.g., "how much Mode ships per ResourceGroup")
 - If the decision is inherently about a pairing with no natural owner → **cross-product concept** (e.g., "assign Worker to Shift")
-- If the model already has a relationship between the concepts → **always prefer multi-index** using `where=[]` to ground variables on the relationship
-
-**Grounding multi-index variables with `where=[]`:**
-
-```python
-# Ground by existing relationship (only create variables where relationship exists)
-problem.solve_for(
-    Worker.hours(Shift, x), lower=0,
-    where=[Worker.available_for(Shift)],  # Uses existing availability relationship
-)
-
-# Ground by data range (parametric/time-indexed)
-problem.solve_for(
-    ResourceGroup.inv(t, x_inv), lower=0,
-    where=[t == std.common.range(ResourceGroup.inv_start_t, ResourceGroup.inv_end_t + 1)],
-)
-```
+- If the model already has a relationship between the concepts → **always prefer multi-index** using `where=[]` to ground variables on the relationship (examples: [Sparse variable creation with `where=[]`](#sparse-variable-creation-with-where))
 
 ---
 
@@ -191,37 +148,12 @@ problem.solve_for(
 | Type | When to use | Business meaning | Examples | `type=` | Num type |
 |------|-------------|-----------------|----------|---------|----------|
 | **Continuous** | Quantities, amounts, flows, weights, fractions | How much? | Gallons shipped, dollars allocated, percentage weight | `"cont"` (default) | `Float` |
-| **Integer** | Counts, schedules, indices, ordering values | How many? | Number of workers, units produced, trucks dispatched | `"int"` | `Integer` |
+| **Integer** | Counts, schedules, indices, ordering values | How many? | Number of workers, units produced, trucks dispatched | `"int"` | `Float` (MIP); `Integer` only for pure CP |
 | **Binary** | Yes/no decisions, selection, activation | Should we or not? | Open this facility, assign this worker, select this supplier | `"bin"` | `Float` (for MILP with binary + continuous vars); `Integer` only for pure CP |
 
 Use the most restrictive type that fits. Binary is a special case of integer. Continuous problems solve faster than integer/mixed-integer.
 
-**Decision rule:** Ask "What can I adjust to improve the outcome?" If the answer is a quantity, use continuous. If it is a count, use integer. If it is a yes/no choice, use binary.
-
-**Problem numeric type — the key implementation axis:**
-
-| Numeric Type | Solver Stack | When to Use | Examples |
-|-------------|-------------|-------------|----------|
-| `Float` | HiGHS (LP/MIP), Gurobi, Ipopt (NLP) | Any problem with continuous variables; MIP with `type="int"` | Diet, portfolio, flow, scheduling with binary vars |
-| `Integer` | MiniZinc (combinatorial) | Pure integer/combinatorial problems; satisfaction problems | Sudoku, n-queens, graph coloring, social golfer |
-
-**Important:** `Float` with `type="int"` variables (MIP) is NOT the same as `Integer`. MIP uses branch-and-bound on continuous relaxation (HiGHS/Gurobi). Integer uses pure combinatorial search (MiniZinc). Different solver stacks, different expression support.
-
-**Use `Integer` when:**
-- All variables have finite discrete domains
-- You need global constraints (`all_different`, cardinality)
-- The problem is pure satisfaction (no objective)
-- Pairwise inequality or combinatorial structure dominates
-
-**Use `Float` when:**
-- Any variable is continuous (quantities, flows, weights)
-- You mix continuous + integer variables (MIP)
-- Linear/quadratic expressions dominate
-
-```python
-problem = Problem(model, Float)    # Continuous/MIP (diet, portfolio, flow, scheduling)
-problem = Problem(model, Integer)  # Pure combinatorial (sudoku, n-queens, graph coloring)
-```
+**Problem numeric type:** `Problem(model, Float)` runs on HiGHS, Gurobi or Ipopt, including MIPs through `type="int"`/`"bin"`; `Problem(model, Integer)` runs on MiniZinc. `Float` with `type="int"` variables (MIP) is NOT the same as `Integer`: different solver stacks, different expression support. The variable property's value type must match the Problem's numeric type — a `Float` property in `Problem(model, Float)` even for `type="int"`/`"bin"`, an `Integer` property in `Problem(model, Integer)` — or `solve_for` raises `ValueError`. Which to pick: `SKILL.md` > Problem Type Classification and Solver Selection.
 
 ### `solve_for` parameter reference
 
@@ -233,71 +165,17 @@ var = problem.solve_for(
     lower=...,             # Lower bound: literal or Property
     upper=...,             # Upper bound: literal or Property
     where=[...],           # List of conditions restricting variable creation
-    start=...,             # Warm start value (for nonlinear solvers like Ipopt)
+    start=...,             # Initial value, literal or Property: a warm start on HiGHS/Gurobi/Ipopt, ignored by MiniZinc
     populate=True,         # If False, solution values not written back to model (for parametric solving)
 )
 # var is a ProblemVariable concept — usable with model.select(), .ref(), Variable.values()
 ```
 
+`start=` details: [solver-parameters.md](../../rai-prescriptive-results/references/solver-parameters.md) > Warm Starting.
+
 ### Reserved field names (v1.0.14+)
 
-`solve_for()` validates non-value relationship field names against every public attribute on `ProblemVariable.__mro__`. Shadowing one of these raises a clear `ValueError` at `solve_for()` time rather than a cryptic `TyperError` later.
-
-**What the validator checks.** The exact reserved set is reported in the raised `ValueError` message — don't memorize a list, read the list printed by the exception. At time of writing (1.0.14) it includes common-sounding names agents often reach for, including `name`, `type`, `lower`, `upper`, `values`, `start`, `alias`, `select`, `define`, `require`, `where`, `filter_by`, `concept_name`, `property_name`, and `var_type`.
-
-**Practical impact:** don't use generic attribute-like words as non-value field names. Prefer domain-specific names (`item_name`, `scheduled_qty`, `allocation_tier`) over `name`, `type`, etc.
-
-```python
-# WRONG — "name" collides with ProblemVariable.name
-problem.solve_for(
-    model.Relationship(f"{Customer} has {String:name} allocation {Float:qty}"),
-    type="cont",
-)
-# Raises ValueError: solve_for() cannot accept relationship '<anonymous>':
-#   non-value field name(s) ['name'] collide with ProblemVariable's intrinsic
-#   properties (reserved: ['RESERVED_NAMES', 'alias', 'annotate', 'as_bool',
-#   'concept_name', 'define', 'dsl_expr', 'filter_by', ...]).
-
-# CORRECT — rename the field
-problem.solve_for(
-    model.Relationship(f"{Customer} has {String:customer_name} allocation {Float:qty}"),
-    type="cont",
-)
-```
-
-**When to catch it:** `except ValueError` (not `RuntimeError`). If you're writing defensive validation around agent-generated formulations, `ValueError` is the exception type to expect.
-
-### Bounds guidance
-
-**Lower bounds:**
-- Physical minimums (cannot be negative if quantity) -- use 0 for most decision variables
-- Business rules (minimum order size, minimum allocation)
-- Use entity attributes when available: `Entity.min_value`
-
-**Upper bounds:**
-- Capacity limits (cannot exceed physical capacity)
-- Budget constraints (cannot spend more than available)
-- Use entity attributes when available: `Entity.capacity`
-- Omit for unbounded (rarely needed -- unbounded variables risk solver issues)
-
-**Rule:** Always set a lower bound. Derive upper bounds from data when possible.
-
-**Common bounds mistakes:**
-- Missing lower bound on non-negative quantities leads to unbounded solutions
-- Bounds too tight causes artificial infeasibility
-- Conflicting bounds (lower > upper) guarantees infeasibility
-- Upper bound that is data-dependent but not linked to actual data
-
-### Deriving bounds from data
-
-Use the ATTRIBUTES & STATISTICS section to set meaningful bounds:
-
-| Variable Type | Lower Bound | Upper Bound |
-|--------------|-------------|-------------|
-| Quantity/Flow | 0 | Use `max` from capacity property, or `None` if uncapped |
-| Allocation weight | 0 | 1.0 (or capacity property if available) |
-| Binary decision | 0 | 1 (automatic for type="bin") |
-| Integer count | 0 | Use entity count or capacity property |
+A non-value field name in the relationship that shadows a `ProblemVariable` attribute (`name`, `type`, `lower`, `upper`, `start`, `values`, `alias`, `select`, `where`, ...) raises `ValueError` at `solve_for()`; the message lists the full reserved set. Use domain names instead: `{String:customer_name}`, not `{String:name}`.
 
 ### Variable naming (`name=[]`)
 
@@ -314,15 +192,18 @@ problem.solve_for(PlacementSegment.x_alloc, lower=0,
 problem.solve_for(MachinePeriod.x_maintain, type="bin",
             name=["x_maintain", MachinePeriod.machine])  # machine is a Concept ref!
 
-# SAFE for cross-product concepts — use just the variable name:
-problem.solve_for(MachinePeriod.x_maintain, type="bin", name=["x_maintain"])
+# CORRECT for cross-product concepts — navigate one hop to a primitive, and cover
+# both dimensions. A bare name=["x_maintain"] compiles but names every row the same,
+# which `display()` cannot disambiguate (see Naming conventions below):
+problem.solve_for(MachinePeriod.x_maintain, type="bin",
+            name=["x_maintain", MachinePeriod.machine.id, MachinePeriod.period])
 ```
 
 With `populate=True` (default), values write back to the Property and are queryable via `model.select(Concept.name, Concept.x_var)`. With `populate=False` (parametric/loop workflows), read results via `var.values(sol_index, val_ref)` paired with the back-pointer attribute on the returned `ProblemVariable` — see `rai-prescriptive-results` > Solution Extraction for the back-pointer naming rule.
 
 ### Variable bounds from data vs literals
 
-Prefer data-driven bounds over hardcoded literals. Bounds from properties automatically apply per-entity.
+Prefer data-driven bounds over hardcoded literals. Bounds from properties automatically apply per-entity. There is no implicit `lower=0`: a variable without `lower=` is free, so set it on every non-negative quantity.
 
 ```python
 # Data-driven bounds (preferred)
@@ -358,14 +239,7 @@ problem.solve_for(bin_fast(t, y_bin_fast), type="bin", name=["y_bin_fast", t],
             where=[t == departure_days])
 ```
 
-Use this when no appropriate concept exists as a carrier, or when a variable is purely parametric (indexed only by Integer, String, etc.). See `../examples/multi_concept_union_objective.py`.
-
-### Granularity
-
-Match variable scope to decision scope:
-- If you decide **per entity** (how much each site produces), variable lives on that entity
-- If you decide **per pair** (how much flows from site A to site B), variable lives on a cross-product or edge concept
-- If you decide **per entity per time** (inventory per day), use multiarity properties or cross-product concepts
+Use this when no appropriate concept exists as a carrier, or when a variable is purely parametric (indexed only by Integer, String, etc.). See `../examples/multi_concept_added_objective.py`.
 
 ### Sparse variable creation with `where=[]`
 
@@ -402,7 +276,7 @@ Food.x_amount = model.Property(f"{Food} has {Float:amount}")
 Edge.x_flow = model.Property(f"{Edge} has {Float:flow}")
 ```
 
-For the underlying Property f-string rules (TYPE FIRST, then field name; valid Python identifiers; same pattern for Relationships), see `rai-pyrel` > Property Definition F-Strings. Those rules are general PyRel grammar, not prescriptive-specific.
+For the underlying Property f-string rules (TYPE FIRST, then field name; valid Python identifiers; same pattern for Relationships), see `rai-pyrel` > Property f-strings. Those rules are general PyRel grammar, not prescriptive-specific.
 
 When accessing decision variables through `.ref()` aliases, use the Python attribute name (with `x_` prefix), not the semantic slot name. The solver resolves variables by attribute name:
 
@@ -414,7 +288,7 @@ sum(OpRef.flow)        # Wrong -- semantic slot name, solver can't resolve
 
 ### Naming conventions
 
-Use a descriptive prefix (`"qty_"`, `"sel_"`, `"x_"`, `"inv_"`) so post-solve DataFrames can be filtered by `name.str.startswith("prefix")`. For the scalar-resolution rule on `name=[]` parts, see [Variable naming (`name=[]`)](#variable-naming-name) above.
+Use a descriptive prefix (`"qty_"`, `"sel_"`, `"x_"`, `"inv_"`) so post-solve DataFrames can be filtered by `name.str.startswith("prefix")`. Naming is not only a readback convenience: from `relationalai>=1.29`, `problem.display()` raises `ValueError` unless every decision variable in the Problem carries a `name=`, checked once at least one has grounded. The name must also discriminate, since a constant name on a per-entity variable makes rows indistinguishable wherever their remaining terms match too. For the scalar-resolution rule on `name=[]` parts, see [Variable naming (`name=[]`)](#variable-naming-name) above.
 
 ```python
 # Single-index: property name as identifier
@@ -429,58 +303,6 @@ problem.satisfy(fix_node, name="fix0")
 problem.satisfy(diff_colors, name=["diff", Edge.i, Edge.j])
 problem.minimize(chromatic_number, name="chromatic_number")
 ```
-
-### Self-check: variables
-
-- Every variable has a type (cont/int/bin) matching the decision
-- Every variable has a lower bound (at minimum 0 for physical quantities)
-- Upper bounds are derived from data or capacity, not arbitrary large numbers
-- Every variable is used in at least one constraint or the objective
-- Variable property is declared as `float` even for integer/binary (solver enforces integrality)
-
-### Variable suggestion response patterns
-
-**Natural language in user-facing fields:** The `rationale` and `business_mapping` fields are shown directly to the user. Write them in domain language, not technical references. For example:
-- **rationale:** "Determines how many units to ship along each route, balancing cost against demand" (not "Continuous variable on Operation concept for flow optimization")
-- **business_mapping:** "Quantity shipped per transportation route" (not "Operation.x_flow continuous variable")
-
-**existing pattern** (variable on existing concept):
-```json
-{
-  "name": "quantity",
-  "scope": "Entity",
-  "type": "cont",
-  "lower": "0",
-  "upper": "None",
-  "pattern": "existing",
-  "property_definition": "USE_EXISTING",
-  "solver_registration": "problem.solve_for(Entity.x_quantity, name=['qty', Entity.name], lower=0, type='cont')",
-  "rationale": "Determines how many units to allocate per entity, letting the optimizer balance cost and coverage",
-  "business_mapping": "Quantity allocated per entity",
-  "parameters": []
-}
-```
-
-**extended_concept pattern** (cross-product decision entity):
-```json
-{
-  "name": "active",
-  "scope": "Decision",
-  "type": "bin",
-  "lower": "0",
-  "upper": "1",
-  "pattern": "extended_concept",
-  "concept_definition": "Decision = model.Concept('Decision')\nDecision.source = model.Relationship(f'{Decision} from {ConceptA:source}')\nDecision.target = model.Relationship(f'{Decision} to {ConceptB:target}')\nDecision.x_active = model.Property(f'{Decision} is {Float:active}')",
-  "property_definition": "Decision.x_active = model.Property(f'{Decision} is {Float:active}')",
-  "entity_creation": "model.define(Decision.new(source=ConceptA, target=ConceptB))",
-  "solver_registration": "problem.solve_for(Decision.x_active, type='bin', name=['active', Decision.source.id, Decision.target.id])",
-  "rationale": "Decides whether each source-target pairing is active, enabling the optimizer to select the best combinations",
-  "business_mapping": "Whether each source-target pairing is selected",
-  "parameters": []
-}
-```
-
-Note: In `concept_definition` and `property_definition`, use v1 f-string syntax — TYPE FIRST: `f"{Concept} has {Float:field}"`. Reversed `{field:Float}` causes "Invalid format specifier" errors.
 
 ---
 
@@ -539,9 +361,9 @@ For MTZ subtour elimination, see TSP in Common Problem Patterns. For time-indexe
 Reduce the search space by fixing arbitrary choices.
 
 ```python
-model.where(Node.v(0)).require(Node.color == 1)                      # Fix node 0 to color 1
-model.where(Player.assign(0, x)).require(x == Player.p // group_size) # Fix week 0 assignment
-model.require(Node.u == 1).where(Node.v(1))                          # Fix TSP ordering u[1] = 1
+problem.satisfy(model.where(Node.v(0)).require(Node.color == 1))                      # Fix node 0 to color 1
+problem.satisfy(model.where(Player.assign(0, x)).require(x == Player.p // group_size)) # Fix week 0 assignment
+problem.satisfy(model.require(Node.u == 1).where(Node.v(1)))                          # Fix TSP ordering u[1] = 1
 ```
 
 ### Conditional fixing from data
@@ -597,14 +419,9 @@ model.where(Edge2 := Edge.ref()).define(
 )
 ```
 
-### Config-driven parameterization and constraint tiers
+### Config-driven parameterization
 
-Externalize business thresholds (budgets, tolerances, minimum shares) as parameters rather than hardcoding in constraints. For debugging infeasible models, organize constraints into two tiers:
-
-- **Essential**: Core physics/accounting constraints (balance, capacity, non-negativity)
-- **Full**: Business rules (tolerance bands, fair-share, service levels)
-
-Start with essential constraints only. If feasible, add full constraints incrementally to identify which business rule causes infeasibility.
+Externalize business thresholds (budgets, tolerances, minimum shares) as parameters rather than hardcoding in constraints. To find which constraint makes a model INFEASIBLE, request the conflict first rather than dropping constraints one at a time: [diagnostic-workflow.md](diagnostic-workflow.md) > INFEASIBLE: localizing the conflict.
 
 ---
 
@@ -626,13 +443,13 @@ model.define(Scenario.new(model.data(
 Route.x_flow = Property(f"{Route} in {Scenario} has {Float:flow}")
 x_flow = Float.ref()
 
-# Constraint with .per(Scenario)
-model.where(Route.x_flow(Scenario, x_flow)).require(
-    sum(x_flow * Route.cost).per(Scenario) <= Scenario.budget
-)
-
 # solve_for with Scenario binding
 problem.solve_for(Route.x_flow(Scenario, x_flow), name=[Scenario.name, Route.origin, Route.dest])
+
+# Constraint with .per(Scenario)
+problem.satisfy(model.where(Route.x_flow(Scenario, x_flow)).require(
+    sum(x_flow * Route.cost).per(Scenario) <= Scenario.budget
+))
 ```
 
 **Key rules:**
@@ -643,48 +460,6 @@ problem.solve_for(Route.x_flow(Scenario, x_flow), name=[Scenario.name, Route.ori
 - `name=[]` in solve_for should include `Scenario.name` for labeling
 - Single solve — no loop needed
 
-**Scenario types:**
-
-| Type | What varies | Example |
-|------|------------|---------|
-| **Parameter sweep** | One parameter across a range | Budget: $1M, $2M, $5M |
-| **What-if** | A specific assumption changes | "What if demand increases 20%?" |
-| **Objective trade-off** | Weights between competing goals | Cost-focused vs coverage-focused |
-| **Multi-parameter** | Two+ parameters varied simultaneously | Budget × demand multiplier matrix |
-
-**Why prefer Scenario Concept when possible:** Results are incorporated into the ontology — queryable via `model.select()` like any other property, composable with other model queries, and available for downstream derived properties. Loop results live outside the model in Python DataFrames. Use Loop only when the problem *structure* changes between scenarios (entities added/removed, constraint graph differs).
-
-See `rai-prescriptive-results/examples/scenario_concept_parameter_sweep.py` and `scenario_concept_milp.py`.
-
-### Loop + where= filter — entity exclusion and partitioned sub-problems
-
-When excluding entities or solving independent partitions:
-
-```python
-for excluded in [None, "SupplierC", "SupplierB"]:
-    problem = Problem(model, Float)
-    if excluded:
-        problem.solve_for(Order.x_qty, where=[Order.supplier.name != excluded], populate=False)
-    else:
-        problem.solve_for(Order.x_qty, populate=False)
-    problem.maximize(sum(Order.x_qty * Order.profit))
-    problem.solve("highs", time_limit_sec=60)
-```
-
-Key flags: `where=[]` scopes variables; `populate=False` prevents cross-iteration contamination.
-
-**Partitioned sub-problems** (independent groups like factories with separate products):
-
-```python
-for factory_name in factory_names:
-    this_product = Product.factory.name(factory_name)
-    problem = Problem(model, Float)
-    problem.solve_for(Product.x_quantity, lower=0, upper=Product.demand,
-                name=Product.name, where=[this_product], populate=False)
-    problem.maximize(sum(Product.profit * Product.x_quantity).where(this_product))
-    problem.solve("highs", time_limit_sec=60)
-```
-
-See `rai-prescriptive-results/examples/partitioned_iteration_scenarios.py`.
+See `rai-prescriptive-results/examples/scenario_concept_parameter_sweep.py` and `scenario_concept_milp.py`. When to prefer the Scenario Concept, and the Loop + `where=` pattern for entity exclusion and partitioned sub-problems (`rai-prescriptive-results/examples/partitioned_iteration_scenarios.py`): [scenario-analysis.md](scenario-analysis.md).
 
 ---

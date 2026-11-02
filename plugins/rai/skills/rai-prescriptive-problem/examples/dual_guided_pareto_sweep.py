@@ -93,7 +93,7 @@ def solve_at(eps):
     x_qty = problem.solve_for(Item.x_alloc, name=Item.index, lower=0, populate=False)
 
     # Budget: total allocation fixed at BUDGET.
-    problem.satisfy(model.where(Item.x_alloc(x)).require(sum(x) == BUDGET))
+    problem.satisfy(model.where(Item.x_alloc(x)).require(sum(Item, x) == BUDGET))
 
     # EPSILON CONSTRAINT (return floor). Capture it so its dual is readable. Scalar constraint →
     # shadow_price reads straight off the returned object (no keyed_by needed for a single bound).
@@ -106,7 +106,7 @@ def solve_at(eps):
     w = Float.ref()
     x_paired = Float.ref()
     problem.minimize(
-        sum(w * x * x_paired).where(
+        sum(Item, PairedItem, w * x * x_paired).where(
             Item.interaction(PairedItem, w),
             Item.x_alloc(x),
             PairedItem.x_alloc(x_paired),
@@ -158,7 +158,7 @@ return_min = anchor_lo["return"] if anchor_lo["feasible"] else 0.0
 problem_hi = Problem(model, Float)
 x_hi = Float.ref()
 problem_hi.solve_for(Item.x_alloc, name=Item.index, lower=0, populate=False)
-problem_hi.satisfy(model.where(Item.x_alloc(x_hi)).require(sum(x_hi) == BUDGET))
+problem_hi.satisfy(model.where(Item.x_alloc(x_hi)).require(sum(Item, x_hi) == BUDGET))
 problem_hi.maximize(sum(Item.value * x_hi).where(Item.x_alloc(x_hi)))
 problem_hi.solve("highs", time_limit_sec=60)
 return_max = problem_hi.solve_info().objective_value

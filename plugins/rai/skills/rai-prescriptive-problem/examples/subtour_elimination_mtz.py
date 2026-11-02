@@ -81,6 +81,9 @@ problem.satisfy(
 
 # --- Solve ---
 problem.solve("highs", time_limit_sec=60)
+si = problem.solve_info()
+if si.termination_status != "OPTIMAL":
+    raise SystemExit(f"No solution to extract: {si.termination_status} {si.error}")
 
 # Extract tour edges
 model.select(

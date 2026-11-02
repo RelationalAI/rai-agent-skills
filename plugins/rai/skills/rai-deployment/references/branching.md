@@ -1,6 +1,6 @@
 # Branching
 
-> **Early access** — the `rai models` deploy/lifecycle surface may change (API, messages, defaults), and op-log recording is off by default. See `rai-deployment` § Prerequisites.
+> **Early access** — the `rai models` deploy/lifecycle surface may change (API, messages, defaults). Op-log recording is on by default since relationalai 1.28.0. See `rai-deployment` § Prerequisites.
 
 Fork a deployed model into an isolated schema, work in it without touching the parent, and choose how it tracks the parent over time.
 

@@ -83,8 +83,14 @@ problem.satisfy(model.where(Node.id == 1).require(Node.color == 1))
 # --- Objective: minimize the largest color used ---
 problem.minimize(max(Node.color))
 
-problem.solve("minizinc", time_limit_sec=30)
-problem.solve_info().display()
+TIME_LIMIT_SEC = 30
+problem.solve("minizinc", time_limit_sec=TIME_LIMIT_SEC)
+si = problem.solve_info()
+si.display()
+if si.termination_status != "OPTIMAL":
+    raise SystemExit(f"No solution to extract: {si.termination_status} {si.error}")
+# MiniZinc also reports a cut-off incumbent as OPTIMAL, so check the clock
+bound = "chromatic number" if (si.solve_time_sec or 0) < TIME_LIMIT_SEC else "an upper bound, time limit reached"
 
-print("\nFinal coloring (max color = chromatic number):")
+print(f"\nFinal coloring (max color = {bound}):")
 model.select(Node.id, Node.color).inspect()

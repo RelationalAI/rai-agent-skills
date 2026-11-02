@@ -74,9 +74,9 @@ for factory_name in factory_names:
     problem.solve("highs", time_limit_sec=60)
     si = problem.solve_info()
 
-    # Guard: skip result extraction on non-optimal partitions (infeasible /
-    # time-limited / etc). Without this guard, si.objective_value is None and
-    # the Variable.values() query yields an empty DataFrame — both silent.
+    # Guard: compare only proven optima across partitions (a time-limited
+    # incumbent's gap would read as a partition effect). Reading an infeasible
+    # or no-incumbent solve fails silently.
     if si.termination_status not in ("OPTIMAL", "LOCALLY_SOLVED"):
         scenario_results.append(
             {

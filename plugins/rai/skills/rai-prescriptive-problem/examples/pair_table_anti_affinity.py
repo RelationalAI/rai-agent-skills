@@ -68,7 +68,7 @@ problem.solve_for(Item.in_slot(Slot, x), type="bin", name=["assign", Item.id, Sl
 
 # --- Constraint: each item is in at most one slot ---
 problem.satisfy(
-    model.where(Item.in_slot(Slot, x)).require(sum(x).per(Item) <= 1)
+    model.where(Item.in_slot(Slot, x)).require(sum(Slot, x).per(Item) <= 1)
 )
 
 # --- Anti-affinity IC: forbidden pairs cannot co-locate on any slot ---
@@ -88,7 +88,7 @@ problem.satisfy(
 )
 
 # --- Objective: maximize number of items placed ---
-problem.maximize(sum(x).where(Item.in_slot(Slot, x)))
+problem.maximize(sum(Item, Slot, x).where(Item.in_slot(Slot, x)))
 
 problem.solve("minizinc", time_limit_sec=30)
 problem.solve_info().display()

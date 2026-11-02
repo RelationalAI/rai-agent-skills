@@ -81,9 +81,23 @@ The user-input boundary is the 3 prompts above (source FQNs, task FQNs, experime
    **c. Disambiguating multiple `_id` columns.** When a table has several `_id` columns (e.g., `TRANSACTIONS` with `t_id`, `t_customer_id`, `t_article_id`), only the one that passes the uniqueness probe **on this table** is the PK; the rest are FKs into other concepts (used in step 3). Confirm by checking which `<x>_id` value appears once per row vs. many times.
 
    If the probe still leaves ambiguity (e.g., no unique column, only composite candidates, or a synthetic surrogate is needed), surface the candidate columns + their `n_distinct / n_rows` ratios in the summary table and ask the user to confirm.
+
+   **Key type.** Type each `identify_by` key from that column's `DATA_TYPE` (and `NUMERIC_SCALE` for `NUMBER`). Do not type a concept key as `Any` when the column type is known. `Any` is only for a relationship slot whose type is genuinely unknown, such as `{Any:ts}` or `{Any:label}` on a task relationship.
+
+   | `DATA_TYPE` | `identify_by` type |
+   |-------------|--------------------|
+   | `NUMBER` with `NUMERIC_SCALE` 0, `INT`, `INTEGER`, `BIGINT` | `Integer` |
+   | `FLOAT`, `DOUBLE`, `NUMBER` with scale > 0 | `Float` |
+   | `VARCHAR`, `STRING`, `TEXT` | `String` |
+   | `BOOLEAN` | `Boolean` |
+   | `DATE` | `Date` |
+   | `TIMESTAMP`, `TIMESTAMP_NTZ`, `TIMESTAMP_LTZ`, `TIMESTAMP_TZ`, `DATETIME` | `DateTime` |
+
 3. **Foreign key relationships** -- detect FK columns by matching column names across tables (e.g., `customer_id` in `TRANSACTIONS` matches `customer_id` PK in `CUSTOMERS`)
+
+   **Cycles, before any script (RelFM).** Walk those edges before writing the script. A cycle is any path that returns to a concept already on it: a self-referential foreign key, or a loop across several concepts. RelFM featurizes with depth-first search and has no base case for revisiting a table, so a cycle does not terminate. The constructor rejects a self-referential foreign key. It does **not** reject a cycle built from several joins — do not write that script. Name the edges that close the cycle and ask which one to drop. GNN may keep a cycle; message passing runs a fixed number of hops.
 4. **Graph concepts** -- each source table becomes a concept (use singular form of table name)
-5. **Edges** -- derived from FK relationships found above
+5. **Edges** -- derived from FK relationships found above. A RelFM graph that contains a cycle is not ready to write.
 6. **Task structure** -- from task table columns, infer:
    - Join key (column matching a source concept PK)
    - Label/target column (non-key, non-timestamp column) or target concept (for link prediction)
@@ -194,7 +208,7 @@ The user-input boundary is the 3 prompts above (source FQNs, task FQNs, experime
    - **Repeated interactions** -> `repeated_link_prediction`
    ```
 
-8. **Has time column** -- detect a time column on the task table. Set `has_time_column=True` when one is found; otherwise `False`. This is **independent of task type** -- any task type can be temporal. When `True`, task relationships must include the `at {Any:ts}` clause (see `task-relationships.md`) and `GNN(...)` must be constructed with `has_time_column=True`.
+8. **Has time column** -- detect a time column on the task table. A `DATE` or `TIMESTAMP*` column on train, val, or test makes the task **temporal**. Set `has_time_column=True` and treat it as temporal: task relationships use the `at {Type:<slot>}` clause (see `task-relationships.md`), `PropertyTransformer` sets `time_col=` (and lists that property in `datetime=`), and `GNN(...)` / `RelFM(...)` is constructed with `has_time_column=True`. This is **independent of task type** -- any task type can be temporal. A `DATE` column counts; it does not need a time of day. Do not set `has_time_column=False` because the rows are already split by time, or because that column was dropped from features. Set `False` and omit `at {…}` only when no column matches **a**, **b**, or **c** below.
 
    Detect in this order:
 
@@ -206,7 +220,7 @@ The user-input boundary is the 3 prompts above (source FQNs, task FQNs, experime
    TIMESTAMP_NTZ, TIMESTAMP_LTZ, TIMESTAMP_TZ
    ```
 
-   Do **not** rely on column-name heuristics first -- a column named `timestamp` may be stored as `NUMBER` (epoch seconds/ms), and a column named `t_dat` or `event_at` may be a true `DATE`. Type wins over name.
+   Do **not** rely on column-name heuristics first -- a column named `timestamp` may be stored as `NUMBER` (epoch seconds/ms), and a column named `t_dat` or `ship_date` may be a true `DATE`. Type wins over name. Read `DATA_TYPE` from `INFORMATION_SCHEMA`; do not guess `TEXT` from the column name. A match here is decisive: the task is temporal.
 
    **b. Epoch-encoded times stored as integers (probe).** When the schema has an integer column whose name suggests time (`timestamp`, `ts`, `time`, `date`, `dt`, `epoch`, `event_time`, `created_at`, `updated_at`, etc.), confirm with a value-range probe:
 
@@ -273,7 +287,7 @@ def get_table_schema(table_name: str, database: str, schema: str) -> list[dict]:
             return [{"error": f"Invalid {field_name}: '{value}'. Use only letters, numbers, and underscores."}]
 
     query = """
-        SELECT COLUMN_NAME, DATA_TYPE
+        SELECT COLUMN_NAME, DATA_TYPE, NUMERIC_SCALE
         FROM {database}.INFORMATION_SCHEMA.COLUMNS
         WHERE TABLE_SCHEMA = '{schema}'
           AND TABLE_NAME = '{table}'
@@ -292,7 +306,14 @@ def get_table_schema(table_name: str, database: str, schema: str) -> list[dict]:
     if not rows:
         return [{"error": f"No columns found for {database}.{schema}.{table_name}. Check the name and permissions."}]
 
-    return [{"column_name": row["COLUMN_NAME"], "data_type": row["DATA_TYPE"]} for row in rows]
+    return [
+        {
+            "column_name": row["COLUMN_NAME"],
+            "data_type": row["DATA_TYPE"],
+            "numeric_scale": row["NUMERIC_SCALE"],
+        }
+        for row in rows
+    ]
 ```
 
 For each user-provided fully qualified table name `DB.SCHEMA.TABLE`:
@@ -307,15 +328,18 @@ Use `DESCRIBE TABLE` / manual SQL only as fallback when the Snowpark helper cann
 
 ## Summary Table Template
 
-Present the discovery results to the user as a summary table for confirmation before proceeding:
+Present the discovery results to the user as a summary table for confirmation before proceeding. Always name the connected database, the estimator, and the task type in this summary without being asked. The estimator is the one this session is building (`RelFM` or `GNN`). The connected database is the Snowflake database the session is using; if the source tables live in a different database, name that too. Do not write a RelFM script whose edges contain a cycle: name the edges that close it and ask which one to drop.
 
 ```
 Here's what I discovered from your tables:
 
+**Connected database:** `<database>`
+**Estimator:** `<RelFM|GNN>`
+
 **Source Tables & Concepts:**
-| Table | Concept | PK | Other Columns |
-|-------|---------|-----|---------------|
-| ... | ... | ... | ... |
+| Table | Concept | PK | PK type | Other Columns |
+|-------|---------|-----|---------|---------------|
+| ... | ... | ... | Integer | ... |
 
 **Edges (FK relationships):**
 | From | To | Join Condition |

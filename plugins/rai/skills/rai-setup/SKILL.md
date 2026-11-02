@@ -32,9 +32,9 @@ Covers the [relationalai Python package](https://pypi.org/project/relationalai) 
 
 ## Prerequisites
 
-Requires Python 3.10+ and `relationalai>=1.20.1`.
+Requires Python 3.10–3.13 and `relationalai>=1.25.0`.
 
-Some guidance carries inline *Requires relationalai ...* notes flagging capabilities that need a version above this baseline; when following those blocks, install at least the version they name.
+Some guidance carries inline *Requires relationalai ...* notes flagging when a capability appeared; anything at or below the baseline above is already covered by a compliant install.
 
 The RelationalAI Native App for Snowflake must be installed in your account by an administrator — request access [here](https://app.snowflake.com/marketplace/listing/GZTYZOOIX8H/relationalai-relationalai); see the [Native App docs](https://docs.relational.ai/manage/install). (Not required for local DuckDB development — see [Local Development with DuckDB](#local-development-with-duckdb-no-snowflake) below.)
 
@@ -99,9 +99,9 @@ Users are expected to be Snowflake users with existing credentials. Walk the use
 
 ### Step 1. Install the package
 ```bash
-pip install 'relationalai>=1.20.1'
+pip install 'relationalai>=1.25.0'
 # or
-uv add 'relationalai>=1.20.1'
+uv add 'relationalai>=1.25.0'
 ```
 
 ### Step 2. Establish the connection
@@ -169,6 +169,7 @@ Load the reference when the trigger fires — don't read them all upfront.
 | Turning on metrics/logging, tuning retries, toggling compiler strictness, or changing data-loading defaults | [execution.md](references/execution.md) |
 | Provisioning, listing, resuming, or deleting engines via CLI/Python API, or evaluating warm reasoners | [engine-management.md](references/engine-management.md) |
 | Running locally on DuckDB without Snowflake — config recipe, data loading with 3-part FQNs, gotchas | [local-development.md](references/local-development.md) |
+| Deploying a model with `configure()`d prescriptive Problems: PAT, secret, EAI, network policy, grants, `deployment.pat_*` | [prescriptive-deploy-setup.md](references/prescriptive-deploy-setup.md) |
 
 ---
 

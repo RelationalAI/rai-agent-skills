@@ -79,18 +79,18 @@ Rate each problem's feasibility using these actionable categories:
 **Template examples by problem type:**
 - Allocation: `../../rai-prescriptive-problem/examples/fixed_charge_facility.py`, `../../rai-prescriptive-problem/examples/semi_continuous_activation.py`
 - Scheduling: `../../rai-prescriptive-problem/examples/binary_coverage_scoped.py`, `../../rai-prescriptive-problem/examples/hinge_variable_penalty.py`
-- Routing/Network: `../../rai-prescriptive-problem/examples/flow_conservation.py`, `../../rai-prescriptive-problem/examples/multi_concept_union_objective.py`
+- Routing/Network: `../../rai-prescriptive-problem/examples/flow_conservation.py`, `../../rai-prescriptive-problem/examples/multi_concept_added_objective.py`
 - Portfolio/Selection: `../../rai-prescriptive-problem/examples/quadratic_pairwise_ref.py`, `../../rai-prescriptive-problem/examples/coupled_binary_knapsack.py`
 - Pricing: `../../rai-prescriptive-problem/examples/one_hot_temporal_recurrence.py`
 - Resource Allocation (multi-period): `../../rai-prescriptive-problem/examples/multi_period_flow_conservation.py`
 
 ### Decision concepts as ontology extensions
 
-When a prescriptive problem is formulated, it creates decision concepts (e.g., `FulfillmentAssignment`, `ProductionPlan`) that extend the ontology -- they are not throwaway code artifacts. After solving, these concepts carry solution values that persist in the graph and can be referenced by other reasoners, queries, and applications.
+When a prescriptive problem is formulated, it creates decision concepts (e.g., `FulfillmentAssignment`, `ProductionPlan`) that extend the ontology -- they are not throwaway code artifacts. After solving, these concepts carry solution values that other reasoners, queries, and applications can reference for the rest of the solving process; to reuse them later, save the extracted frame (`rai-prescriptive-results` > Solution Extraction).
 
 **What this means for enrichment:**
 - Decision concepts are part of the ontology growth story, not just the formulation layer
-- After solving, `ProductionPlan.quantity = 150 for SKU_1 at Site_A` is a fact in the ontology
+- After solving, `ProductionPlan.quantity = 150 for SKU_1 at Site_A` is a fact in the ontology, in the solving process
 - Other reasoners (predictive, graph) can read decision concept values
 - The ontology is richer after optimization -- it contains "what should happen," not just "what exists"
 

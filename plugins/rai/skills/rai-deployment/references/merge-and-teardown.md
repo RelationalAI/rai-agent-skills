@@ -1,6 +1,6 @@
 # Merge and teardown
 
-> **Early access** — the `rai models` deploy/lifecycle surface may change (API, messages, defaults), and op-log recording is off by default. See `rai-deployment` § Prerequisites.
+> **Early access** — the `rai models` deploy/lifecycle surface may change (API, messages, defaults). Op-log recording is on by default since relationalai 1.28.0. See `rai-deployment` § Prerequisites.
 
 Promote a branch's changes back to its parent, and remove models safely.
 

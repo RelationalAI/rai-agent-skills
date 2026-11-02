@@ -102,7 +102,7 @@ problem.satisfy(
 
 # --- Objective: maximize total revenue across all scenarios ---
 problem.maximize(
-    sum(x_approved * Project.revenue).where(Project.x_approved(Scenario, x_approved))
+    sum(Scenario, x_approved * Project.revenue).where(Project.x_approved(Scenario, x_approved))
 )
 
 # --- Single MiniZinc solve covers all scenarios ---

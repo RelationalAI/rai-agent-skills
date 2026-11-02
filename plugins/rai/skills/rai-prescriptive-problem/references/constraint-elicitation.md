@@ -1,6 +1,6 @@
 # Constraint Elicitation — the Full Playbook
 
-Detail behind SKILL.md Step 7 and the constraint-vs-objective decision rule. Constraints are rarely handed to you complete: they emerge by asking the right questions before solving, and by using results to surface preferences the user couldn't articulate in the abstract. For model-structural constraint discovery (boundary/structural/multi-concept probes), see [constraint-formulation.md](constraint-formulation.md) > Constraint Discovery Patterns.
+Detail behind SKILL.md Step 7 and the constraint-vs-objective decision rule. Constraints are rarely handed to you complete: they emerge by asking the right questions before solving, and by using results to surface preferences the user couldn't articulate in the abstract. For model-structural discovery (what stops the all-zero solution), see [constraint-formulation.md](constraint-formulation.md) > Forcing constraints.
 
 ## Pre-solve: from business language to constraints
 

@@ -54,7 +54,7 @@ Two questions that form a sequential chain:
 ### Chain mechanics
 - **Stage 1:** Query `RiskPrediction` concept for target period → entity risk ranking
 - **Stage 2:** Prescriptive formulation references `RiskPrediction.predicted_risk_prob` as reliability parameter
-  - Scenario 1: soft penalty — `reliability_weight * sum(flow * (1 - reliability_score))`
+  - Scenario 1: soft penalty — `reliability_weight` × total flow weighted by (1 − `reliability_score`)
   - Scenario 2: hard threshold — exclude entities where `predicted_risk_prob > threshold`
   - Scenario 3: parameter sweep across threshold values → cost-vs-reliability tradeoff
 

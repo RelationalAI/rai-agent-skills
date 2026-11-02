@@ -68,7 +68,8 @@ problem.satisfy(
 )
 
 # --- Objective using .where() on multiarity properties ---
-revenue = sum(Product.initial_price * (1 - d.discount_pct / 100) * x).where(
+# Key by w: without it, equal sales in two weeks would count once.
+revenue = sum(w, Product.initial_price * (1 - d.discount_pct / 100) * x).where(
     Product.x_sales(w, d, x)
 )  # binds x to sales quantity here
 

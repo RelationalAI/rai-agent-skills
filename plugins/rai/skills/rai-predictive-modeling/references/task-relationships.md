@@ -2,17 +2,17 @@
 
 Relationships encode the task structure using a template string with three parts:
 - **Head** = source concept (the concept being predicted on)
-- **"at" clause** = timestamp field (required if the task table contains a time column, otherwise omit)
+- **"at" clause** = timestamp field (required when the task table has a `DATE` or `TIMESTAMP*` column — that makes the task temporal; omit only when it has neither)
 - **"has" clause** = label (classification/regression) or target concept (link prediction)
 
 ## Relationship Arity Rules
 
 | Task Type | Train/Val template | Test template |
 |-----------|-------------------|---------------|
-| `binary_classification`, `multiclass_classification`, `multilabel_classification` | `f"{Source} has {Any:label}"` (add `at {Any:ts}` if task table has time column) | `f"{Source}"` (add `at {Any:ts}` if task table has time column) |
-| `regression` | `f"{Source} has {Any:value}"` (add `at {Any:ts}` if task table has time column) | `f"{Source}"` (add `at {Any:ts}` if task table has time column) |
-| `link_prediction` | `f"{Source} has {Target}"` (add `at {Any:ts}` if task table has time column) | `f"{Source}"` (add `at {Any:ts}` if task table has time column) |
-| `repeated_link_prediction` | `f"{Source} has {Target}"` (add `at {Any:ts}` if task table has time column) | `f"{Source}"` (add `at {Any:ts}` if task table has time column) |
+| `binary_classification`, `multiclass_classification`, `multilabel_classification` | `f"{Source} has {Any:label}"` (add `at {Any:ts}` when the task table has a `DATE` or `TIMESTAMP*` column) | `f"{Source}"` (add `at {Any:ts}` when the task table has a `DATE` or `TIMESTAMP*` column) |
+| `regression` | `f"{Source} has {Any:value}"` (add `at {Any:ts}` when the task table has a `DATE` or `TIMESTAMP*` column) | `f"{Source}"` (add `at {Any:ts}` when the task table has a `DATE` or `TIMESTAMP*` column) |
+| `link_prediction` | `f"{Source} has {Target}"` (add `at {Any:ts}` when the task table has a `DATE` or `TIMESTAMP*` column) | `f"{Source}"` (add `at {Any:ts}` when the task table has a `DATE` or `TIMESTAMP*` column) |
+| `repeated_link_prediction` | `f"{Source} has {Target}"` (add `at {Any:ts}` when the task table has a `DATE` or `TIMESTAMP*` column) | `f"{Source}"` (add `at {Any:ts}` when the task table has a `DATE` or `TIMESTAMP*` column) |
 
 ## Node Classification (with time)
 

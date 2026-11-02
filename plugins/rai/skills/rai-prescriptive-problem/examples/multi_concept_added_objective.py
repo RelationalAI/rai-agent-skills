@@ -1,12 +1,12 @@
 # Pattern: multi-concept coordination — inventory flow conservation + mode selection
 # Key ideas: three variable types (continuous inv, continuous qty, binary indicator)
 # across two concepts (ResourceGroup, Mode); inventory balance links them;
-# model.union() combines heterogeneous cost components into a single objective.
+# add separately aggregated cost components, defaulting empty totals to zero.
 
 from relationalai.semantics import Float, Integer, Model, String, std, sum
 from relationalai.semantics.reasoners.prescriptive import Problem
 
-model = Model("multi_concept_union_objective")
+model = Model("multi_concept_added_objective")
 Concept, Property = model.Concept, model.Property
 
 # --- Ontology (abbreviated) ---
@@ -86,7 +86,7 @@ problem.satisfy(
         ResourceGroup.x_inv(t, x_inv1),
         ResourceGroup.x_inv(t + 1, x_inv2),
         Mode.x_qty_mode(ResourceGroup, t, x_qty_mode),
-    ).require(x_inv1 == x_inv2 + sum(x_qty_mode).per(ResourceGroup, t))
+    ).require(x_inv1 == x_inv2 + sum(Mode, x_qty_mode).per(ResourceGroup, t))
 )
 
 # --- Boundary conditions ---
@@ -104,13 +104,13 @@ problem.satisfy(
     )
 )
 
-# --- Objective: multi-component cost (use model.union() to combine heterogeneous terms) ---
-inv_cost = 0.001 * sum(x_inv).where(ResourceGroup.x_inv(t, x_inv), t > ResourceGroup.inv_start_t)
-fast_fixed_cost = 2000.0 * sum(y_bin_mode).where(
+# --- Objective: add separately keyed cost totals ---
+inv_cost = 0.001 * sum(ResourceGroup, t, x_inv).where(ResourceGroup.x_inv(t, x_inv), t > ResourceGroup.inv_start_t)
+fast_fixed_cost = 2000.0 * sum(Mode, ResourceGroup, t, y_bin_mode).where(
     Mode.name("fast"),
     Mode.y_bin_mode(ResourceGroup, t, y_bin_mode),
 )
-total_cost = sum(model.union(inv_cost, fast_fixed_cost))
+total_cost = (inv_cost | 0.0) + (fast_fixed_cost | 0.0)
 problem.minimize(total_cost)
 
 # --- Solve ---

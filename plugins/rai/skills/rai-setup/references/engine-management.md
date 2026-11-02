@@ -1,20 +1,20 @@
 ## Engine Management
 
-Two interfaces manage engines/reasoners: the `rai reasoners:*` CLI (operational one-liners) and the Python `Resources` class / `connect_sync()` client (scriptable). Each engine has a **name** and a **type** (`LOGIC`, `SOLVER`, `PREDICTIVE` in the Python API; `Logic`, `Prescriptive`, `Predictive` in the CLI — `SOLVER` ↔ `Prescriptive`). Multiple engine types can share the same name.
+Two interfaces manage engines/reasoners: the `rai reasoners` CLI (operational one-liners) and the Python `Resources` class / `connect_sync()` client (scriptable). Each engine has a **name** and a **type** (`LOGIC`, `SOLVER`, `PREDICTIVE` in the Python API; `Logic`, `Prescriptive`, `Predictive` in the CLI — `SOLVER` ↔ `Prescriptive`). Multiple engine types can share the same name.
 
-### CLI (`rai reasoners:*`)
+### CLI (`rai reasoners`)
 
-All commands accept `--type` (`Logic` / `Prescriptive` / `Predictive`) and `--name`. Both are optional — interactive prompts fill missing values.
+All commands accept `--type` (`Logic` / `Prescriptive` / `Predictive`) and `--name`. Both are optional — interactive prompts fill missing values. The old colon-form (`reasoners:create`, etc.) still works but is deprecated — use the space-form subcommands below.
 
 | Command | Purpose |
 |---|---|
-| `rai reasoners:create --type Logic --name <name> --size <size>` | Create a reasoner. Add `--await-storage-vacuum` to block until storage is ready. |
-| `rai reasoners:delete --type Logic --name <name>` | Delete a reasoner |
-| `rai reasoners:suspend --type Logic --name <name>` | Suspend (stop billing) |
-| `rai reasoners:resume --type Logic --name <name>` | Resume a suspended reasoner |
-| `rai reasoners:list` | List all reasoners (filterable by `--type`, `--name`, `--size`, `--state`) |
-| `rai reasoners:get --type Logic --name <name>` | Get details for one reasoner |
-| `rai reasoners:alter --type Logic --name <name> --auto-suspend-mins <N>` | Change settings (e.g. `auto_suspend_mins`) |
+| `rai reasoners create --type Logic --name <name> --size <size>` | Create a reasoner. Add `--await-storage-vacuum` to block until storage is ready. |
+| `rai reasoners delete --type Logic --name <name>` | Delete a reasoner |
+| `rai reasoners suspend --type Logic --name <name>` | Suspend (stop billing) |
+| `rai reasoners resume --type Logic --name <name>` | Resume a suspended reasoner |
+| `rai reasoners list` | List all reasoners (filterable by `--type`, `--name`, `--size`, `--state`) |
+| `rai reasoners get --type Logic --name <name>` | Get details for one reasoner |
+| `rai reasoners alter --type Logic --name <name> --auto-suspend-mins <N>` | Change settings (e.g. `auto_suspend_mins`) |
 
 **Resize pattern:** No in-place resize — delete and recreate: `suspend` → `delete` → `create` with the new size.
 
@@ -136,7 +136,7 @@ The CLI and Python clients are thin wrappers over `RELATIONALAI.API.*` stored pr
 | `RELATIONALAI.API.ALTER_REASONER_POOL_NODE_LIMITS(type, name, min, max)` | Configure compute-pool `MIN_NODES` / `MAX_NODES`. |
 | `RELATIONALAI.API.GET_JOB(type, id)` | Fetch metadata for one job. |
 | `RELATIONALAI.API.CANCEL_JOB(type, id)` | Cancel an active job. |
-| `RELATIONALAI.API.REASONERS` (view) | All reasoners — equivalent of `rai reasoners:list`. |
+| `RELATIONALAI.API.REASONERS` (view) | All reasoners — equivalent of `rai reasoners list`. |
 | `RELATIONALAI.API.JOBS` (view) | Job ledger — `ID`, `STATE`, `JOB_TYPE`, `PAYLOAD`, `CREATED_ON`, … Filter by `STATE IN ('QUEUED','RUNNING')` for active jobs. |
 
 The `type` argument is the canonical reasoner family — `'logic'` or `'prescriptive'`. SDK code paths in `relationalai/services/reasoners/gateways.py` invoke exactly these procs.

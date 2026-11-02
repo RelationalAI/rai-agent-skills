@@ -98,11 +98,11 @@ problem.satisfy(
 problem.satisfy(model.where(Product.x_cuml(w, z)).require(z <= Product.initial_inventory))
 
 # --- Objective ---
-revenue = sum(Product.initial_price * (1 - d.discount_pct / 100) * x).where(Product.x_sales(w, d, x))
-salvage = sum(Product.initial_price * Product.salvage_rate * (Product.initial_inventory - z)).where(
+revenue = sum(w, Product.initial_price * (1 - d.discount_pct / 100) * x).where(Product.x_sales(w, d, x))
+salvage = sum(w, Product.initial_price * Product.salvage_rate * (Product.initial_inventory - z)).where(
     Product.x_cuml(w, z), w.num == count(Week)
 )
-problem.maximize(revenue + salvage)
+problem.maximize((revenue | 0.0) + (salvage | 0.0))
 
 # --- Solve ---
 problem.solve("highs", time_limit_sec=60)

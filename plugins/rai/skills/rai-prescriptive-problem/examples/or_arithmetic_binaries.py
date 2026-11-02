@@ -74,7 +74,10 @@ problem.satisfy(model.where(Row.id == 4).require(Row.a == 1, Row.b == 1))
 
 # --- Pure satisfaction: no objective ---
 problem.solve("minizinc", time_limit_sec=30)
-problem.solve_info().display()
+si = problem.solve_info()
+si.display()
+if si.termination_status != "OPTIMAL":
+    raise SystemExit(f"No solution to extract: {si.termination_status} {si.error}")
 
 # --- Display the OR truth-table reconstruction ---
 print("\nOR truth-table reconstruction:")

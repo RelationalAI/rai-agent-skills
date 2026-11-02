@@ -71,7 +71,7 @@ bounds = model.where(Item.x_allocation(Scenario, x_alloc)).require(x_alloc >= 0)
 # Budget: total allocation per scenario
 budget_ok = model.where(
     Item.x_allocation(Scenario, x_alloc),
-).require(sum(x_alloc).per(Scenario) <= total_budget)
+).require(sum(Item, x_alloc).per(Scenario) <= total_budget)
 
 # Benefit: meets scenario-specific minimum
 benefit_ok = model.where(
@@ -80,7 +80,7 @@ benefit_ok = model.where(
 
 # Quadratic cost: pairwise interaction cost per scenario
 quad_cost = (
-    sum(interaction_value * x_alloc * paired_alloc)
+    sum(Item, PairedItem, interaction_value * x_alloc * paired_alloc)
     .per(Scenario)
     .where(
         Item.x_allocation(Scenario, x_alloc),
@@ -95,7 +95,7 @@ problem.solve_for(Item.x_allocation(Scenario, x_alloc), name=[Scenario.name, "al
 problem.satisfy(bounds)
 problem.satisfy(budget_ok)
 problem.satisfy(benefit_ok)
-problem.minimize(sum(quad_cost))
+problem.minimize(sum(Scenario, quad_cost))
 
 problem.display()
 problem.solve("highs", time_limit_sec=60)

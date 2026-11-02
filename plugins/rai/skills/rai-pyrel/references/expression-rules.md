@@ -104,7 +104,7 @@ model.not_(order.customer)               # Negation (entities that DON'T match)
 
 ### `model.union()` — set-style OR combinator
 
-`model.union()` combines results from ALL matching branches (set union). Three primary uses:
+`model.union()` combines results from ALL matching branches (set union). Two primary uses:
 
 **1. OR-filtering in `where()` clauses:**
 
@@ -113,16 +113,7 @@ model.not_(order.customer)               # Negation (entities that DON'T match)
 model.where(model.union(Person.age < 18, Person.age >= 65)).select(Person.name)
 ```
 
-**2. Summing multi-component objectives across concept scopes:**
-
-```python
-total = sum(model.union(term_a, term_b, term_c))
-problem.minimize(total)
-```
-
-Each term may involve different concepts and `.where()` conditions. Required when building multi-component objectives or aggregations that span concept boundaries.
-
-**3. CASE WHEN — union of filtered fragments returning labels:**
+**2. CASE WHEN — union of filtered fragments returning labels:**
 
 ```python
 # All matching branches contribute (a person can have multiple rights)
@@ -134,6 +125,8 @@ rights = union(
 )
 select(Person.name, rights).to_df()
 ```
+
+**Not for decision-variable totals.** A union is a set, so equal decision values count once in PyRel while the solver counts every term. Add separate sums instead, `(sum(A.x) | 0.0) + (sum(B.x) | 0.0)`, defaulting each potentially empty one outside its aggregate (relationalai>=1.13.0; `| 0` in an `Integer` problem), because one missing term drops the whole objective. `min`/`max` over a union, and data-only aggregates over one, are fine. Key bare decision refs by their entities (`sum(f, xf).where(f.flow_var(xf))`) and name inner group keys in nested totals. Full rule: `rai-prescriptive-problem/references/known-limitations.md` § Decision-variable aggregate agreement.
 
 **Rule:** All branches in a `union()` must return the same number of values (same "shape"). A bare relation call (e.g., `a.parents(c)`) returns 1 value, while `where(...)` without `select()` returns 0 (a filter). Mixing these causes `[Inconsistent branches] All branches in a Union must have the same number of returned values`. Similarly, two Fragments with different numbers of `select()` columns are incompatible. Fix by making all branches return the same count: either chain relation calls so all branches return values, or wrap all branches in `where(...)` so all return Fragments with matching `select()` columns.
 

@@ -1,4 +1,4 @@
-# Pattern: Scenario Concept result extraction — results live in the ontology
+# Pattern: Scenario Concept result extraction — results live in the ontology for the rest of the solving process
 # Key ideas: after a single solve with Scenario as a Concept, results are queryable
 # via model.select() like any other property; per-scenario aggregation uses the same
 # .where()/.per() patterns as constraints.
@@ -69,7 +69,7 @@ total_budget = 1000
 problem = Problem(model, Float)
 problem.solve_for(Item.x_allocation(Scenario, x_alloc), name=[Scenario.name, "alloc", Item.index])
 problem.satisfy(model.where(Item.x_allocation(Scenario, x_alloc)).require(x_alloc >= 0))
-problem.satisfy(model.where(Item.x_allocation(Scenario, x_alloc)).require(sum(x_alloc).per(Scenario) <= total_budget))
+problem.satisfy(model.where(Item.x_allocation(Scenario, x_alloc)).require(sum(Item, x_alloc).per(Scenario) <= total_budget))
 problem.satisfy(
     model.where(Item.x_allocation(Scenario, x_alloc)).require(
         sum(x_alloc * Item.value).per(Scenario) >= Scenario.min_benefit
@@ -77,7 +77,7 @@ problem.satisfy(
 )
 
 quad_cost = (
-    sum(interaction_value * x_alloc * paired_alloc)
+    sum(Item, PairedItem, interaction_value * x_alloc * paired_alloc)
     .per(Scenario)
     .where(
         Item.x_allocation(Scenario, x_alloc),
@@ -85,7 +85,7 @@ quad_cost = (
         Item.interaction(PairedItem, interaction_value),
     )
 )
-problem.minimize(sum(quad_cost))
+problem.minimize(sum(Scenario, quad_cost))
 
 problem.solve("highs", time_limit_sec=60)
 
@@ -112,7 +112,7 @@ model.select(Scenario.name, quad_cost.alias("quad_cost")).inspect()
 
 # 4. Per-scenario total allocation
 print("\nTotal allocation by scenario:")
-total_alloc = sum(x_alloc).per(Scenario).where(Item.x_allocation(Scenario, x_alloc))
+total_alloc = sum(Item, x_alloc).per(Scenario).where(Item.x_allocation(Scenario, x_alloc))
 model.select(Scenario.name, total_alloc.alias("total_allocated")).inspect()
 
 # 5. Per-scenario achieved benefit

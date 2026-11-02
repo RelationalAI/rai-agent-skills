@@ -308,14 +308,14 @@ Access requires binding with `ref()`:
 ```python
 x_approved = Float.ref()
 
-# In constraints/objectives — bind Scenario dimension via model.where():
-model.where(Project.x_approved(Scenario, x_approved)).require(
-    sum(x_approved * Project.cost).per(Scenario) <= Scenario.budget
-)
-
 # In solve_for — pass the binding, include Scenario.name for labeling:
 problem.solve_for(Project.x_approved(Scenario, x_approved),
             name=[Scenario.name, Project.name])
+
+# In constraints/objectives — bind Scenario dimension via model.where():
+problem.satisfy(model.where(Project.x_approved(Scenario, x_approved)).require(
+    sum(x_approved * Project.cost).per(Scenario) <= Scenario.budget
+))
 
 # In result queries — filter on the bound reference:
 model.select(Scenario.name, Project.name).where(

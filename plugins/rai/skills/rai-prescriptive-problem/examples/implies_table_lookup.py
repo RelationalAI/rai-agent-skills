@@ -43,7 +43,7 @@ Assortment = model.Concept("Assortment", identify_by={"id": Integer})
 Assortment.revenue = model.Property(f"{Assortment} has {Integer:revenue}")
 
 # Reference table — note ids are 10..14 (dense, no gaps). Revenue is Integer because MiniZinc
-# requires Problem(model, Integer); a single Float would coerce the problem to MIP.
+# requires Problem(model, Integer); a Float decision or Float data in an expression fails.
 assort_data = pd.DataFrame(
     [(10, 200), (11, 150), (12, 175), (13, 90), (14, 240)],
     columns=["id", "revenue"],
@@ -107,13 +107,16 @@ problem.satisfy(model.where(Pi.index < Pj.index).require(Pi.x_assort != Pj.x_ass
 # --- Objective: maximize total revenue ---
 problem.maximize(sum(Position.x_rev))
 
-problem.solve("minizinc", time_limit_sec=30)
+TIME_LIMIT_SEC = 30
+problem.solve("minizinc", time_limit_sec=TIME_LIMIT_SEC)
 si = problem.solve_info()
 si.display()
 
 # --- Post-solve assertion: re-evaluate the implies cascade against extracted values ---
 # This is the workaround for verify()'s silent-OK behavior on implies-bodied ICs.
 if si.termination_status in ("OPTIMAL", "SOLUTION_LIMIT"):
+    if (si.solve_time_sec or 0) >= TIME_LIMIT_SEC:  # MiniZinc also reports a cut-off incumbent as OPTIMAL
+        print("Time limit reached: best placement found, not proven optimal")
     rev_lookup = dict(zip(assort_data["id"], assort_data["revenue"]))
     rows = model.select(
         Position.index.alias("position"),

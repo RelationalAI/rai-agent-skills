@@ -2,6 +2,8 @@
 
 Valid `(task_type, eval_metric)` combinations for the GNN constructor.
 
+**RelFM supports a narrower set of task types than GNN.** Both `RelFM` (relational) and `RelFMTabular`'s predictor mode (flat) support only `binary_classification`, `multiclass_classification`, and `regression` from the tables below -- no `multilabel_classification`, `link_prediction`, or `repeated_link_prediction`. `RelFMTabular`'s forecaster mode adds a `task_type="forecasting"` not in this file at all -- see [relfm-flat-mode.md](relfm-flat-mode.md).
+
 ## Binary Classification
 
 | task_type | eval_metric |
@@ -60,9 +62,9 @@ Valid `(task_type, eval_metric)` combinations for the GNN constructor.
 
 | Task Type | has_time_column | Train Relationship template | Test Relationship template |
 |-----------|-----------------|---------------------------|--------------------------|
-| binary_classification | True if task table has time column | `f"{Source} has {Any:label}"` (add `at {Any:ts}` if time column present) | `f"{Source}"` (add `at {Any:ts}` if time column present) |
-| multiclass_classification | True if task table has time column | `f"{Source} has {Any:label}"` (add `at {Any:ts}` if time column present) | `f"{Source}"` (add `at {Any:ts}` if time column present) |
-| multilabel_classification | True if task table has time column | `f"{Source} has {Any:label}"` (add `at {Any:ts}` if time column present) | `f"{Source}"` (add `at {Any:ts}` if time column present) |
-| regression | True if task table has time column | `f"{Source} has {Any:value}"` (add `at {Any:ts}` if time column present) | `f"{Source}"` (add `at {Any:ts}` if time column present) |
-| link_prediction | True if task table has time column | `f"{Source} has {Target}"` (add `at {Any:ts}` if time column present) | `f"{Source}"` (add `at {Any:ts}` if time column present) |
-| repeated_link_prediction | True if task table has time column | `f"{Source} has {Target}"` (add `at {Any:ts}` if time column present) | `f"{Source}"` (add `at {Any:ts}` if time column present) |
+| binary_classification | True if task table has a `DATE` or `TIMESTAMP*` column | `f"{Source} has {Any:label}"` (add `at {Any:ts}` when that column is present) | `f"{Source}"` (add `at {Any:ts}` when that column is present) |
+| multiclass_classification | True if task table has a `DATE` or `TIMESTAMP*` column | `f"{Source} has {Any:label}"` (add `at {Any:ts}` when that column is present) | `f"{Source}"` (add `at {Any:ts}` when that column is present) |
+| multilabel_classification | True if task table has a `DATE` or `TIMESTAMP*` column | `f"{Source} has {Any:label}"` (add `at {Any:ts}` when that column is present) | `f"{Source}"` (add `at {Any:ts}` when that column is present) |
+| regression | True if task table has a `DATE` or `TIMESTAMP*` column | `f"{Source} has {Any:value}"` (add `at {Any:ts}` when that column is present) | `f"{Source}"` (add `at {Any:ts}` when that column is present) |
+| link_prediction | True if task table has a `DATE` or `TIMESTAMP*` column | `f"{Source} has {Target}"` (add `at {Any:ts}` when that column is present) | `f"{Source}"` (add `at {Any:ts}` when that column is present) |
+| repeated_link_prediction | True if task table has a `DATE` or `TIMESTAMP*` column | `f"{Source} has {Target}"` (add `at {Any:ts}` when that column is present) | `f"{Source}"` (add `at {Any:ts}` when that column is present) |

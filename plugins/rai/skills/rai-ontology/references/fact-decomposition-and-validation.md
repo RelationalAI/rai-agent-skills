@@ -85,7 +85,7 @@ ProjectAssignment.info = model.Property(
 
 ### Redundancy check via sample data
 
-After proposing a Property or Relationship, populate it with 3-5 sample rows from actual data. If the same value combination appears in more than one row (same values in all fields), the declaration is either compound (needs splitting) or the data has duplicates that should be resolved.
+After proposing a Property or Relationship, populate it with 3-5 sample rows from actual data. If the same value combination appears in more than one row (same values in all fields), the declaration does not identify the fact — because it holds a set of tuples, those rows are one tuple and the extras are lost. See the three remedies below.
 
 **How to apply:**
 
@@ -96,12 +96,21 @@ Sample population:
   (Acme, Nut,  0.75)
   (Acme, Bolt, 1.50)  <-- duplicate! Same fact repeated
 
-Diagnosis: Either the data has true duplicates (clean them), or there's
-a hidden dimension (e.g., Date) that makes each row unique:
+Diagnosis: Either there's a hidden dimension (e.g., Date) that makes each
+row unique:
   Supplier.price = model.Property(f"{Supplier} supplies {Part} on {Date} at {Float:price}")
+or the repeats are distinct events the source cannot tell apart, and the
+fact needs its own identity:
+  Supply = model.Concept("Supply", identify_by={"row": supply_src})
 ```
 
-**Rule:** Zero repeated rows in a correct sample. If duplicates appear, either add a missing dimension or deduplicate the source data.
+**Rule:** repeated rows in a sample mean the declaration does not identify the fact. Three remedies, in order:
+
+1. **A dimension is missing** — the source does distinguish these rows, on a column you have not declared yet. Add it.
+2. **The source declares no key and the repeats are real** — distinct events that happen to share every value. Give the fact its own identity from the source row (`identify_by={"row": src}`), as in the Identity hygiene section of [SKILL.md](../SKILL.md). Do **not** assemble a compound key from the dimension columns; see the cardinality anti-pattern there.
+3. **The rows are genuinely spurious** — a loading error or a true data-quality defect. Only here is deduplication correct, and it is a statement about the source, not a modelling decision. Confirm with the user before discarding rows.
+
+Reaching for (3) when the answer is (2) destroys data. The repeats look identical either way, so the question "could two of these legitimately be the same in every column?" has to be answered from the domain, not the sample. For sales, shipments, readings, payments and most other events, the answer is yes.
 
 ### Schema equivalence for model refactoring
 

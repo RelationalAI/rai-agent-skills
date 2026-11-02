@@ -120,9 +120,9 @@ for excluded in excluded_suppliers:
         }
     )
 
-    # Guard: skip result extraction on non-optimal scenarios (infeasible /
-    # time-limited / etc). Without this guard, si.objective_value is None and
-    # the Variable.values() query yields an empty DataFrame — both silent.
+    # Guard: compare only proven optima across scenarios (a time-limited
+    # incumbent's gap would read as a scenario effect). Reading an infeasible
+    # or no-incumbent solve fails silently.
     if si.termination_status not in ("OPTIMAL", "LOCALLY_SOLVED"):
         print(f"\n{label}: {si.termination_status} — skipping result extraction")
         continue

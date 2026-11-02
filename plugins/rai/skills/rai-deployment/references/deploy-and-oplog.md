@@ -1,6 +1,6 @@
 # Deploy and the op log
 
-> **Early access** — the `rai models` deploy/lifecycle surface may change (API, messages, defaults), and op-log recording is off by default. See `rai-deployment` § Prerequisites.
+> **Early access** — the `rai models` deploy/lifecycle surface may change (API, messages, defaults). Op-log recording is on by default since relationalai 1.28.0. See `rai-deployment` § Prerequisites.
 
 How `rai models deploy` works, what the op log records, and the backends.
 
@@ -24,7 +24,7 @@ connections:
     type: snowflake
     # ... auth fields (see rai-setup) ...
 oplog:
-  enabled: true              # required for branch / pull / merge
+  enabled: true              # default since 1.28.0; required for branch / pull / merge
   backend: snowflake
 deployment:
   schema: MY_DB.MY_MODEL     # fully qualified — model management co-locates its metadata schema in
@@ -56,19 +56,15 @@ Options:
 - `deployment.outputs.type` sets the default materialization (`dynamic_table` — the default — `table`, or `view`); per-object `overrides` change individual outputs. PyRel falls back to a table when an output can't be represented as a dynamic table.
 - Everything PyRel creates carries a `relationalai_managed = 'true'` tag, and deploy **errors rather than overwrite an untagged object** — keep the target schema dedicated to the model.
 
-## Monitor a deployment
+## Privileges for a custom deploy role
 
-Deploy also maintains a **meta schema** (`<target schema>_META` by default; override with `deployment.meta_schema`) holding model state and the refresh tasks — others should not depend on its contents. Its `REFRESH_STATUS` procedure is the first place to look when a model isn't refreshing as expected:
+`rai_developer` is the standard role (see `rai-setup`). A scoped deploy role needs, beyond the `relationalai.rai_user` application role: USAGE on the model database and the warehouse, SELECT on the source tables (grant on ALL and FUTURE), and CREATE SCHEMA on the model database — or ownership of pre-created target + `_META` schemas. Verified on a live account (1.25.0) to the schema-DDL + source-read level; before locking CI onto a scoped role, validate one full `rai models deploy` under it — the app-side minimal set for the complete deploy/refresh path is not documented anywhere else. Separately, PyRel's deploy checks that a role whose schedules run (an interval, or run on deploy) holds the account-level EXECUTE TASK privilege, granted by an ACCOUNTADMIN: Snowflake checks it against the role that owns the refresh tasks and ignores secondary roles, so without it the deploy succeeds but the tables never refresh (`[Refresh Tasks Cannot Run]`).
 
-```sql
-CALL MY_DB.MY_MODEL_META.REFRESH_STATUS();
-```
+Create the target and `_META` schemas as regular schemas, not `WITH MANAGED ACCESS`: managed access restricts object-level grants to the schema owner, and the deployed objects rely on grants PyRel applies to what it creates.
 
-One row per schedule; `status` is `DEPLOY_RUNNING`, `DEPLOY_FAILED`, `NEVER_RUN`, `RUNNING`, `SUCCEEDED`, or `FAILED` (failure message in the `error` column). A refresh-time privilege failure usually means `deployment.role` can't execute tasks.
+## The meta schema
 
-Deployed outputs are **eventually consistent** with their sources. Within one schedule a refresh updates outputs in dependency order; schedules run independently, so dependent outputs on *different* schedules can show mixed freshness while refreshing.
-
-For config-shaped failures, `rai doctor` and `rai config explain` diagnose, and `rai doctor report` bundles config, privilege checks, deployment state, and run traces into a zip for support.
+Deploy also maintains a **meta schema** (`<target schema>_META` by default; override with `deployment.meta_schema`) holding model state, the refresh tasks, and the refresh log. Its `REFRESH_STATUS` procedure is the stable, public surface for refresh state; the rest of its contents are internal. Reading state back — `REFRESH_STATUS`, the refresh log, `rai doctor report` — is covered in [dev-loop-and-monitoring.md](dev-loop-and-monitoring.md).
 
 ## Outcome messages
 
@@ -87,25 +83,25 @@ The op log is the model's ordered history. It is the foundation for the whole li
 
 You never edit the op log directly — the `rai models` commands maintain it. Each model and branch keeps its own.
 
-## Op-log recording is opt-in
+## Op-log recording on and off
 
-Recording is **off by default** ("opt-in while rolling out"; expected to default on soon). Turn it on in `raiconfig.yaml`:
+Recording is **on by default** since relationalai 1.28.0; earlier releases default it off. Set it explicitly in `raiconfig.yaml`:
 
 ```yaml
 oplog:
-  enabled: true        # required for branch / pull / merge
+  enabled: true        # default since 1.28.0; required for branch / pull / merge
   backend: snowflake   # default
 ```
 
 Behavior by state:
-- **On (`enabled: true`)** — deploy installs *and* records to the op log; `branch`/`pull`/`merge` are available.
-- **Off (default)** — deploy installs only, records nothing; `branch`/`pull`/`merge` refuse with `Oplog recording is disabled (config.oplog.enabled = false).`
+- **On (`enabled: true`, the default)** — deploy installs *and* records to the op log; `branch`/`pull`/`merge` and Cortex agents are available.
+- **Off (`enabled: false`)** — deploy installs only, records nothing; `branch`/`pull`/`merge` refuse with `Oplog recording is disabled (config.oplog.enabled = false).`
 
 `teardown` works regardless of this setting.
 
 ## Backends
 
-- **`snowflake`** (default) — the real op log, stored in a hybrid table beside the model. This is the production backend.
+- **`snowflake`** (default) — the real op log, stored in the `_INTERNAL_OPLOG` hybrid table beside the model. This is the production backend.
 - **`jsonl`** — a local file; **reserved for tests/demos only**, not production collaboration.
 
 ## shared_model.py (generated)

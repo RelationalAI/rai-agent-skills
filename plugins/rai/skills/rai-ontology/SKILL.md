@@ -20,7 +20,7 @@ description: Builds and evolves RAI ontologies — greenfield starter builds fro
 - PyRel authoring of any kind — syntax, data loading, queries, derived-property rules — see `rai-pyrel`
 - Optimization formulation (variables, constraints, objectives) — see `rai-prescriptive-problem`
 
-**Overview:** Scope the questions → discover and analyze source data → identify concepts with identities → identify relationships and properties → validate the design against the schema → generate code → validate with queries. The [Design Principles](#concept-design-principles) sections are the authority the workflow steps apply; enrichment and gap classification extend an already-working model.
+**Overview:** Scope the questions → dump the source schema with `rai explore schema` → identify concepts with identities → identify relationships and properties → validate the design against the schema → generate code → validate with queries. The [Design Principles](#concept-design-principles) sections are the authority the workflow steps apply; enrichment and gap classification extend an already-working model.
 
 ---
 
@@ -29,13 +29,14 @@ description: Builds and evolves RAI ontologies — greenfield starter builds fro
 | Decision | Choose | Pattern |
 |----------|--------|---------|
 | Has own PK / identity? | **Concept** | `model.Concept("Name", identify_by={"id": Type})` |
+| Fact/event table, no PK at all? | **Concept keyed by row** | `model.Concept("Sale", identify_by={"row": src})` — never a compound of data columns |
 | Scalar value on entity? | **Property** | `model.Property(f"{Concept} has {Type:name}")` |
 | Functional FK (each A → one B)? | **Property** | `model.Property(f"{Order} placed by {Customer:customer}")` |
 | Many-to-many link? | **Relationship** | `model.Relationship(f"{A} links to {B}")` |
 | Boolean flag? | **Unary Relationship** | `model.Relationship(f"{Concept} is active")` |
 | Fundamental category of a concept? | **Subtype** | `model.Concept("Supplier", extends=[Business])` |
 | Recurring `.where()` filter? | **Subtype** | `model.Concept("Sub", extends=[Parent])` |
-| Many-to-many with data? | **Junction concept** | Concept with compound identity |
+| Many-to-many with data? | **Junction concept** | Concept with compound identity (yours to establish — `pk_candidates` is single-column only) |
 
 **Layer structure:** Core (source→semantic) → Computed (derived logic) → Application (queries, reports)
 
@@ -48,6 +49,14 @@ description: Builds and evolves RAI ontologies — greenfield starter builds fro
 Start from the business domain — what concepts exist, what questions must the model answer — then find data mappings. Domain-first modeling produces better models than table-to-concept mapping because user intent drives concept selection rather than table structure.
 
 Document your findings and decisions at each step so others can follow the reasoning.
+
+**Keep the run lean.** Every tool call re-sends everything already in context, so a build's cost is turns × context, and anything printed once is paid for on every later turn:
+- **Query large artifacts, never print them whole.** `schema.json`, validation output and the reference files run to tens or hundreds of KB. Print the slice a step needs — a short script over `schema.json`, `tail`/`grep` over a log, the one section of a reference (`grep -n '^#'` its headings first).
+- **Batch each step's questions into one call** — one script that answers all of a step's checks, not one call per table or column.
+- **Run SQL probes through a session from `raiconfig.yaml`** — `create_config().get_session(SnowflakeConnection)`, as in [discovery-queries.md](references/discovery-queries.md) — and put a step's probes in one `UNION ALL` query. Do not read `raiconfig.yaml` or the library source to build a connection of your own.
+- **Write each file once, then run it in the same call.** Write `<domain>.py` whole — model and validation queries together, not appended in pieces — and run it in that call (a heredoc followed by `python <domain>.py 2>&1 | tail -n 80`). Fix failures with targeted edits, not a rewrite.
+- **Wait, don't poll.** Give long commands (the schema scan, the validation run) a timeout long enough to finish in the foreground; if one is backgrounded, wait for it in one blocking call (a loop that sleeps until its output file shows it finished), not a check per turn.
+- **Bound the deploy wait.** `rai models deploy --wait` has no timeout flag and can block for up to an hour on a first refresh that never starts. Give the call a timeout of about 10 minutes; if it expires, read the refresh state directly with `CALL <db>.<schema>_META.REFRESH_STATUS();` (see `rai-deployment`) instead of waiting again: report `error` when it is `FAILED`, `DEPLOY_FAILED`, or `NEVER_RUN` with a `SUSPENDED` task; while it is `RUNNING`, re-read it in one blocking loop (30s or more between reads), not one call per turn.
 
 **Interaction mode:** Before starting, ask the user which mode they prefer:
 - **Guided** — present your proposed design at each step and confirm before proceeding. Best when the user has domain context to share along the way; they know their domain better than the data does.
@@ -65,43 +74,86 @@ Keep the first version to ~10-15 must-have properties. A tight scope keeps the m
 |---|---|---|
 | Identify delayed orders | Orders, shipments, delay timestamps | Returns, carrier contracts, inventory |
 
+The out-of-scope column is also the Step 2 cost lever: pass `--table NAME` (repeatable, once per table) to restrict discovery to the in-scope tables. On a very large or very wide schema, start at `--depth structure` for a zero-scan overview, then re-run at `--depth profile` on the scoped set.
+
 ### Step 2 — Discover source data
 
 **Data loading decision:** Use `model.Table()` for Snowflake-backed data (any size, production-ready). Use `model.data()` for prototyping with DataFrames only (≤ hundreds of rows) or inline scenario data not in Snowflake. For connection setup, see `rai-setup`.
 
-Pull the full column inventory first — it stays load-bearing through Step 6:
+**Snowflake or DuckDB — run `rai explore schema`.** One invocation produces the whole inventory: column types (with the RAI type to declare), PK candidates, FK candidates with multiplicity, value distributions, numeric ranges, and optional graph topology.
 
-```sql
-SELECT TABLE_NAME, COLUMN_NAME, DATA_TYPE, IS_NULLABLE, NUMERIC_PRECISION, NUMERIC_SCALE
-FROM <database>.INFORMATION_SCHEMA.COLUMNS
-WHERE TABLE_SCHEMA = '<schema>' ORDER BY TABLE_NAME, ORDINAL_POSITION;
+```bash
+rai explore schema --database <DB> --schema <SCHEMA> --depth profile -o schema.json
 ```
 
-> **Keep this result available throughout the workflow.** `DATA_TYPE` and `NUMERIC_SCALE` are the authoritative source for deriving RAI property types in Step 6. Never infer types from column names, CSV samples, or example ontologies.
+> **Keep `schema.json` on disk through Step 7, and query it — never `cat` it.** Every subsequent step reads from it, but on a wide schema it runs to hundreds of KB: load it in a short script and print only the tables and fields the step needs. Output is deterministic (byte-identical across runs on unchanged data), and the key set is the same at every depth — keys a shallower depth did not compute are `null`, never absent.
 
-**Analyze each table:** business purpose, likely PKs (`_ID` suffixes, identity/NOT NULL columns), inferred FKs (columns matching other tables' PKs), soft-joins (shared codes across tables), `IS_`/`HAS_` prefixes (boolean flags), and `STATUS`/`TYPE`/`CATEGORY` columns with repeated values (enum or subtype candidates). Nullability, identity flags, and column comments are stronger signals than names alone.
+> **Budget minutes, not seconds.** Give the call a timeout of 600s or more. If it is backgrounded anyway, wait for it in one blocking call — `until grep -q '✓' <output-file> || ! pgrep -f 'rai explore schema' >/dev/null; do sleep 15; done` with a 600s timeout, then read the file's tail (the scan prints no `✓` if it fails) — not one check per turn. A turn that ends while waiting ends the run, and the scan dies with the session.
+
+**Depth controls cost, not shape:**
+- **`profile`** — one aggregate scan per table. Required for PK candidates, multiplicity, `null_rate`, `numeric_range`, and value distributions, so it is the floor for Steps 3-5. Use it unless you have a reason not to.
+- **`full`** — adds the graph-topology block. Use for graph / network-shaped data, which you can spot before running it: a table whose columns are mostly FKs into one other table, or a name like `*_EDGES` / `FOLLOWS` / `CONNECTIONS` / `*_LINKS`.
+- **`structure`** — metadata only, zero table scans. Safe on a schema of any size; supplies types but no data-derived fields. Pair with `--table` on very large schemas (see Step 1), then re-run at `profile` on the scoped set.
+
+**What to read** (field-by-field contract: [schema-json.md](references/schema-json.md)):
+
+| Field | Use |
+|---|---|
+| `tables[].columns[].rai_type` | The RAI type to declare. Read it directly — never infer a type from the column name. `null` means the column's type is unmapped, not missing; fall back to the [type mapping table](#data-mapping-guidance). |
+| `tables[].pk_candidates` | Identity for Step 3. The first entry is almost always the real PK; later entries are unique *by coincidence* (`EMAIL`, `PHONE`). Single-column only — composite identity stays your call. |
+| `tables[].row_count` | Live `COUNT(*)` at `profile`+ — populated for views and zero-row tables too, so it is always a real expected value. |
+| `tables[].columns[].value_distribution` | Subtype and enum candidates (fires at `distinct_count <= 20`). **Alphabetical on the wire — sort by count descending yourself to rank values.** For a share-of-rows figure, divide by `row_count`. |
+| `tables[].columns[].numeric_range` | `{min, max}` — the real data scale, for Step 5 thresholds. |
+| `fk_candidates[].multiplicity_class` | `1:1` / `N:1` / `M:N`. Drives Step 4's Property-vs-Relationship choice. |
+| `graph_topology` | Present at `--depth full` when a table carries 2+ FKs to the same target — a strong hint to model that table as a `Relationship`, not a concept. Non-zero `broken_edges` means the graph has gaps; surface them to the user. |
+| `warnings[]` | Degradations and undecidable inferences. **Read every entry** — an ambiguous FK is reported here rather than guessed at, and how you respond differs by warning. See [schema-json.md](references/schema-json.md) § Reading `warnings[]`. |
+
+**CSV / DataFrame sources** have no command path — profile inline, then map columns per `rai-pyrel` [data-loading.md](../rai-pyrel/references/data-loading.md):
+
+```python
+df.dtypes                         # → RAI types: the mapping table below is the authority here
+df.isna().mean()                  # null rates
+df[col].value_counts().head(20)   # enum / subtype candidates
+df.select_dtypes("number").agg(["min", "max"])   # threshold scale
+```
 
 **Identify data shape.** Source tables arrive in one of two shapes, classified per table:
-- **Raw events / measurements** — one row per occurrence; metrics must be *derived* downstream from the raw rows.
-- **Pre-aggregated statistics** — one row per entity, pair, or time bucket carrying already-computed values (including long-form `(entity_i, entity_j, value)` matrices). Bind directly; do not re-aggregate — worked example: the pairwise value matrix in [build-examples.md](references/build-examples.md).
+- **Raw events / measurements** — one row per occurrence; metrics must be *derived* downstream from the raw rows. Signals: high `row_count`, a high-`distinct_count` timestamp column, `N:1` FKs, a populated `value_distribution` on a status column.
+- **Pre-aggregated statistics** — one row per entity, pair, or time bucket carrying already-computed values (including long-form `(entity_i, entity_j, value)` matrices). Signals: low `row_count`, `*_RATE` / `*_AVG` / `*_TOTAL` / `*_SCORE` names, identity that is a tuple of FKs with no surrogate id. Bind directly; do not re-aggregate — worked example: the pairwise value matrix in [build-examples.md](references/build-examples.md).
 
-**Run the EDA queries** in [discovery-queries.md](references/discovery-queries.md) — load it now if you are executing this step. It covers: row count and PK uniqueness, FK cardinality, null rates, value distributions for enum/category columns, subtype discovery (TYPE columns that partition entities), relationship multiplicity (1:1 / 1:N / M:N — Step 4 depends on this), and, for graph/network data, topology tracing (node-type-to-node-type edge counts, NULL-FK gap checks) that reveals hidden tiers before Step 3.
+**For graph / network data**, the command's topology block counts edges between *tables*. To trace tiers by a node's TYPE *column value* — which reveals hidden layers the table-level view cannot — run the one query in [discovery-queries.md](references/discovery-queries.md) before Step 3.
 
 ### Step 3 — Identify concepts
 
 Work domain-first: brainstorm business entities broadly — both obvious entities (tables with clear PKs) and implied entities (referenced but not directly represented) — then map each to an authoritative source. Reject any concept that cannot be grounded. Apply [Concept Design Principles](#concept-design-principles).
 
-Define each concept's identity from the authoritative source's PK columns. Identity is intrinsic: a concept without an identity key is not yet a concept.
+Define each concept's identity from its authoritative source's `pk_candidates`. Take the **first** entry — later entries are usually unique by coincidence, so do not promote `EMAIL` or `PHONE` to an identity column. Every concept needs an identity; where the source declares none, that identity is the source row, not a compound you assemble from its columns (see Identity hygiene below).
 
-**Check for subtypes:** If Step 2 EDA found TYPE/CATEGORY columns that partition a concept into fundamentally different kinds (e.g. `BUSINESS_TYPE` with values `Supplier` and `Customer`), model these as subtypes using `extends` — when each kind carries its own properties or relationships, not for every enum column. If you find yourself writing the same `.where()` filter repeatedly, promote it to a named subtype. See [categorization-and-advanced.md](references/categorization-and-advanced.md).
+**Check for subtypes:** If `value_distribution` shows TYPE/CATEGORY columns that partition a concept into fundamentally different kinds (e.g. `BUSINESS_TYPE` with values `Supplier` and `Customer`), model these as subtypes using `extends` — when each kind carries its own properties or relationships, not for every enum column. If you find yourself writing the same `.where()` filter repeatedly, promote it to a named subtype. See [categorization-and-advanced.md](references/categorization-and-advanced.md).
 
 **Validate:** each concept maps to at least one authoritative source, has a clear identity, and the set is orthogonal (see [Concept orthogonality](#concept-orthogonality)).
 
-**Identity hygiene.** Prefer minimal identity (1-2 natural-key fields). If the only natural identity you can find is >3 fields, pause: (a) does the source table have a surrogate ID you missed? (b) is this really a measurement that belongs as a Relationship payload on a smaller concept? If both answers are no, keep the compound identity but flag the concept as a candidate for scope cuts.
+**Identity hygiene.** `pk_candidates` reports single-column candidates only — composite uniqueness is out of the command's scope, so compound identity is yours to establish. Prefer minimal identity (1-2 natural-key fields). If the only natural identity you can find is >3 fields, pause: (a) **is there a surrogate ID in `pk_candidates` you overlooked?** (b) is this really a measurement that belongs as a Relationship payload on a smaller concept? (c) **does the source declare no key at all?** — if so, use row identity, below.
+
+**Identity when the source declares no key.** A table with no PK and no unique column — typically a fact or event table — gets its identity from the source row, never from a compound of its data columns:
+
+```python
+Sales = model.Concept("Sales", identify_by={"row": sales_src})   # sales_src = model.Table(...)
+model.define(Sales.new(row=sales_src))        # required; without it the model builds and returns nothing
+s = Sales.lookup(row=sales_src)
+```
+
+`Table` subclasses `Concept` and its instances are rows, so this yields exactly one entity per physical record.
+
+**Never synthesise identity from data columns.** A compound of dimension columns is only a key if something guarantees one row per combination, and for an event table nothing does. Two real events sharing a material, plant and period are then the same entity, and they silently merge — no error, wrong totals. The same failure follows from making the fact an n-ary Relationship instead of a Concept: a Relationship holds a *set* of tuples, so rows agreeing on every argument collapse.
+
+*Anti-pattern — the cardinality argument.* "3 materials × 2 plants × 5 months = 30 combinations, 13 rows, so the compound is unique" does not follow. Row count below the size of the dimension space says nothing about whether two rows share a cell. Reject this reasoning wherever it appears, including in your own.
+
+*Probing distinctness is not enough either.* `COUNT(*) = COUNT(DISTINCT cols)` establishes that today's rows differ, not that the source guarantees it; tomorrow's load can collide and the model starts losing rows with no schema change to notice. Use a declared key when the source has one, row identity when it does not.
 
 ### Step 4 — Identify relationships and properties
 
-**Choose Property or Relationship per link** from the Step 2 multiplicity results: Property for many-to-one (scalar attributes AND functional FKs), Relationship for one-to-many / many-to-many, multi-field associations, and boolean flags. The full decision rule, FD semantics, and failure modes are in [Relationship Principles](#relationship-principles).
+**Choose Property or Relationship per link** by reading `fk_candidates[].multiplicity_class` from `schema.json`: `N:1` or `1:1` → Property (scalar attributes AND functional FKs); `M:N` → Relationship, and the source table is a junction. Also use a Relationship for one-to-many modelled from the parent side, multi-field associations, and boolean flags. A `null` `multiplicity_class` means there was nothing to classify from (empty table, or an all-NULL FK column) — establish multiplicity yourself before choosing. The full decision rule, FD semantics, and failure modes are in [Relationship Principles](#relationship-principles).
 
 Then assign remaining columns as properties of their parent concepts, grouped by topic. Not every column needs a property — omit columns with no business meaning for the scoped questions.
 
@@ -109,7 +161,7 @@ Then assign remaining columns as properties of their parent concepts, grouped by
 
 **Same-type-slot disambiguation.** When a `Relationship` has two slots of the same concept type, the slots are roles and must be distinguished: either split into two `Property` declarations whose attribute names are the roles, or label both slots — `f"{Lane} from {Location:origin} to {Location:destination}"`. Without this, `model.define(...)` silently binds both slots to whichever column you list first. Verify with a Step 7 query that origin ≠ destination on at least one row.
 
-**Constraints are user-asserted, data-proposed.** As you assign links, note the candidate constraints the Step 2 EDA suggests (mandatory roles, disjunctions, frequency and cardinality bounds) and confirm each with the user in guided mode — or record it as an assumption in one-shot mode. Signal-to-question mapping: [constraint-patterns.md](references/constraint-patterns.md).
+**Constraints are user-asserted, data-proposed.** As you assign links, note the candidate constraints the Step 2 `schema.json` suggests (mandatory roles, disjunctions, frequency and cardinality bounds) and confirm each with the user in guided mode — or record it as an assumption in one-shot mode. Signal-to-question mapping: [constraint-patterns.md](references/constraint-patterns.md).
 
 ### Step 5 — Validate design
 
@@ -122,32 +174,36 @@ Validate the proposed design against source data before coding:
 | Properties | Source column exists with compatible data type |
 | Concept grounding | Every concept maps to an authoritative source |
 | Orthogonality | No two concepts represent the same entity set |
-| Threshold scale | For any planned threshold (subtype or flag), check `min/max/avg` of the property first — assuming 0-100 when the data is 0-10 captures nothing or everything |
+| Threshold scale | For any planned threshold (subtype or flag), read the column's `numeric_range` (`{min, max}`) first — assuming 0-100 when the data is 0-10 captures nothing or everything |
 | Constraint intent | Every proposed constraint and bound is user-confirmed (guided) or recorded as an assumption (one-shot) — data proposes, the user asserts ([constraint-patterns.md](references/constraint-patterns.md)) |
 | Fact decomposition | Each relationship is irreducible and survives sample-data + counterexample checks — apply [fact-decomposition-and-validation.md](references/fact-decomposition-and-validation.md) to steps 3-5 output |
 
-**Type validation is the gate.** Verify every property's RAI type against `INFORMATION_SCHEMA.COLUMNS` using the [type mapping table](#data-mapping-guidance) — a single mismatch causes a `TyperError` at query time that blocks ALL queries on the model with no indication of which property failed. The high-risk cases: date-like columns stored as TEXT or TIMESTAMP_NTZ (use `String` / `DateTime`, not `Date`), `NUMBER` scale (scale > 0 → `Float`), BOOLEAN (→ `Boolean` property or unary Relationship), and numeric IDs (a `PHONE` column may be NUMBER — the schema dictates, not the name).
+**Type validation is the gate.** Verify every property's RAI type against `columns[].rai_type` in `schema.json` — a single mismatch causes a `TyperError` at query time that blocks ALL queries on the model with no indication of which property failed. `rai_type` already encodes the mapping rules, so the check is a comparison, not a derivation. Cross-check `data_type` on the cases where the column *name* misleads: date-like columns stored as TEXT or TIMESTAMP_NTZ (`String` / `DateTime`, not `Date`), `NUMBER` with scale > 0 (`Float`), BOOLEAN (→ `Boolean` property or unary Relationship), and numeric IDs (a `PHONE` column may be NUMBER — the schema dictates, not the name). Where `rai_type` is `null`, derive the type from the [type mapping table](#data-mapping-guidance) and flag the column to the user.
 
 ### Step 6 — Generate code
 
-> **GATE: Do not proceed until Step 5 type validation is complete.** Derive every property type from the type mapping table and the Step 2 `INFORMATION_SCHEMA.COLUMNS` output.
+> **GATE: Do not proceed until Step 5 type validation is complete.** Take every property type from `columns[].rai_type` in `schema.json` — not from column names, CSV samples, or example ontologies. Use the [type mapping table](#data-mapping-guidance) only where `rai_type` is `null`.
 
-Follow conventions in `rai-pyrel`. Worked end-to-end builds (Sources class, FK binding, junction concepts, pairwise matrices) are in [build-examples.md](references/build-examples.md) — load it when generating your first build or when a binding pattern is unclear. Put everything in a single file named after the domain (`supply_chain.py`, `fraud.py`) — easiest to iterate on. When the model grows (multiple reasoners, derived layers, shared logic), split into a package per [Layering Principles](#layering-principles).
+Follow conventions in `rai-pyrel`. Worked end-to-end builds (Sources class, FK binding, junction concepts, pairwise matrices) are in [build-examples.md](references/build-examples.md) — when generating your first build or when a binding pattern is unclear, read the one example that matches (its `## Example N` headings name the patterns), not the whole file. Put everything in a single file named after the domain (`supply_chain.py`, `fraud.py`) — easiest to iterate on. When the model grows (multiple reasoners, derived layers, shared logic), split into a package per [Layering Principles](#layering-principles).
 
 > **If you split into a package:** never name the directory `model/` when your `Model` variable is also called `model` — Python resolves `import model.xxx` to the directory, shadowing the variable. Use a domain-specific name (`sc_model/`, `fraud_model/`).
 
 ### Step 7 — Validate with queries
 
-Add validation queries to the bottom of `<domain>.py` and fix any import errors or empty results before considering the ontology complete. For query syntax, see `rai-pyrel`. Import aggregates with `from relationalai.semantics.std import aggregates`.
+Add validation queries to the bottom of `<domain>.py` — in the same write as the model (Step 6) — and fix any import errors, query errors or empty results before considering the ontology complete. Have them print one compact line per check (`<check>  expected  actual  OK|FAIL`), not whole DataFrames, so a single run's output shows every failure. For query syntax, see `rai-pyrel`. Import aggregates with `from relationalai.semantics.std import aggregates`.
 
-**7a — Spot-check property types** for each `BOOLEAN`, `DATE`, and `NUMBER` column in the Step 2 schema output — the three most common sources of silent `TyperError`.
+**7a — Spot-check property types** for each `BOOLEAN`, `DATE`, and `NUMBER` `data_type` in `schema.json` — the three most common sources of silent `TyperError`.
 
 **7b — Count instances per concept** to confirm data binding loaded rows:
 
 ```python
 df = model.select(aggregates.count(MyConcept).alias("count")).to_df()
-# Expect: count matches source table row count. Zero means data binding failed.
+# Expect: count matches the source table's `row_count` in schema.json. Zero means binding failed.
 ```
+
+Run it for **every** concept, not a sample. An *error* here — not just a zero — means the model is not done, and the cause is often not the concept the error names: a single rule the SQL reasoner rejects makes every concept in the model unqueryable. The most common cause is a fact defined through its own negation (see [Common Pitfalls](#common-pitfalls)). The model still imports cleanly, so this step is the first place it shows.
+
+At `--depth profile` and above, `row_count` is a live `COUNT(*)` and is populated for every table — including views and genuinely empty ones — so there is always a real number to compare against. A concept whose source `row_count` is `0` should load zero instances; that is a match, not a failure.
 
 > `aggregates.count(C)` on a concept with zero instances returns an *empty* DataFrame, not `count=0`. For chained workflows where a placeholder concept is populated by a later step, verify declaration via `inspect.schema()` membership instead.
 
@@ -167,8 +223,7 @@ df = model.select(ConceptA.id.alias("a"), ConceptB.id.alias("b")).where(
 from relationalai.semantics import inspect
 
 schema = inspect.schema(model)
-print(schema)                                  # full dump for small models
-for c in (schema[n] for n in scoped_concepts): # targeted for larger models
+for c in (schema[n] for n in scoped_concepts): # targeted; print(schema) dumps every property of a wide model
     idents = ", ".join(f"{f.name}:{f.type_name}" for f in c.identify_by)
     print(f"{c.name} [id: {idents}], extends={c.extends}")
     for prop in c.properties:
@@ -229,6 +284,8 @@ model.define(Customer.credit_score(TABLE__CUSTOMERS.credit_score)).where(
 Entity counts of zero at introspection time are normal — concepts loaded from data or created via `model.define(X.new(...))` populate at runtime; do not flag them as gaps. Reference entities (countries, currencies) may exist without participating in any relationship; only declare mandatory participation when the domain truly requires it.
 
 ### Compound identity for multi-key entities
+
+`schema.json`'s `pk_candidates` covers single-column identity only, so a multi-key entity will show **no** usable candidate — an empty or coincidental list is the signal to look for compound identity, not a sign the table lacks identity. Before committing to one, check `pk_candidates` once more for a surrogate ID that makes the compound key unnecessary.
 
 ```python
 LineItem = model.Concept("LineItem", identify_by={"order": Order, "product": Product})
@@ -313,7 +370,10 @@ Enrollment.grade = model.Property(f"{Enrollment} has {Float:grade}")
 
 ## Data Mapping Guidance
 
-**Snowflake type mapping** (the authority for Step 5 validation and all property declarations):
+**Snowflake type mapping.** Which role this table plays depends on which Step 2 path you took:
+
+- **Command path (`schema.json` in hand) — fallback only.** `columns[].rai_type` is the authority for Step 5 validation and every property declaration. Use this table just for the columns where `rai_type` is `null` (an unmapped source type such as VARIANT, OBJECT, ARRAY, GEOGRAPHY, or VECTOR), and when reading legacy hand-written code.
+- **CSV / DataFrame path — primary source.** There is no `schema.json` and therefore no `rai_type` at all, so this table *is* the type authority: map each `df.dtypes` entry through it yourself, and apply the same name-versus-type scrutiny Step 5 describes.
 
 | Snowflake type | RAI type | Notes |
 |---|---|---|
@@ -420,8 +480,16 @@ After the ontology validates and queries correctly: surface what problems it can
 
 | Mistake | Cause | Fix |
 |---------|-------|-----|
+| Rows silently lost from a fact table | Concept keyed on its dimension columns, or the fact declared as an n-ary Relationship — both make attribute values the identity, so duplicate-valued rows merge | `identify_by={"row": src}`; see Identity hygiene |
+| "N combinations possible, fewer rows, so the key is unique" | Cardinality argument — invalid for event tables, which permit repeats within a cell | Reject it; row count says nothing about collisions |
+| Deduplicated the source to remove "duplicate" rows | Read repeated rows as a data-quality defect when they were distinct events | Ask whether two events could legitimately share every value; for sales, shipments, readings, payments the answer is yes |
+| Every query fails, including on concepts that look correct | A fact defined through its own negation — e.g. `X.flag(False)` where `not_(X.flag)` — is recursive negation; the SQL reasoner rejects the whole model, not just that rule | Apply the default where the value is read, with the `\|` fallback (`X.flag \| False`, see `rai-pyrel`), or omit it and let absence mean false |
 | Schema-driven names (`TBL_CUST`, `ORD_AMT`) | Copying schema names | Business domain names (`Customer`, `amount`) |
-| Boolean columns as `String` | Guessing types from names or examples | Derive types from `INFORMATION_SCHEMA.COLUMNS` `DATA_TYPE` |
+| Boolean columns as `String` | Guessing types from names or examples | Read `columns[].rai_type` from `schema.json` |
+| Ranked the wrong top value | Trusted `value_distribution`'s wire order | It is alphabetical — sort by count descending before reading a ranking |
+| Ambiguous FK investigated at length, or silently dropped | Ignored `warnings[]` | Dispatch on the warning — see [schema-json.md](references/schema-json.md) § Reading `warnings[]` |
+| No model written — turn ended waiting on discovery | `rai explore schema` timed out and was backgrounded | Wait in one blocking call until its output file shows `✓` or the scan exits; timeout ≥600s |
+| A run takes 60+ turns and millions of context tokens | `schema.json` or a reference printed whole; the model written in appended pieces, then run and read back in separate calls; a background job checked once per turn | Query slices; write each file once and run it in the same call; wait in one blocking call — see Keep the run lean |
 | `FDError: Found non-unique values` | `Property` used for a many-to-many association | Establish multiplicity — `Relationship` if truly M:N, or fix data quality |
 | Modeling every column | No scoping step | Only model columns relevant to scoped questions |
 | `model.data()` for large datasets | Treating DataFrames as production-ready | Prototyping only (≤ hundreds of rows); use `model.Table()` |
@@ -437,7 +505,7 @@ After the ontology validates and queries correctly: surface what problems it can
 | Cross-product concept without linking constraints | Entities created unconstrained | `.where()` filter on creation or relationship constraints |
 | Wrong source table for enrichment | Joinable source used instead of authoritative | Use the table from `model.define(C.new(id=TABLE.key))` |
 | Property chaining in solver expressions | `DecisionConcept.rel.property` in an objective | Denormalize needed properties onto the decision concept |
-| Subtype threshold yields 0 or all results | Assumed wrong data scale | Check `min/max/avg` before setting thresholds |
+| Subtype threshold yields 0 or all results | Assumed wrong data scale | Read the column's `numeric_range` before setting thresholds |
 | Model won't load or sync at all | Engine or connection failure, not ontology code | Diagnose with `rai-setup` (connection) and `rai-health` (engine/transaction state) |
 
 ---
@@ -461,7 +529,8 @@ After the ontology validates and queries correctly: surface what problems it can
 
 ## Reference files
 
-- Executing Step 2 discovery / EDA (row counts, multiplicity, subtype discovery, graph topology tracing)? See [discovery-queries.md](references/discovery-queries.md)
+- Reading `schema.json` — every field, the warning taxonomy and what each warning means for your next action, and an annotated sample? See [schema-json.md](references/schema-json.md)
+- Tracing graph tiers by a node's TYPE column value (the one discovery query `rai explore schema` does not cover)? See [discovery-queries.md](references/discovery-queries.md)
 - Worked greenfield builds end-to-end (Snowflake tables, CSV, junction concepts, self-referential hierarchies, pairwise matrices, portable source paths)? See [build-examples.md](references/build-examples.md)
 - Enriching a model for optimization (relationship promotion, cross-products, multi-hop, gap classification)? See [enrichment-patterns.md](references/enrichment-patterns.md)
 - Categorization, subtypes, derivation modes, temporal tracking, or semantic stability? See [categorization-and-advanced.md](references/categorization-and-advanced.md)

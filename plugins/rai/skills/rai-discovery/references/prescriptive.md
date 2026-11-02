@@ -4,7 +4,7 @@
 - [Scenario Detection](#scenario-detection)
 - [Formulation Style Detection](#formulation-style-detection)
 - [Implementation Hints](#implementation-hints)
-- [Structural Checklists](#structural-checklists)
+- [Structure notes by problem type](#structure-notes-by-problem-type)
   - [Resource Allocation](#resource-allocation)
   - [Network Flow / Design](#network-flow--design)
   - [Routing](#routing)
@@ -32,11 +32,11 @@ These are the ONLY allowed problem types. Every suggestion must use exactly one 
 - If the problem has **graph structure** (source -> destination edges): Network Flow/Design or Routing, not Resource Allocation
 - If the decision is **binary assignment** (who does what): Scheduling/Assignment, even if it minimizes cost
 - If the problem has **both** network structure **and** binary facility selection: Network Design (not just flow)
-- If unsure between two types, check which structural checklist matches more components
+- If unsure between two types, check which type's structural signals match more components
 
 **Template examples by problem type:**
 - Resource Allocation: `../rai-prescriptive-problem/examples/continuous_ternary_join.py` (diet/blending), `../rai-prescriptive-problem/examples/quadratic_pairwise_ref.py` (portfolio balancing)
-- Network Flow: `../rai-prescriptive-problem/examples/flow_conservation.py` (network flow), `../rai-prescriptive-problem/examples/multi_concept_union_objective.py` (supply chain transport), `../rai-prescriptive-problem/examples/fixed_charge_facility.py` (facility location)
+- Network Flow: `../rai-prescriptive-problem/examples/flow_conservation.py` (network flow), `../rai-prescriptive-problem/examples/multi_concept_added_objective.py` (supply chain transport), `../rai-prescriptive-problem/examples/fixed_charge_facility.py` (facility location)
 - Routing: `../rai-prescriptive-problem/examples/subtour_elimination_mtz.py` (traveling salesman)
 - Scheduling/Assignment: `../rai-prescriptive-problem/examples/binary_coverage_scoped.py` (shift assignment), `../rai-prescriptive-problem/examples/epoch_filter_assignment.py` (sprint scheduling), `../rai-prescriptive-problem/examples/hinge_variable_penalty.py` (staffing with overtime), `../rai-prescriptive-problem/examples/conflict_graph_exclusion.py` (maintenance scheduling)
 - Resource Allocation (multi-period): `../rai-prescriptive-problem/examples/multi_period_flow_conservation.py` (demand planning)
@@ -122,24 +122,14 @@ This signals `rai-prescriptive-problem` to use scenario analysis (see its `scena
 
 ## Formulation Style Detection
 
-Within the five prescriptive problem types above, formulation can take two styles, each leaning on a different solver family. **This is a style axis cross-cutting the five problem types — not a sixth type.** Any of Resource Allocation, Network Flow / Design, Routing, Scheduling / Assignment, or Pricing can adopt either style when the decisions and data fit. Most problems can be formulated either way; the style is then a modeling preference.
+Formulation style is an axis cutting across the five problem types above — **not a sixth type**. MIP-style (`Problem(model, Float)` + HiGHS / Gurobi / Ipopt) is the default; the style choice belongs to `rai-prescriptive-problem` > MIP-style vs CSP-style. Discovery only flags the CSP-style (`Problem(model, Integer)` + MiniZinc) signals:
 
-**MIP-style** (`Problem(model, Float)` + `solver="highs"` / `"gurobi"` / `"ipopt"`):
-- Continuous decision variables or continuous data participating in constraints
-- Linear objectives, optionally convex quadratic
-- LP-relaxation gap on `TIME_LIMIT` is useful
+- All-integer decisions and data — a single Float variable or Float data rules CSP-style out
+- `all_different`-shaped requirements ("all distinct", "no two share a value")
+- "Find K feasible" / enumerate valid configurations — multi-solution enumeration is a MiniZinc capability
+- Audit / witness / counterexample framings — the answer is the termination status (`INFEASIBLE` = the property holds)
 
-**CSP-style** (`Problem(model, Integer)` + `solver="minizinc"`):
-- All-integer decisions and data — a single Float variable coerces to MIP
-- `all_different` constraints — the MIP wire does not consume `!=` natively, so the MIP equivalent is tedious pairwise binaries + big-M
-- Multi-solution enumeration via `solution_limit=K` + `Variable.values(sol_index, val)` — only exposed on the MiniZinc path in PyRel today
-- Audit / witness / "find K feasible" framings — answer in termination status (`INFEASIBLE` = no, `OPTIMAL`/`SOLUTION_LIMIT` = yes)
-- Also accepts directly: `min`/`max` in objective, `count` over decision variables, `implies` cascades, products of decision variables. MIP requires linearization for these (the wire applies the `implies` → big-M automatically); both styles work — preference.
-
-**Forcing MIP-style:** continuous decision or data; convex QP objective; use of `special_ordered_set_type_1` / `special_ordered_set_type_2` callables (Gurobi-only per the matrix in `rai-prescriptive-problem/references/global-constraints.md`).
-**Forcing CSP-style (in PyRel today):** use of the `all_different` callable (MiniZinc-only per the matrix); multi-solution workflow via `Variable.values` (theoretical MIP alternatives — Gurobi solution pools, re-solve with no-good cuts — aren't surfaced in PyRel).
-
-Many problems land outside both lists. In the gray zone, pick the style that's easier to maintain; if performance matters on a specific instance, try both styles and measure. Both families prove optimality. When filters are inconclusive, check the **Formulation style** note in each problem-type checklist below — each type has a default.
+When the signals are inconclusive, the **Formulation style** note under each problem type below gives that type's default.
 
 **Routing:** Set `csp_style_witness_enumeration` in the prescriptive implementation hint when the style triggers fire — particularly when the question is "find K feasible / find counterexamples / enumerate all builds satisfying" rather than minimize / maximize:
 
@@ -170,7 +160,7 @@ Identify WHERE decisions are made. Include brief context about the decision stru
 
 ### forcing_requirement
 The most important field. A MINIMIZE objective with no forcing constraint always yields zero -- the solver sets everything to 0 for minimum cost. Identify what real-world requirement forces activity:
-- Demand satisfaction: "All customer demand must be fulfilled" (`sum(x) >= demand`)
+- Demand satisfaction: "All customer demand must be fulfilled" (`sum(Flow.x) >= demand`)
 - Coverage requirements: "Every shift must have at least one worker assigned"
 - Assignment requirements: "Each task must be handled by exactly one resource"
 - Look for Demand/Order/Requirement concepts with quantity fields -- these often define forcing constraints
@@ -191,123 +181,36 @@ Every MODEL_GAP fix must reference a specific source table and column. Decision 
 
 ---
 
-## Structural Checklists
+## Structure notes by problem type
 
-After classifying the problem type, use the corresponding checklist to verify the ontology has the structural elements needed.
+Per problem type: the PyRel-specific structure notes and the default formulation style.
 
 ### Resource Allocation
 Deciding how much of a divisible resource goes where.
 
-**Key considerations:**
-- Forcing constraints are critical for minimize objectives -- without demand satisfaction or coverage requirements, the solver returns all-zeros
-- Balance/fairness constraints (min share per category) prevent the optimizer from concentrating all resources on the highest-return option
-- Penalty-based soft constraints handle infeasibility when total demand exceeds total supply
-
-**Structural checklist:**
-- **Variables:** Continuous allocation amounts (>= 0), optional binary selection
-- **Constraints:** Budget/capacity limits, minimum coverage or return targets, diversification/balance limits
-- **Objective:** Minimize cost/risk or maximize return/coverage
-- **Verify:** Budget constraint present? Forcing constraint ensures non-trivial allocation? Allocations sum correctly?
 - **Formulation style:** MIP-style is the default — divisible-resource problems usually have continuous allocations and a linear cost objective, where LP relaxation drives quality. CSP-style fits when the allocation is fully integer and you want to enumerate K different valid allocations (configurator-style: "show me 10 different valid product bundles satisfying the constraints"). See `rai-prescriptive-problem/references/csp-formulation.md` for the CSP-style decision flow.
 
 ### Network Flow / Design
 Moving flow through a graph, optionally selecting which infrastructure to build.
 
 **Key considerations:**
-- Flow conservation (inflow == outflow) must hold at every interior node -- missing even one node creates a "leak"
-- Source and sink nodes are exceptions to conservation -- they inject/absorb flow
 - When binary open/close decisions are present, linking constraints (`flow <= capacity * x_open`) are essential
-- Multi-component objectives (fixed cost + variable transport cost) need `model.union()` to combine terms from different scopes
+- Multi-component objectives (fixed cost + variable transport cost) add separately keyed sums from each scope, defaulting each potentially empty total to zero
 
-**Structural checklist:**
-- **Variables:** Flow on arcs (continuous, >= 0, <= capacity), optional binary open/close for facilities/arcs
-- **Constraints:** Flow conservation at interior nodes, arc capacity, source/sink limits, linking constraints (flow only if open)
-- **Objective:** Minimize transport + fixed cost, or maximize total flow
-- **Verify:** Every interior node has conservation constraint? Source/sink boundary conditions correct? No isolated nodes? Linking constraint prevents flow through closed arcs?
 - **Formulation style:** MIP-style is the default — flow volumes are typically continuous and LP relaxation drives the gap. CSP-style fits when flows are unit-valued (path-routing, packet-style) and the question is "find K feasible routings" or "enumerate all topologies satisfying capacity bounds." See `rai-prescriptive-problem/references/csp-formulation.md`.
 
 ### Routing
 Determining paths or sequences for vehicles/shipments visiting locations.
 
-**Key considerations:**
-- Subtour elimination is the defining challenge -- without it, the solver finds disconnected short loops instead of a single tour
-- MTZ formulation (auxiliary ordering variable `u`) is simplest but weakest LP relaxation; acceptable for moderate sizes
-- Degree constraints (exactly 1 in-edge, 1 out-edge) are necessary but not sufficient -- they don't prevent subtours alone
-- Symmetry breaking (fix depot node ordering) reduces search space significantly
-
-**Structural checklist:**
-- **Variables:** Binary arc selection, auxiliary ordering variables (for subtour elimination)
-- **Constraints:** Visit each location exactly once, degree constraints, vehicle capacity, subtour elimination (MTZ or similar)
-- **Objective:** Minimize total distance/time/cost
-- **Verify:** Subtour elimination present? Depot start/end constraints? Degree constraints enforce exactly one in-edge and one out-edge?
 - **Formulation style:** MIP-style is dominant for cost-objective routing — MTZ subtour elimination + LP relaxation drives the gap on TIME_LIMIT. CSP-style fits when the routing problem is combinatorial with `all_different` constraints, or when the question shifts to "find K distinct tours" (witness enumeration). See `rai-prescriptive-problem/references/csp-formulation.md`.
 
 ### Scheduling / Assignment
 Deciding when activities occur or which resources handle which tasks.
 
-**Key considerations:**
 - Create variables only for valid (resource, task) pairs using `where=` -- not every resource can handle every task
-- Both directions need constraints: each task covered (forcing) AND each resource not overloaded (capacity)
-- For time-based scheduling, precedence constraints (`start_j >= end_i` for dependent tasks) are often missing
-- CP solvers (MiniZinc) may outperform MIP for highly constrained combinatorial assignment
-
-**Structural checklist:**
-- **Variables:** Binary assignment (resource-to-task), start/completion times, optional integer ordering
-- **Constraints:** Each task assigned exactly once, resource capacity not exceeded, precedence ordering, time windows, no-overlap
-- **Objective:** Minimize makespan, tardiness, or cost; maximize coverage
-- **Verify:** Binary variables for decisions? Task coverage (each task assigned)? Resource capacity not exceeded? Time variables bounded within horizon?
 - **Formulation style:** Most live use of CSP-style. Slot assignment with `all_different`, precedence cascades via `implies`, multi-solution enumeration of valid schedules, and pure-satisfaction "is there any schedule covering all shifts" framings all fit CSP-style naturally. MIP-style fits when the objective is a linear cost or makespan minimization with LP-relaxation value. See `rai-prescriptive-problem/references/csp-formulation.md` — particularly the integer-slot-with-sentinel and audit/witness idioms.
-
-### Multi-Period Considerations (applies to any type)
-When a problem has a temporal/period dimension, these additional structural elements apply regardless of the base type:
-
-- The inventory/state balance equation (`state_t = state_{t-1} + inflow_t - outflow_t`) links consecutive periods -- missing it means periods are independent
-- Initial conditions (starting state) must be set, otherwise the first period is unconstrained
-- Terminal conditions prevent the model from "dumping" everything in the last period
-- Shortage/surplus variables with penalties handle uncertainty gracefully
-
-**Additional checklist for multi-period problems:**
-- Balance constraint connects consecutive periods?
-- Initial state specified?
-- Terminal conditions set?
-- Storage/capacity constraints per period?
 
 ### Pricing
 Setting prices to optimize revenue subject to demand response and business rules.
 
-**Key considerations:**
-- The demand-price relationship is the core modeling challenge -- must be captured either as a constraint or embedded in the objective
-- Markdown problems typically require monotonicity (prices can only decrease over time)
-- Revenue = price * demand is bilinear; if both are variables, linearization or piecewise approximation is needed
-
-**Structural checklist:**
-- **Variables:** Price levels (continuous or discrete tiers), demand response quantities
-- **Constraints:** Price bounds, markdown monotonicity, inventory/demand coupling
-- **Objective:** Maximize revenue or profit
-- **Verify:** Demand-price relationship captured? Price bounds from data? Revenue calculation correct?
 - **Formulation style:** MIP-style by default — continuous price levels, possibly bilinear revenue terms. CSP-style fits when prices are restricted to a discrete tier menu and the objective is a revenue lookup via `implies` cascade (planogram-style: prices and SKUs are all-integer, decision-indexed table lookups for revenue per chosen tier). See `rai-prescriptive-problem/references/csp-formulation.md` — particularly the implies-cascade table-lookup idiom.
-
----
-
-## Feasibility Assessment Framework
-
-When evaluating whether a problem statement is suitable for optimization, assess on two dimensions:
-
-### 1. Data Feasibility (from the data model)
-- **Entities to decide about?** Are there concepts that represent things to allocate, assign, schedule, or route?
-- **Numeric attributes to optimize?** Costs, values, distances, capacities — properties with Float/Integer types
-- **Constraint data?** Capacities, demands, limits, budgets — bounds that restrict decisions
-- **Relationships between entities?** Connections that enable flow, assignment, or dependency constraints
-
-### 2. Value Assessment (from the problem statement)
-- **Clear decision?** Allocate, assign, schedule, route, price — an actionable verb implying choices
-- **Recurring decision?** Operational decisions made repeatedly benefit most from optimization (vs one-time analysis)
-- **Stakes mentioned?** Costs, efficiency, service levels, revenue — quantifiable impact
-- **Output drives action?** The solution should change how resources are deployed, not just produce a report
-
-### Verdict Scale
-- **GOOD:** Both data and value are strong — proceed to formulation
-- **PARTIAL:** Data exists but gaps need enrichment, OR value is clear but decision structure is ambiguous
-- **POOR:** Missing fundamental data (no numeric attributes, no constraint data) or the problem isn't suitable for optimization (e.g., pure analytics, no decision)
-
-**Key principle:** Evaluate the problem STATEMENT, not a solution. Do not suggest specific variables, constraints, or objectives at this stage — that comes in the formulation phase.

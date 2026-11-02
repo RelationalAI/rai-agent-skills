@@ -31,7 +31,7 @@ Discovery-to-routing walkthroughs for prescriptive reasoner questions. Each exam
 - Decision concept: `ComponentFlow` defined on `Activity` with `quantity` variable
 - Slack concept: `UnmetComponent` per (Resource, Entity) for infeasibility handling
 - Variables: `ComponentFlow.quantity` (continuous, 0 to capacity), `UnmetComponent.quantity` (continuous, >= 0)
-- Constraints: per (Resource, Entity): sum(inflow) + unmet >= Dependency requirement
+- Constraints: per (Resource, Entity): total inflow + unmet >= Dependency requirement
 - Constraint: if excluded entity, force `ComponentFlow.quantity == 0` for that entity's activities
 
 ### Reasoner handoff (→ prescriptive workflow)
@@ -69,13 +69,13 @@ Discovery-to-routing walkthroughs for prescriptive reasoner questions. Each exam
 - Slack concept: `UnmetDemand` per Resource
 - Reliability integration: `Entity.reliability_score` as constraint parameter
 - Three scenario framings:
-  1. Pure cost: minimize `sum(flow * cost_per_unit) + unmet_penalty`
-  2. Reliability-weighted: add `reliability_weight * sum(flow * (1 - reliability_score))`
+  1. Pure cost: minimize total flow cost (quantity × the activity's `cost_per_unit`) + unmet penalty
+  2. Reliability-weighted: add `reliability_weight` × total flow weighted by (1 − the source's `reliability_score`)
   3. Hard threshold: force `AllocationFlow.quantity == 0` where `source.reliability_score < min_reliability`
 
 ### Reasoner handoff (→ prescriptive workflow)
 - Same prescriptive workflow as the previous example
-- `configure_scenarios` to set up reliability parameter sweeps before solving
+- Reliability sweeps as a Scenario Concept (`reliability_weight` / `min_reliability` as `Scenario` properties, one solve for all levels): `rai-prescriptive-problem/references/scenario-analysis.md`
 - Output: cost-vs-reliability tradeoff frontier across scenarios
 
 ### Cumulative discovery note

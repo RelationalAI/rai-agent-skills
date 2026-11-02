@@ -1,8 +1,8 @@
 # Pattern: multi-period flow conservation with time-indexed multiarity variables
 # Key ideas: std.common.range() creates integer periods; multiarity properties bind
 # (entity, time, value) triples; model.where() with adjacent-period refs (t, t-1)
-# gives a single declarative balance constraint; model.union() combines per-entity
-# costs from different concepts into one objective.
+# gives a single declarative balance constraint; add separately keyed production
+# and inventory totals, defaulting each empty total to zero.
 
 from relationalai.semantics import Float, Integer, Model, String, std, sum
 from relationalai.semantics.reasoners.prescriptive import Problem
@@ -102,9 +102,9 @@ problem.satisfy(
     ).require(x_inv_curr == x_inv_prev + x_prod - WeeklyDemand.qty)
 )
 
-# --- Objective: minimize production + holding cost via model.union() ---
-prod_cost_term = SiteSKU.prod_cost * sum(x_prod).per(SiteSKU).where(SiteSKU.x_prod(t, x_prod))
-hold_cost_term = SiteSKU.hold_cost * sum(x_inv).per(SiteSKU).where(SiteSKU.x_inv(t, x_inv), t >= 1)
-problem.minimize(sum(model.union(prod_cost_term, hold_cost_term)))
+# --- Objective: minimize production + holding cost ---
+prod_cost_term = SiteSKU.prod_cost * sum(t, x_prod).per(SiteSKU).where(SiteSKU.x_prod(t, x_prod))
+hold_cost_term = SiteSKU.hold_cost * sum(t, x_inv).per(SiteSKU).where(SiteSKU.x_inv(t, x_inv), t >= 1)
+problem.minimize((sum(SiteSKU, prod_cost_term) | 0.0) + (sum(SiteSKU, hold_cost_term) | 0.0))
 
 problem.solve("highs", time_limit_sec=60)

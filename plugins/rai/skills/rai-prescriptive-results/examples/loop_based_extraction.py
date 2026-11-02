@@ -72,13 +72,12 @@ def build_and_solve(min_benefit):
 
     # --- Result extraction ---
     # termination_status: "OPTIMAL", "INFEASIBLE", "TIME_LIMIT", etc.
-    # objective_value: best objective found (None if infeasible)
+    # objective_value: best objective found (None when no point was returned)
     print(f"Status: {si.termination_status}")
 
-    # Guard: skip result extraction on non-optimal solves. Without this,
-    # si.objective_value is None and Variable.values() yields an empty DataFrame.
-    # Note: TIME_LIMIT / SOLUTION_LIMIT may have a valid incumbent — for production
-    # code, also check `si.objective_value is not None` to preserve usable solutions.
+    # Guard: compare only proven optima across scenarios (a time-limited
+    # incumbent's gap would read as a scenario effect). Reading an infeasible
+    # or no-incumbent solve fails silently.
     if si.termination_status not in ("OPTIMAL", "LOCALLY_SOLVED"):
         print("Objective: N/A — skipping result extraction")
         return {

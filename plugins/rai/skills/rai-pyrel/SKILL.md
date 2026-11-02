@@ -194,7 +194,7 @@ Python's `and`/`or`/`not`/`if-else` raise `[Invalid operator]` in RAI expression
 | `not x` | `model.not_(x)` — Python `~` raises `TypeError` |
 | `if c else d` | `value \| fallback` (ordered fallback) or `.where(c)` |
 
-**`|` vs `model.union()`** — the one distinction that silently changes results: `|` is an ordered fallback (first branch that succeeds — if-then-else; creates a flattenable `Match`); `model.union()` is set OR (collects ALL matching branches). Use `|` for defaults and case-when; `union()` for OR-filters and multi-term objectives. **All `union()` branches must return the same number of values** — a bare relation call returns 1, `where(...)` without `select()` returns 0; mixing raises `[Inconsistent branches]`.
+**`|` vs `model.union()`** — the one distinction that silently changes results: `|` is an ordered fallback (first branch that succeeds — if-then-else; creates a flattenable `Match`); `model.union()` is set OR (collects ALL matching branches). Use `|` for defaults and case-when; `union()` for OR-filters (min/max over a union is also fine). Never `sum(model.union(...))` over decision variables: add separate sums, each defaulted outside its aggregate, `(sum(A.x) | 0.0) + (sum(B.x) | 0.0)` (`| 0` in an `Integer` problem), and name bare decision refs' entities, `sum(f, xf).where(f.flow_var(xf))`; see [expression-rules.md](references/expression-rules.md#modelunion--set-style-or-combinator). **All `union()` branches must return the same number of values** — a bare relation call returns 1, `where(...)` without `select()` returns 0; mixing raises `[Inconsistent branches]`.
 
 ### Property f-strings
 
@@ -409,7 +409,7 @@ Lower-frequency pitfalls (Snowflake export casing, Python builtins on RAI expres
 | Reconciliation rule | Two-source delta with tolerance and severity | [examples/reconciliation_rule.py](examples/reconciliation_rule.py) |
 | Cross-entity alerting | Disjunctive OR flags via multiple `define()` calls | [examples/cross_entity_alerting.py](examples/cross_entity_alerting.py) |
 | Multiarity properties + refs | Multiple `Float.ref()` binding, pairwise multi-arity joins | [examples/multiarity_property_refs.py](examples/multiarity_property_refs.py) |
-| Standalone Property + union | Unattached Property, `model.union()` multi-component objective | [examples/standalone_property_union_objective.py](examples/standalone_property_union_objective.py) |
+| Standalone Property + added totals | Unattached Property, keyed sums added across objective components | [examples/standalone_property_added_objective.py](examples/standalone_property_added_objective.py) |
 | print() debugging | Readable repr before query execution | [examples/pprint_debugging.py](examples/pprint_debugging.py) |
 | End-to-end walkthrough | Ontology + graph + aggregation + query in one script | [examples/graph_derived_subtypes.py](examples/graph_derived_subtypes.py) |
 | `inspect.to_concept()` helper | Defensive helper for any DSL handle | [examples/inspect_to_concept_helper.py](examples/inspect_to_concept_helper.py) |

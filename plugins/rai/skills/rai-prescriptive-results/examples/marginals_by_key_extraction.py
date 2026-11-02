@@ -75,7 +75,7 @@ cap = problem.satisfy(
 # sensitivity=True requires an objective (duals are objective marginals).
 problem.maximize(sum(Activity.profit * Activity.level))
 
-# Request duals on the solve itself — a solve option, not a post-processing re-solve.
+# Request duals on the solve whose results you read; sensitivity is a solve option.
 problem.solve("highs", sensitivity=True)
 si = problem.solve_info()
 print("status:", si.termination_status, "| sensitivity:", si.sensitivity)

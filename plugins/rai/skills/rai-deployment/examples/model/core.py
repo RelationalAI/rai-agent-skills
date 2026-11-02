@@ -2,20 +2,8 @@ import relationalai.semantics as rai
 
 model = rai.Model("customers_orders")
 
-customer_source = model.data([
-    {"id": 1},
-    {"id": 2},
-    {"id": 3},
-    {"id": 4},
-])
-
-order_source = model.data([
-    {"id": 1, "customer_id": 1, "total": 1.0, "cogs": 0.1},
-    {"id": 2, "customer_id": 1, "total": 2.0, "cogs": 0.2},
-    {"id": 3, "customer_id": 2, "total": 3.0, "cogs": 0.3},
-    {"id": 4, "customer_id": 3, "total": 4.0, "cogs": 0.4},
-    {"id": 5, "customer_id": 1, "total": 5.0, "cogs": 0.5},
-])
+customer_source = model.Table("EXAMPLE.SOURCES.CUSTOMERS")
+order_source = model.Table("EXAMPLE.SOURCES.ORDERS")
 
 # -- Customer
 # ref scheme
@@ -43,4 +31,3 @@ order.define(
 Order.cogs = model.Property(f"{Order} had total cost of goods sold {rai.Float}")
 order.define(
     o.cogs(order_source.cogs))
-

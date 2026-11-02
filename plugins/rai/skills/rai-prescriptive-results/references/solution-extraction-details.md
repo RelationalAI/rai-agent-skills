@@ -1,18 +1,5 @@
 # Solution Extraction Details
 
-## Table of Contents
-- [Engine-Side Result Attributes (Relationships)](#engine-side-result-attributes-relationships)
-- [Querying Solution Values — Full Patterns](#querying-solution-values--full-patterns)
-- [Variable.values() Back-Pointer Naming Rule](#variablevalues-back-pointer-naming-rule)
-- [Constraint Back-Pointer Access (marginals & conflict membership)](#constraint-back-pointer-access-marginals--conflict-membership)
-- [Silent-Failure Warnings](#silent-failure-warnings)
-- [Exporting Solution Results to Tables](#exporting-solution-results-to-tables)
-- [Multiple Solutions](#multiple-solutions)
-- [Iterative Solving](#iterative-solving)
-- [Scenario / Parametric Solving](#scenario--parametric-solving)
-
----
-
 ## Engine-Side Result Attributes (Relationships)
 
 After `problem.solve()`, these accessors return Relationships usable in `model.require()`, `model.select()`, and solver expressions (the Python-side `solve_info()` counterparts live in SKILL.md > Solution Extraction):
@@ -30,68 +17,19 @@ After `problem.solve()`, these accessors return Relationships usable in `model.r
 | `problem.num_max_objectives()` | Relationship | Number of maximize objectives |
 
 ```python
-# Engine-side: integrity constraint on status
+# Engine-side: integrity constraint on status (reports only with compiler.require_mode: report)
 model.require(problem.termination_status() == "OPTIMAL")
 ```
 
 ---
 
-## Querying Solution Values — Full Patterns
+## Querying Solution Values
 
-### `populate=True` (default) — `model.select()` variations
+The canonical `populate=True` and `populate=False` queries are in SKILL.md > Solution Extraction. The rules behind them:
 
-With `populate=True`, solved values are written back into the model as property values. Query them like any other model data — with entity context, aliases, and filtering:
-
-```python
-# Display results — .inspect() prints to stdout (preferred for display-only)
-model.select(
-    MachinePeriod.machine.machine_id.alias("machine_id"),
-    MachinePeriod.period.pid.alias("period"),
-    MachinePeriod.x_maintain.alias("maintained"),
-).where(MachinePeriod.x_maintain > 0.5).inspect()
-
-# Use .to_df() when you need the DataFrame for further Python analysis
-assignments_df = model.select(
-    TechnicianMachinePeriod.technician.technician_id.alias("technician"),
-    TechnicianMachinePeriod.machine.machine_id.alias("machine"),
-    TechnicianMachinePeriod.period.pid.alias("period"),
-).where(TechnicianMachinePeriod.x_assigned > 0.5).to_df()
-
-# Binary variable selection — filter active decisions
-model.select(
-    Edge.i.alias("from"), Edge.j.alias("to")
-).where(Edge.x_edge > 0.5).inspect()
-```
-
-### `populate=False` — `Variable.values()` on ProblemVariable
-
-Use `populate=False` + `Variable.values()` for loop-based entity exclusion/partition scenarios. For Scenario Concept workflows, use `model.select()` — the scenario dimension is part of the variable identity. For loop workflows where multiple Problems share decision variables, `populate=False` prevents one solve from overwriting another's results.
-
-`solve_for()` returns a `ProblemVariable` — a Concept that can be used in `model.define()`, `model.select()`, and `.ref()`. Call `.values(sol_index, value_ref)` on it to extract solution values.
-
-```python
-# solve_for() returns a ProblemVariable concept
-assign_var = problem.solve_for(Assignment.x, type="bin", populate=False)
-
-problem.solve("highs")
-
-# Extract solution values using Variable.values()
-value_ref = Float.ref()
-df = model.select(
-    assign_var.assignment.worker.name.alias("worker"),
-    value_ref.alias("value"),
-).where(assign_var.values(0, value_ref), value_ref > 0.5).to_df()
-# Returns entity-aware results with proper identity columns
-
-# For multiple solutions (e.g., from MiniZinc with solution_limit),
-# pass different sol_index values (0-based)
-```
-
-**Key rules:**
-- Use `model.select()` by default — it gives entity-aware results with proper identity columns
-- Use `Variable.values()` for scenario loops or when you need per-variable extraction with `populate=False`
-- The `ProblemVariable` returned by `solve_for()` is a Concept — you can traverse its relationships in `model.select()` for entity context
-- `satisfy()` returns `ProblemConstraint` and `minimize()`/`maximize()` return `ProblemObjective` — also Concepts usable with `model.define()`, `model.select()`, `.ref()`
+- Use `model.select()` by default: with `populate=True`, solved values are written back as property values and query like any other model data, with entity context. `.inspect()` prints; `.to_df()` returns the DataFrame.
+- Use `populate=False` + `var.values(sol_index, value_ref)` for loop-based exclusion/partition scenarios, where several Problems share decision variables and one solve would overwrite another's results. Scenario Concept workflows keep `model.select()`: the scenario is part of the variable's identity.
+- `solve_for()` returns a `ProblemVariable`, `satisfy()` a `ProblemConstraint`, `minimize()`/`maximize()` a `ProblemObjective`. All three are Concepts usable in `model.define()`, `model.select()` and `.ref()`. For entity context, traverse a variable's back-pointers or the ones a constraint declared with `keyed_by=`; an objective has none.
 
 ---
 
@@ -115,28 +53,7 @@ The lowercased type name is the type name converted to lowercase **as-is** — n
 
 ## Constraint Back-Pointer Access (marginals & conflict membership)
 
-`satisfy()` returns a `ProblemConstraint` — a Concept, like the `ProblemVariable` from `solve_for()`. When you request `sensitivity=True` or `conflict=True`, the marginal and membership attributes read **straight off it**, single-valued (no `sol_index`):
-
-- `con.shadow_price`, `con.basis_status` — populated by `sensitivity=True`
-- `con.in_conflict` — populated by `conflict=True`
-
-It also carries an **entity back-pointer** for each grounding key declared via `keyed_by=` at `satisfy()` time, mirroring the variable back-pointer. That lets a marginal or conflict flag **join to entity data by key** (`con.entity.prop`) instead of parsing the constraint's name string. The back-pointer attribute is the **dict key you chose** in the declaration — `keyed_by={"resource": Resource}` reads back as `cap.resource` — not the `name=` display label (`"cap"`). The `name=` kwarg only sets the constraint's display name; it plays no part in the back-pointer.
-
-```python
-# Constraint family: one capacity limit per Resource, keyed by its Resource:
-cap = problem.satisfy(
-    model.require(usage <= Resource.capacity),
-    name=["cap", Resource.name],
-    keyed_by={"resource": Resource},
-)
-# ... an objective must already be set — duals are objective marginals:
-problem.solve("highs", sensitivity=True)
-
-# The entity back-pointer (cap.resource) joins the marginal to its entity by key:
-model.select(cap.resource.name, cap.resource.capacity, cap.shadow_price).inspect()
-```
-
-**`keyed_by` is required for reading families back by key.** A constraint **family** — one logical constraint instantiated per entity (a capacity limit per Resource, a coverage floor per Shift) — only exposes per-instance back-pointers if its grounding keys are **declared** at formulation time (`keyed_by={"resource": Resource}`); there is no automatic constraint back-pointer. Without the declaration, a marginal / conflict flag can't be paired with its entity. A family grounded over several entities takes several keys (one back-pointer each); a scalar grounding takes a value reference (`keyed_by={"i": X.i}`). The authoritative formulation idiom — including the key-uniqueness rule (a too-coarse key raises at solve) — lives in `rai-prescriptive-problem/references/constraint-formulation.md`.
+A `ProblemConstraint` carries one entity back-pointer per grounding key declared with `keyed_by=` at `satisfy()` time, named by the **dict key you chose** (`keyed_by={"resource": Resource}` reads back as `cap.resource`), never by the `name=` display label. There is no automatic constraint back-pointer. A family grounded over several entities takes several keys; a scalar grounding takes a value reference (`keyed_by={"i": X.i}`). Reading marginals and conflict flags through it: SKILL.md > Sensitivity & conflict attributes; the formulation idiom and key-uniqueness rule: `rai-prescriptive-problem/references/constraint-formulation.md` > Declaring constraint keys.
 
 ---
 
@@ -175,77 +92,23 @@ model.select(
 ).into(results_table, update=True).exec()
 ```
 
-The `.into(table)` call writes query results to the specified Snowflake table. Use `update=True` to merge into an existing table rather than replacing it.
-
 ## Multiple Solutions
 
-v1 supports multiple solutions natively:
-
-- **Request multiple solutions:** `problem.solve("minizinc", solution_limit=10)` — `solution_limit` is a first-class parameter
-- **Check count:** `problem.num_points()` (Relationship) or `problem.solve_info().num_points` (Python)
-- **Extract solution values:** Use `Variable.values(sol_index, value_ref)` on the `ProblemVariable` returned by `solve_for()` for structured access via back-pointers. For multi-solution access, use different `sol_index` values.
+MiniZinc on a `Problem(model, Integer)` returns up to K distinct feasible points for `solve(..., solution_limit=K)`; what the limit does on other solvers, and how to size K: [solver-parameters.md](solver-parameters.md) > `solution_limit` semantics. Count points with `si.num_points` (or `problem.num_points()`), read point k with `var.values(k, ref)` (0-based), and gate the loop on status:
 
 ```python
-# Solve with multiple solutions
-problem = Problem(model, Float)
-amount_var = problem.solve_for(Food.x_amount, lower=0)
-problem.minimize(sum(Food.cost * Food.x_amount))
+problem = Problem(model, Integer)
+pick = problem.solve_for(Item.x_pick, type="bin", name=["pick", Item.name], populate=False)
+problem.satisfy(model.require(sum(Item.x_pick) == 2))
 problem.solve("minizinc", solution_limit=5)
 si = problem.solve_info()
-print(f"Found {si.num_points} solutions")
-
-# Extract solution at index 0 (preferred: Variable.values())
-value_ref = Float.ref()
-sol0_df = model.select(
-    amount_var.food.name.alias("food"),
-    value_ref.alias("amount"),
-).where(amount_var.values(0, value_ref), value_ref > 0.001).to_df()
-
-# Extract solution at index 2
-sol2_df = model.select(
-    amount_var.food.name.alias("food"),
-    value_ref.alias("amount"),
-).where(amount_var.values(2, value_ref), value_ref > 0.001).to_df()
-
+if si.termination_status in ("OPTIMAL", "SOLUTION_LIMIT"):   # OPTIMAL = fewer than K found (complete unless the time limit hit)
+    v = Integer.ref()
+    for k in range(si.num_points or 0):
+        model.select(pick.item.name).where(pick.values(k, v), v > 0.5).inspect()
 ```
 
-**How many solutions to request:**
-
-Two distinct sizing rules apply, depending on the use case:
-
-1. **Human-comparison mode (3–10):** When the primary use is enabling human evaluation — like Google Maps showing a few route options — humans are not effective at comparing hundreds of alternatives. If there is an analytical way to compare solutions, that criterion belongs in the objective function, not in post-hoc filtering of a large set.
-
-2. **Audit / witness enumeration mode (above feasible-set size):** When the use is "find ALL configurations violating the property" or "enumerate every valid build" (CSP-style audit / witness), `solution_limit` must exceed the expected feasible-set size so the search terminates with `OPTIMAL` (= search exhausted) rather than `SOLUTION_LIMIT` (= stopped at K with more remaining). `SOLUTION_LIMIT` is a valid status for K-of-many enumeration but its order is solver-dependent — fine for sampling, problematic when downstream tests expect a deterministic full set. See `rai-prescriptive-problem/references/csp-formulation.md` § 4 and `rai-prescriptive-problem/examples/audit_witness.py`.
-
-Requesting very large solution counts (e.g., 100,000) is rarely appropriate in human-comparison mode. The few specialized cases where large solution sets make sense include audit / witness enumeration above, downstream simulation over candidate solutions, or feeding alternatives into a separate evaluation pipeline.
-
-**Status-gated extraction:** for either mode, gate the extraction loop on `termination_status`:
-
-```python
-if si.termination_status not in ("OPTIMAL", "SOLUTION_LIMIT"):
-    # Solver did not enumerate — do not iterate sol_index; results are undefined
-    ...
-else:
-    n_points = si.num_points or 0
-    for sol_idx in range(n_points):
-        ...
-```
-
-A non-success status with `num_points == 0` (TIME_LIMIT, crash) does NOT mean the search was exhaustive — it means the search did not run to completion. Treating "zero results" as "exhaustive enumeration found nothing" is a silent-failure mode in audit-mode problems (see SKILL.md > Audit / witness mode).
-
-**By problem type:**
-
-| Problem type | Recommended count | Rationale |
-|---|---|---|
-| Binary assignment (scheduling, shift) | 5–10 | Each solution is a distinct assignment; users can compare alternatives |
-| Resource allocation (continuous) | 5–15 | Different trade-off frontiers show budget/return variety |
-| Routing (TSP, VRP) | 3–5 | Solutions differ subtly (permutations); diminishing returns above 5 |
-| Multi-period/inventory | 3–5 | Large variable counts make diverse solutions expensive |
-
-**Solver-specific limits:**
-- **HiGHS:** Limited multi-solution support — typically returns 1–2 solutions. Cap at 5.
-- **MiniZinc (Chuffed):** Native support for solution enumeration; can handle hundreds when the feasible space is structurally constrained. For audit / witness use, size above expected feasible-set size; termination is `OPTIMAL` when exhausted, `SOLUTION_LIMIT` when cut off. Requires `Problem(model, Integer)`.
-- **Gurobi:** Pool search mode supports 10–20+ solutions efficiently.
+Zero points under `TIME_LIMIT` or an error does not mean the feasible set is empty: the search did not finish (SKILL.md > Audit / witness mode). For people comparing alternatives, a handful of points (3-10) is enough; if one criterion should decide between them, it belongs in the objective.
 
 ## Iterative Solving
 
@@ -257,6 +120,6 @@ Constraints defined over concepts automatically apply to new data added between 
 
 ## Scenario / Parametric Solving
 
-**Scenario Concept (parameter variations) — preferred when applicable:** Results from a single solve are incorporated into the ontology — queryable via `model.select(Scenario.name, ...).where(Entity.x_var(Scenario, x_ref), x_ref > threshold)`, composable with other model queries, and available for downstream derived properties. Group by `Scenario.name` for comparison tables. Variables are multi-argument Properties indexed by (Entity, Scenario) — the scenario column is part of the variable identity. Use when only parameter values change between scenarios (budget, demand, thresholds). See [examples/scenario_concept_extraction.py](../examples/scenario_concept_extraction.py).
+**Scenario Concept** (only parameter values change): one solve; results stay in the ontology for the rest of the solving process, queryable with `model.select(Scenario.name, ...).where(Entity.x_var(Scenario, x_ref), x_ref > threshold)` and grouped by `Scenario.name`. [examples/scenario_concept_extraction.py](../examples/scenario_concept_extraction.py).
 
-**Loop + where= (entity exclusion):** Each iteration produces results via `Variable.values()` — results live in Python DataFrames, outside the model. Collect per-iteration results in a list, label by scenario. Use `populate=False` to prevent cross-iteration contamination. Required when the problem *structure* changes between scenarios (entities added/removed, constraint graph differs). See [examples/loop_based_extraction.py](../examples/loop_based_extraction.py).
+**Loop + `where=`** (the problem's structure changes: entities added or removed): one Problem per iteration with `populate=False`; results come back through `Variable.values()` into Python DataFrames labelled by scenario. [examples/loop_based_extraction.py](../examples/loop_based_extraction.py). Choosing between them: `rai-prescriptive-problem/references/scenario-analysis.md`.

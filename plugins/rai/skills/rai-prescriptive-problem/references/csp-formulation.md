@@ -1,11 +1,8 @@
 # CSP-style formulation in PyRel
 
-This doc covers PyRel's CSP-style (constraint satisfaction problem style) prescriptive formulation. It covers both problems with objectives (e.g., `chromatic_number` minimizes max color, `book_slate` maximizes revenue, `planogram` maximizes revenue via an `implies` cascade) and pure-satisfaction modes (audit / witness / property-check, multi-solution enumeration without ranking — see §§ Multi-solution mode, Audit / witness enumeration). The community shorthand "CSP" technically denotes satisfaction-only problems; the style as practiced in PyRel includes optimization too, so treat "CSP-style" here as the broader paradigm.
-
-CSP-style is a **style**, not a separate problem class. It is characterized by `Problem(model, Integer)` + `solver="minizinc"`, all-discrete decisions and data, and constraint + objective shapes (globals, `count` / products over decision variables, `min`/`max` in objective) that MiniZinc supports natively where HiGHS/Gurobi require manual reformulation. Any of the five existing prescriptive problem types (Resource Allocation, Network Flow / Design, Routing, Scheduling / Assignment, Pricing) can adopt this style.
+CSP-style is a **style**, not a separate problem class, and it covers optimization as well as pure satisfaction. It is characterized by `Problem(model, Integer)` + `solver="minizinc"`, all-discrete decisions and data, and constraint + objective shapes (globals, `count` / products over decision variables, `min`/`max` in objective) that MiniZinc supports natively where HiGHS/Gurobi require manual reformulation.
 
 <!-- TOC -->
-- [0. PyRel-level cross-references](#0-pyrel-level-cross-references)
 - [1. When this style fits](#1-when-this-style-fits)
 - [2. Decision-variable shapes](#2-decision-variable-shapes)
 - [3. Constraint idioms](#3-constraint-idioms)
@@ -20,52 +17,23 @@ CSP-style is a **style**, not a separate problem class. It is characterized by `
 
 ---
 
-## 0. PyRel-level cross-references
-
-This doc focuses on what is distinctive about CSP-style formulation. General PyRel mechanics live one level up in `rai-pyrel`. Before reading the rest of this doc, know that:
-
-- `count(X, condition)` syntax — second arg is a condition expression on `X` — is documented in `rai-pyrel/references/common-pitfalls.md` (count syntax row). This doc only surfaces the CSP-style-distinctive twist on top of that base syntax (see § Constraint idioms).
-- `.ref()` mechanics for pairwise self-joins (`Concept.ref()`) and value-binding (`Float.ref()`, `Integer.ref()`) are documented in `rai-pyrel/references/expression-rules.md` § References and Aliasing.
-- Undirected-edge expansion via reverse-define is documented in `rai-pyrel/references/expression-rules.md` (undirected-edge expansion section). CSP-style chromatic_number / pod_placement / book_slate problems hit this mechanic frequently — see the cross-reference in `chromatic_number.py`.
-- `model.union()` branch-shape requirement is documented in `rai-pyrel/references/common-pitfalls.md` (inconsistent branches row).
-
----
-
 ## 1. When this style fits
 
-Most prescriptive problems can be formulated either way — the choice is usually a modeling preference, and on a given instance either style may be faster. A few cases are genuinely structural.
-
-**Hard rules forcing MIP-style:**
-
-- Any continuous decision variable or continuous numeric data participating in a constraint. MiniZinc requires `Problem(model, Integer)`; a single Float coerces to MIP.
-- Convex QP objective. MiniZinc has no QP.
-- Use of the `special_ordered_set_type_1` / `special_ordered_set_type_2` callables — Gurobi only (per the matrix in `global-constraints.md`). The semantics can be hand-modeled with explicit binary indicators in HiGHS or MiniZinc, but the callables force Gurobi-MIP.
-
-**Cases where CSP-style is markedly easier to write:**
+MIP-style vs CSP-style decision rules: [SKILL.md](../SKILL.md) > MIP-style vs CSP-style. The CSP-specific detail on top of it:
 
 - `all_different` (callable MiniZinc-only — see the matrix in `global-constraints.md`), `!=` / `==` between decision variables, and pairwise `count` over decision-variable equality. The MIP wire does not consume `!=` natively, so the MIP equivalent is pairwise binary indicators with big-M per pair. MiniZinc takes these directly with strong propagation. See `n_queens.py`, `sudoku.py`, `chromatic_number.py` (per-edge `!=`), `pairwise_no_repeat.py`.
-- Multi-solution enumeration. In PyRel today, `solution_limit=K` + `Variable.values(sol_index, val)` is only exposed on the MiniZinc path; MIP solvers return a single primal point. (Theoretical alternatives — Gurobi solution pools, re-solve with no-good cuts — exist but aren't surfaced.) See `multi_solution_enumeration.py`, `audit_witness.py`.
+- Multi-solution enumeration. `solution_limit=K` + `Variable.values(sol_index, val)` enumerates up to K distinct feasible solutions on MiniZinc (§ 4); HiGHS does not enumerate — there the limit can stop the search early and return a suboptimal incumbent. Per-solver semantics: `rai-prescriptive-results/references/solver-parameters.md` > `solution_limit` semantics. See `multi_solution_enumeration.py`, `audit_witness.py`.
+- Decision-indexed `implies` cascades (§ 3d). HiGHS and Gurobi reject any antecedent other than `x == 0` / `x == 1` on a single variable `x` (`The implies condition must compare to 0 or 1.`), so a cascade over `decision_id == k` is MiniZinc-only as written.
 
-**Everything else — `min`/`max` in objective, `count` over decision variables not in the equality shape above, `implies` cascades, products of decision variables — both styles work.** MiniZinc accepts these expressions directly; MIP requires linearization. The wire auto-lowers `implies` (big-M on HiGHS via `LazyBridgeOptimizer`; native indicator constraints on Gurobi for binary antecedents). The rest is hand-written: aux `t` for `max`, McCormick or non-convex QP for bilinear, pairwise indicators for `count` / `==` / `!=` over decision variables. CSP-style is shorter to write; MIP-style produces a more standard linear/quadratic form. Many of the examples here (`integer_slot_with_sentinel.py`, `implies_table_lookup.py`, `subconcept_solve_for.py`, and `rai-prescriptive-results/examples/scenario_concept_csp.py`) could be formulated either way — they are collected under CSP-style for readability and pattern coverage, not because MIP cannot express them.
-
-**Performance.** Both families can prove optimality (Chuffed completes the search tree on bounded discrete domains; MIP solvers close the gap via branch-and-bound). Neither family is universally faster:
-
-- MIP tends to win when the LP relaxation is tight.
-- CP tends to win on heavily logical / global-constraint structure.
-- Gurobi is typically faster than HiGHS where both apply. Gurobi has native indicator constraints, but only when the antecedent compares a variable to `0` or `1`; for `implies(decision_id == k, body)` with `k ∉ {0, 1}` the wire lowers to big-M even on Gurobi — so the indicator advantage is binary-antecedent specific.
-- MIP reports an LP-relaxation gap on `TIME_LIMIT`; MiniZinc reports best-incumbent + search progress without an LP-style gap.
-
-If performance matters on a specific instance, try both styles and measure.
-
-**Note on operator support.** `//` (floor division) and `%` (modulo) on two decision variables are rejected by both wires — not a style differentiator. See `rai-pyrel/references/common-pitfalls.md` (`//` on two decision variables row) and `rai-prescriptive-results/SKILL.md` § Unsupported operators.
-
-For the expanded reference table with per-filter template precedents, see `global-constraints.md` § "MIP-style vs CSP-style — when to choose which."
+Per-solver operator support, including the operators every solver rejects on decision variables (`//`, `%`, floor/ceil, trig): `numerical-and-mip.md` > Operator and Construct Compatibility by Solver.
 
 ---
 
 ## 2. Decision-variable shapes
 
 CSP-style problems share a small set of recurring decision-variable shapes. Pick the one that matches the data, then verify membership.
+
+From `relationalai>=1.29`, `problem.display()` raises `ValueError` unless **every** decision variable in the Problem carries a `name=`, not just the ones you read, and it checks once at least one variable has grounded. Pass a discriminating `name=["x", Entity.id]` on each `solve_for`. The skeletons below omit it where it would obscure the pattern.
 
 ### 2a. Integer slot in `{1..K+1}` with `K+1` = unpicked sentinel
 
@@ -157,7 +125,7 @@ problem.satisfy(model.require(sum(Event.has_type).per(Event) == 1))
 place_ind = Integer.ref()
 problem.satisfy(
     model.where(Event.has_type(EventType.PLACE, place_ind))
-    .require(sum(place_ind).per(Event.order) == 1)
+    .require(sum(Event, place_ind).per(Event.order) == 1)
 )
 ```
 
@@ -269,15 +237,10 @@ assert n_decision_domain == n_ref_rows, "implies-cascade lookup is non-total"
 
 ## 4. Multi-solution mode
 
-CSP-style problems frequently want K different feasible solutions rather than one optimum. `solution_limit` enables this; the semantics need care.
+CSP-style problems frequently want K different feasible solutions rather than one optimum. `solution_limit=K` on `solve(...)` enables this on MiniZinc; its statuses and what the returned set is (and is not): `rai-prescriptive-results/references/solver-parameters.md` > `solution_limit` semantics.
 
-- **`solution_limit=K` is a `solve(...)` kwarg, not `solve_for(...)`.**
-- **Termination status interpretation:**
-  - `OPTIMAL` means the search exhausted the feasible space with ≤ K solutions found.
-  - `SOLUTION_LIMIT` means the search stopped at K with more feasible solutions remaining.
-- **K must exceed the feasible-set size for `OPTIMAL` + stable extraction order.** If K < feasible-set size, you get a `SOLUTION_LIMIT` cut-off whose order is solver-dependent — fine for K-of-many enumeration, problematic when the test expects a deterministic full set.
+- **K must exceed the feasible-set size for `OPTIMAL` + stable extraction order.** If K < feasible-set size, you get a `SOLUTION_LIMIT` cut-off whose order is solver-dependent — fine for K-of-many enumeration, problematic when the test expects a deterministic full set. `OPTIMAL` proves the set complete only if the run finished inside `time_limit_sec`.
 - **Extract via `Variable.values(sol_index, value_ref)`** — solution `0` to `num_points - 1`. With `populate=True` the first solution is also written back to model properties; with `populate=False` only `Variable.values` is populated, and the model is unchanged.
-- **The returned set is up to K distinct feasible solutions — NOT top-K-optimal, NOT ranked, NOT diversity-maximized.** Don't promise any of these properties to users.
 
 ```python
 problem.solve("minizinc", solution_limit=K, time_limit_sec=60)
@@ -303,23 +266,15 @@ if si.termination_status in ("OPTIMAL", "SOLUTION_LIMIT"):
 decision_var = problem.solve_for(Decision.x, type="bin", populate=False)
 ```
 
-`populate=False` also suppresses spurious `verify()` warnings tied to the first-solution write-back.
+`verify()` cannot check a `populate=False` solution (§ 6, Regime 3).
 
 ---
 
 ## 5. Audit / witness enumeration
 
-When the question is "does the property hold?" or "is there any configuration where X happens?", the solver answer comes from the termination status, not the objective value. This **inverts** MIP intuition: `INFEASIBLE` is the desired outcome.
+When the question is "does the property hold?" or "is there any configuration where X happens?", the answer is the termination status: the status → PASS / FAIL / INCONCLUSIVE table and the `num_points() == 0` caveat are in `rai-prescriptive-results` > Audit / witness mode. This section is the formulation side.
 
 **Counterexample IC = property negation.** The modeling move behind every audit problem: encode the property to be audited as its negation in the constraint set. `INFEASIBLE` on the negated form proves the original property holds across the entire feasible space (not just sampled fixtures); `OPTIMAL` / `SOLUTION_LIMIT` returns a witness that violates the original property. `audit_witness.py` follows this move — the IC `sum(salary × x_flagged) >= cap + 1` is the negation of "no K-subset exceeds cap"; INFEASIBLE on the negation = PASS on the original.
-
-| Termination status | Audit verdict |
-|--------------------|---------------|
-| `INFEASIBLE` | **PASS** — no configuration satisfies the witness condition. The property holds. |
-| `OPTIMAL` or `SOLUTION_LIMIT` | **FAIL** — at least one configuration was found that violates the property. Extract witnesses for the report. |
-| Other (`TIME_LIMIT`, error, `LOCALLY_SOLVED` on a CSP) | **INCONCLUSIVE** — solver did not exhaust the search. Do not interpret as PASS. |
-
-`num_points() == 0` does **not** prove the property holds — the solver may have crashed, hit a time limit, or produced zero solutions for any other reason. Always check the termination status first.
 
 ```python
 problem.solve("minizinc", solution_limit=MAX_WITNESSES, time_limit_sec=60)
@@ -333,7 +288,7 @@ else:
     verdict = "INCONCLUSIVE"
 ```
 
-`audit_witness.py` (distilled from `underwriting_audit`) carries this pattern end-to-end. A "FAIL" verdict line should disambiguate itself (e.g., `FAIL (ruleset has counterexamples)`) so consumers don't misread a property failure as a template error.
+`audit_witness.py` (distilled from `underwriting_audit`) carries this pattern end-to-end. A "FAIL" verdict line should disambiguate itself (e.g., `FAIL (ruleset has counterexamples)`) so consumers don't misread a property failure as a template error. The same negation audit runs on HiGHS/Gurobi (no `solution_limit`) when the data is continuous, but yields at most one witness, and the example's breach threshold `cap + 1` assumes integer totals: with continuous data, use `cap + tol` for a tolerance you state, and report PASS as holding up to that tolerance.
 
 ---
 
@@ -378,10 +333,10 @@ The big-M form `body + M*active <= TOL + M` has no auxiliary — it is a single 
 
 ```python
 # AVOID in multi-solution mode when body is an aggregate over DVs:
-implies(active == 1, sum(x_flow).per(Path) <= 0)
+implies(active == 1, sum(Flow.x_flow).per(Path) <= 0)
 
 # PREFER in multi-solution mode:
-sum(x_flow).per(Path) + BIG_M * active <= TOL + BIG_M
+sum(Flow.x_flow).per(Path) + BIG_M * active <= TOL + BIG_M
 ```
 
 For decision-indexed **table lookup** (body references a single Ref row's value, not an aggregate), `implies` is still the right shape — see § 3d above. The pitfall is specific to aggregate-body active-iff in enumeration mode.
@@ -392,9 +347,7 @@ Demonstrated end-to-end in `big_m_active_iff_aggregate.py` (distilled from the A
 
 ## 8. Globals available today
 
-Only four global constraints are callable from PyRel today: `all_different`, `implies`, `special_ordered_set_type_1`, `special_ordered_set_type_2`. MiniZinc's native global-constraint library is far richer (`circuit`, `cumulative`, `element`, `table`, `no_overlap`, `inverse`, `lex_lesseq`) but those are not yet exposed.
-
-For the full per-solver coverage matrix (which of the four globals each solver supports) and the syntax for each, see `global-constraints.md`.
+Callable globals, their syntax and per-solver coverage: [global-constraints.md](global-constraints.md).
 
 ---
 
@@ -408,19 +361,4 @@ For the chained-discovery handshake (how to declare the closure as enrichment fr
 
 ## 10. Cross-links to examples
 
-Local examples that distill the idioms above, plus a cross-link to `scenario_concept_csp.py` in `rai-prescriptive-results`:
-
-| File | Idioms |
-|------|--------|
-| `examples/multi_solution_enumeration.py` | § 4 (solution_limit, Variable.values, status-gated extraction, MAX_WITNESSES, populate=False) |
-| `examples/audit_witness.py` | § 5 (audit verdict mapping, pure-satisfaction property encoding) |
-| `examples/integer_slot_with_sentinel.py` | § 2a (K+1 sentinel) + § 3a (count over decision-dependent filter) |
-| `examples/implies_table_lookup.py` | § 3d (implies cascade) + § 2c (integer-ID membership IC) + § 6 (verify() skip) |
-| `examples/subconcept_solve_for.py` | § 2b (sub-concept predicate marker) |
-| `examples/chromatic_number.py` | `minimize(max(...))` directly (no aux-variable rewrite), data-driven bounds, undirected-edge expansion, per-edge `!=` |
-| `examples/pairwise_no_repeat.py` | § 3a (binder-in-where + double-symbolic `count(r, g0 == g1)`) — pairwise no-repeat, adapted from the social golfer benchmark |
-| `examples/big_m_active_iff_aggregate.py` | § 7 (big-M form of active-iff with aggregate body — preferred over half-reified `implies` in multi-solution mode) |
-| `examples/pair_table_anti_affinity.py` | Pairwise no-co-location via symmetric forbidden-pair table — `xi + xj <= 1` per (Slot, pair) tuple; CP-friendly (no big-M) |
-| `examples/gang_atomicity_reified.py` | All-or-nothing group placement via reified cardinality `sum(member.placed).per(group) == replicas × group.placed` |
-| `examples/or_arithmetic_binaries.py` | Linear three-inequality encoding of `y = a OR b` on binaries (`y >= a`, `y >= b`, `y <= a + b`) |
-| `../../rai-prescriptive-results/examples/scenario_concept_csp.py` | CSP-style analog of `scenario_concept_milp.py` — Scenario as data concept indexing integer decisions; single MiniZinc solve over all scenarios |
+Every example named above, plus the other CSP-style examples, is in [examples-index.md](examples-index.md) (rows marked CSP).

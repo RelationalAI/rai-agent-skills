@@ -102,10 +102,10 @@ x_approved_ref = Float.ref()
 x_selected_ref = Float.ref()
 problem.satisfy(
     model.where(
-        Project.x_approved(Scenario, x_approved_ref),
-        Investment.x_selected(Scenario, x_selected_ref),
-        Project.site(Site),
-        Investment.site(Site),
+        ProjectRef.x_approved(Scenario, x_approved_ref),
+        InvestmentRef.x_selected(Scenario, x_selected_ref),
+        ProjectRef.site(Site),
+        InvestmentRef.site(Site),
     ).require(
         Site.current_capacity
         + sum(x_selected_ref * InvestmentRef.capacity_added)
@@ -121,7 +121,7 @@ problem.satisfy(
 problem.satisfy(
     model.where(
         Investment.x_selected(Scenario, x_selected),
-    ).require(sum(x_selected).where(Investment.site == Site).per(Site, Scenario) <= 1)
+    ).require(sum(Investment, x_selected).where(Investment.site == Site).per(Site, Scenario) <= 1)
 )
 
 # --- Constraint: budget limit (per Scenario) — spans both variable types ---
@@ -137,7 +137,7 @@ problem.satisfy(
 
 # --- Objective: maximize net revenue ---
 problem.maximize(
-    sum(x_approved * (Project.revenue - Project.connection_cost)).where(Project.x_approved(Scenario, x_approved))
+    sum(Scenario, x_approved * (Project.revenue - Project.connection_cost)).where(Project.x_approved(Scenario, x_approved))
 )
 
 # --- Solve all budget scenarios at once ---

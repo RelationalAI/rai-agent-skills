@@ -221,7 +221,7 @@ Each layer makes the next more powerful. Question discovery should convey this p
 Shared across all reasoners. Classify each suggestion's data readiness:
 
 - **READY**: All required data is in the model. Can proceed directly to the reasoner workflow.
-- **MODEL_GAP**: Data exists in the schema (tables/columns) but isn't mapped to the model. Auto-fixable via `enrich_ontology`. Each gap should reference a specific `source_table` and `source_column` — without these, the enrichment tool cannot generate the correct `define()` rule.
+- **MODEL_GAP**: Data exists in the schema (tables/columns) but isn't mapped to the model. Fixable by enrichment (`rai-ontology` > Enrichment Workflow). Each gap should name its `source_table` and `source_column`, since the enrichment's `define()` rule reads from them.
 - **DATA_GAP**: Required data doesn't exist in any table. Blocks the question. Include only if the domain has very limited potential -- flag what data would be needed.
 
 **Order suggestions by feasibility:** READY first, then MODEL_GAP. Prefer suggestions that can proceed without manual data collection.
@@ -357,7 +357,7 @@ Vary the business question itself, not just constraints -- use different objecti
 
 When the user selects a question with **MODEL_GAP** feasibility:
 
-1. The next step is `enrich_ontology`, not the reasoner workflow
+1. The next step is enrichment (`rai-ontology` > Enrichment Workflow), not the reasoner workflow
 2. Show the specific gaps and their source tables/columns from `model_gap_fixes`
 3. After enrichment, re-assess feasibility -- it should now be READY
 4. Then proceed to the reasoner workflow via Post-Discovery Routing

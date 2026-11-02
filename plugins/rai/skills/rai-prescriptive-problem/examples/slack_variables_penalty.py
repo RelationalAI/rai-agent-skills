@@ -1,7 +1,7 @@
 # Pattern: slack variables with penalty — allow graceful infeasibility
 # Key ideas: Slack (unmet) variables absorb shortfall when hard demand satisfaction
 # is impossible. High penalty in the objective discourages unmet demand without making
-# the problem infeasible. model.union() combines cost terms from different concept scopes.
+# the problem infeasible. Add separate cost totals from different concept scopes.
 # This pattern is essential for any minimize objective with forcing constraints — without
 # slack, the solver returns INFEASIBLE when capacity < demand.
 
@@ -64,15 +64,11 @@ problem.satisfy(
 )
 
 # Objective: minimize transport cost + heavy penalty for unmet demand
-# model.union() combines per-Route costs and per-Demand penalties into one sum
+# Default each aggregate outside its body before adding the totals
 UNMET_PENALTY = 10000.0
 problem.minimize(
-    sum(
-        model.union(
-            Route.cost * Route.x_flow,  # per-Route transport cost
-            UNMET_PENALTY * Demand.x_unmet,  # per-Demand penalty
-        )
-    )
+    (sum(Route.cost * Route.x_flow) | 0.0)  # transport cost
+    + (sum(UNMET_PENALTY * Demand.x_unmet) | 0.0)  # unmet-demand penalty
 )
 
 # Solve

@@ -1,12 +1,12 @@
-# Pattern: model.union() for combining costs from different concept scopes
-# Key ideas: two concept types each have their own cost variables;
-# sum(ConceptA.cost) and sum(ConceptB.cost) live in different scopes
-# and CANNOT be added with +. model.union() merges them into a single objective.
+# Pattern: add cost totals from different concept scopes
+# Key ideas: aggregate each concept's costs separately, then add the totals;
+# default each empty total to zero so it cannot drop the objective.
+# Entity keys preserve contributions even when decision values coincide.
 
 from relationalai.semantics import Float, Integer, Model, String, sum
 from relationalai.semantics.reasoners.prescriptive import Problem
 
-model = Model("union_heterogeneous_objective")
+model = Model("heterogeneous_added_objective")
 
 # --- Ontology ---
 Warehouse = model.Concept("Warehouse", identify_by={"name": String})
@@ -20,7 +20,7 @@ Transport.warehouse = model.Property(f"{Transport} comes from {Warehouse}")
 
 # --- Data ---
 wh_data = model.data(
-    [("W1", 100, 500.0), ("W2", 80, 300.0), ("W3", 60, 200.0)],
+    [("W1", 100, 500.0), ("W2", 80, 300.0), ("W3", 80, 200.0)],
     columns=["name", "capacity", "fixed_cost"],
 )
 model.define(Warehouse.new(wh_data.to_schema()))
@@ -60,21 +60,14 @@ problem.satisfy(
         Transport.x_ship(x_ship),
         Transport.warehouse(Warehouse),
         Warehouse.x_open(x_open),
-    ).require(sum(x_ship).per(Warehouse) <= Warehouse.capacity * x_open)
+    ).require(sum(Transport, x_ship).per(Warehouse) <= Warehouse.capacity * x_open)
 )
 
-# --- Objective: model.union() combines costs from TWO different concept scopes ---
-# WHY union is needed: sum(Warehouse.fixed_cost * x_open) is scoped to Warehouse;
-# sum(Transport.cost_per_unit * x_ship) is scoped to Transport. These are different
-# concept groups -- using + would cause AssertionError. model.union() merges them
-# so the outer sum() can aggregate across both.
-#
-# Note: each branch wraps its expression in `sum(...).where(...)` — `.where()` is a
-# Fragment method, not an Expression method, so you must go through sum() first.
+# --- Objective: add totals from two concept scopes ---
 warehouse_cost = sum(Warehouse.fixed_cost * x_open).where(Warehouse.x_open(x_open))
 transport_cost = sum(Transport.cost_per_unit * x_ship).where(Transport.x_ship(x_ship))
 
-problem.minimize(sum(model.union(warehouse_cost, transport_cost)))
+problem.minimize((warehouse_cost | 0.0) + (transport_cost | 0.0))
 
 # --- Solve ---
 problem.display()

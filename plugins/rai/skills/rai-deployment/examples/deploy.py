@@ -2,6 +2,9 @@
 Deployment script - deploy, update, status, chat, teardown, preflight, or
 emit setup SQL for a Cortex agent.
 
+The agent reads a model already deployed with PyRel deploy mode
+(`rai models deploy`) at MODEL_SCHEMA. Deploy the model first.
+
 Usage:
     python -m <package>.deploy deploy
     python -m <package>.deploy update
@@ -19,10 +22,11 @@ from snowflake import snowpark
 
 from relationalai.config import create_config, SnowflakeConnection
 from relationalai.agent.cortex import (
+    AgentConfig,
     CortexAgentManager,
-    DeploymentConfig,
+    DefaultTool,
+    ModelDeployment,
     QueryCatalog,
-    ToolRegistry,
     discover_imports,
 )
 
@@ -32,24 +36,20 @@ console = Console()
 # Configuration
 # ---------------------------------------------------------------------------
 AGENT_NAME = "EXAMPLE_AGENT"
-DATABASE = "EXAMPLE"
-SCHEMA = "CORTEX_DEMO"
+TOOLS_SCHEMA = "EXAMPLE.CUSTOMERS_AGENT"  # sprocs, stage, and the agent
+MODEL_SCHEMA = "EXAMPLE.CUSTOMERS"  # the model's deployment.schema
 AGENT_SCHEMA = None  # e.g. "SNOWFLAKE_INTELLIGENCE.AGENTS"
 WAREHOUSE = "TEAM_ECO"
-
-
-def _agent_location() -> str:
-    return AGENT_SCHEMA or f"{DATABASE}.{SCHEMA}"
 
 
 def _build_manager() -> CortexAgentManager:
     session: snowpark.Session = create_config().get_session(SnowflakeConnection)
     return CortexAgentManager(
         session=session,
-        config=DeploymentConfig(
+        config=AgentConfig(
             agent_name=AGENT_NAME,
-            database=DATABASE,
-            schema=SCHEMA,
+            tools_schema=TOOLS_SCHEMA,
+            model_deployment=ModelDeployment(schema=MODEL_SCHEMA),
             agent_schema=AGENT_SCHEMA,
             warehouse=WAREHOUSE,
             allow_preview=True,
@@ -60,25 +60,21 @@ def _build_manager() -> CortexAgentManager:
 # ---------------------------------------------------------------------------
 # init_tools - executed inside each sproc invocation.
 #
-# Recommended form: zero-arg init_tools() that imports model modules inside
-# the function so they initialize within the sproc session.
-# Must be self-contained: don't close over local runtime state
-# (sessions, connections, dataframes, etc.).
+# Zero-arg and self-contained: import model modules inside the function so
+# they initialize within the sproc session, and don't close over local
+# runtime state (sessions, connections, dataframes, etc.).
 #
-# This example uses the level 2 (recommended) shape: the default
-# ModelVerbalizer plus catalog + dynamic queries via `QueryCatalog(..., model=)`.
-# Passing `model=` to QueryCatalog enables the agent to author dynamic JSON
-# specs against the model's queryable schema when no catalog query fits.
+# Returns one DefaultTool for the one model this agent serves, with the
+# default ModelVerbalizer plus catalog + dynamic queries: passing `model=`
+# to QueryCatalog lets the agent author dynamic JSON specs against the
+# model's queryable schema when no catalog query fits.
 # ---------------------------------------------------------------------------
 def init_tools():
-    # IMPORTANT: import your model code inside init_tools so it is
-    #            resolved from the packaged sproc code, not local state.
     # `computed` registers ltv / ValueSegment / value_segment / profit
-    # onto the core model; `segment_summary` reads them, so it must be
-    # imported before the catalog is built.
+    # onto the core model; `segment_summary` reads them.
     from .model import computed, core, queries  # noqa: F401
 
-    return ToolRegistry().add(
+    return DefaultTool(
         model=core.model,
         description="Customers and orders",
         queries=QueryCatalog(queries.segment_summary, model=core.model),
@@ -90,8 +86,8 @@ def init_tools():
 # ---------------------------------------------------------------------------
 def cmd_deploy(manager: CortexAgentManager) -> None:
     console.print(
-        f"Deploying sprocs to [bold]{DATABASE}.{SCHEMA}[/bold] "
-        f"and agent [bold]{AGENT_NAME}[/bold] to [bold]{_agent_location()}[/bold] ..."
+        f"Deploying agent [bold]{AGENT_NAME}[/bold] to [bold]{TOOLS_SCHEMA}[/bold] "
+        f"over the model deployed at [bold]{MODEL_SCHEMA}[/bold] ..."
     )
     manager.deploy(init_tools=init_tools, imports=discover_imports())
     console.print(Pretty(manager.status()))
@@ -114,10 +110,7 @@ def cmd_chat(manager: CortexAgentManager, message: str) -> None:
 
 
 def cmd_teardown(manager: CortexAgentManager) -> None:
-    console.print(
-        f"Tearing down agent [bold]{AGENT_NAME}[/bold] from [bold]{_agent_location()}[/bold] "
-        f"and sprocs from [bold]{DATABASE}.{SCHEMA}[/bold] ..."
-    )
+    console.print(f"Tearing down agent [bold]{AGENT_NAME}[/bold] and its sprocs in [bold]{TOOLS_SCHEMA}[/bold] ...")
     console.print("[yellow]WARNING: this permanently deletes SI conversation history.[/yellow]")
     manager.cleanup()
     console.print(Pretty(manager.status()))
@@ -141,7 +134,7 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command")
     sub.required = True
 
-    sub.add_parser("deploy", help="Preflight, then create schema, stage, sprocs, and agent")
+    sub.add_parser("deploy", help="Preflight, then create stage, sprocs, and agent")
     sub.add_parser("update", help="Update sprocs without re-registering the agent")
     sub.add_parser("status", help="Print deployment status")
 
@@ -149,7 +142,7 @@ def main() -> None:
     chat_p.add_argument("message", help="Message to send")
 
     sub.add_parser("teardown", help="Remove all agent resources")
-    sub.add_parser("preflight", help="Probe grants without deploying")
+    sub.add_parser("preflight", help="Probe grants and the model deployment without deploying")
 
     setup_p = sub.add_parser("setup-sql", help="Emit a paste-ready GRANT block")
     setup_p.add_argument("--deployer-role", default="<your_role>")

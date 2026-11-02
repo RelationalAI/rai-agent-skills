@@ -17,18 +17,11 @@ description: Runs optimization solves and interprets the output — solve execut
 - Extracting solution values; communicating any status (OPTIMAL, INFEASIBLE, DUAL_INFEASIBLE, TIME_LIMIT) to stakeholders
 - Diagnosing why a solved-OPTIMAL result is trivial or wrong (all zeros, all at bounds, concentrated on one entity), or why a model is infeasible (conflict / IIS)
 - Reading duals and marginals; running sensitivity / what-if analysis; explaining results in business language
+- Reading a deployed model's solver results after a refresh (see Deploy-mode results)
 
 **When NOT to use:**
 - Designing or fixing the formulation (adding constraints, changing variables), classifying the problem type, or selecting a solver — see `rai-prescriptive-problem`. In particular, an OPTIMAL result the user rejects on preference grounds ("too much X") signals latent constraints, not a bug — route to `rai-prescriptive-problem` > Step 7 / constraint elicitation.
 - PyRel and query syntax — see `rai-pyrel`
-
-**Overview:**
-1. Execute the solve to completion — parameters set, diagnostics requested up front
-2. Check termination status; recall the optimization goal the formulation encodes
-3. Extract solution values (model queries or `Variable.values()`)
-4. Assess quality against the goal (trivial-solution detection, reasonableness)
-5. Explain to stakeholders (decisions, drivers, business impact)
-6. Explore what-if (marginals to rank, scenarios to quantify)
 
 ---
 
@@ -36,7 +29,7 @@ description: Runs optimization solves and interprets the output — solve execut
 
 ```python
 problem.solve(solver_name, time_limit_sec=60)      # returns None — never assign it
-model.require(problem.termination_status() == "OPTIMAL")   # engine-side check
+model.require(problem.termination_status() == "OPTIMAL")   # engine-side check; silent without require_mode: report
 si = problem.solve_info()                           # Python-side summary
 si.display()
 if si.termination_status != "OPTIMAL":
@@ -47,25 +40,29 @@ if si.termination_status != "OPTIMAL":
 
 **Run to completion before reporting.** `solve()` blocks until the solver returns. Read terminal status + objective + variable values **in the same run** before composing any answer. A formulation summary, a "solver is still running" status, or a backgrounded solve whose output was never collected is **not a result**. If a solve is slow, raise `time_limit_sec` deliberately and wait.
 
-**Parametric sweeps and what-if re-solves.** Each `problem.satisfy(...)` accumulates, so build a **fresh Problem per scenario / sweep point**; extract each point's results before moving on (a later failure can't erase earlier rows). Before re-solving a point, check whether the active constraint set actually changed — identical registrations mean a reusable result. Derive per-point inputs once, up front, not inside the loop.
-
 ### First-class solve parameters
 
-Solver-independent — every solver accepts them (solver-specific kwargs, warm starting via `start=`, and re-solve rules: [solver-parameters.md](references/solver-parameters.md)). The two diagnostic flags are the caveat: any solver accepts the *request*, but output depends on model class and capability (unsupported cases degrade to empty results, a warning, or `NOT_SUPPORTED` — not a call-time error):
+Solver-independent names, mapped to each backend's own option (solver-specific kwargs and warm starting via `start=`: [solver-parameters.md](references/solver-parameters.md)). A backend without the option ends `OTHER_ERROR` instead of ignoring it: MiniZinc and Ipopt have no gap tolerance, Ipopt has no `solution_limit`, and MiniZinc has no `silent`. The two diagnostic flags are the caveat: any solver accepts the *request*, but output depends on model class and capability (unsupported cases degrade to empty results, a warning, or `NOT_SUPPORTED` — not a call-time error):
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `time_limit_sec` | float | Max solve seconds (unset → solver-service default, currently 300s) |
 | `silent` / `log_to_console` | bool | Suppress / stream solver output |
-| `solution_limit` | int | Max solutions to find (MiniZinc multi-solution) |
+| `solution_limit` | int | Max points returned. MiniZinc enumerates up to K distinct solutions; HiGHS returns one, and the limit can stop its MIP search early. [solver-parameters.md](references/solver-parameters.md) > `solution_limit` semantics |
 | `relative_gap_tolerance` / `absolute_gap_tolerance` | float | Optimality gap (e.g. 0.01 = 1%) |
 | `print_only` / `print_format` | bool / str | Print the solver model without solving; formats `"moi"`, `"latex"`, `"mof"`, `"lp"`, `"mps"`, `"nl"` → `si.printed_model` |
 | `sensitivity` | bool | Populate post-solve duals (`reduced_cost`, `shadow_price`, `basis_status`). LP/QP only; **requires an objective**; not with `solution_limit`/`print_only` |
 | `conflict` | bool | Populate conflict / IIS on an infeasible model (`con.in_conflict`, `var.*_in_conflict`, `si.conflict_status`). **No objective required**; works on MIP; not with `print_only` |
 
-**Diagnostics are solve options, not post-processing.** Request the flag on the solve whose results you'll read. An objectiveless `solve(sensitivity=True)` raises `ValueError` (duals are marginals *of the objective* — use `conflict=True` for pure-feasibility models: the asymmetry that's easy to miss). A MIP under `sensitivity=True` returns empty duals with a warning; interior-point solvers (Ipopt) populate marginals but no `basis_status`. The flags also pin the Problem to the diagnostic result schema: plain and diagnostic solves can't mix on one Problem, and a re-solve may add a diagnostic family but never drop one — rebuild a fresh Problem to change regime.
+**Diagnostics are solve options, not post-processing:** request the flag on the solve whose results you read. An objectiveless `solve(sensitivity=True)` raises `ValueError` (duals are marginals of the objective); use `conflict=True` for pure-feasibility models. A MIP under `sensitivity=True` returns empty duals with a warning; Ipopt populates marginals but no `basis_status`. To add a diagnostic after a plain solve, re-solve (below).
 
-**Unsupported operators** (not lowered to any solver inside `solve_for`/`satisfy`/`minimize`/`maximize`): `%`, `//` (between two decision variables), `math.floor/ceil/round/sign/clip/factorial/erf`, trig. No `if_then_else` — use `implies()` (Gurobi/MiniZinc) or Big-M (HiGHS). Full compatibility table and reformulation techniques: `rai-prescriptive-problem/references/numerical-and-mip.md`.
+**Unsupported operators** (not lowered to any solver when applied to a decision variable inside `solve_for`/`satisfy`/`minimize`/`maximize`): `%`, `//`, `math.floor/ceil/round/sign/clip/factorial/erf`, trig. No `if_then_else` — use `implies()` (Gurobi, MiniZinc, or HiGHS on bounded variables) or a hand-written Big-M. Full compatibility table: `rai-prescriptive-problem/references/numerical-and-mip.md`.
+
+### Re-solving the same Problem
+
+The same `Problem` can be solved again, and `solve_for` / `satisfy` calls accumulate (there is no removal API). A `solve()` that returns replaces every result family whatever its termination status, so a family it didn't request (`sensitivity=` / `conflict=`) comes back empty; one that raises leaves the previous results, and `solve_info()` still describes the last solve that returned. Plain and diagnostic solves follow one another in any order on relationalai>=1.26 (earlier versions raise `ValueError` on a switch): re-solve an INFEASIBLE plain solve with `conflict=True`, or an OPTIMAL one with `sensitivity=True`, without rebuilding.
+
+**Parametric sweeps and what-if re-solves.** A different constraint set needs a **fresh Problem per scenario / sweep point**; extract each point's results before moving on (a later failure can't erase earlier rows). Before re-solving a point, check whether the active constraint set actually changed — identical registrations mean a reusable result. Derive per-point inputs once, up front, not inside the loop. Loop and Scenario Concept patterns: `rai-prescriptive-problem/references/scenario-analysis.md`.
 
 ---
 
@@ -74,7 +71,7 @@ Solver-independent — every solver accepts them (solver-specific kwargs, warm s
 **Precondition — a finished solve** (see Solve Execution above). Then, in order:
 
 1. **Recall the goal** — what decisions, what objective, what constraints. OPTIMAL means nothing if the solution doesn't address the intent.
-2. **Check status** (Status Interpretation) — INFEASIBLE / DUAL_INFEASIBLE / error: stop, diagnose, do not present results. TIME_LIMIT with gap > 10%: flag uncertainty.
+2. **Check status** (Status Interpretation) — INFEASIBLE / DUAL_INFEASIBLE / error, or TIME_LIMIT without a solution: stop, diagnose, do not present results. TIME_LIMIT with gap > 10%: flag uncertainty.
 3. **Assess quality** (Quality Assessment) — trivial (all zeros, all at bounds)? Diagnose before presenting.
 4. **Extract and filter** — drop near-zero noise (< 0.5 binary, < 1e-6 continuous), group by decision concept, map to business entities.
 5. **Explain** (Result Explanation) — context → decisions → drivers → quality → impact → next steps.
@@ -90,9 +87,10 @@ Solver-independent — every solver accepts them (solver-specific kwargs, warm s
 
 | Attribute | Type | Description |
 |-----------|------|-------------|
-| `si.termination_status` | `str` | `"OPTIMAL"`, `"INFEASIBLE"`, `"DUAL_INFEASIBLE"`, `"TIME_LIMIT"`, `"LOCALLY_SOLVED"`, `"SOLUTION_LIMIT"` |
-| `si.objective_value` | float/int | Objective value — `None` on infeasible/unbounded solves; **check status first** |
-| `si.solve_time_sec` / `si.num_points` / `si.solver_version` | | Wall-clock, solution count, solver version |
+| `si.termination_status` | `str` | `"OPTIMAL"`, `"INFEASIBLE"`, `"DUAL_INFEASIBLE"`, `"TIME_LIMIT"`, `"LOCALLY_SOLVED"`, `"SOLUTION_LIMIT"`, `"OTHER_ERROR"` |
+| `si.objective_value` | float/int | Objective value — `None` when no point was returned, but an infeasible point still carries a value; **check status first** |
+| `si.solve_time_sec` / `si.num_points` / `si.solver_version` | | Wall-clock, result count (an `INFEASIBLE` solve can report 1), solver version |
+| `si.primal_status` | str/None | Result status of the returned point; `"FEASIBLE_POINT"` = a usable solution, `None` or `"NO_SOLUTION"` = no point. Before relationalai 1.26 it is `None` on every plain solve; for a MIP stopped at a limit, test `if si.num_points:` there instead. Treat an LP stopped at a limit as having no plan there: its point can be infeasible, and `num_points` counts it |
 | `si.printed_model` | str | Solver-model text (when `print_format=` was set) |
 | `si.sensitivity` / `si.conflict` | bool | Which diagnostics this solve requested |
 | `si.conflict_status` | str/None | `"CONFLICT_FOUND"` / `"NO_CONFLICT_EXISTS"` / `"NOT_SUPPORTED"` / `"FAILED"`; `None` unless `conflict=True` |
@@ -103,16 +101,16 @@ Solver-independent — every solver accepts them (solver-specific kwargs, warm s
 
 | Setting | Results live | Access |
 |---|---|---|
-| `populate=True` (default) | Written back into model properties | `model.select()` with entity context — standard single-solve |
-| `populate=False` | Solver-level only | `Variable.values(sol_index, ref)` on the `ProblemVariable` — scenario loops, multi-solve |
+| `populate=True` (default) | Written back into model properties, for the rest of the solving process | `model.select()` with entity context — standard single-solve |
+| `populate=False` | Solver-level only, for the rest of the solving process | `Variable.values(sol_index, ref)` on the `ProblemVariable` — scenario loops, multi-solve |
 
 ```python
-# populate=True — canonical extraction: filter active binaries, alias, inspect/to_df
-model.select(
+# populate=True — canonical extraction: filter active binaries, alias, to_df
+df = model.select(
     MachinePeriod.machine.machine_id.alias("machine_id"),
     MachinePeriod.period.pid.alias("period"),
     MachinePeriod.x_maintain.alias("maintained"),
-).where(MachinePeriod.x_maintain > 0.5).inspect()
+).where(MachinePeriod.x_maintain > 0.5).to_df()
 
 # populate=False — back-pointer attributes + values(sol_index, ref)
 assign_var = problem.solve_for(Assignment.x, type="bin", populate=False)
@@ -125,9 +123,11 @@ if problem.solve_info().termination_status in ("OPTIMAL", "LOCALLY_SOLVED"):
 
 **Extraction principles:** binaries filter `> 0.5` (MIP tolerance), continuous `> 1e-6`; scalar objective via `si.objective_value`; alias every column; integer columns come back as `Int128Array` — cast at extraction (`df["n"] = df["n"].astype("int64")`) before any pandas reduction. Per-pattern variations (multiple solutions, iterative, scenario extraction, back-pointer naming rules, Snowflake export): [solution-extraction-details.md](references/solution-extraction-details.md).
 
+**Interactive solution values last only as long as the process that solved** (deployed results persist: Deploy-mode results). A new Python process, whether a follow-up script or the next question in a session, rebuilds the model without them, so reading them there means solving again. For a sweep or a long MIP, that repeats the whole solve. So after either, save the extracted frame, with each solve's or scenario's termination status and objective, before the script exits (`df.to_csv(...)`, or a Snowflake table as in [solution-extraction-details.md](references/solution-extraction-details.md) > Exporting Solution Results to Tables), and answer follow-up questions from that saved copy, looking for it before you solve again.
+
 ### Sensitivity & conflict attributes
 
-Together the two flags make a solve *interrogable*: `sensitivity=True` tells you, at the optimum, what each constraint is worth and how close each unused option is to entering; `conflict=True` tells you why an infeasible model has no plan. Read the populated attributes **straight off the objects `solve_for()` and `satisfy()` returned** — like `.name`, not through a separate API. Each is **single-valued** (no `sol_index`, unlike `Variable.values()`) and joins to its entity through the **back-pointer key**, never by parsing a name string.
+Read the attributes `sensitivity=True` / `conflict=True` populate **straight off the objects `solve_for()` and `satisfy()` returned** — like `.name`, not through a separate API. Each is **single-valued** (no `sol_index`, unlike `Variable.values()`) and joins to its entity through the **back-pointer key**, never by parsing a name string.
 
 | Accessor | Shape | Read like |
 |---|---|---|
@@ -147,9 +147,49 @@ model.select(floor.nutrient.name, floor.shadow_price).inspect()
 
 Reading a marginal or conflict flag **by entity** requires the constraint's grounding key to be **declared** at formulation time — `satisfy(..., keyed_by={"nutrient": Nutrient})`; a variable's back-pointer is automatic, a constraint's is not. Full `keyed_by` idiom: `rai-prescriptive-problem/references/constraint-formulation.md`. Dual economics and IIS reading in depth: [sensitivity-analysis.md](references/sensitivity-analysis.md), [conflict-analysis.md](references/conflict-analysis.md).
 
+### Deploy-mode results
+
+A Problem registered with `configure()` (`rai-prescriptive-problem` > Deploy Mode) has results only after a refresh, and each refresh re-solves, except a scheduled tick skipped because no source changed. Read them with the same handles as an interactive session (`model.select(...)`, `problem.solve_info()` and the other accessors, the `in_conflict` predicates) from a separate script that imports the model file, which must contain no queries. With `deployment.auto_deploy: true` the first query in a fresh process deploys first, so a read-only session sets `auto_deploy: false`. Request marginals and conflicts at registration: `configure(sensitivity=True)`, `configure(conflict=True)`. Give SQL consumers Concepts defined from the results, the termination status included (`problem.termination_status()` is usable in rules); the solver's own tables are internal.
+
+**A table alone never says whether its plan is current or optimal** (observed on 1.31.1):
+
+| Last refresh | Plan tables | The only marker |
+|---|---|---|
+| Solver returned INFEASIBLE | Rows kept; every value derived from a decision is null | `termination_status` INFEASIBLE; with `configure(conflict=True)`, `conflict_status` `CONFLICT_FOUND` and the conflict predicates populated, or `NOT_SUPPORTED` / `FAILED` (Infeasible diagnosis) |
+| Solver hit `time_limit_sec` | The point the solver stopped at, shaped exactly like an optimal plan | `termination_status` TIME_LIMIT; the plan is usable only if `primal_status` is FEASIBLE_POINT |
+| Refresh failed before the solver began writing results (e.g. the PAT was removed or expired: `job could not be created (RAIERR:1000)`) | **The previous successful run's results and everything derived from them**, `solve_info()` included | Only the refresh state: `REFRESH_STATUS()` reports `FAILED` with the error |
+
+So before trusting a plan, check that `CALL <meta_schema>.REFRESH_STATUS()` reports `SUCCEEDED` and that `termination_status` is one you accept (Status Interpretation: on MiniZinc, an `OPTIMAL` whose `si.solve_time_sec` reached the limit is a cut-off incumbent). Outputs are rewritten table by table, so a read that overlaps a refresh can mix two runs. The script below rejects a read once the status shows a refresh started, but a refresh can record its start after its first writes, so for a read that must be consistent also make sure no refresh can start during it (no schedule due, no manual refresh). A read script next to the user's deploy-mode model file (here the Quick Reference model of `rai-prescriptive-problem`, completed with its imports and sources and registered with `configure()`):
+
+```python
+import os, sys
+HERE = os.path.dirname(os.path.abspath(__file__))
+os.chdir(HERE); sys.path.insert(0, HERE)   # finds raiconfig.yaml and model.py from any working directory
+from relationalai.config import SnowflakeConnection, create_config
+from model import model, problem, Lane
+
+session = create_config().get_session(SnowflakeConnection)
+def refresh_state():
+    return [(r["SCHEDULE_NAME"], r["STATUS"], r["LAST_RUN_STARTED_AT"], r["ERROR"])
+            for r in session.sql("CALL <meta_schema>.REFRESH_STATUS()").collect()]
+before = refresh_state()
+if any(status != "SUCCEEDED" for _, status, _, _ in before):   # the tables may hold an older plan
+    sys.exit(f"plan not current: {before}")
+si = problem.solve_info()
+if not (si.termination_status == "OPTIMAL" or (si.termination_status == "TIME_LIMIT" and si.primal_status == "FEASIBLE_POINT")):
+    sys.exit(f"no usable plan: {si.termination_status} {si.primal_status}")
+df = model.select(Lane.item_id, Lane.src_id, Lane.flow).to_df()
+if refresh_state() != before:                                   # a refresh started during the read
+    sys.exit("a refresh ran during the read; read again")
+print(si.termination_status, si.primal_status)   # TIME_LIMIT: feasible, no optimality proof
+print(df)
+```
+
 ### Post-solve constraint verification
 
-`problem.verify(*fragments)` temporarily installs the original `model.require(...)` fragments as ICs at IC strictness (tighter than solver tolerance) — useful for exact solvers (HiGHS MIP, MiniZinc). It checks `termination_status` first and cleans up in a `finally`. Known silent limitation on solver-only-IC bodies: see Common Pitfalls.
+`problem.verify(*fragments)` temporarily installs the original `model.require(...)` fragments as ICs at IC strictness (tighter than solver tolerance) — useful for exact solvers (HiGHS MIP, MiniZinc). It checks `termination_status` first and cleans up in a `finally`. A violation is a `ModelWarning` ("Requirements not met"), never an exception. Known silent limitation on solver-only-IC bodies: see Common Pitfalls.
+
+**Every IC check is silent unless the config sets `compiler: require_mode: report`** (in `raiconfig.yaml`, or `cfg.compiler.require_mode = "report"` on a `relationalai.config.create_config()` object passed as `Model(..., config=cfg)`; the default is `ignore`). That covers `verify()`, a post-solve `model.require(...)` and the engine-side status check above: under the default, a violated one prints nothing. The SQL backend never reports them, even with `report`.
 
 ---
 
@@ -157,31 +197,30 @@ Reading a marginal or conflict flag **by entity** requires the constraint's grou
 
 | Status | Meaning | Action |
 |---|---|---|
-| `OPTIMAL` | Best solution within tolerance (~1e-6 LP, 0.01% MIP gap) | Quality assessment, then explain |
+| `OPTIMAL` | Best solution within tolerance (~1e-6 LP, 0.01% MIP gap). **MiniZinc** also reports it when `time_limit_sec` cuts the search off after finding a solution: if `si.solve_time_sec` reached the limit, read it as `TIME_LIMIT` ([solver-parameters.md](references/solver-parameters.md) > `solution_limit` semantics) | Quality assessment, then explain |
 | `INFEASIBLE` | No solution satisfies all constraints | Diagnose before presenting — see Infeasible diagnosis |
 | `DUAL_INFEASIBLE` | Unbounded (the status string is not `"UNBOUNDED"`) | See Unbounded diagnosis |
-| `"Feasible"` (MIP) | HiGHS found a solution, optimality unproven | Treat as TIME_LIMIT for gap purposes |
-| `TIME_LIMIT` | Feasible found, optimality unproven | Read the realized gap from `si.ancillary` (schema-less: discover the key via `si.display()`, read with `.get()` — a hardcoded key risks `KeyError` across solvers). Gap < 1%: near-optimal; 1-5%: good; > 10%: uncertain — more time, tighter Big-M, symmetry breaking, or simplify |
-| Error / Unknown | Compilation or solver error | Check `si.error`; expression/property fixes → `rai-prescriptive-problem` |
+| `TIME_LIMIT` | Stopped at the limit; it holds a solution only if `si.primal_status == "FEASIBLE_POINT"` (before relationalai 1.26, for a MIP: `if si.num_points:`) | Read the gap from `si.ancillary` with `.get()` (absent when the solver reports none; `si.display()` lists the keys). Gap < 1%: near-optimal; 1-5%: good; > 10%: uncertain — more time, tighter Big-M, symmetry breaking, or simplify |
+| `OTHER_ERROR` (or another error status) | Solver or service error; an unsupported solver option also ends here without raising | Check `si.error`; expression/property fixes → `rai-prescriptive-problem`. A `solve()` that raised left `solve_info()` on the previous solve: read the exception instead |
 
-A non-optimal status is information, not necessarily failure: INFEASIBLE on a probe constraint set is a valid feasibility-boundary test, and TIME_LIMIT with gap < 5% and sensible values is presentable as near-optimal ("is a 2% improvement worth 10 more minutes?"). **Iterate** on INFEASIBLE-without-clear-conflict, DUAL_INFEASIBLE, gap > 10%, or trivial solutions; **accept** OPTIMAL, gap < 5%, or intentional probes. Per-status stakeholder phrasing: [status-interpretation.md](references/status-interpretation.md).
+A non-optimal status is information, not necessarily failure: INFEASIBLE on a probe constraint set is a valid feasibility-boundary test, and TIME_LIMIT with gap < 5% and sensible values is presentable as near-optimal ("is a 2% improvement worth 10 more minutes?"). **Iterate** on INFEASIBLE-without-clear-conflict, DUAL_INFEASIBLE, gap > 10%, or trivial solutions; **accept** OPTIMAL, gap < 5%, or intentional probes.
 
 ### Infeasible diagnosis
 
 **Localize with `solve(conflict=True)` first** — one solve returns the IIS, a *minimal* set of constraints and bounds that cannot all hold, read as bare predicates joined by key:
 
 ```python
-problem.solve("highs", conflict=True)   # request upfront — a plain-solved Problem can't add it on re-solve
+problem.solve("highs", conflict=True)   # upfront, or as a re-solve after an INFEASIBLE plain solve (relationalai>=1.26)
 si = problem.solve_info()
 if si.conflict_status == "CONFLICT_FOUND":
     model.select(coverage.shift.name, coverage.shift.min_coverage).where(coverage.in_conflict).inspect()
 ```
 
-Each flagged member is a *candidate* (leads, not proof): relax one and re-solve to confirm — other independent conflicts may remain. `NO_CONFLICT_EXISTS` means the conflict solve found the model *feasible* — the earlier INFEASIBLE came from a different formulation or data state; re-check what changed. `NOT_SUPPORTED` / `FAILED` (read `si.error`) → manual checks: (1) total demand vs capacity; (2) contradictory constraints (`x >= 10`, `x <= 5`); (3) bound consistency (lower > upper); (4) bisect by rebuilding the Problem with one `satisfy()` or bound removed at a time (no in-place removal API). After localizing: present trade-off options; moving the conflicting hard constraint to the objective with a penalty (softening) is often more useful than pure diagnosis. See [conflict-analysis.md](references/conflict-analysis.md); for the full failure-mode catalog (symptom → root cause → fix), load [diagnostic-taxonomy.md](references/diagnostic-taxonomy.md).
+Each flagged member is a lead, not proof: relax one and re-solve to confirm; other independent conflicts may remain. `NO_CONFLICT_EXISTS` means this solve found the model feasible, so the earlier INFEASIBLE came from a different formulation or data state. `NOT_SUPPORTED` / `FAILED` (read `si.error`) → check total demand vs capacity, contradictory constraints (`x >= 10`, `x <= 5`) and lower > upper bounds, then bisect by rebuilding the Problem with one `satisfy()` or bound removed at a time (no removal API). After localizing, present trade-offs: softening the conflicting constraint into a penalized objective term is often more useful than diagnosis alone. Details: [conflict-analysis.md](references/conflict-analysis.md).
 
 ### Unbounded (DUAL_INFEASIBLE) diagnosis
 
-(1) All variables bounded (upper bounds for maximize, lower for minimize)? (2) Budget/capacity constraints present? (3) Objective direction right? (4) Coefficient signs right?
+(1) All variables bounded (upper bounds for maximize, lower for minimize)? (2) Budget/capacity constraints present? (3) Objective direction right? (4) Coefficient signs right? (5) Can a penalty term turn into a reward — `100 * (demand - fulfilled)` with `fulfilled` unbounded above pays for over-serving without limit?
 
 ### Audit / witness mode — status-aware verdict (CSP-style)
 
@@ -201,16 +240,16 @@ When the question is "does the property hold?", the answer is the termination st
 
 Progressive quality gates — each level subsumes the previous. Use it to classify where a formulation stands and what to fix next; report against it ("reaches optimal but fails non-trivial — all-zero, missing forcing constraints").
 
-| Level | Gate | Check |
-|-------|------|-------|
-| **generates** | Syntactically valid PyRel | Parses |
-| **compiles** | `display()` succeeds | Variables, constraints, objective registered |
-| **solves** | Solver returns any status without crash | `solve()` completes; `solve_info()` has a status |
-| **optimal** | Proven optimum (or acceptable gap) | `OPTIMAL`, or `TIME_LIMIT` with gap < 5% |
-| **non-trivial** | Meaningful activity | Objective ≠ 0, non-zero ratio > 1%, not all at bounds |
-| **meaningful** | Actionable decisions | Domain-specific: scale matches demand, coverage complete, flows balance |
+| Level | Gate | Check | Usual root causes when it fails |
+|-------|------|-------|---------------------------------|
+| **generates** | Syntactically valid PyRel | Parses | Syntax error; a concept or property that doesn't exist (check `inspect.schema(model)`) |
+| **compiles** | `display()` succeeds | Variables, constraints, objective registered | Operand type mismatch (Float vs Integer) in `solve_for` / `satisfy` / the objective; a `name=[]` part that resolves to an entity instead of a scalar |
+| **solves** | Solver returns any status without crash | `solve()` completes; `solve_info()` has a status | `solve()` raised (read the exception); an error status (read `si.error`) |
+| **optimal** | Proven optimum (or acceptable gap) | `OPTIMAL` (on MiniZinc, only with `si.solve_time_sec` under the limit), or `TIME_LIMIT` with gap < 5% | INFEASIBLE, DUAL_INFEASIBLE, or a time limit with a wide gap (Status Interpretation) |
+| **non-trivial** | Meaningful activity | Objective ≠ 0, non-zero ratio > 1%, not all at bounds | No forcing constraint, or one whose joins match zero rows; variable sets never linked; RHS data unpopulated |
+| **meaningful** | Actionable decisions | Domain-specific: scale matches demand, coverage complete, flows balance | Unit mismatch in data; one entity absorbs everything; objective sense flipped; required entities missing from entity creation |
 
-Root causes by level and the 5-step diagnosis protocol: [failure-taxonomy.md](references/failure-taxonomy.md).
+Diagnose at the **first** failed level: fixing an upstream failure often clears the downstream ones.
 
 ---
 
@@ -225,17 +264,15 @@ An "optimal" status can decorate a trivially empty problem. Type-specific expect
 4. **One entity absorbs everything**: missing balance/fairness constraints or extreme cost differentials.
 5. **All variables at bounds** (≥ 90%): at lower → constraint joins matched zero rows; at upper → capacity too tight or maximize without caps.
 
-**Diagnosis sequence:** understand the domain → for minimize-with-zero find what should force activity → locate the requirement data in the model → link variable sums to requirements via correct relationship paths. Fix *constraints* over variables, ground every fix in actual model surface, and fix broken join paths rather than aggregate workarounds — navigate FROM the `.per()` entity (`Demand.customer.site`, not `Customer.site`). Forcing-constraint patterns: `rai-prescriptive-problem/references/constraint-formulation.md` > Forcing constraints; fix taxonomy: `rai-prescriptive-problem/references/fix-generation-guidelines.md`.
+**Diagnosis:** find what should force activity, locate that requirement's data in the model, and link the variable sums to it through the right relationship path — navigate FROM the `.per()` entity (`Demand.customer.site`, not `Customer.site`). Fix broken join paths rather than adding aggregate workarounds. Formulation-side localization: `rai-prescriptive-problem/references/diagnostic-workflow.md`; forcing-constraint patterns: `rai-prescriptive-problem/references/constraint-formulation.md` > Forcing constraints.
 
-**Reasonableness (domain judgment):** quantities match demand scale? flows within known capacity? assignments geographically sensible? objective in a plausible range? **Interpretability:** decision-variable attributes carry an `x_` prefix — translate to business language in all user-facing prose (`x_flow` → "units shipped"); code samples stay technical.
-
-**Post-solve diagnosis checklist:** status OPTIMAL (or acceptable gap)? objective non-zero and plausible? non-zero ratio reasonable? no values > 1e10? not clustered at bounds? business sense? binding constraints match known bottlenecks? stable to small perturbations? Failing checks: all-zero → forcing constraints; infeasible → `solve(conflict=True)`.
+**Reasonableness (domain judgment):** quantities match demand scale? flows within known capacity? assignments geographically sensible? objective in a plausible range? no values > 1e10? **Interpretability:** decision-variable attributes carry an `x_` prefix — translate to business language in all user-facing prose (`x_flow` → "units shipped"); code samples stay technical.
 
 ---
 
 ## Result Explanation Guide
 
-Explanation is the return leg of bidirectional translation: the solver produced math; translate it back to business language. Present in order: **(1) problem context** (2-3 sentences), **(2) what was decided** (lead with the actionable output; objective in business terms), **(3) why these decisions** (which constraints and costs drove each selection/exclusion — answer "why was X selected?", "what's preventing Z?" with actual entity names), **(4) solution quality** (non-triviality, red flags), **(5) business impact**, **(6) next steps**. Map extended (cross-product) decision concepts back to their base entities. Full 6-part template with worked phrasing and explainability question patterns: [result-explanation.md](references/result-explanation.md).
+Explanation is the return leg of bidirectional translation: the solver produced math; translate it back to business language. Present in order: **(1) problem context** (2-3 sentences), **(2) what was decided** (lead with the actionable output; objective in business terms), **(3) why these decisions** (which constraints and costs drove each selection/exclusion — answer "why was X selected?", "what's preventing Z?" with actual entity names), **(4) solution quality** (non-triviality, red flags), **(5) business impact**, **(6) next steps**. Map extended (cross-product) decision concepts back to their base entities.
 
 For *why* a constraint binds or an option was excluded: `sensitivity=True` gives exact marginals on LP/QP (a constraint's `shadow_price` = one more unit of RHS; a variable's `reduced_cost` = objective marginal at its bound). For MIP (no duals) or structural changes, reason from binding-constraint identification and scenario deltas. Frame in the decision maker's entities, never variable indices.
 
@@ -263,27 +300,27 @@ Duals *rank* what to perturb; scenarios *quantify* the result. Treat scenarios a
 | Mistake | Cause | Fix |
 |---------|-------|-----|
 | Presented a plan/formulation as the result | Solve still running or backgrounded — no terminal status or values ever read | A finished solve is the precondition: status + objective + values first |
-| Zero objective on minimize | Missing forcing constraints | Add `sum(x).per(Entity) >= Entity.demand`; joins matching zero rows are the sibling cause |
+| Zero objective on minimize | Missing forcing constraints | Add `sum(Decision.x).per(Entity) >= Entity.demand`; joins matching zero rows are the sibling cause |
 | Infeasible: demand > capacity | Total demand exceeds supply | Slack/penalty variables or relax demand |
 | Silent: `problem.termination_status == "OPTIMAL"` always False | No parens — bound method compared to a string | Engine-side: `problem.termination_status()` (parens) in `require()`; Python-side: `si.termination_status` (no parens) |
 | `AttributeError` on `solve()` return value | `solve()` returns `None` | `solve_info()` for status; `model.select()` / `Variable.values()` for values |
-| Silent: non-OPTIMAL extraction returns empty df / `None` objective | Loop extracts without checking status | Guard: `if si.termination_status not in ("OPTIMAL", "LOCALLY_SOLVED"): continue` |
-| Multi-solution overclaim | `solution_limit=K` returns up to K **distinct feasible** solutions — neither ranked nor diversity-maximized | Document the semantics; for top-K re-solve K times with previous-best as constraint. `rai-prescriptive-problem/references/csp-formulation.md` § 4 |
+| Silent: extraction without a usable solution returns empty df / `None` objective, or an infeasible point's values | Loop extracts without checking status | Guard: skip unless `si.termination_status in ("OPTIMAL", "LOCALLY_SOLVED")`. To report a `TIME_LIMIT` incumbent, also accept `TIME_LIMIT` with `si.primal_status == "FEASIBLE_POINT"` (before relationalai 1.26, for a MIP: `si.num_points`), but not when comparing scenarios, where an incumbent's gap reads as a scenario effect. On MiniZinc, an `OPTIMAL` whose `si.solve_time_sec` reached the limit is such a `TIME_LIMIT` incumbent |
+| Multi-solution overclaim | `solution_limit=K` returns up to K **distinct feasible** solutions on MiniZinc — neither ranked nor diversity-maximized — and one point on HiGHS, possibly from a search the limit stopped early | Document the semantics; for top-K re-solve K times with previous-best as constraint. [solver-parameters.md](references/solver-parameters.md) > `solution_limit` semantics |
 | Silent: `verify()` OK on solver-only-IC bodies (`implies` / `all_different`) even when violated | Verify engine can't ground wire-format constraint relations; documented limitation | Mixed constraints → `verify()` + post-solve assertions on solver-only ICs; all-solver-only or `populate=False` → skip `verify()`. `rai-prescriptive-problem/references/csp-formulation.md` § 6 |
 | Audit misread: `num_points() == 0` as "property holds" | Zero points can mean crash/time-limit | Status first; only `INFEASIBLE` proves PASS (see Audit / witness mode) |
-| Marginal reads empty on LP/QP | `sensitivity=True` not requested on that solve | Request on the solve you'll read; re-solving plain to "add" duals raises `ValueError` — rebuild the Problem |
+| Marginal reads empty on LP/QP | `sensitivity=True` not requested on that solve | Re-solve the same Problem with `sensitivity=True` (relationalai>=1.26), then read |
 | Marginal still empty with `sensitivity=True` | Non-optimal solve (no duals) or MIP (integer models have none; warning fires) | Check status first; if OPTIMAL and empty, it's a MIP — use scenarios / binding-constraint reasoning |
 | Empty `basis_status` | Interior-point (Ipopt) has no simplex basis | Expected; use marginals, or a simplex solver if a basis is needed |
 | `conflict=True` confused with `sensitivity=True` | Conflict populates `in_conflict` predicates, not marginals; sensitivity the reverse | Request the one matching the question; confirm which ran from `si.conflict` / `si.sensitivity` / `si.conflict_status` — an always-False `in_conflict` can equally mean `NO_CONFLICT_EXISTS`, `NOT_SUPPORTED`, or "not in this (non-unique) IIS" |
 | Dual sign assumed from objective sense alone | `shadow_price` sign = objective sense × constraint direction; `reduced_cost` sign = objective sense × active bound | Read each marginal's sign from both factors: [sensitivity-analysis.md](references/sensitivity-analysis.md) § Sign convention |
 | Asserting `reduced_cost > 0` for every unused option | The converse holds only under a unique optimum; degeneracy allows `≈ 0` on unused options | Assert only the always-true directions: in use ⇒ `reduced_cost ≈ 0`; nonzero ⇒ at a bound |
 | `solve(sensitivity=True)` on an objectiveless model → `ValueError` | Duals are objective marginals | `conflict=True` for pure feasibility / CSP — it needs no objective |
-| `integrality_in_conflict == False` read as "not involved" | The IIS is one minimal subset, not unique; `False` = "not in this subset" (and `True` may be a "maybe") | Treat only `True` as a lead; confirm non-involvement by relaxing and re-solving |
+| `in_conflict` / `*_in_conflict == False` read as "not involved" | The IIS is one minimal subset, not unique; `False` = "not in this subset" (and `True` may be a "maybe") | Treat only `True` as a lead; confirm non-involvement by relaxing and re-solving |
 | Constraint family without a declared key | Back-pointers are declared, not inferred (`name=` is display-only) | `satisfy(..., keyed_by={"nutrient": Nutrient})` at formulation time; read via `con.nutrient` |
 | `FDError` on a `keyed_by` constraint | Declared keys don't uniquely determine the instance (family wider than key, or two conjuncts sharing keys) | Add missing key(s), or split multi-conjunct `require` into one `satisfy` per conjunct |
 | Sweep moves an unnamed boundary with the swept threshold | Structure (band width, offset) inherited from a sibling analysis instead of re-derived | Vary only the named parameter; restate the partition at each value; state the chosen reading (see Sensitivity Analysis) |
-
-Additional interpretation pitfalls (numerical instability, degenerate solutions, aggregation scope, missing/null data): [common-pitfalls.md](references/common-pitfalls.md).
+| Silent: missing or null data leaves variables / constraints ungrounded | A null produces no tuple, so the variable or constraint grounds no row for that entity | Completeness checks before solve: `rai-prescriptive-problem/references/pre-solve-validation.md` |
+| Different plan on re-run, same objective | Alternate optima | Add a tie-breaking secondary term or symmetry-breaking constraints if one plan must be reproducible |
 
 ---
 
@@ -310,11 +347,6 @@ Additional interpretation pitfalls (numerical instability, degenerate solutions,
 | Reference | Description | File |
 |-----------|-------------|------|
 | Solution extraction details | Engine-side accessor table, `populate=` variations, back-pointer naming rules, Snowflake export | [solution-extraction-details.md](references/solution-extraction-details.md) |
-| Status communication | Per-status stakeholder phrasing, gap interpretation, iterate-vs-accept | [status-interpretation.md](references/status-interpretation.md) |
-| Result explanation templates | Full 6-part structure, decision-variable translation, explainability patterns | [result-explanation.md](references/result-explanation.md) |
-| Failure taxonomy | Root causes by solvability level, 5-step diagnosis protocol | [failure-taxonomy.md](references/failure-taxonomy.md) |
 | Sensitivity analysis | Dual economics, sign rules, key-join idiom, sweeps, Pareto construction, dual-guided frontiers | [sensitivity-analysis.md](references/sensitivity-analysis.md) |
 | Conflict (IIS) analysis | `in_conflict` membership, `conflict_status` vocabulary, joining conflicts to entities | [conflict-analysis.md](references/conflict-analysis.md) |
-| Solver parameters | Solver-specific kwargs (HiGHS/Gurobi/Ipopt), tuning, warm starting, which solvers yield duals/basis/IIS | [solver-parameters.md](references/solver-parameters.md) |
-| Diagnostic taxonomy | Solver-side root-cause codes mapping status to fix-action types | [diagnostic-taxonomy.md](references/diagnostic-taxonomy.md) |
-| Common pitfalls | Additional interpretation pitfalls beyond the silent-bug rows above | [common-pitfalls.md](references/common-pitfalls.md) |
+| Solver parameters | Solver-specific kwargs (HiGHS/Gurobi/Ipopt), `solution_limit` semantics, tuning, warm starting, which solvers yield duals/basis/IIS | [solver-parameters.md](references/solver-parameters.md) |

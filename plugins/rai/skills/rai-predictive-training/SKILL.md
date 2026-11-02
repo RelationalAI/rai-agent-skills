@@ -1,6 +1,6 @@
 ---
 name: rai-predictive-training
-description: Configure and train graph neural network (GNN) models, generate predictions, evaluate results, and manage trained models. Use when ready to train, generate predictions, evaluate, or manage models; for concepts, data loading, edges, and feature configuration, see `rai-predictive-modeling`.
+description: Generate PyRel code (it does not run it) to configure and train graph neural network (GNN) models, generate predictions, evaluate results, and manage trained models. Also covers `RelFM`/`RelFMTabular` -- zero-shot, no-training-step alternatives to GNN (flat/tabular single-table and relational multi-table modes). Use when ready to train, generate predictions, evaluate, or manage models, or whenever a task wants predictions without a training step; for concepts, data loading, edges, and feature configuration, see `rai-predictive-modeling`.
 ---
 
 # Predictive Training
@@ -22,12 +22,13 @@ description: Configure and train graph neural network (GNN) models, generate pre
 **When NOT to use:**
 - Defining concepts, loading data, building graphs -- see `rai-predictive-modeling`
 
-**Overview:** 4 steps: configure GNN -> train -> predict/evaluate -> optional: register/load.
+**Overview:** 4 steps: configure GNN -> train -> predict/evaluate -> optional: register/load. `RelFM`/`RelFMTabular` skip the train step entirely -- see § RelFM below.
 
 **By user intent — sections to focus on:**
 - Train + read validation metric → Quick Reference + GNN Constructor + `gnn.fit()`
 - + predict + downstream rule / optimization → also Predictions + Using Predictions Downstream
 - + register + reload across sessions → also Model Management
+- Zero-shot prediction, no training step wanted/needed → § RelFM: Zero-Shot Alternatives to GNN
 
 ## Quick Reference
 
@@ -83,12 +84,14 @@ User.predictions = gnn.predictions(domain=Test)
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `property_transformer` | None | PropertyTransformer instance (omit for auto-inference) |
-| `has_time_column` | False | Set `True` if the task table contains a time column. See § Triple-coupling rule below. |
+| `has_time_column` | False | Set `True` when the task table has a `DATE` or `TIMESTAMP*` column. That column makes the task temporal. See § Triple-coupling rule below. |
 | `dataset_alias` | None | Custom alias for the dataset |
 
 Operational flags (`stream_logs`, `parallel_reasoners_init`, `use_current_time`, `test_batch_size`) are documented in [references/hyperparameters.md](references/hyperparameters.md) § GNN constructor operational flags.
 
 ### Triple-coupling rule for `has_time_column`
+
+A `DATE` or `TIMESTAMP*` column on train, val, or test (`DATE`, `TIMESTAMP`, `TIMESTAMP_NTZ`, `TIMESTAMP_LTZ`, `TIMESTAMP_TZ`, `DATETIME`) makes the task temporal. Set `has_time_column=True` on `GNN(...)` and on `RelFM(...)`. A `DATE` column counts; it does not need a time of day. Do not leave the flag `False` because the rows are already split by time.
 
 When `has_time_column=True`, three things must move together:
 
@@ -224,7 +227,7 @@ GNN training has runtime gotchas that surface as opaque or no-error symptoms in 
 
 | Symptom | Recover via |
 |---|---|
-| `has_time_column=True` fails with `no time column defined in data tables` | Temporal setup is incomplete. Verify (1) the relationship signature includes `at {Type:<slot>}`, (2) the time column is bound in `define(Train(Source, train.<time_col>, ...))`, (3) the column is a true `DATE`/`TIMESTAMP*` per `rai-predictive-modeling` § Auto-Discovery step 8. If all three are correct and the error persists, fall back to `has_time_column=False` + non-temporal Relationships. |
+| `has_time_column=True` fails with `no time column defined in data tables` | Temporal setup is incomplete. Verify (1) the relationship signature includes `at {Type:<slot>}`, (2) the time column is bound in `define(Train(Source, train.<time_col>, ...))`, (3) the column is a true `DATE`/`TIMESTAMP*` per `rai-predictive-modeling` § Auto-Discovery step 8. A `DATE` column is temporal — do not skip the flag because it is not a `TIMESTAMP`. If all three are correct and the error persists, fall back to `has_time_column=False` + non-temporal Relationships. |
 | Train job stays `QUEUED` indefinitely while reasoner reports `READY` | `rai-health` § Predictive train jobs stuck QUEUED (`SUSPEND_REASONER` + `RESUME_REASONER_ASYNC`) |
 | `gnn.fit()` returns a `model_run_id` from an earlier job after a partial failure or notebook re-run | `gnn.fit()` is idempotent if `self.train_job` exists and isn't FAILED — re-instantiate `GNN(...)` on every retry, not bump `Model("...")` |
 | Client polls forever with no progress | `JobMonitor._wait_for_completion` has no timeout — kill the client manually + recover via the QUEUED runbook |
@@ -362,6 +365,46 @@ If results are poor, see [references/evaluation-debugging.md](references/evaluat
 
 ---
 
+## RelFM: Zero-Shot Alternatives to GNN
+
+`RelFM` (relational) and `RelFMTabular` (flat/single-table) are in-context-learning alternatives to `GNN` -- **no `fit()`/`load()`/model-registry step at all**. Construct with `context=` in place of `train=`, then call `.predictions()`/`.forecast()` and `.score()` directly:
+
+```python
+from relationalai.semantics.reasoners.predictive import RelFM, RelFMTabular
+
+# Flat/tabular -- single standalone table, no Graph:
+relfm_tabular = RelFMTabular(
+    database="DB", schema="EXPERIMENTS",
+    context=Train, validation=Val,
+    label_column="target", task_type="regression", eval_metric="rmse",
+)
+Test.predictions = relfm_tabular.predictions(domain=Test)
+
+# Relational -- multi-table via the same Graph/PropertyTransformer as GNN:
+relfm = RelFM(
+    database="DB", schema="EXPERIMENTS",
+    graph=gnn_graph, property_transformer=pt,
+    context=Train, validation=Val,
+    task_type="binary_classification", eval_metric="roc_auc",
+)
+Test.predictions = relfm.predictions(domain=Test)
+```
+
+**When to reach for RelFM instead of GNN:**
+- The signal is single-table (flat) or comes from FK-joined related tables (relational), and a trained model isn't needed or wanted -- e.g. quick baselines, cold-start prediction, or time-series forecasting (`RelFMTabular` with `task_type="forecasting"` -- GNN has no forecasting mode).
+- Not for link prediction or multilabel classification -- neither RelFM mode supports these task types (GNN does).
+
+**Key differences from GNN, both modes:**
+- No `train_batch_size`/`n_epochs`/`lr` -- ICL knobs are `n_estimators`, `random_state`, `sample_size`, `sampling_strategy` instead.
+- `source_concept`/`context`/`domain` must be identified by a **single `identify_by` column** (e.g. `customerid`). The forecaster is the one exception: it is identified by the pair `(item_id, time)`. A table with no unique column needs a surrogate key added first (SQL in [relfm-flat-mode.md](references/relfm-flat-mode.md) § Tables with no unique column).
+- Relational `RelFM` additionally rejects graphs with **self-referential foreign keys** and does not support the `text` `PropertyTransformer` type (drop free-text columns instead).
+
+Full parameter tables, identity rules, output shapes, gotchas (schema-mismatch errors, leakage checks, forecast pre-flight checks, Snowflake change tracking), and complete worked examples:
+- [references/relfm-flat-mode.md](references/relfm-flat-mode.md) -- single-table classification, regression, and forecasting.
+- [references/relfm-relational-mode.md](references/relfm-relational-mode.md) -- multi-table via Deep Feature Synthesis over the same `Graph`/`PropertyTransformer` setup as GNN.
+
+---
+
 ## Model Management
 
 ### Register a Model
@@ -471,7 +514,7 @@ User.predictions = gnn.predictions(domain=Test)
 | Omitting `has_time_column` when loading a temporal model | Not persisted in the registry | Re-supply `has_time_column=True` at load time |
 | Calling `fit()` on a GNN instance created in load mode | Load-mode GNN instances do not support training | Create a separate fit-mode GNN instance (with `train=`, `validation=`) and call `fit()` on that |
 | Calling `load()` on a GNN instance created in fit mode (with `train=`, `validation=`) | Fit-mode GNN instances do not support `load()` | Create a separate load-mode GNN instance (with `source_concept=`, `model_name=`, `version_name=`) and call `load()` on that |
-| `has_time_column=True` fails with "no time column defined in data tables" | Temporal setup is incomplete. The relationship signature must use `at {Type:<slot>}`, the time column must be bound in the corresponding `define(Train(...))` call, and the column must be a true `DATE`/`TIMESTAMP*` type | Confirm all three conditions above. If correct and the error persists, fall back to `has_time_column=False` with non-temporal Relationships as a workaround |
+| `has_time_column=True` fails with "no time column defined in data tables" | Temporal setup is incomplete. The relationship signature must use `at {Type:<slot>}`, the time column must be bound in the corresponding `define(Train(...))` call, and the column must be a true `DATE`/`TIMESTAMP*` type. `DATE` is enough to make the task temporal | Confirm all three conditions above. If correct and the error persists, fall back to `has_time_column=False` with non-temporal Relationships as a workaround |
 | `SnowflakeTableObjectsException: Failed to pull data into index: transaction was aborted (runtime error)` | Opaque client wrapper that hides the actual server-side error (commonly a stale compiled-relation signature after schema drift, but other causes possible) | Pull `problems.json` via `RELATIONALAI.API.GET_TRANSACTION_ARTIFACTS('<txn_id>')` (presigned URL) and read the `report` field for the real error. For the schema-drift case specifically, see § Known Limitations |
 | `gnn.fit()` raises `PermissionError` with *"Database does not exist or the GNN RelationalAI Native App lacks permissions"* (or *"Schema does not exist or ..."*) — from `relationalai_gnns.core.diagnostics.PermissionDiagnostic` | RAI app missing one or more of the four required grants on the experiment database/schema | Apply all four grants per `rai-predictive-modeling` § Prerequisites: `USAGE` on the database, `USAGE` on the schema, `CREATE EXPERIMENT` on the schema, `CREATE MODEL` on the schema |
 
@@ -497,3 +540,5 @@ User.predictions = gnn.predictions(domain=Test)
 | Prediction attributes | Prediction attributes by task type with usage examples | [references/prediction-attributes.md](references/prediction-attributes.md) |
 | Evaluation & debugging | Dataset inspection, result checking, tuning steps; dictionary-style prediction field indexing and `gnn.prediction_concept` direct access | [references/evaluation-debugging.md](references/evaluation-debugging.md) |
 | Known limitations & runtime troubleshooting | `has_time_column=True` failure-mode fallback code; SUSPEND/RESUME runbook; `gnn.fit()` idempotency; `JobMonitor._wait_for_completion` polling; `GET_TRANSACTION_ARTIFACTS` recipe — load when the symptom→fix table in SKILL.md is too compact | [references/known-limitations.md](references/known-limitations.md) |
+| RelFM (flat/tabular) | `RelFMTabular` factory, param tables, identity rules, output shapes, forecasting-specific gotchas, worked regression + forecast examples | [references/relfm-flat-mode.md](references/relfm-flat-mode.md) |
+| RelFM (relational) | `RelFM` class, DFS feature synthesis, self-referential-FK restriction, worked multi-table example | [references/relfm-relational-mode.md](references/relfm-relational-mode.md) |

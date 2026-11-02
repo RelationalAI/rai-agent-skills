@@ -2,6 +2,8 @@
 
 Two patterns for exploring how solutions change under different assumptions.
 
+Whichever pattern you use, a sweep's results last only as long as the process that solved it. Save the extracted frame before the script exits, so later questions load it instead of re-solving: `rai-prescriptive-results` > Solution Extraction. When a follow-up asks about a sweep already solved, look for its saved frame before solving again; one may exist even when your session history no longer mentions it.
+
 ## Pattern 1: Scenario Concept — parameter variations (preferred)
 
 When the same problem structure is solved with different parameter values (budget, demand,
@@ -38,10 +40,11 @@ problem.satisfy(return_ok)
 problem.minimize(sum(Stock.x_quantity))
 problem.solve(solver, time_limit_sec=60)
 
-# Results: query with scenario filter
-model.select(Scenario.name, Stock.index, Stock.x_quantity).where(
-    Stock.x_quantity(Scenario, x_qty), x_qty > 0.001
-).inspect()
+# Results: query with scenario filter, and save them for later scripts
+df = model.select(
+    Scenario.name.alias("scenario"), Stock.index.alias("stock"), x_qty.alias("quantity")
+).where(Stock.x_quantity(Scenario, x_qty), x_qty > 0.001).to_df()
+df.to_csv("scenario_results.csv", index=False)
 ```
 
 ## Pattern 2: Loop + where= filter — entity selection/exclusion
@@ -62,6 +65,8 @@ for excluded in [None, "SupplierC", "SupplierB"]:
     # Use Variable.values() for per-iteration results
 ```
 
+Extraction for both patterns, with runnable examples: `rai-prescriptive-results/references/solution-extraction-details.md` > Scenario / Parametric Solving.
+
 ## When to use which
 
 | Criterion | Scenario Concept | Loop + where= |
@@ -69,11 +74,11 @@ for excluded in [None, "SupplierC", "SupplierB"]:
 | What varies | Parameter values (budget, demand, thresholds) | Which entities participate (exclude supplier, solve per factory) |
 | Problem structure | Same constraints, same entities, different parameter values | Constraints or entity sets change between scenarios |
 | Number of solves | One (all scenarios simultaneously) | One per scenario |
-| Where results live | **In the ontology** — queryable via `model.select()`, composable with other model queries, available for downstream derived properties | In Python DataFrames via `Variable.values()` — outside the model |
+| Where results live | **In the ontology**, for the rest of the solving process — queryable via `model.select()`, composable with other model queries, available for downstream derived properties | In Python DataFrames via `Variable.values()` — outside the model |
 | Problem size | Cross-product of entities x scenarios (can be large) | Each sub-problem is small and independent |
 
 **Decision rule:**
-- Only parameter values change -> **Scenario Concept**. Results are part of the ontology, which is the key advantage — they can be queried, joined, and composed like any other model data. *Exception:* for a 2-point baseline-vs-alternative comparison, prefer two fresh `Problem` instances — cross-product overhead of one Scenario Concept solve isn't worth it for two points.
+- Only parameter values change -> **Scenario Concept**. Results are part of the ontology for the rest of the solving process, which is the key advantage — they can be queried, joined, and composed like any other model data. *Exception:* for a 2-point baseline-vs-alternative comparison, prefer two fresh `Problem` instances — cross-product overhead of one Scenario Concept solve isn't worth it for two points.
 - Entities are added/removed or constraint structure changes -> **Loop + where=**. Required when the problem graph itself differs between scenarios (e.g., removing a supplier changes which entities exist).
 - Independent partitions (per-factory, per-region) -> **Loop + where=**. Each partition is a separate problem with no cross-partition coupling.
 

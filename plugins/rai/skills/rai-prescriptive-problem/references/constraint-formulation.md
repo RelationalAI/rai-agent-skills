@@ -1,12 +1,8 @@
 <!-- TOC -->
-- [Constraint Context Integration](#constraint-context-integration)
 - [Constraint Principles](#constraint-principles)
-  - [Constraint categories](#constraint-categories)
   - [Constraint type classification](#constraint-type-classification)
   - [Two constraint styles](#two-constraint-styles)
-  - [Tightness and contradictions](#tightness-and-contradictions)
   - [Forcing constraints](#forcing-constraints)
-  - [Demand modeling: context determines direction](#demand-modeling-context-determines-direction)
   - [Self-defeating constraints](#self-defeating-constraints)
 - [Constraint Modeling Patterns](#constraint-modeling-patterns)
   - [Balance constraints](#balance-constraints)
@@ -17,90 +13,11 @@
   - [Proportional / fair-share constraints](#proportional--fair-share-constraints)
 - [Constraint Join Patterns](#constraint-join-patterns)
   - [Constraint pattern examples (DO / DON'T)](#constraint-pattern-examples-do--dont)
-  - [Addressing user requirements](#addressing-user-requirements)
-- [Constraint Verification](#constraint-verification)
-  - [Pre-generation verification](#pre-generation-verification)
-  - [Self-check: constraints](#self-check-constraints)
 - [Constraint Selection Guidance](#constraint-selection-guidance)
-  - [Completeness checklist](#completeness-checklist)
   - [Constraint interaction check (avoid conflicts)](#constraint-interaction-check-avoid-conflicts)
 - [Parameter Derivation from Data](#parameter-derivation-from-data)
   - [Value extraction priority](#value-extraction-priority)
 <!-- /TOC -->
-
-## Constraint Context Integration
-
-**Natural language rule:** When describing constraints to the user (in `description`, `rationale`, and suggestion text), use business language, not property names. Translate technical references into domain-natural phrases:
-- "Ensure total shipments to each customer meet their demand" (not "sum(Operation.x_flow).per(Demand.sku) >= Demand.quantity")
-- "Don't exceed the daily processing capacity at any facility" (not "Operation.x_flow <= Operation.capacity_per_day")
-- "Each worker can be assigned to at most 5 shifts per week" (not "sum(Assignment.x_assigned).per(Worker) <= 5")
-
-**Your suggestions should be inspired by BOTH the base model structure AND any user inputs.**
-
-**1. Start with the Base Model:**
-- Examine what natural limits/rules the model implies (capacities, demands, flow balances)
-- Identify properties that represent limits (capacity, budget, min_quantity, max_quantity)
-- Consider typical constraints for this type of optimization problem
-
-**2. Layer in User Goals (if provided):**
-If the user provided constraints goals (look for USER'S REQUIREMENTS AND LIMITS section):
-- Parse their input to identify specific limits, rules, or requirements
-- Extract specific values they mentioned (e.g., "budget is $10K", "must serve 80%")
-- Align your constraints with both model structure AND user's stated requirements
-
-**3. Check for Data-Driven Incompatibilities:**
-When entity attributes create combinations that are infeasible by data (not by optimization), add conditional zero-forcing constraints. These reduce the feasible space to only valid combinations:
-- Time incompatibility: `qty == 0 where transit_days > due_day` (delivery can't arrive in time)
-- Skill mismatch: `assigned == 0 where worker.skill != task.required_skill`
-- Range exceeded: `flow == 0 where distance > max_range`
-
-Ask: "Which combinations of decision variables are impossible given the data properties?" These are not optimization trade-offs — they are feasibility filters that should always be included.
-
-**4. Decision Criteria (when user hasn't specified constraints):**
-- If user mentions limits that match model properties -- use those properties directly
-- If user needs constraints not supported by model -- note what extension would be needed
-- If no user input provided, derive constraints from the model structure:
-  - If model has capacity/limit properties -- add capacity constraints
-  - If model has demand/requirement properties -- add demand satisfaction (forcing) constraints
-  - If model has network structure (source/destination relationships) -- add flow conservation/balance constraints
-  - If multiple decision concepts share a base entity -- consider linking/conservation constraints (flag if missing, but not always required)
-  - If objective minimizes cost/time/risk -- ensure at least one forcing constraint exists (see Forcing Constraints for Minimize Objectives)
-  - If continuous variables have no explicit upper bounds -- add capacity constraints from data
-
-**5. Check for Temporal Context:**
-If the problem specifies a time scope or granularity, and concepts have date columns:
-- Add `.where()` filters on date columns to scope constraints to the relevant time window
-- If granularity is specified ("weekly", "monthly"), use aggregation in constraints
-- Surface time boundaries as editable parameters so users can adjust the planning horizon
-- For large event tables (>1000 entities) without explicit time scope, suggest a reasonable default time window
-
-## Constraint Discovery Patterns
-
-After identifying variables, use these prompts to systematically discover missing constraints. Each question targets a specific constraint category.
-
-**Boundary probes (apply to every formulation):**
-- "What prevents setting all variables to zero?" → Surfaces forcing/demand constraints. If the answer is "nothing," you need a forcing constraint or the objective direction is wrong.
-- "What prevents setting all variables to their maximum?" → Surfaces capacity/budget constraints. If the answer is "nothing" for a minimization problem, the formulation is likely correct. If for maximization, you need upper bounds.
-
-**Iterative discovery (after adding first constraints):**
-- "Are there other limits on [concept]?" → Surfaces additional capacity constraints on the same entity (e.g., both weight and volume limits on a truck).
-- "What happens if we violate this limit?" → Distinguishes hard constraints (infeasible/illegal) from soft goals (penalize in objective). If the answer is "it's bad but not impossible," consider moving to objective.
-
-**Objective-driven probes:**
-- For **minimize** objectives: "What capacity, budget, or resource limits apply?" → Without these, the solver sets everything to zero (trivial).
-- For **maximize** objectives: "What demand, coverage, or throughput requirements exist?" → Without these, the solver may over-allocate.
-
-**Structural probes:**
-- "Can the same [resource] be assigned to multiple [tasks] simultaneously?" → Surfaces mutual exclusivity or capacity constraints.
-- "Does [entity] have a natural ordering or precedence?" → Surfaces sequencing/precedence constraints.
-- "Are there combinations that are physically or logically impossible?" → Surfaces infeasibility filters (`.where()` conditions).
-
-**Multi-concept probes (when variables span 2+ decision concepts):**
-- "How does [detail concept] aggregate to [summary concept]?" → Surfaces aggregation/linking constraints (e.g., sum of assignment hours == total hours).
-- "Which pairs of decision concepts share a dimension but have no constraint connecting them?" → Surfaces missing linking constraints. Every shared-dimension pair needs at least one link.
-- "Does the objective reach all decision concept groups, directly or via linking constraints?" → Surfaces disconnected variable groups that the solver can set to arbitrary values.
-
----
 
 ## Constraint Principles
 
@@ -108,31 +25,17 @@ After identifying variables, use these prompts to systematically discover missin
 
 Python boolean keywords (`and`, `or`, `not`, `if/else`) are invalid inside RAI expressions — use the operator overloads (`&`, `|`, `model.not_()`) and `.where()` scoping. This rule applies to all PyRel expressions, not just constraints. For the full table and `|` vs `model.union()` semantics, see `rai-pyrel` > Expressions > Boolean logic.
 
-### Constraint categories
-
-| Category | Business meaning | Pattern |
-|----------|-----------------|---------|
-| **Conservation/Balance** | What flows in must flow out (or be accounted for as inventory) | `inflow == outflow` or `inv_t == inv_{t-1} + in - out` |
-| **Capacity/Limit** | Don't exceed available resources, budget, or physical limits | `usage <= capacity` |
-| **Requirement/Minimum** | Meet minimum service levels, demand, or coverage thresholds | `provided >= required` |
-| **Logical/Business Rules** | Enforce business policies like mutual exclusivity or dependencies | Conditional expressions, counting |
-| **Linking/Definition** | Connect decision quantities to tracked totals or derived measures | `derived_var == f(decision_vars)` |
-
-**Linking constraints warning:** Only works when both sides contain solver variables. "Definition" constraints where you define a property as a function of pure data properties do NOT work. For quadratic/bilinear terms, use `Float.ref()` directly in the objective/constraint.
-
 ### Constraint type classification
 
 Classify each constraint using one of these types:
 
 | Type | Use When | Business meaning | Examples |
 |------|----------|-----------------|----------|
-| **forcing** | Requires positive activity (demand satisfaction, coverage). Essential for minimize objectives — without it, solver returns zeros. | Every customer order must be fulfilled; every shift must be covered | `sum(qty) >= demand`, `sum(assigned) == 1` |
-| **capacity** | Limits maximum values (resource limits, budgets, physical constraints) | Don't exceed warehouse storage, budget ceiling, or machine hours | `sum(usage) <= capacity`, `qty <= max_available` |
+| **forcing** | Requires positive activity (demand satisfaction, coverage). Essential for minimize objectives — without it, solver returns zeros. | Every customer order must be fulfilled; every shift must be covered | `sum(Decision.qty) >= demand`, `sum(Assignment.assigned) == 1` |
+| **capacity** | Limits maximum values (resource limits, budgets, physical constraints) | Don't exceed warehouse storage, budget ceiling, or machine hours | `sum(Decision.usage) <= capacity`, `qty <= max_available` |
 | **balance** | Enforces conservation/flow balance at nodes or over time | What enters a warehouse must leave or be stored | `inflow == outflow`, `start + produced - consumed == end` |
 | **linking** | Connects multiple variables or enforces conditional relationships | Only ship through a facility if it is open | `qty <= M * is_active`, `var_A == f(var_B)` |
-| **logical** | Cardinality constraints, either/or, at-most-one | Each task assigned to exactly one worker; select at most 3 suppliers | `sum(binary) == 1`, `sum(selected) <= K` |
-
-**Type selection matters for validation**: forcing constraints are checked when objective is minimize, linking constraints are checked when multiple decision concepts exist.
+| **logical** | Cardinality constraints, either/or, at-most-one | Each task assigned to exactly one worker; select at most 3 suppliers | `sum(Assignment.binary) == 1`, `sum(Supplier.selected) <= K` |
 
 ### Two constraint styles
 
@@ -167,16 +70,6 @@ model.require(x_weight <= fast_cap * y_bin_fast).where(
 ```
 
 **When to use which:** Style 1 reads naturally when the scope defines entity relationships (pairwise, adjacency). Style 2 reads naturally when the requirement is the primary statement and scope is a filter.
-
-### Tightness and contradictions
-
-- A constraint is **binding** when the solution sits exactly at its boundary. Start with essential constraints, add more if solution quality is poor.
-- Check that upper bounds do not conflict with lower bounds across related variables. Verify demand satisfaction is compatible with supply/capacity.
-- When in doubt, use soft constraints (slack variables with penalties) instead of hard constraints.
-
-**Too tight:** Feasible region is very small or empty. Minor data changes cause infeasibility. Consider relaxing some constraints to inequalities, adding slack variables with penalties, or using soft constraints.
-
-**Too loose:** Solver returns degenerate or extreme solutions. Variables at bounds that shouldn't be. Add missing business rules, tighten bounds, verify coefficients are correct.
 
 ### Forcing constraints
 
@@ -220,11 +113,6 @@ problem.satisfy(model.where(Worker.x_assign(Shift, x)).require(
     sum(Worker, x).per(Shift) >= min_coverage
 ))
 
-# Nutritional bounds: total intake within [min, max]
-qty = Float.ref()
-total = sum(qty * Food.amount).where(Food.contains(Nutrient, qty)).per(Nutrient)
-problem.satisfy(model.require(total >= Nutrient.min, total <= Nutrient.max))
-
 # Degree constraints: exactly one in-edge and one out-edge per node
 node_flow = sum(Edge.x).per(Node)
 problem.satisfy(model.require(
@@ -232,19 +120,6 @@ problem.satisfy(model.require(
     node_flow.where(Edge.i == Node.v) == 1
 ))
 ```
-
-### Demand modeling: context determines direction
-
-Demand is NOT simply "upper bound for maximize, lower bound for minimize." The correct modeling depends on the business relationship and real-world consequences:
-
-| Business Context | Constraint | User-facing description | Rationale |
-|-----------------|------------|------------------------|-----------|
-| **Market opportunity** (can sell up to demand) | `qty <= demand` | Don't produce more than customers will buy | Can't sell more than the market wants |
-| **Contractual obligation** (must fulfill orders) | `qty >= demand` | Fulfill every customer order in full | Penalties or contract breach for shortfall |
-| **Forced acceptance** (must take delivery) | `qty >= demand` | Accept all incoming deliveries from suppliers | Supplier pushes product; you must absorb it |
-| **Flexible fulfillment** (partial OK) | Soft constraint with penalty | Meet as much demand as possible, penalizing shortfalls | Penalize shortfall in objective rather than hard constraint |
-
-**Rule:** Ask "What happens in the real world if we go above/below this quantity?" The answer determines the constraint direction, not the objective direction.
 
 ### One-hot selection (exactly-one-of-N)
 
@@ -261,6 +136,8 @@ problem.satisfy(model.where(Product.x_select(w, d, x)).require(
 ```
 
 The `sum(d, x)` aggregates over the Discount dimension only; `.per(Product, w)` groups by the remaining dimensions. This is the standard one-hot encoding for discrete choice. See `../examples/one_hot_temporal_recurrence.py`.
+
+Together the leading args and `.per()` keys must identify every term: without them PyRel counts equal values of `x` once, so a grand total is `sum(Product, w, d, x)`, not `sum(x)`. Full rule: [known-limitations.md](known-limitations.md) § Decision-variable aggregate agreement.
 
 ### Temporal recurrence (running totals / inventory balance)
 
@@ -316,6 +193,8 @@ problem.satisfy(model.require(SiteProduction.x_quantity == 0).where(~SiteProduct
 problem.satisfy(model.require(SiteProduction.x_quantity <= SiteProduction.capacity))
 ```
 
+Conditional zero-forcing is also how to rule out combinations the data makes impossible — `qty == 0` where `transit_days > due_day` (delivery can't arrive in time), `assigned == 0` where `worker.skill != task.required_skill`, `flow == 0` where `distance > max_range`. Ask which combinations of decision variables the data rules out: these are feasibility filters, not optimization trade-offs, so always include them.
+
 **Never nest `require()` calls:**
 ```python
 # WRONG:
@@ -339,11 +218,11 @@ flow_in = per(Ej.j).sum(Ej.flow)
 balance = model.require(flow_in == flow_out).where(Ei.i == Ej.j)
 ```
 
-For inventory balance (linking consecutive time steps), see Multi-period models in Common Problem Patterns.
+For inventory balance (linking consecutive time steps), see Temporal recurrence above.
 
 ### Concept-variable matching in constraints
 
-Decision variables must be referenced on the concept where they were defined. Mismatched concept names cause "undefined variable" compile errors.
+Decision variables must be referenced on the concept where they were defined. `BaseConcept.x_assigned` creates a new, empty `x_assigned` relationship on `BaseConcept` instead of reaching the solver variable, so a constraint whose only variable reference is on the wrong concept raises `ValueError: Expression does not reference any decision variables` at `satisfy()`.
 
 **Rule:** If a variable is defined as `ConceptA.x_quantity`, constraints must use `ConceptA.x_quantity` — not `ConceptB.x_quantity`, even if ConceptB is related.
 
@@ -385,10 +264,10 @@ Rules of the declaration:
 - **The keys must uniquely determine the constraint instance** (1:1). A key set that doesn't — a family wider than its key, or two conjuncts of a single `require(A, B)` sharing the same keys — forces two constraint expressions onto one identity and **raises at solve** (an `FDError`: the relationship violates functional dependency guarantees). Add the missing key, or split a multi-conjunct `require` into one `satisfy` per conjunct.
 - **A constraint grounded over several entities takes several keys** — `keyed_by={"worker": Worker, "shift": Shift}` — and exposes one back-pointer per key.
 - **A key need not be an entity.** A value reference such as an identifier — `keyed_by={"i": X.i}` — keys by that scalar (`con.i`), the natural form when the grounding domain is a bare index with no richer entity to join to. A bare primitive type (`Integer`) is rejected — it carries no per-instance value.
-- **Key names** must be valid identifiers and must not clash with the constraint's managed properties (`name`, `root`, `type`, `shadow_price`, `basis_status`, `in_conflict`, `id`).
+- **Key names** must be valid identifiers and must not clash with the constraint's managed properties, compared case-insensitively: `basis_status`, `display_string`, `id`, `in_conflict`, `name`, `root`, `shadow_price`, `type`. The raised `ValueError` lists the full set, so read that rather than this line if they diverge.
 - **Omit `keyed_by`** for constraints you never read back by key — they are still valid solver constraints.
 
-`name=` is a **display label only** — it keeps `problem.display()` rows readable (the `name=["cap", Entity.id]` form recommended under Constraint Join Patterns) and plays no part in identifying instances or naming the back-pointer.
+`name=` plays no part in identifying instances or naming the back-pointer, but it is not cosmetic: it keeps `problem.display()` rows readable (`name=["cap", Entity.id]`), and from `relationalai>=1.29` it is what `aggs.limit` caps a `display_string` read on: an unnamed constraint drops out of a capped read entirely while still appearing in the uncapped one. A `keyed_by` back-pointer stays available as a `where` filter on the same read.
 
 This is the formulation-time bridge for the post-solve readback patterns in `rai-prescriptive-results` (Sensitivity & conflict attributes, plus its sensitivity-analysis.md and conflict-analysis.md references).
 
@@ -410,16 +289,6 @@ problem.satisfy(model.require(x_qty_mode == ResourceGroup.inv_start * y_bin_mode
     Mode.qty_mode(ResourceGroup, t, x_qty_mode),
     Mode.bin_mode(ResourceGroup, t, y_bin_mode),
 ))
-```
-
-**Big-M guidelines:**
-- Use the tightest possible M value (data-driven, not arbitrary large numbers)
-- `M = capacity` or `M = max_demand` is preferred over `M = 999999`
-- Big-M too loose degrades LP relaxation quality and solver performance
-
-```python
-# GOOD: M = actual capacity            | BAD: arbitrary M
-x_weight <= fast_cap * y_bin_fast      # x_weight <= 999999 * y_bin_fast
 ```
 
 ---
@@ -483,8 +352,6 @@ This ensures balanced allocation across sub-groups rather than concentrating res
 
 ## Constraint Join Patterns
 
-Before writing any constraint, check the CONCEPT JOINABILITY section in the model context.
-
 **DIRECT joins** — concepts linked by a relationship:
 ```python
 # A.rel -> B (direct link): aggregate A's variable per B, compare to B's threshold
@@ -538,12 +405,11 @@ problem.satisfy(model.require(inflow_per_sku + UnmetDemand.x_slack >= demand_per
 
 # 3. Objective: minimize cost + penalty for unmet demand
 PENALTY = 1000.0
-problem.minimize(sum(Operation.x_flow * Operation.cost_per_unit) + PENALTY * sum(UnmetDemand.x_slack))
+problem.minimize((sum(Operation.x_flow * Operation.cost_per_unit) | 0.0)
+                 + PENALTY * (sum(UnmetDemand.x_slack) | 0.0))
 ```
 
 **Why this works:** Both sides aggregate `.per(UD.sku)` — the shared dimension. The slack variable ensures feasibility when supply < demand. The penalty in the objective drives the solver to satisfy demand when possible.
-
-See templates for complete working examples.
 
 ### Cross-Concept Join Rules
 
@@ -582,13 +448,7 @@ When using extended concepts (e.g., SiteProduction with `.site` and `.sku` relat
 - Instead, group by the underlying dimension concepts directly (Site, SKU)
 - If you need the cross-product entity, aggregate each side separately per the shared dimension
 
-**Rule 4: Always verify relationship names exist**
-Before using `Concept.some_relationship` in a constraint:
-- Check the RELATIONSHIPS section in context for available names
-- Do NOT invent relationship names — use only what the model provides
-- Common mistake: guessing names like `reviewer_githubpullrequest` when the actual name is `pull_request`
-
-**Rule 5: Valid RHS types in `.where()` equality**
+**Rule 4: Valid RHS types in `.where()` equality**
 The RHS of a `.where()` equality may be:
 - A **Concept type**: `.where(A.rel(ConceptName))` — groups by that concept
 - A **property reference**: `.where(A.prop(B.prop))` — matches on shared values; multi-hop chains (`B.rel.nested_prop`) are also valid when populated
@@ -596,7 +456,7 @@ The RHS of a `.where()` equality may be:
 
 Avoid: nested `.where()` calls.
 
-**Rule 6: `.per()` on extended concepts — group via the extended concept's relationship, not the base concept**
+**Rule 5: `.per()` on extended concepts — group via the extended concept's relationship, not the base concept**
 
 When grouping a sum on an extended (cross-product) concept by one of its base concepts, use `.per(AB.a)` (the relationship through the extended concept), not `.per(A)` (the bare base concept):
 
@@ -618,9 +478,9 @@ model.require(sum(AB.x_active).per(AB.a) == 1)
 
 The failure is silent — solver returns OPTIMAL with the wrong feasibility region. Verify with `problem.display()` that per-group constraints have the expected disaggregated sums.
 
-Per-group constraints also produce no row for entities whose bound property is unpopulated (a related but distinct mode — the `.per()` scope is correct, the *data* is sparse, so under PyRel relational semantics the body grounds only where the bound has tuples). Capture the constraint ref and check `len(model.select(constr_ref).to_df()) == len(model.select(Entity).to_df())` before solving; pass `name=["cap", Entity.id]` at `satisfy()` time so `problem.display(constr_ref)` rows are identifiable. For very-large constraints, sample with `problem.display(constr_ref, limit=10)` or filter directly: `problem.display(constr_ref, where=constr_ref.name == "cap_42")`. See `rai-prescriptive-problem/references/formulation-display.md` § Counts before display.
+Per-group constraints also produce no row for entities whose bound property is unpopulated (a related but distinct mode — the `.per()` scope is correct, the *data* is sparse, so under PyRel relational semantics the body grounds only where the bound has tuples). Check grounding counts before solving: [pre-solve-validation.md](pre-solve-validation.md) > Cardinality checks.
 
-**Rule 7: Access data properties on extended concepts via relationship traversal**
+**Rule 6: Access data properties on extended concepts via relationship traversal**
 Extended/cross-product concepts only have their own declared properties (relationships + decision variables). To access data properties from the base concept they reference, traverse the relationship.
 ```python
 # Setup: AB is an extended concept with relationship to B
@@ -639,7 +499,6 @@ sum(...).where(AB.category == ...)
 # CORRECT: traverse via the relationship
 sum(...).where(AB.b.category == ...)
 ```
-The extended concept's available properties are listed in its concept_definition; everything else lives on the base concept and must be accessed through a relationship.
 
 ### Constraint pattern examples (DO / DON'T)
 
@@ -665,124 +524,32 @@ Why:  Missing aggregation. Each individual decision bounded by the full resource
       allowing total usage to far exceed the limit.
 ```
 
-**Balance/conservation constraint (flow preservation):**
-Business description: "Everything that enters an intermediate location must also leave it."
-```
-GOOD (transshipment): sum(Edge.x_flow).where(Edge.dest == Node) == sum(Edge.x_flow).where(Edge.src == Node)
-Why:  Strict equality prevents "leakage" at intermediate nodes.
-
-GOOD (buffer/storage): inventory_t == inventory_{t-1} + inflow_t - outflow_t
-Why:  Nodes that hold inventory use inventory balance linking periods.
-
-BAD:  sum(Edge.x_flow).where(Edge.dest == Node) >= sum(Edge.x_flow).where(Edge.src == Node)
-Why:  Bare inequality without inventory tracking allows uncontrolled accumulation.
-```
-
-**Linking constraint (Big-M, connects binary to continuous):**
-Business description: "A facility can only process goods if it is open, and only up to its capacity."
-```
-GOOD: Entity.x_qty <= Entity.capacity * Entity.x_open
-      Entity.x_qty >= Entity.min_prod * Entity.x_open
-Why:  Both bounds needed. Upper: if not selected, forced to 0. Lower: if selected, must meet minimum.
-
-BAD:  Entity.x_qty <= 999999 * Entity.x_open
-Why:  Arbitrary Big-M weakens LP relaxation. Use actual data property for tight bound.
-```
-
-### Addressing user requirements
-
-If user requirements are provided, address the underlying intent while following optimization best practices. Implementing requests verbatim often produces over-constrained or infeasible formulations.
-
-**Principles:**
-1. **Prefer static parameters over dynamic calculations** -- Easier to adjust and understand
-2. **Use entity groups when available** -- Simpler than pairwise combinations
-3. **Distinguish requirements from goals** -- Requirements (non-negotiable) --> constraints; Goals (can trade off) --> objective
-4. **Constraints are for**: limits, capacities, budgets, rules, maximums
-5. **Performance targets/goals belong in objective**, not constraints
-
----
-
-## Constraint Verification
-
-### Pre-generation verification
-
-Before writing any constraint expression:
-1. List the concepts and properties you will reference
-2. Verify each one appears in AVAILABLE CONCEPTS AND PROPERTIES or DEFINED DECISION VARIABLES
-3. Verify join paths: if using `.where(A.x == B)`, confirm A has a relationship to B in the model
-4. If a needed property doesn't exist in the schema, skip that constraint (do not invent property names)
-5. **Check variable bounds before suggesting constraints.** If a variable already has `lower_bound` or `upper_bound` defined, the bound is already enforced — only suggest constraints that add new business logic beyond existing bounds.
-6. **Only reference properties that exist in the model.** If a constraint needs a property that isn't available, skip the constraint and report it as a model_gap so enrichment can add it.
-7. **Check property types before using in expressions.** Look up each property in ATTRIBUTE TYPES BY CONCEPT. Only use numeric properties (`Float`, `Integer`, rai_type `:float`/`:int`) in arithmetic (`+`, `-`, `*`, `/`) and numeric comparisons (`>=`, `<=`, `>`, `<`). String properties (rai_type `:str`) — including names like `criticality`, `priority`, `risk_level` that may sound numeric but contain text values like 'High', 'Critical' — must be used only in equality filters (`.where(Concept.prop == "value")`). If a numeric version of a string property is needed, report as a model_gap requiring enrichment (string-to-numeric mapping).
-
-### Self-check: constraints
-
-- Every constraint references at least one registered solver variable
-- Aggregation scope (`.per()`) matches constraint scope
-- No contradictions between constraints (e.g., `x >= 100` and `x <= 50`)
-- Join paths in `.where()` clauses match actual model relationships
-- Slack variables have equality linking constraints, not just bounds
-
 ---
 
 ## Constraint Selection Guidance
 
-For constraints: select constraints that enforce real business rules without being overly restrictive.
-
-### Completeness checklist
-1. Every decision variable appears in at least one constraint
-2. If multiple decision concepts exist, every pair sharing a dimension MUST have a linking or balance constraint connecting them (not just one link total — one per shared-dimension pair)
-3. Aggregation constraints link detail-level variables to summary-level variables (e.g., sum of assignment-level hours == technician-period total hours)
-4. Continuous variables have effective upper bounds (via "capacity" constraints or variable bounds)
-5. If the problem has a MINIMIZE objective, at least one "forcing" type constraint exists
-6. Binary/indicator variables must have forcing constraints that drive related continuous variables to zero when inactive (big-M or equivalent)
-7. The objective must reference variables from all relevant decision concepts — directly or indirectly via linking constraints
-
 ### Constraint interaction check (avoid conflicts)
 Before finalizing selection, verify the selected constraints work together:
-
-1. **No direct conflicts**: Check for same variables with incompatible bounds
-   - Example conflict: "capacity >= 100" AND "capacity <= 50" (impossible)
-   - Example conflict: Two equality constraints on same expression with different RHS
-
-2. **No implicit conflicts**: Check if total requirements exceed total capacity
-   - Example: sum(demand) > sum(supply) makes demand satisfaction infeasible
-   - Example: minimum utilization per-operation conflicts with limited total demand
-
-3. **Balance/flow constraints need exceptions for sources and sinks**:
-   - "inflow == outflow" at EVERY node blocks all flow (no sources or sinks)
-   - Must exclude source nodes from inflow requirement
-   - Must exclude sink nodes from outflow requirement
-
-4. **Minimum requirements must not conflict with capacity limits**:
-   - "each operation ships >= 1" with "total shipped <= demand" can conflict
-   - If #operations > total demand, minimum requirements are infeasible
 
 5. **Refinement replaces simpler version**:
    When two constraints address the same business logic but one includes a data-driven factor (loss_rate, yield, efficiency):
    - KEEP the refined version (with the transformation factor)
    - DROP the simpler version (it's a special case where the factor = 1)
-   - Example: "sum(flow * (1 - loss_rate)) >= demand" replaces "sum(flow) >= demand"
-
-If conflicts detected: EXCLUDE one conflicting constraint OR note needed modification in rationale.
+   - Example: "sum(Flow.x * (1 - Flow.loss_rate)) >= demand" replaces "sum(Flow.x) >= demand"
 
 ### Slack variable and soft constraint patterns
 
 6. **Slack variable triads**: For each variable in a minimize objective, trace its constraint linkage:
    - If a variable appears in the objective AND in at least one constraint (== or >=), it is properly linked.
-   - If a variable appears in the objective but in NO constraint, flag CRITICAL: solver will set it to lower bound (trivial zero).
+   - If a variable appears in the objective but in NO constraint, the solver sets it to its lower bound (trivial zero).
    - Under minimization, `slack >= rhs` is equivalent to `slack == rhs` at optimality (solver drives slack to minimum), so `>=` is valid here — no need to require syntactic `==`.
 
 7. **Coverage + slack + penalty patterns**: A common valid pattern is:
-   - `sum(x_assigned) + x_unmet >= 1` (coverage with slack)
+   - `sum(Assignment.x_assigned) + x_unmet >= 1` (coverage with slack)
    - `minimize(... + M * x_unmet)` (penalty drives slack to zero when possible)
    This is correct — the slack absorbs infeasibility. When slack is present on the LHS, `>= 1` is a coverage-with-fallback pattern, not a hard per-entity minimum.
 
-8. **Hard per-entity minimums**: `sum(x).per(entity) >= N` WITHOUT a slack variable on the LHS imposes a hard minimum of N per entity. If N * (number of entities) exceeds total capacity, the problem is INFEASIBLE. Flag as WARNING with the arithmetic.
-
-### Forcing constraint adequacy
-
-9. **Trivial zero risk**: Under minimization, if ALL terms have non-negative coefficients and NO constraint forces positive activity, the solver can set everything to zero. Check that at least one constraint or bound forces meaningful activity (e.g., demand satisfaction, coverage requirements, or lower bounds > 0).
+8. **Hard per-entity minimums**: `sum(Decision.x).per(entity) >= N` WITHOUT a slack variable on the LHS imposes a hard minimum of N per entity. If N * (number of entities) exceeds total capacity, the problem is INFEASIBLE. Flag as WARNING with the arithmetic.
 
 ---
 
@@ -790,53 +557,17 @@ If conflicts detected: EXCLUDE one conflicting constraint OR note needed modific
 
 **Embed parameter values DIRECTLY in constraint expressions, not as separate inputs.**
 
-Instead of: `sum(allocations) <= total_budget` with user_input_needed
-Use: `sum(allocations) <= 2000000` (with the actual value in the expression AND in parameters for editing)
+Instead of: `sum(Allocation.x) <= total_budget` with user_input_needed
+Use: `sum(Allocation.x) <= 2000000` (with the actual value in the expression AND in parameters for editing)
 
 ### Value extraction priority
 
 **Step 1: Use existing model properties via relationship traversals (always check first)**
 
-Before hardcoding ANY numeric value, check whether the data already exists in the model on a related concept reachable via NAVIGATION PATHS.
+Before hardcoding ANY numeric value, check whether the data already exists in the model on a related concept reachable by relationship traversal.
 
 - If a property exists on a related concept and is reachable via a relationship traversal, use the traversal in the expression. Hardcoding a default value means the constraint won't reflect actual data and will silently produce wrong results.
-- If the property exists in the model but is NOT reachable from the constraint's scope concept (no navigation path), suggest using `enrich_ontology` to denormalize it — and use a parameter as a temporary fallback.
 - Only use hardcoded parameters when no matching data property exists anywhere in the model.
-
-**model_gaps rule**: A property reachable via relationship traversal is NOT a model gap. Only report `model_gaps` for properties that truly do not exist anywhere in the model. If a property exists on a related concept but needs denormalization for performance or clarity, note it as an optimization suggestion, not a gap.
 
 **Step 2: Check user input**
 1. Check user requirements for specific values they mentioned — these override data-derived defaults
-2. If user says "budget is $2M" -- use 2000000 as the default in both expression AND parameters
-3. If user says "at least 80% coverage" -- use 0.8 as the threshold
-4. If user says "maximum 5 items" -- use 5 as the limit
-
-**Step 3: Derive from DATA STATISTICS (when available in context)**
-For materialized models, data statistics (min, max, mean, total) are included in the DATA SUMMARY section. Use them to set sensible defaults:
-
-| Constraint Type | How to Derive Default |
-|----------------|----------------------|
-| Budget/capacity limit | Use `total` from relevant attribute (e.g., total demand, total capacity) |
-| Minimum requirement | Use `total` from requirement attribute (e.g., total Demand.quantity) |
-| Coverage percentage | Default to 0.8-1.0 (80-100% coverage) of the total |
-| Per-entity minimum | Use `mean` or `min` from the attribute |
-| Per-entity maximum | Use `max` from the attribute or entity's capacity property |
-| Return/profit target | Use `mean` from returns/profit attribute as baseline |
-
-**Step 4: Last resort -- use conservative generic defaults**
-Only if no user input AND no relevant data statistics:
-- Minimum thresholds: use small positive value (0.01, 1, etc.)
-- Maximum limits: leave unbounded or use large value
-- Coverage: default to 100% (full requirement satisfaction)
-
-The `parameters` array lets users edit values BEFORE adding the constraint.
-
----
-
-## Constraints in Bi-Objective Formulations
-
-When two objectives exist, evaluate forcing constraints against BOTH:
-
-- **Forcing for primary:** Ensures primary objective is non-trivial (e.g., demand satisfaction forces cost > 0 when minimizing cost).
-- **Forcing for secondary:** Ensures secondary has a meaningful range (e.g., minimum activity constraint ensures coverage > 0 even when primary pushes toward zero activity).
-- **Cross-objective interaction:** A constraint that's non-binding for the primary may become binding as the secondary is pushed toward its extreme via the epsilon parameter. The epsilon constraint itself is generated by the loop — it's a regular `problem.satisfy(model.require(...))` call, same syntax as any other constraint.

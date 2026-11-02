@@ -11,17 +11,17 @@
 #
 # TRANSFORMATION FROM SINGLE-OBJECTIVE:
 #   Original: benefit is a fixed constraint (>= threshold), quadratic cost is minimized once
-#     problem.satisfy(model.require(sum(values * x).per(Scenario) >= Scenario.min_benefit))
+#     problem.satisfy(model.require(sum(Item, values * x).per(Scenario) >= Scenario.min_benefit))
 #     problem.minimize(quadratic_cost)
 #   Bi-objective: benefit target becomes the loop parameter, swept across feasible range
 #     for eps in epsilon_values:
-#         problem.satisfy(model.require(sum(values * x).per(Scenario) >= eps * Scenario.capacity))
+#         problem.satisfy(model.require(sum(Item, values * x).per(Scenario) >= eps * Scenario.capacity))
 #         problem.minimize(quadratic_cost)
 #   This exposes the full cost-benefit frontier instead of a single operating point.
 #
 # UNBUNDLE-THE-PENALTY pattern (alternative entry point, shown for reference):
-#   Original: problem.minimize(cost + PENALTY * sum(slack))
-#   Bi-objective: problem.minimize(cost) with problem.satisfy(model.require(sum(slack) <= eps))
+#   Original: problem.minimize(cost + PENALTY * (sum(Slack.x_slack) | 0.0))
+#   Bi-objective: problem.minimize(cost) with problem.satisfy(model.require(sum(Slack.x_slack) <= eps))
 #   Same loop structure -- the epsilon constraint replaces the penalty term.
 
 from relationalai.semantics import Float, Integer, Model, String, sum
@@ -101,13 +101,13 @@ alloc_var1 = problem1.solve_for(
 )
 problem1.satisfy(model.where(Item.x_allocation(Scenario, x_alloc)).require(x_alloc >= 0))
 problem1.satisfy(
-    model.where(Item.x_allocation(Scenario, x_alloc)).require(sum(x_alloc).per(Scenario) <= Scenario.capacity)
+    model.where(Item.x_allocation(Scenario, x_alloc)).require(sum(Item, x_alloc).per(Scenario) <= Scenario.capacity)
 )
 problem1.satisfy(
-    model.where(Item.x_allocation(Scenario, x_alloc)).require(sum(x_alloc).per(Scenario) >= Scenario.capacity)
+    model.where(Item.x_allocation(Scenario, x_alloc)).require(sum(Item, x_alloc).per(Scenario) >= Scenario.capacity)
 )
 problem1.minimize(
-    sum(interaction_val * x_alloc * x_alloc_paired).where(
+    sum(Item, PairedItem, Scenario, interaction_val * x_alloc * x_alloc_paired).where(
         Item.interaction(PairedItem, interaction_val),
         Item.x_allocation(Scenario, x_alloc),
         PairedItem.x_allocation(Scenario, x_alloc_paired),
@@ -144,12 +144,12 @@ alloc_var2 = problem2.solve_for(
 )
 problem2.satisfy(model.where(Item.x_allocation(Scenario, x_alloc)).require(x_alloc >= 0))
 problem2.satisfy(
-    model.where(Item.x_allocation(Scenario, x_alloc)).require(sum(x_alloc).per(Scenario) <= Scenario.capacity)
+    model.where(Item.x_allocation(Scenario, x_alloc)).require(sum(Item, x_alloc).per(Scenario) <= Scenario.capacity)
 )
 problem2.satisfy(
-    model.where(Item.x_allocation(Scenario, x_alloc)).require(sum(x_alloc).per(Scenario) >= Scenario.capacity)
+    model.where(Item.x_allocation(Scenario, x_alloc)).require(sum(Item, x_alloc).per(Scenario) >= Scenario.capacity)
 )
-problem2.maximize(sum(Item.value * x_alloc).where(Item.x_allocation(Scenario, x_alloc)))
+problem2.maximize(sum(Scenario, Item.value * x_alloc).where(Item.x_allocation(Scenario, x_alloc)))
 problem2.solve("ipopt", time_limit_sec=60)
 si2 = problem2.solve_info()
 assert si2.termination_status in ("OPTIMAL", "LOCALLY_SOLVED"), f"Anchor 2 failed: {si2.termination_status}"
@@ -194,10 +194,10 @@ for rate in epsilon_rates:
     )
     problem.satisfy(model.where(Item.x_allocation(Scenario, x_alloc)).require(x_alloc >= 0))
     problem.satisfy(
-        model.where(Item.x_allocation(Scenario, x_alloc)).require(sum(x_alloc).per(Scenario) <= Scenario.capacity)
+        model.where(Item.x_allocation(Scenario, x_alloc)).require(sum(Item, x_alloc).per(Scenario) <= Scenario.capacity)
     )
     problem.satisfy(
-        model.where(Item.x_allocation(Scenario, x_alloc)).require(sum(x_alloc).per(Scenario) >= Scenario.capacity)
+        model.where(Item.x_allocation(Scenario, x_alloc)).require(sum(Item, x_alloc).per(Scenario) >= Scenario.capacity)
     )
 
     # EPSILON CONSTRAINT: benefit rate >= target (scaled by capacity per scenario)
@@ -209,7 +209,7 @@ for rate in epsilon_rates:
 
     # Primary objective: minimize quadratic cost
     problem.minimize(
-        sum(interaction_val * x_alloc * x_alloc_paired).where(
+        sum(Item, PairedItem, Scenario, interaction_val * x_alloc * x_alloc_paired).where(
             Item.interaction(PairedItem, interaction_val),
             Item.x_allocation(Scenario, x_alloc),
             PairedItem.x_allocation(Scenario, x_alloc_paired),

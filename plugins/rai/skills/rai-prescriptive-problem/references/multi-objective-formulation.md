@@ -3,13 +3,10 @@
 <!-- TOC -->
 - [The Unifying Principle](#the-unifying-principle)
 - [Approach Selection](#approach-selection)
-- [Decision Tree](#decision-tree)
 - [Recognizing Competing Objectives (Tension Heuristics)](#recognizing-competing-objectives-tension-heuristics)
 - [Scalarization Menu](#scalarization-menu)
   - [Epsilon Constraint (primary worked path)](#epsilon-constraint-primary-worked-path)
   - [Weighted Sum + Dichotomy (skeleton)](#weighted-sum--dichotomy-skeleton)
-  - [Augmented Forms (named, for >2 objectives / non-convex)](#augmented-forms-named-for-2-objectives--non-convex)
-- [The Class, Mapped to MOA.jl](#the-class-mapped-to-moajl)
 - [Two Entry Points (Before/After Code)](#two-entry-points-beforeafter-code)
   - [Entry 1: Constraint to Epsilon Sweep](#entry-1-constraint-to-epsilon-sweep)
   - [Entry 2: Bundled Penalty to Unbundle](#entry-2-bundled-penalty-to-unbundle)
@@ -53,8 +50,7 @@ are two interchangeable *views* of that same hyperplane:
 weights are `(1, λ)` *by construction*, so the non-trivial fact is geometric: those weights are the
 **supporting hyperplane** at the point — equivalently, the ε-point is the optimum of `min(f₁ − λ·f₂)`
 over the frontier. That supporting-hyperplane property is a **supported-point / convex-frontier**
-property — it can fail at unsupported points on integer or non-convex frontiers. (Checked directly in
-the worked example by confirming no other sampled point undercuts the weighted-sum objective.)
+property — it can fail at unsupported points on integer or non-convex frontiers.
 
 **Sign is formulation-specific.** `λ = shadow_price = ∂f₁/∂ε`, so its sign is set by objective
 sense **and** constraint direction (`min`+`≥` and `max`+`≤` give `λ ≥ 0`; `min`+`≤` and `max`+`≥`
@@ -79,41 +75,14 @@ Match the problem structure to the right method:
 | Secondary objective has a known acceptable bound | Primary + threshold (existing) | No need to explore — bound is fixed |
 | User provides explicit weights for combining objectives | Weighted sum (existing) | Single-objective with weighted combination; weights = the hyperplane you've chosen |
 | More than two objectives | Weighted sum / sandwiching (supported set) | A uniform ε-grid blows up combinatorially past 2 objectives; see [Applicability Guard](#applicability-guard) |
-
-## Decision Tree
-
-1. **How many objectives?** 2 → ε-constraint or dichotomy. >2 → weighted-sum / sandwiching for the
-   **supported set on convex problems** (uniform ε-grid blows up combinatorially); for the
-   *complete* efficient set or non-convex / discrete frontiers these miss unsupported points → use
-   augmented ε-constraint / Tchebychev or objective-space bound-set methods.
-2. **Continuous or integer?** **Convex** LP/QP → duals available, full dual-guided class. MIP →
-   duals empty (warning), use objective-space decomposition or fix-and-relax for a *local* dual.
-3. **Whole frontier, or one tradeoff rate?** One operating point's local rate → a single solve with
-   `sensitivity=True`, read the threshold's shadow price (no sweep at all). Whole curve →
-   dual-guided sweep.
-4. **Exact or approximate?** Bi-objective LP → dichotomy is exact (finite). Smooth convex QP with a
-   tolerance → sandwiching.
-5. **Fixed weights / recurring operational use?** → weighted sum, single objective (existing
-   guidance) — set the weights once, run daily.
+| Only the local tradeoff rate at one operating point | Single solve with `sensitivity=True` | Read the threshold constraint's shadow price; no sweep needed |
 
 ## Recognizing Competing Objectives (Tension Heuristics)
-
-Not domain-specific. General patterns where objectives compete:
-
-- Cost vs performance/quality/coverage -- improving one worsens the other given same constraints
-- Risk vs return -- classic competing pair
-- Speed/throughput vs fairness/balance
-- Quantity vs quality
 
 **Test**: if improving objective A naturally worsens B under the same constraints, they are in tension.
 If both can improve simultaneously, they are not competing -- combine into a single objective.
 
 ## Scalarization Menu
-
-Epsilon-constraint and weighted-sum are **peers** — two scalarizations of the same vector problem,
-each exposing a different face of the supporting hyperplane (see [The Unifying
-Principle](#the-unifying-principle)). Keep ε-constraint as the primary worked path: it is the member
-that actually exercises `sensitivity=True`.
 
 ### Epsilon Constraint (primary worked path)
 
@@ -134,50 +103,13 @@ hyperplane is the input.
 problem.minimize(w1 * f1_expr + w2 * f2_expr)   # f2_expr already in min-sense (negate a max objective)
 ```
 
-**Dichotomy / NISE** (Aneja–Nair 1979) picks the *next* weight from two found points: the new weight
-is the normal to the line through them — pure objective-space geometry, no dual needed. Two adjacent
-supported points `a`, `b` (in `(f1, f2)` space) give the next search direction
-`w = (f2_a − f2_b, f1_b − f1_a)`; solve `min(w·f)`; a point off the chord is a new supported vertex,
-otherwise the segment is exact.
+**Dichotomy / NISE:** from two adjacent supported points `a`, `b` in `(f1, f2)` space, the next
+weight is `w = (f2_a − f2_b, f1_b − f1_a)`; solve `min(w·f)`; a point off the chord is a new
+supported vertex, otherwise the segment is exact.
 
-> **Convex-hull-only limitation (the key weighted-sum caveat).** Weighted sum reaches only
-> **supported** (convex-hull-efficient) points. On integer or non-convex frontiers it *skips
-> unsupported* nondominated points entirely. For the **full** efficient set use ε-constraint or
-> augmented Tchebychev — not weighted sum.
-
-### Augmented Forms (named, for >2 objectives / non-convex)
-
-- **Augmented ε-constraint** — ε-constraint with a small Tchebychev/slack term; recovers weakly
-  efficient and unsupported points the plain forms miss. Still works past 2 objectives but a uniform
-  grid rarely pays off there.
-- **Augmented Tchebychev** (weighted-Tchebychev + augmentation) — reaches the complete efficient set
-  including unsupported points; the standard choice when weighted sum's convex-hull limitation bites.
-
-## The Class, Mapped to MOA.jl
-
-[MultiObjectiveAlgorithms.jl](https://github.com/jump-dev/MultiObjectiveAlgorithms.jl) (MOA, the
-JuMP package) is the canonical menu of this class. The continuous, dual-driven subset is runnable
-today over PyRel + `sensitivity=True`; the rest is named so the landscape and its limits are clear.
-
-**"Hyperplane from"** = where the local tradeoff geometry comes from — a *solver-returned* dual
-(shadow price; the `sensitivity=True` feature) vs the *weight vector you set* (objective-space,
-needs only objective values). Don't read "weights you set" as a solver dual.
-
-| MOA algorithm | Scalarization | Hyperplane from | Obj. | Class | Enable now? |
-|---|---|---|---|---|---|
-| **EpsilonConstraint** | ε-constraint | ε-bound; for LP/QP its **solver shadow price = slope** (the dual-guided read the skill adds — stock MOA just enumerates the bound) | 2 | convex LP/QP (+MIP, no duals) | **Yes** — dual-guided (adaptive) on LP/QP |
-| **Dichotomy / NISE** (Aneja–Nair 1979) | weighted-sum | weights you set (obj-space geometry) | 2 | convex LP/QP | **Yes** — supporting-hyperplane sampling |
-| **Sandwiching** (Koenen 2023) | weighted-sum | weights you set (facet normals) | any | any (needs polyhedra) | **Yes (prose + skeleton)** — the ≥2-obj generalization |
-| Chalmet (1986) | augmented w-sum | weights you set | 2 | integer | name only (MIP) |
-| KirlikSayin / DominguezRios / TambyVanderpooten | objective-space boxes / **bound sets** | bound sets, *not* LP duals | many | discrete only | name only (no LP duals on MIP) |
-| Lexicographic / Hierarchical | priority order | — | any | any | already adjacent (priority objectives) |
-| RandomWeighting | weighted-sum | random weights | any | any | baseline / foil only |
-
-The duality-information core you enable (continuous convex LP/QP) is **one idea in three dresses**:
-ε-constraint (reads the **solver** shadow price = slope), weighted-sum / dichotomy (the **weights
-you set** = the hyperplane), and sandwiching (inner/outer **hyperplane** bounds, generalizes to many
-objectives). Get the supporting hyperplane, use it to target + bound. Everything else is either MIP
-(duals empty → bound-set / objective-space decomposition) or non-adaptive (no hyperplane guidance).
+Weighted sum reaches only **supported** (convex-hull) points; on integer or non-convex frontiers it
+skips unsupported nondominated points, so for the full efficient set use ε-constraint or augmented
+Tchebychev.
 
 ## Two Entry Points (Before/After Code)
 
@@ -206,7 +138,7 @@ When two concerns are combined via penalty weight in a single objective.
 ```python
 # BEFORE (single-objective): cost + penalty bundled
 PENALTY = 10000
-problem.minimize(sum(Route.cost * Route.x_flow) + PENALTY * sum(Demand.x_unmet))
+problem.minimize((sum(Route.cost * Route.x_flow) | 0.0) + PENALTY * (sum(Demand.x_unmet) | 0.0))
 
 # AFTER (bi-objective): split into primary objective + epsilon constraint
 for eps in epsilon_values:
@@ -285,9 +217,8 @@ and the `keyed_by` join, see `rai-prescriptive-results` >
 | maximize | maximize | secondary >= eps |
 | maximize | minimize | secondary <= eps |
 
-The shadow-price **sign** follows from the objective sense × the constraint direction in this table:
-`min`+`≥` and `max`+`≤` give `λ ≥ 0`; `min`+`≤` and `max`+`≥` give `λ ≤ 0`. Never assume `λ ≥ 0`
-(full rules in [The Unifying Principle](#the-unifying-principle)).
+The shadow-price **sign** follows from the objective sense × the constraint direction in this table;
+never assume `λ ≥ 0` (rules in [The Unifying Principle](#the-unifying-principle)).
 
 ### Sampling Policies (blind / pointwise / global)
 
@@ -309,13 +240,9 @@ dichotomic" progression. Each step places solves more deliberately than the last
 3. **Global** (dichotomic / sandwiching) — keep an **inner** approximation (chords through found
    points) and an **outer** one (supporting hyperplanes — the ε-bound shadow prices, or equivalently
    the weights you set); sample where the inner–outer gap is largest; stop when the gap is within
-   tolerance. **Exact (finite)** for a bi-objective LP — one solve per supported vertex. (Driven by
-   the ε-bound shadow price, this is the dual-guided **ε-space analogue** of weighted-sum
-   Dichotomy/NISE above — same supported set on a convex frontier, but it splits by choosing the next
-   **ε** from the duals rather than the next **weight**; it is not the Aneja–Nair weighted-sum original.) For a smooth
+   tolerance. **Exact (finite)** for a bi-objective LP — one solve per supported vertex. For a smooth
    convex frontier it places markedly fewer, better-positioned solves than a blind grid at equal
-   tolerance (think "fewer, better-placed solves," not an asymptotic class win — the approximation
-   error of a sandwich under bounded curvature scales ~`O(δ^−1/2)`, not `O(log 1/δ)`).
+   tolerance.
 
 All three drive the **same** `solve_at(eps)` kernel; only the choice of the next ε differs. Worked
 side-by-side in [dual_guided_pareto_sweep.py](../examples/dual_guided_pareto_sweep.py).
@@ -352,13 +279,6 @@ point_df = model.select(
 secondary_value = builtins.sum(point_df["returns"] * point_df["quantity"])
 ```
 
-This replaces the old pattern of building `entity_data` dictionaries keyed by string variable
-names. Back-pointers on `ProblemVariable` give direct access to entity properties, eliminating
-fragile name-string parsing.
-
-**Pitfall**: `from relationalai.semantics import sum` shadows Python's built-in `sum`.
-Use `builtins.sum` for Python-side aggregation over DataFrames.
-
 ## Combining with Scenario Concept
 
 If the user also has parameter variations (different budgets, demand levels), Scenario Concept
@@ -369,7 +289,7 @@ for eps in epsilon_values:
     problem = Problem(model, Float)
     # Scenario Concept handles parameter variations -- one solve, all scenarios
     problem.solve_for(Entity.x_var(Scenario, x), ..., populate=False)
-    problem.satisfy(model.require(secondary >= eps).per(Scenario))
+    problem.satisfy(model.where(Entity.x_var(Scenario, x)).require(sum(Entity.coef * x).per(Scenario) >= eps))
     problem.minimize(primary_objective)  # aggregated across scenarios
     problem.solve(...)
     # all scenarios solved at this epsilon level
@@ -380,28 +300,9 @@ per-scenario ε-bound, declare `keyed_by={"scenario": Scenario}` to read one sha
 
 ## Storing Results
 
-**Phase 1 — Explore the frontier** using `populate=False` (results in Python DataFrames):
-
-```python
-pareto_points = []
-for eps in epsilon_values:
-    ...
-    # Example for f"{Stock} in {Scenario} has {Float:quantity}":
-    value_ref = Float.ref()
-    variables_df = model.select(
-        var.stock.name.alias("entity"),          # back-pointer to Stock
-        var.stock.returns.alias("coefficient"),   # secondary coefficient via back-pointer
-        var.scenario.name.alias("scenario"),
-        value_ref.alias("value"),
-    ).where(var.values(0, value_ref)).to_df()
-
-    pareto_points.append({
-        "eps": eps,
-        "primary": si.objective_value,
-        "secondary": builtins.sum(variables_df["coefficient"] * variables_df["value"]),
-        "variables": variables_df,
-    })
-```
+**Phase 1 — Explore the frontier** with `populate=False`, as in the [Loop Pattern](#loop-pattern):
+append each point's `eps`, primary (`si.objective_value`), secondary (computed as in [Evaluating the
+Secondary Objective](#evaluating-the-secondary-objective)) and variables frame to `pareto_points`.
 
 **Phase 2 — Populate the chosen operating point** back into the ontology with `populate=True`:
 
@@ -421,8 +322,6 @@ problem_final.solve(solver, time_limit_sec=60)
 model.select(Entity.id, Entity.x_var).where(Entity.x_var > 0.001).inspect()
 ```
 
-This two-phase approach uses the loop for frontier exploration (robust, handles infeasibility) and a final populate solve to bring the selected solution into the ontology for downstream queries and derived properties.
-
 ## Pitfalls
 
 | Pitfall | Cause | Fix |
@@ -435,14 +334,12 @@ This two-phase approach uses the loop for frontier exploration (robust, handles 
 | Negative weight in a both-min weighted sum | Confusing the mixed-sense `(1, −λ)` with the both-min form | Use non-negative `(1, λ)` on `(f₁, −f₂)`; `(1, −λ)` is the mixed-sense `(min f₁, max f₂)` reading |
 | Weighted sum misses Pareto points | Weighted sum reaches only supported (convex-hull) points | For the full efficient set use ε-constraint or augmented Tchebychev |
 | `builtins.sum` vs RAI `sum` | `from relationalai.semantics import sum` shadows built-in | Use `builtins.sum` for Python-side aggregation |
-| `Float.ref()` -- safe to reuse | Declared once, used across loop iterations | Works correctly; no need to recreate per iteration |
 | Scale mismatch between objectives | Very different magnitudes | Normalize epsilon range; consider rates (per unit) rather than absolutes |
 
 ## References
 
-- Epsilon loop pattern: same as Loop + `populate=False` in [scenario-analysis.md](scenario-analysis.md) Pattern 2
 - Dual-guided worked example: [dual_guided_pareto_sweep.py](../examples/dual_guided_pareto_sweep.py) — shared `solve_at(eps)` kernel, uniform grid vs adaptive vs dichotomic, in-place weighted-sum equivalence check (supporting hyperplane), QP
 - Baseline epsilon example: [epsilon_constraint_pareto.py](../examples/epsilon_constraint_pareto.py) -- epsilon loop + Scenario Concept, QP (uniform grid)
 - Reading duals off the returned objects (key-join idiom, sign rules): `rai-prescriptive-results` > [sensitivity-analysis.md](../../rai-prescriptive-results/references/sensitivity-analysis.md)
-- Results analysis: see `rai-prescriptive-results` > Pareto Frontier / Efficient Frontier Results
+- Results analysis: `rai-prescriptive-results` > [sensitivity-analysis.md](../../rai-prescriptive-results/references/sensitivity-analysis.md) > Pareto Frontier / Efficient Frontier Analysis
 - Runnable public precedent: the `portfolio_balancing` template (bi-objective Markowitz, dual-guided frontier)

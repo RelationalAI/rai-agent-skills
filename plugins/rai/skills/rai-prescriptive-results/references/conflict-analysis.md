@@ -1,14 +1,3 @@
-<!-- TOC -->
-- [Conflict (IIS) Analysis](#conflict-iis-analysis)
-  - [What an IIS is, and why it beats bisection](#what-an-iis-is-and-why-it-beats-bisection)
-  - [Requesting it: the asymmetry vs. sensitivity](#requesting-it-the-asymmetry-vs-sensitivity)
-  - [Reading membership](#reading-membership)
-  - [Joining the conflict to its entity by key](#joining-the-conflict-to-its-entity-by-key)
-  - [conflict_status vocabulary and how to act](#conflict_status-vocabulary-and-how-to-act)
-  - [The MAYBE_IN_CONFLICT collapse caveat](#the-maybe_in_conflict-collapse-caveat)
-  - [Equality constraints in an IIS](#equality-constraints-in-an-iis)
-<!-- /TOC -->
-
 ## Conflict (IIS) Analysis
 
 This reference covers reading an infeasibility **conflict** (an Irreducible Infeasible Subset, IIS) produced by `solve(conflict=True)`. For *changing* a formulation in response to a conflict, see `rai-prescriptive-problem`; for *exact marginals* on a feasible model, see [sensitivity-analysis.md](sensitivity-analysis.md).
@@ -17,7 +6,7 @@ This reference covers reading an infeasibility **conflict** (an Irreducible Infe
 
 An IIS is a **minimal** set of constraints and variable bounds that cannot all hold simultaneously — minimal in that removing any one member makes that subset satisfiable. It localizes *why* a model is infeasible without your having to guess.
 
-`solve(conflict=True)` returns the conflicting subset in a **single solve**. The fallback — when the solver can't produce an IIS (see `NOT_SUPPORTED` below) — is **bisection**: rebuild the Problem omitting one `satisfy(...)` call — or relaxing one variable bound (`lower=` / `upper=` on `solve_for`) — at a time and re-solve, narrowing down the offender across N solves. Bisect over bounds too, not just constraints: as the IIS definition above says, variable bounds alone can be the entire source of infeasibility.
+`solve(conflict=True)` returns the conflicting subset in a **single solve**. When the solver can't produce an IIS (`NOT_SUPPORTED` below), fall back to **bisection**: rebuild the Problem omitting one `satisfy(...)` call, or relaxing one variable bound (`lower=` / `upper=` on `solve_for`), at a time and re-solve. Bisect over bounds too: variable bounds alone can be the entire source of infeasibility.
 
 ### Requesting it: the asymmetry vs. sensitivity
 
@@ -35,7 +24,7 @@ Request it on the solve whose result you intend to interpret — it's a solve *o
 problem.solve("highs", conflict=True)
 ```
 
-It is also a *commitment*: a `Problem` already solved **without** diagnostics cannot re-solve **with** them — one result schema per `Problem`, enforced with a `ValueError` before the job is submitted. So an INFEASIBLE plain solve can't be followed by `conflict=True` on the same instance: request `conflict=True` up front when infeasibility is plausible, or re-run the formulation to build a fresh `Problem` for the diagnosis. Once a diagnostic family is loaded, every later re-solve of that `Problem` must keep requesting it — a re-solve may *add* a family (`sensitivity=True` → `sensitivity=True, conflict=True`), never drop one.
+After an INFEASIBLE plain solve, re-solve the same `Problem` with `conflict=True` (relationalai>=1.26); requesting it up front saves that solve. A later re-solve without the flag empties the conflict results unless it raises.
 
 ### Reading membership
 

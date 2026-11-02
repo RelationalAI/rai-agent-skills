@@ -92,6 +92,15 @@ model.define(Order.shipping_without_order()).where(
 # Alert if any entities match -- this violates the subset constraint
 ```
 
+> **Negate a different fact from the one you are defining.** `shipping_without_order` above negates `order_date`, which is fine. Defining a fact through its own negation is recursive negation — the SQL reasoner rejects it, and every concept in the model becomes unqueryable, not only this one. The error appears at query time, not when the rule is defined, so the model still imports cleanly. (The logic reasoner does accept recursive negation, and the error suggests rerouting to it — but for a closed-world default the fix below is simpler and keeps the default reasoner.)
+>
+> ```python
+> # WRONG: has_record is defined from its own absence
+> model.where(Account, model.not_(Account.has_record)).define(Account.has_record(False))
+> ```
+>
+> For a closed-world default, apply it where the value is read with the `|` fallback — `Account.has_record | False` — or omit it and let absence mean false. Neither defines the fact in terms of itself.
+
 **Common patterns:**
 - Shipping date subset of order date (can't ship without ordering)
 - End date subset of start date (can't end without starting)

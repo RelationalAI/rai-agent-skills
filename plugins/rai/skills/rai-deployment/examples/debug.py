@@ -7,8 +7,8 @@ unexpected answers. It connects to the existing deployment and:
 1. Describes the agent via the Snowflake API to show the registered tool
    resources and the agent spec the orchestrator actually sees.
 2. Invokes each RAI tool sproc directly so any runtime error (missing grants,
-   bad imports, invalid model code, payload truncation, preview-flag
-   mismatch) surfaces in plain SQL output instead of being buried inside a
+   bad imports, an unusable model deployment, payload truncation,
+   preview-flag mismatch) surfaces in plain SQL output instead of being buried inside a
    tool-call trace.
 3. Sends one chat turn and dumps tool calls, tool results, and the
    orchestrator's thinking so you can see exactly where a failed turn went
@@ -29,15 +29,15 @@ from rich.syntax import Syntax
 from rich.table import Table
 from snowflake import snowpark
 
-from relationalai.agent.cortex import CortexAgentManager, DeploymentConfig
+from relationalai.agent.cortex import AgentConfig, CortexAgentManager, ModelDeployment
 from relationalai.config import SnowflakeConnection, create_config
 
 # ---------------------------------------------------------------------------
 # Configuration — keep in sync with deploy.py
 # ---------------------------------------------------------------------------
 AGENT_NAME = "EXAMPLE_AGENT"
-DATABASE = "EXAMPLE"
-SCHEMA = "CORTEX_DEMO"
+TOOLS_SCHEMA = "EXAMPLE.CUSTOMERS_AGENT"
+MODEL_SCHEMA = "EXAMPLE.CUSTOMERS"
 AGENT_SCHEMA = None  # e.g. "SNOWFLAKE_INTELLIGENCE.AGENTS"
 WAREHOUSE = "TEAM_ECO"
 
@@ -47,14 +47,13 @@ QUESTION = "What can I ask about?"
 console = Console()
 
 
-def _build_manager() -> CortexAgentManager:
-    session: snowpark.Session = create_config().get_session(SnowflakeConnection)
+def _build_manager(session: snowpark.Session) -> CortexAgentManager:
     return CortexAgentManager(
         session=session,
-        config=DeploymentConfig(
+        config=AgentConfig(
             agent_name=AGENT_NAME,
-            database=DATABASE,
-            schema=SCHEMA,
+            tools_schema=TOOLS_SCHEMA,
+            model_deployment=ModelDeployment(schema=MODEL_SCHEMA),
             agent_schema=AGENT_SCHEMA,
             warehouse=WAREHOUSE,
             allow_preview=True,
@@ -103,18 +102,11 @@ def describe_agent(manager: CortexAgentManager) -> None:
     tools.add_column("name")
     tools.add_column("type")
     tools.add_column("resource / sproc")
+    resources = spec.tool_resources or {}
     for tool in spec.tools or []:
-        tool_dict = tool.to_dict() if hasattr(tool, "to_dict") else dict(tool)
-        spec_block = tool_dict.get("tool_spec") or tool_dict
-        name = spec_block.get("name", "?")
-        kind = spec_block.get("type", "?")
-        resource = ""
-        for resource_block in (spec.tool_resources or {}).values() if spec.tool_resources else []:
-            if isinstance(resource_block, dict) and resource_block.get("name") == name:
-                resource = resource_block.get("execution_environment", {}).get("query_timeout", "")
-                break
-        identifier = (spec.tool_resources or {}).get(name, {}).get("identifier") if spec.tool_resources else None
-        tools.add_row(name, kind, identifier or resource or "")
+        name = tool.tool_spec.name
+        resource = resources.get(name)
+        tools.add_row(name, tool.tool_spec.type, (resource.identifier if resource else None) or "")
     console.print(tools)
 
 
@@ -122,58 +114,47 @@ def invoke_sprocs(session: snowpark.Session) -> None:
     """Call each RAI tool sproc directly.
 
     A direct CALL surfaces grant errors, import errors, and model
-    construction failures in a single SQL error message — much faster than
+    deployment failures in a single SQL error message — much faster than
     waiting for the orchestrator to fail mid-turn. Run these in order:
-    DISCOVER first to learn ``model_id`` and catalog query ids, then drill
+    DISCOVER first to learn the concepts and catalog query ids, then drill
     in with VERBALIZE, EXPLAIN, and QUERY.
     """
     console.print(Rule("[bold]Invoking sprocs directly[/bold]"))
 
-    fq = f"{DATABASE}.{SCHEMA}"
-
-    # 1. RAI_DISCOVER_MODELS — no args. Returns model_id, concepts, catalog.
-    console.print(Rule("RAI_DISCOVER_MODELS", style="dim"))
+    # 1. RAI_DISCOVER_MODEL — no args. Returns concepts and the query catalog.
+    console.print(Rule("RAI_DISCOVER_MODEL", style="dim"))
     try:
-        rows = _run_sql(session, f"CALL {fq}.RAI_DISCOVER_MODELS()")
-        payload = json.loads(rows[0][0]) if rows else None
-        console.print(Pretty(payload, max_depth=4))
-        model_id = (payload or {}).get("content", [{}])[0].get("model_id", 1)
+        rows = _run_sql(session, f"CALL {TOOLS_SCHEMA}.RAI_DISCOVER_MODEL()")
+        console.print(Pretty(json.loads(rows[0][0]), max_depth=4))
     except Exception as exc:  # noqa: BLE001
         console.print(Panel.fit(f"DISCOVER failed: {exc}", style="red"))
-        return  # Nothing else will succeed without a model_id.
+        return  # Nothing else will succeed if DISCOVER fails.
 
-    # 2. RAI_VERBALIZE_MODEL(model_id) — emits the traversal graph.
+    # 2. RAI_VERBALIZE_MODEL — no args. Emits the traversal graph.
     console.print(Rule("RAI_VERBALIZE_MODEL", style="dim"))
     try:
-        rows = _run_sql(session, f"CALL {fq}.RAI_VERBALIZE_MODEL({model_id})")
+        rows = _run_sql(session, f"CALL {TOOLS_SCHEMA}.RAI_VERBALIZE_MODEL()")
         console.print(Pretty(json.loads(rows[0][0]), max_depth=3))
     except Exception as exc:  # noqa: BLE001
         console.print(Panel.fit(f"VERBALIZE failed: {exc}", style="red"))
 
-    # 3. RAI_EXPLAIN_CONCEPT(model_id, name). Pick a concept from DISCOVER
-    #    output and substitute it here. The reserved name "dynamic" returns
-    #    the dynamic-query reference for preview-mode deployments.
+    # 3. RAI_EXPLAIN_CONCEPT(name). Pick a concept from DISCOVER output.
+    #    The reserved name "dynamic" returns the dynamic-query reference.
     console.print(Rule("RAI_EXPLAIN_CONCEPT", style="dim"))
     concept_name = "Customer"  # <-- replace with a concept from DISCOVER
     try:
-        rows = _run_sql(
-            session,
-            f"CALL {fq}.RAI_EXPLAIN_CONCEPT({model_id}, '{concept_name}')",
-        )
+        rows = _run_sql(session, f"CALL {TOOLS_SCHEMA}.RAI_EXPLAIN_CONCEPT('{concept_name}')")
         console.print(Pretty(json.loads(rows[0][0]), max_depth=4))
     except Exception as exc:  # noqa: BLE001
         console.print(Panel.fit(f"EXPLAIN failed: {exc}", style="red"))
 
-    # 4. RAI_QUERY_MODEL(model_id, json_spec). Requires allow_preview=True.
+    # 4. RAI_QUERY_MODEL(json_spec). Requires allow_preview=True.
     #    The spec below uses a catalog id; for dynamic queries pass
     #    {"id": "dynamic", "args": {"spec": {...}}}.
     console.print(Rule("RAI_QUERY_MODEL", style="dim"))
     query_spec = json.dumps({"id": "segment_summary", "args": {}})
     try:
-        rows = _run_sql(
-            session,
-            f"CALL {fq}.RAI_QUERY_MODEL({model_id}, '{query_spec}')",
-        )
+        rows = _run_sql(session, f"CALL {TOOLS_SCHEMA}.RAI_QUERY_MODEL('{query_spec}')")
         console.print(Pretty(json.loads(rows[0][0]), max_depth=4))
     except Exception as exc:  # noqa: BLE001
         console.print(Panel.fit(f"QUERY failed: {exc}", style="red"))
@@ -223,11 +204,12 @@ def chat_trace(manager: CortexAgentManager, question: str) -> None:
 
 
 def main() -> int:
-    manager = _build_manager()
+    session: snowpark.Session = create_config().get_session(SnowflakeConnection)
+    manager = _build_manager(session)
     console.print(Panel.fit(Pretty(manager.status()), title="Status"))
 
     describe_agent(manager)
-    invoke_sprocs(manager._session)
+    invoke_sprocs(session)
     chat_trace(manager, QUESTION)
     return 0
 

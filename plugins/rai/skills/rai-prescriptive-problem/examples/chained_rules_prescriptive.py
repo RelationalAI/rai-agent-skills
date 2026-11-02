@@ -91,7 +91,7 @@ base_cost = sum(Supplier.unit_cost * Supplier.x_flow)
 s_risk = Supplier.ref()
 risk_cost = RISK_SURCHARGE * sum(s_risk.x_flow).where(s_risk.is_at_risk())
 
-problem.minimize(sum(model.union(base_cost, risk_cost)))
+problem.minimize((base_cost | 0.0) + (risk_cost | 0.0))
 
 # --- Solve ---
 problem.display()
