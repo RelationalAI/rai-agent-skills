@@ -31,6 +31,8 @@ description: Builds and evolves RAI ontologies — greenfield starter builds fro
 | Has own PK / identity? | **Concept** | `model.Concept("Name", identify_by={"id": Type})` |
 | Fact/event table, no PK at all? | **Concept keyed by row** | `model.Concept("Sale", identify_by={"row": src})` — never a compound of data columns |
 | Scalar value on entity? | **Property** | `model.Property(f"{Concept} has {Type:name}")` |
+| Categorical value (status, type, brand) shared across tables, grouped or filtered on, or with attributes of its own? | **Enumeration concept** keyed by the value | `model.Concept("Status", identify_by={"code": String})` — see [Categorical values](#categorical-values-enumeration-concept-or-string) |
+| Code column + description column for the same thing? | **Enumeration concept** keyed by the code | Description is a property of it — never map only the description |
 | Functional FK (each A → one B)? | **Property** | `model.Property(f"{Order} placed by {Customer:customer}")` |
 | Many-to-many link? | **Relationship** | `model.Relationship(f"{A} links to {B}")` |
 | Boolean flag? | **Unary Relationship** | `model.Relationship(f"{Concept} is active")` |
@@ -102,7 +104,7 @@ rai explore schema --database <DB> --schema <SCHEMA> --depth profile -o schema.j
 | `tables[].columns[].rai_type` | The RAI type to declare. Read it directly — never infer a type from the column name. `null` means the column's type is unmapped, not missing; fall back to the [type mapping table](#data-mapping-guidance). |
 | `tables[].pk_candidates` | Identity for Step 3. The first entry is almost always the real PK; later entries are unique *by coincidence* (`EMAIL`, `PHONE`). Single-column only — composite identity stays your call. |
 | `tables[].row_count` | Live `COUNT(*)` at `profile`+ — populated for views and zero-row tables too, so it is always a real expected value. |
-| `tables[].columns[].value_distribution` | Subtype and enum candidates (fires at `distinct_count <= 20`). **Alphabetical on the wire — sort by count descending yourself to rank values.** For a share-of-rows figure, divide by `row_count`. |
+| `tables[].columns[].value_distribution` | Enumeration-concept, subtype and enum candidates (fires at `distinct_count <= 20`). **Alphabetical on the wire — sort by count descending yourself to rank values.** For a share-of-rows figure, divide by `row_count`. |
 | `tables[].columns[].numeric_range` | `{min, max}` — the real data scale, for Step 5 thresholds. |
 | `fk_candidates[].multiplicity_class` | `1:1` / `N:1` / `M:N`. Drives Step 4's Property-vs-Relationship choice. |
 | `graph_topology` | Present at `--depth full` when a table carries 2+ FKs to the same target — a strong hint to model that table as a `Relationship`, not a concept. Non-zero `broken_edges` means the graph has gaps; surface them to the user. |
@@ -130,6 +132,8 @@ Work domain-first: brainstorm business entities broadly — both obvious entitie
 Define each concept's identity from its authoritative source's `pk_candidates`. Take the **first** entry — later entries are usually unique by coincidence, so do not promote `EMAIL` or `PHONE` to an identity column. Every concept needs an identity; where the source declares none, that identity is the source row, not a compound you assemble from its columns (see Identity hygiene below).
 
 **Check for subtypes:** If `value_distribution` shows TYPE/CATEGORY columns that partition a concept into fundamentally different kinds (e.g. `BUSINESS_TYPE` with values `Supplier` and `Customer`), model these as subtypes using `extends` — when each kind carries its own properties or relationships, not for every enum column. If you find yourself writing the same `.where()` filter repeatedly, promote it to a named subtype. See [categorization-and-advanced.md](references/categorization-and-advanced.md).
+
+**Check categorical columns:** for each text column with a `value_distribution` or a name ending `_CD` / `_CODE` / `_TYPE` / `_STATUS` / `_CATEGORY`, look for the same column in other tables and for a sibling description column in its own table. `fk_candidates` will not show a value shared by two tables when neither table is keyed by it, so compare `columns[]` across tables yourself, and confirm that the value sets overlap — a shared name alone is not evidence. Decide each column with [Categorical values](#categorical-values-enumeration-concept-or-string).
 
 **Validate:** each concept maps to at least one authoritative source, has a clear identity, and the set is orthogonal (see [Concept orthogonality](#concept-orthogonality)).
 
@@ -241,7 +245,24 @@ print(f"Tables: {[t.name for t in schema.tables]}")
 
 ### When to create a new concept vs. adding a property
 
-**Create a concept** when the thing has its own identity, its own properties, and participates in multiple relationships. **Add a property** when the value only makes sense in the context of its parent. **Decision rule:** if you would give it a primary key in a relational schema, it is a concept; if it would be a column on someone else's table, it is a property.
+**Create a concept** when the thing has its own identity, its own properties, and participates in multiple relationships. **Add a property** when the value only makes sense in the context of its parent. **Decision rule:** if you would give it a primary key in a relational schema — including a lookup table the source never built — it is a concept; if it only ever describes its parent, it is a property. A categorical column on someone else's table can be either: apply the next section.
+
+### Categorical values: enumeration concept or String
+
+Make a categorical value (status, type, category, brand) an **enumeration concept** — a concept identified by the value, or by its code — when any of these hold; otherwise keep it a `String` property. A categorical is a label from a small set that many rows share. Identifiers, columns that hold another table's key (Step 4), measures, dates and free text are not categoricals, even when `value_distribution` fires on them in a small table.
+
+| Signal | Choose | Why |
+|---|---|---|
+| The same value set appears in 2+ tables or sources, with or without a lookup table | Enumeration concept | One hub links every table that carries it; `String` copies can only be joined by matching text at query time |
+| The scoped questions group or filter by it | Enumeration concept | The concept holds every value, including values no fact row uses yet |
+| It has attributes of its own (a tier, a description, a sort order) | Enumeration concept | The attributes need an owner |
+| Display-only: read back, never grouped, filtered or joined | `String` | No concept earns its keep |
+| Free text, or too messy to normalise (many spellings of one value) | `String` | Flag it to the user; record the choice as an assumption in one-shot mode |
+| Two-valued flag (`Y`/`N`, `*_IND`) | Unary `Relationship` | A flag is a fact about its parent, not a category |
+
+**Code + description pair.** When a table carries a code column and a description column for the same thing (`STATUS_CD` + `STATUS_DESC`), a lookup table has been folded into it: model an enumeration concept identified by the code, with the description as a property. Never map only the description — two codes can share a description, and other tables reference the code. Worked example: `MachineType` in [examples/cross_product_decision_concept.py](examples/cross_product_decision_concept.py).
+
+Populate the concept from every table that carries the value, so values with no fact rows still exist. Prefer it to a `model.Enum`-typed property for values loaded from data: rows whose value is not a declared member drop silently out of member comparisons. Finding candidates in `schema.json`, populating the concept when no lookup table exists, and messy values: [categorization-and-advanced.md](references/categorization-and-advanced.md) § Enumeration concepts without a lookup table.
 
 ### Concept orthogonality
 
@@ -402,7 +423,8 @@ Enrollment.grade = model.Property(f"{Enrollment} has {Float:grade}")
 | One concept needs data from multiple tables | Load each table, bind with `model.define(...).where(...)` |
 | Column has no business meaning | Omit it — not every column needs a property |
 | Cryptic column naming | Map to descriptive property names during loading |
-| Related concepts with no explicit FK | `model.define(A.rel(B)).where(A.shared_field == B.shared_field)` |
+| Column holds another concept's key, no declared FK | `model.define(A.rel(B)).where(A.ref_field == B.key_field)` |
+| Two concepts share a categorical value, no FK and no lookup table | Enumeration concept keyed by the value, linked from both — not a direct A→B link, which asserts a relationship the data does not have ([Categorical values](#categorical-values-enumeration-concept-or-string)) |
 
 ### Subconcept creation from filtered data
 
@@ -500,6 +522,8 @@ After the ontology validates and queries correctly: surface what problems it can
 | Stale-source cleanup takes minutes on re-run | Re-using a model name after changing data bindings | Fresh model name during rapid iteration, or wait |
 | Missing `identify_by` on data-backed concepts | Entities created without stable identity | Add `identify_by` or explicit identity `Property` + `.new()` |
 | Property chain failure on cross-product concepts | `ProductStoreWeek.week.week_num` → `UninitializedPropertyException` | Store needed values directly as properties on the cross-product concept |
+| Shared categorical (status, brand) is a `String` on each concept | Treated "a column on someone else's table" as always a property | Enumeration concept keyed by the value, populated from every table that carries it ([Categorical values](#categorical-values-enumeration-concept-or-string)) |
+| Only the description of a code + description pair is mapped | Kept the readable column | Enumeration concept identified by the code; the description is its property |
 | Proposed concept is a property group | Attribute bundle with no independent identity | Properties on the parent concept |
 | Enrichment proposed with no source table | Decision variable misclassified as MODEL_GAP | Formulation layer, not base model |
 | Cross-product concept without linking constraints | Entities created unconstrained | `.where()` filter on creation or relationship constraints |
@@ -517,12 +541,12 @@ After the ontology validates and queries correctly: surface what problems it can
 | Value-type + FK resolution | Value-type concepts, FK resolution with lookup, boolean flags as unary Relationships, computed aggregations | [examples/value_type_fk_resolution.py](examples/value_type_fk_resolution.py) |
 | Hierarchy + compound key | Geographic hierarchy chain, compound identity for junction concepts, derived metrics | [examples/geographic_hierarchy_compound_key.py](examples/geographic_hierarchy_compound_key.py) |
 | Multi-level hierarchy | Location + time hierarchies, mutually exclusive classification rules | [examples/multi_level_hierarchy_segmentation.py](examples/multi_level_hierarchy_segmentation.py) |
-| Derived concept + bridge | Derived concepts from column values, bridge entity, `.alias()` inverse | [examples/derived_concept_bridge_entity.py](examples/derived_concept_bridge_entity.py) |
+| Derived concept + bridge | Enumeration concepts from column values (no lookup table), bridge entity, `.alias()` inverse | [examples/derived_concept_bridge_entity.py](examples/derived_concept_bridge_entity.py) |
 | Self-referential hierarchy | Self-referential Entity→Entity, identity limited to natural key | [examples/self_referential_bom.py](examples/self_referential_bom.py) |
-| Cross-product decision concept | Constrained cartesian via `.where()`, `.ref()` derived properties, generated Period concept | [examples/cross_product_decision_concept.py](examples/cross_product_decision_concept.py) |
+| Cross-product decision concept | Enumeration concept from a code + description pair shared by two sources, constrained cartesian via `.where()`, `.ref()` derived properties, generated Period concept | [examples/cross_product_decision_concept.py](examples/cross_product_decision_concept.py) |
 | Large-scale bidirectional | 14 tables / 12+ concepts, unary flags, bidirectional inverses, walrus binding | [examples/large_scale_bidirectional.py](examples/large_scale_bidirectional.py) |
 | Multi-schema cross-system | 4 source schemas, cross-system entity linking | [examples/multi_schema_cross_system.py](examples/multi_schema_cross_system.py) |
-| Pairwise property + ref | Pairwise property, `.ref()` same-type binding, junction concept | [examples/pairwise_property_ref.py](examples/pairwise_property_ref.py) |
+| Pairwise property + ref | Pairwise property, `.ref()` same-type binding, junction concept, enumeration concept shared by two concepts | [examples/pairwise_property_ref.py](examples/pairwise_property_ref.py) |
 | Auxiliary schema enrichment | Auxiliary schema loading, composite-key enrichment, cross-schema lookup | [examples/auxiliary_schema_enrichment.py](examples/auxiliary_schema_enrichment.py) |
 
 ---
@@ -533,7 +557,7 @@ After the ontology validates and queries correctly: surface what problems it can
 - Tracing graph tiers by a node's TYPE column value (the one discovery query `rai explore schema` does not cover)? See [discovery-queries.md](references/discovery-queries.md)
 - Worked greenfield builds end-to-end (Snowflake tables, CSV, junction concepts, self-referential hierarchies, pairwise matrices, portable source paths)? See [build-examples.md](references/build-examples.md)
 - Enriching a model for optimization (relationship promotion, cross-products, multi-hop, gap classification)? See [enrichment-patterns.md](references/enrichment-patterns.md)
-- Categorization, subtypes, derivation modes, temporal tracking, or semantic stability? See [categorization-and-advanced.md](references/categorization-and-advanced.md)
+- Categorical columns as enumeration concepts (shared values, code + description pairs, no lookup table), subtypes, derivation modes, temporal tracking, or semantic stability? See [categorization-and-advanced.md](references/categorization-and-advanced.md)
 - Advanced modeling (value types, identity patterns, ternary properties, inverses, role naming, scenario modeling)? See [advanced-modeling.md](references/advanced-modeling.md)
 - Model inventory or unmapped data classification? See [examination-guidance.md](references/examination-guidance.md)
 - Decomposition quality gates (irreducibility, sample data validation, counterexample)? See [fact-decomposition-and-validation.md](references/fact-decomposition-and-validation.md)

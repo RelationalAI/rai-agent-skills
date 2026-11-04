@@ -157,7 +157,7 @@ What the sample demonstrates: `generated_at: null` (no `--stamp`); a `value_dist
 
 - **PKs first.** Take the first `pk_candidates` entry per table; treat later entries as coincidence. An empty list on a junction table means compound identity, which is yours to establish.
 - **Then `warnings[]`.** Cheaper to read seven warnings than to rediscover an undecidable FK by hand.
-- **Subtypes via `value_distribution`.** A low-`distinct_count` column naming a kind or category is a subtype candidate; whether to use `extends` depends on whether each kind carries distinct properties.
+- **Categoricals via `value_distribution`.** A low-`distinct_count` column naming a kind or category is an enumeration-concept or subtype candidate: SKILL.md § Categorical values decides concept vs `String`; use `extends` only when each kind carries distinct properties.
 - **Trust `multiplicity_class`.** `N:1` → Property on the source. `M:N` → Relationship, source is a junction. `null` → nothing to classify from; decide yourself.
 - **Watch `null_rate`.** Close to 1.0 is a sparse column — model it as optional or scope it out.
 - **`numeric_range` before any threshold.** Type alone cannot distinguish percentage points from a 0–1 fraction, or cents from dollars.

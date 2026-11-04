@@ -3,7 +3,8 @@
 NOTE: Demonstrates cross-product decision concepts and constrained cartesian joins —
 advanced patterns for optimization modeling beyond the starter build.
 
-Patterns: CSV data loading, generated Period concept, compound identity,
+Patterns: CSV data loading, enumeration concept from a code + description pair
+shared by two sources (MachineType), generated Period concept, compound identity,
 cross-product decision concepts (Technician x Machine x Period) constrained via `.where()`,
 `.ref()` for derived properties, conditional binary flags.
 """
@@ -13,12 +14,15 @@ model = Model("Machine Maintenance")
 
 # --- Sample Data ---
 machines_data = model.data([
-    {"machine_id": "M1", "machine_type": "CNC", "facility": "Plant-A",
-     "location": "Chicago", "failure_probability": 0.12, "maintenance_duration_hours": 4},
-    {"machine_id": "M2", "machine_type": "Lathe", "facility": "Plant-A",
-     "location": "Chicago", "failure_probability": 0.08, "maintenance_duration_hours": 3},
-    {"machine_id": "M3", "machine_type": "CNC", "facility": "Plant-B",
-     "location": "Detroit", "failure_probability": 0.15, "maintenance_duration_hours": 5},
+    {"machine_id": "M1", "machine_type": "CNC", "machine_type_desc": "CNC machining center",
+     "facility": "Plant-A", "location": "Chicago",
+     "failure_probability": 0.12, "maintenance_duration_hours": 4},
+    {"machine_id": "M2", "machine_type": "LTH", "machine_type_desc": "Lathe",
+     "facility": "Plant-A", "location": "Chicago",
+     "failure_probability": 0.08, "maintenance_duration_hours": 3},
+    {"machine_id": "M3", "machine_type": "CNC", "machine_type_desc": "CNC machining center",
+     "facility": "Plant-B", "location": "Detroit",
+     "failure_probability": 0.15, "maintenance_duration_hours": 5},
 ])
 technicians_data = model.data([
     {"technician_id": "T1", "base_location": "Chicago", "hourly_rate": 75.0, "max_weekly_hours": 40},
@@ -26,7 +30,7 @@ technicians_data = model.data([
 ])
 qual_data = model.data([
     {"technician_id": "T1", "machine_type": "CNC"},
-    {"technician_id": "T1", "machine_type": "Lathe"},
+    {"technician_id": "T1", "machine_type": "LTH"},
     {"technician_id": "T2", "machine_type": "CNC"},
 ])
 avail_data = model.data([
@@ -36,16 +40,30 @@ avail_data = model.data([
     {"technician_id": "T2", "period": 2, "available": 1.0},
 ])
 
+# --- Enumeration concept: machine type ---
+# The machine-type code is shared by the machines and qualifications sources, and the
+# machines source folds its description in next to it (code + description pair). So it
+# is a concept identified by the code, with the description as its property, populated
+# from both sources -- not a String repeated on each, and never the description alone.
+MachineType = model.Concept("MachineType", identify_by={"code": String})
+MachineType.description = model.Property(f"{MachineType} has {String:description}")
+model.define(MachineType.new(
+    code=machines_data.machine_type, description=machines_data.machine_type_desc))
+model.define(MachineType.new(code=qual_data.machine_type))  # code-only source, same concept
+
 # --- Base entities ---
 Machine = model.Concept("Machine", identify_by={"machine_id": String})
-Machine.machine_type = model.Property(f"{Machine} has type {String:machine_type}")
+Machine.machine_type = model.Property(f"{Machine} has type {MachineType:machine_type}")
 Machine.facility = model.Property(f"{Machine} at {String:facility}")
 Machine.location = model.Property(f"{Machine} in {String:location}")
 Machine.failure_probability = model.Property(
     f"{Machine} has failure probability {Float:failure_probability}")
 Machine.maintenance_duration_hours = model.Property(
     f"{Machine} requires {Integer:maintenance_duration_hours} hours")
-model.define(Machine.new(machines_data.to_schema()))
+model.define(Machine.new(
+    machines_data.to_schema(exclude=["machine_type", "machine_type_desc"]),
+    machine_type=MachineType.lookup(code=machines_data.machine_type),
+))
 
 Technician = model.Concept("Technician", identify_by={"technician_id": String})
 Technician.base_location = model.Property(f"{Technician} based in {String:base_location}")
@@ -56,15 +74,11 @@ model.define(Technician.new(technicians_data.to_schema()))
 
 # Qualification: compound identity linking technician to machine type
 Qualification = model.Concept("Qualification",
-    identify_by={"technician_id": String, "machine_type": String})
-Qualification.technician = model.Relationship(
-    f"{Qualification} for {Technician}")
+    identify_by={"technician": Technician, "machine_type": MachineType})
 model.define(Qualification.new(
-    technician_id=qual_data.technician_id,
-    machine_type=qual_data.machine_type,
+    technician=Technician.lookup(technician_id=qual_data.technician_id),
+    machine_type=MachineType.lookup(code=qual_data.machine_type),
 ))
-model.define(Qualification.technician(Technician)).where(
-    Qualification.technician_id == Technician.technician_id)
 
 # Period: discrete planning horizon (no source table — generated)
 Period = model.Concept("Period", identify_by={"pid": Integer})
@@ -100,7 +114,7 @@ model.define(TechnicianMachinePeriod.new(
     technician=Technician, machine=Machine, period=Period
 )).where(
     QualRef.technician(Technician),
-    QualRef.machine_type == Machine.machine_type,
+    QualRef.machine_type(Machine.machine_type),  # joins through MachineType, not on text
 )
 
 # Derived property: co-location flag

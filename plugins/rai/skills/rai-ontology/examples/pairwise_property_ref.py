@@ -3,7 +3,8 @@
 # Pattern: binary property + .ref() pairwise binding + junction concept
 # Key ideas: Concept.covar is a binary Property relating two instances of the same type;
 # Concept.ref() creates a second independent iterator for pairwise binding;
-# Junction concept connects two parent concepts; lookup for FK resolution.
+# Junction concept connects two parent concepts; lookup for FK resolution;
+# enumeration concept for a categorical value shared by two tables (AccountType).
 
 """Pattern: binary property with `.ref()` for pairwise self-join + junction concept for many-to-many."""
 from relationalai.semantics import Model, Date, DateTime, Float, Integer, String
@@ -25,6 +26,12 @@ class Sources:
 
 # -- Concepts & Properties ---------------------------------------------------
 
+# AccountType: ACCOUNT_TYPE appears on both OWNERS and ACCOUNTS with no table of its
+# own, so it is an enumeration concept both link to, not a String copied onto each.
+# Transaction.category and Item.category below stay String: each is a different
+# vocabulary on a single table, and nothing in this model groups or filters by them.
+AccountType = model.Concept("AccountType", identify_by={"name": String})
+
 # Address
 Address = model.Concept("Address", identify_by={"id": Integer})
 Address.street_address = model.Property(f"{Address} has {String:street_address}")
@@ -38,14 +45,14 @@ Owner.full_name = model.Property(f"{Owner} has {String:full_name}")
 Owner.email = model.Property(f"{Owner} has {String:email}")
 Owner.phone = model.Property(f"{Owner} has {String:phone}")
 Owner.external_id = model.Property(f"{Owner} has {Integer:external_id}")
-Owner.account_type = model.Property(f"{Owner} has {String:account_type}")
+Owner.account_type = model.Property(f"{Owner} has {AccountType:account_type}")
 Owner.risk_score = model.Property(f"{Owner} has {Float:risk_score}")
 Owner.signup_date = model.Property(f"{Owner} has {String:signup_date}")
 Owner.address = model.Relationship(f"{Owner} lives at {Address}")
 
 # Account
 Account = model.Concept("Account", identify_by={"id": Integer})
-Account.account_type = model.Property(f"{Account} has {String:account_type}")
+Account.account_type = model.Property(f"{Account} has {AccountType:account_type}")
 Account.balance = model.Property(f"{Account} has {Float:balance}")
 Account.opened_date = model.Property(f"{Account} has {String:opened_date}")
 Account.owner = model.Property(f"{Account} owned by {Owner:owner}")
@@ -84,6 +91,10 @@ Allocation.item = model.Relationship(f"{Allocation} of {Item}")
 
 # -- Data Loading ------------------------------------------------------------
 
+# AccountType: populated from every table that carries the value
+model.define(AccountType.new(name=Sources.ops_db.public.owners.ACCOUNT_TYPE))
+model.define(AccountType.new(name=Sources.ops_db.public.accounts.ACCOUNT_TYPE))
+
 # Address
 src = Sources.ops_db.public.addresses
 model.define(Address.new(
@@ -102,7 +113,7 @@ model.define(Owner.new(
     email=src.EMAIL,
     phone=src.PHONE,
     external_id=src.EXTERNAL_ID,
-    account_type=src.ACCOUNT_TYPE,
+    account_type=AccountType.lookup(name=src.ACCOUNT_TYPE),
     risk_score=src.RISK_SCORE,
     signup_date=src.SIGNUP_DATE,
     address=Address.lookup(id=src.ADDRESS_ID),
@@ -112,7 +123,7 @@ model.define(Owner.new(
 src = Sources.ops_db.public.accounts
 model.define(Account.new(
     id=src.ACCOUNT_ID,
-    account_type=src.ACCOUNT_TYPE,
+    account_type=AccountType.lookup(name=src.ACCOUNT_TYPE),
     balance=src.BALANCE,
     opened_date=src.OPENED_DATE,
     owner=Owner.lookup(id=src.OWNER_ID),

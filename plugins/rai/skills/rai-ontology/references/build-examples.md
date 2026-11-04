@@ -110,8 +110,9 @@ class Sources:
 allocations = Sources.ops_db.public.allocations
 segments = Sources.ops_db.public.allocation_pwl_segments
 
-# --- Derived concepts from column values ---
-# These aren't their own tables — they're derived from unique values in a column
+# --- Enumeration concepts from column values ---
+# These aren't their own tables — they're derived from unique values in a column.
+# They are concepts because allocations are grouped and filtered by them.
 Channel = model.Concept("Channel", identify_by={"name": String})
 model.define(Channel.new(name=allocations.channel))
 
@@ -201,16 +202,34 @@ from relationalai.semantics import Float, Integer, Model, String
 
 model = Model("Machine Maintenance")
 
+# --- Source data (DataFrames read from the CSV files) ---
+machines_data = model.data(machines_df)
+qual_data = model.data(qualifications_df)
+avail_data = model.data(availability_df)
+
+# --- Enumeration concept: machine type ---
+# The machine-type code is shared by the machines and qualifications sources, and the
+# machines source folds its description in next to it (code + description pair), so it
+# is a concept keyed by the code, populated from both sources.
+MachineType = model.Concept("MachineType", identify_by={"code": String})
+MachineType.description = model.Property(f"{MachineType} has {String:description}")
+model.define(MachineType.new(
+    code=machines_data["machine_type"], description=machines_data["machine_type_desc"]))
+model.define(MachineType.new(code=qual_data["machine_type"]))  # code-only source
+
 # --- Base entities from CSV ---
 Machine = model.Concept("Machine", identify_by={"machine_id": String})
-Machine.machine_type = model.Property(f"{Machine} has type {String:machine_type}")
+Machine.machine_type = model.Property(f"{Machine} has type {MachineType:machine_type}")
 Machine.facility = model.Property(f"{Machine} at {String:facility}")
 Machine.location = model.Property(f"{Machine} in {String:location}")
 Machine.failure_probability = model.Property(
     f"{Machine} has failure probability {Float:failure_probability}")
 Machine.maintenance_duration_hours = model.Property(
     f"{Machine} requires {Integer:maintenance_duration_hours} hours")
-model.define(Machine.new(model.data(machines_df).to_schema()))
+model.define(Machine.new(
+    machines_data.to_schema(exclude=["machine_type", "machine_type_desc"]),
+    machine_type=MachineType.lookup(code=machines_data["machine_type"]),
+))
 
 Technician = model.Concept("Technician", identify_by={"technician_id": String})
 Technician.base_location = model.Property(f"{Technician} based in {String:base_location}")
@@ -221,14 +240,11 @@ model.define(Technician.new(model.data(technicians_df).to_schema()))
 
 # Qualification: compound identity linking technician to machine type
 Qualification = model.Concept("Qualification",
-    identify_by={"technician_id": String, "machine_type": String})
-Qualification.technician = model.Property(f"{Qualification} for {Technician}")
+    identify_by={"technician": Technician, "machine_type": MachineType})
 model.define(Qualification.new(
-    technician_id=qual_data["technician_id"],
-    machine_type=qual_data["machine_type"],
+    technician=Technician.lookup(technician_id=qual_data["technician_id"]),
+    machine_type=MachineType.lookup(code=qual_data["machine_type"]),
 ))
-model.define(Qualification.technician(Technician)).where(
-    Qualification.technician_id == Technician.technician_id)
 
 # Period: discrete planning horizon (no source table — generated)
 Period = model.Concept("Period", identify_by={"pid": Integer})
@@ -265,7 +281,7 @@ model.define(TechnicianMachinePeriod.new(
     technician=Technician, machine=Machine, period=Period
 )).where(
     QualRef.technician(Technician),
-    QualRef.machine_type_str == Machine.machine_type,
+    QualRef.machine_type(Machine.machine_type),  # joins through MachineType, not on text
 )
 
 # Derived property: co-location flag
@@ -284,6 +300,7 @@ model.where(
 
 **Patterns demonstrated:**
 - CSV data loading via `model.data(df).to_schema()`
+- Enumeration concept (MachineType) from a code + description pair, shared by two sources
 - Generated concepts (Period) with no source table
 - Compound identity for junction concepts (Qualification)
 - Cross-product decision concepts (TechnicianMachinePeriod)
@@ -389,7 +406,7 @@ BillOfMaterials.at_site = model.Relationship(
 - `Relationship` for multi-valued concept-to-concept links
 - Self-referential relationship (SKU → SKU for BOM assembly)
 - Bracket syntax for column access (`src.site["ID"]`)
-- Closed status/priority vocabularies (`Shipment.status`, `Demand.priority`) kept as `String` here; with `relationalai>=1.12` they can instead be `model.Enum` types — see `rai-pyrel` § Enums
+- Categorical columns (`Shipment.status`, `Demand.priority`, `StockKeepingUnit.category`) kept as `String` here: each sits on one table and is display-only in this build. Make one an enumeration concept once it is shared across tables, grouped or filtered on, or has attributes of its own (SKILL.md § Categorical values)
 
 ---
 
@@ -457,9 +474,9 @@ model.define(
     p.stock_status(raw.parts_inventory.STOCK_STATUS),
 )
 
-# Unary flag binding — condition from column value. With relationalai>=1.12 the
-# closed vocabulary can be a model.Enum and the condition becomes
-# Part.stock_status == StockStatus.CRITICAL_SHORTAGE (see rai-pyrel § Enums).
+# Unary flag binding — condition from column value. The status is loaded from
+# data, so it is not a model.Enum: an unseen value would drop silently out of the
+# member comparison (SKILL.md § Categorical values).
 model.define(Part.is_critical_shortage()).where(
     Part.stock_status == "CRITICAL_SHORTAGE",
 )
@@ -613,7 +630,7 @@ model.define(rf_ref.is_on_target()).where(
 - Large-scale model: 14 source tables, 12+ concepts
 - Walrus operator (`:=`) for compact entity creation + property binding
 - Unary flags from status/boolean columns (`is_critical_shortage`, `is_auto_renew`, `is_outage`, `is_dropped`, `is_on_target`)
-- Status columns (`Part.stock_status`, `Customer.status`) kept as `String` here; with `relationalai>=1.12`, closed vocabularies can instead be `model.Enum` types — see `rai-pyrel` § Enums
+- Status columns (`Part.stock_status`, `Customer.status`) kept as `String` here: each sits on one table, and the one filter on it is captured by a unary flag. Make one an enumeration concept if questions group by it or another table carries the same codes (SKILL.md § Categorical values)
 - Bidirectional relationships with explicit inverses (both directions defined)
 - **Self-referential relationships**: source and target both reference Customer — distinct attribute names are the roles
 - Multi-FK binding: Equipment references both Facility and Part

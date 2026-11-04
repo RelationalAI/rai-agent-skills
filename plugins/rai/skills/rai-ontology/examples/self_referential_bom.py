@@ -26,6 +26,10 @@ class Sources:
 src = Sources.supply_chain.public
 
 # --- Concepts (identity = true natural key only) ---
+# Categorical columns (site_type, region, category, priority, status, ...) stay String
+# in this design sketch: each sits on one table and is display-only here. Promote one
+# to an enumeration concept once it is shared across tables, grouped or filtered on,
+# or carries attributes of its own.
 Site = model.Concept("Site", identify_by={"id": String})
 Site.name = model.Property(f"{Site} has {String:name}")
 Site.site_type = model.Property(f"{Site} has {String:site_type}")

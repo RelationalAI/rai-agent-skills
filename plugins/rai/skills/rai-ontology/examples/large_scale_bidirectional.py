@@ -50,6 +50,9 @@ Part = model.Concept("Part", identify_by={"id": String})
 Part.name = model.Property(f"{Part} has {String:name}")
 Part.quantity_on_hand = model.Property(f"{Part} has {Integer:quantity_on_hand}")
 Part.unit_cost = model.Property(f"{Part} has {Float:unit_cost}")
+# stock_status stays a String: one table, and the one filter on it is captured by
+# the unary flag below. Make it an enumeration concept if questions group by it or
+# another table carries the same codes.
 Part.stock_status = model.Property(f"{Part} has {String:stock_status}")
 Part.is_critical_shortage = model.Relationship(f"{Part} is critical shortage")
 

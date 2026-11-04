@@ -18,7 +18,9 @@ class Sources:
 allocs = Sources.resource_allocation.public.allocations
 segments = Sources.resource_allocation.public.allocation_pwl_segments
 
-# --- Dimension Concepts (derived from source columns) ---
+# --- Enumeration concepts (derived from source columns, no lookup table) ---
+# Channel and Country have no table of their own; they are concepts because
+# allocations are grouped and filtered by them. A display-only column stays a String.
 Channel = model.Concept("Channel", identify_by={"name": String})
 model.define(Channel.new(name=allocs.channel))
 

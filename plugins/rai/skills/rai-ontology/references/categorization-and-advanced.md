@@ -1,6 +1,7 @@
 <!-- TOC -->
 - [Categorization Patterns](#categorization-patterns)
   - [Enumeration concepts for categorical data](#enumeration-concepts-for-categorical-data)
+  - [Enumeration concepts without a lookup table](#enumeration-concepts-without-a-lookup-table)
   - [Entity subtyping for derived classifications](#entity-subtyping-for-derived-classifications)
   - [Computed categorization with typed sub-concepts](#computed-categorization-with-typed-sub-concepts)
   - [Decision rule: enumeration vs. subtyping](#decision-rule-enumeration-vs-subtyping)
@@ -25,7 +26,7 @@
 
 ### Enumeration concepts for categorical data
 
-Use for lookup tables (status codes, types, categories) instead of raw strings:
+Use for categorical values (status codes, types, categories) instead of raw strings — whether or not the source has a lookup table for them. Which columns qualify, and which stay `String`: SKILL.md § Categorical values. When the source has a lookup table, load the concept from it:
 
 ```python
 LifecycleID = model.Concept("LifecycleID", extends=[String])
@@ -41,17 +42,49 @@ Component.lifecycle = model.Property(f"{Component} has lifecycle {Lifecycle:life
 
 **Benefits:** Type safety, referential integrity, extensibility (enumerations can have their own properties), and cleaner queries.
 
-**Compact alternative — `model.Enum`**: when the vocabulary is small, fixed, and carries no per-value properties or data table of its own, declare it as a `model.Enum` instead — members become typed literals in rules (`Component.lifecycle == Lifecycle.ACTIVE`), and queries read labels back with `.name` (*enum-typed properties and `.name` readback require relationalai>=1.12; plain member comparisons in `where()`/`define()` work on earlier versions*). Prefer the enumeration-concept pattern above when categories have their own properties (`sort_order`, display names) or are loaded from data; prefer `model.Enum` for closed code lists. See `rai-pyrel` § Enums.
+**Compact alternative — `model.Enum`**: when the vocabulary is small, fixed, and carries no per-value properties or data table of its own, declare it as a `model.Enum` instead — members become typed literals in rules (`Component.lifecycle == Lifecycle.ACTIVE`), and queries read labels back with `.name` (*enum-typed properties and `.name` readback require relationalai>=1.12; plain member comparisons in `where()`/`define()` work on earlier versions*). Prefer the enumeration-concept pattern above when categories have their own properties (`sort_order`, display names) or are loaded from data; prefer `model.Enum` for closed code lists the model itself owns. A `model.Enum`-typed property bound from a data column is fragile: a value with no matching member silently drops out of every member comparison, and warehouse data routinely carries unseen spellings. See `rai-pyrel` § Enums.
 
 **Soft-join pattern (shared enumerations across concepts):** When two concepts share categorical values (country codes, status codes, region names) but no strict FK exists between them, model the shared category as an enumeration concept and link both concepts to it:
 
 ```python
 Country = model.Concept("Country", identify_by={"code": String})
-Order.country = model.Relationship(f"{Order} ships to {Country}")
-Customer.country = model.Relationship(f"{Customer} located in {Country}")
+Order.country = model.Property(f"{Order} ships to {Country:country}")
+Customer.country = model.Property(f"{Customer} located in {Country:country}")
 ```
 
-This is preferable to creating a direct Order-Customer relationship through the shared value, which would imply a business relationship that does not exist. The enumeration concept makes the shared dimension explicit without fabricating connections.
+This is preferable to creating a direct Order-Customer relationship through the shared value, which would imply a business relationship that does not exist. The enumeration concept makes the shared dimension explicit without fabricating connections. Each link is a `Property` because every order ships to one country (N:1).
+
+### Enumeration concepts without a lookup table
+
+Most categorical values in warehouse data have no table of their own: the value is repeated on fact and entity tables, and its attributes are repeated next to it. Build the enumeration concept from those columns.
+
+**Finding the candidates in `schema.json`.** None of these signals is reported directly, so cross-reference `tables[].columns[]` yourself:
+
+| Signal | How to read it | Watch out for |
+|---|---|---|
+| Same value set in 2+ tables | Same or same-suffix column name in several tables, absent from `fk_candidates` (which only reports columns that point at some table's key) | Confirm the value sets overlap (`value_distribution`, or a `SELECT DISTINCT` probe) — two columns can share a name and hold disjoint codes |
+| Code + description pair | `*_CD` / `*_CODE` next to `*_DESC` / `*_NAME` / `*_NM` in one table | Check that each code has one description; the reverse need not hold |
+| Attribute repeated with the value | A column whose value is constant for each value of the categorical (a tier per brand, a group per category) | Confirm the functional dependency before binding it as a `Property` — a violation raises `FDError` |
+| Categorical name | `_STATUS` / `_TYPE` / `_CATEGORY` / `_CLASS` suffix | `value_distribution` fires only up to 20 distinct values and fires on most columns of low-variety data, so it neither proves nor rules out a categorical |
+
+**Pattern.** Populate the concept from every table that carries the value, so values with no rows in one table still exist; take each attribute from the table that carries it:
+
+```python
+# CATEGORY appears on ITEMS and on TARGETS; TARGETS also repeats CATEGORY_GROUP.
+Category = model.Concept("Category", identify_by={"code": String})
+Category.group = model.Property(f"{Category} belongs to {String:group}")
+model.define(Category.new(code=items.CATEGORY))
+model.define(Category.new(code=targets.CATEGORY, group=targets.CATEGORY_GROUP))
+
+Item.category = model.Property(f"{Item} is in {Category:category}")
+Target.category = model.Property(f"{Target} applies to {Category:category}")
+model.define(Item.lookup(id=items.ITEM_ID).category(Category.lookup(code=items.CATEGORY)))
+model.define(Target.lookup(id=targets.TARGET_ID).category(Category.lookup(code=targets.CATEGORY)))
+```
+
+A code + description pair follows the same shape: identify the concept by the code and bind the description as its property from the table that carries both. Tables that carry only the code link to the same concept, and can then read the description through it.
+
+**Messy values.** When one value is spelled several ways, either keep the column as a `String` and say so, or normalise it in one rule (upper-case, trim) before `Category.new(...)` and record the mapping as an assumption. Do not silently pick one spelling.
 
 ### Entity subtyping for derived classifications
 
@@ -96,9 +129,11 @@ model.where(Customer.customer_value_score >= 150).define(Customer.value_segment(
 | Use Case | Pattern |
 |----------|---------|
 | Lookup tables where categories have their own attributes | Enumeration Concepts |
+| Categorical values shared across tables, grouped or filtered on, or with a code + description pair — no lookup table | Enumeration Concepts, built from the columns |
 | Classifying existing entities based on computed conditions | Entity Subtyping |
 | Fixed categories from source data with no extra attributes | Either; prefer Enumeration if the set is closed |
 | Derived categories from computed values | Entity Subtyping |
+| Display-only value, or free text too messy to normalise | `String` property |
 
 ### Subtype constraint completeness
 
