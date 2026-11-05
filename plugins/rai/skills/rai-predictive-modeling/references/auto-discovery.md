@@ -1,27 +1,33 @@
 # Auto-Discovery
 
-After the user provides table names, the agent automatically discovers schema details by querying Snowflake. This reference documents the conversation templates and discovery process.
+After the user names the source data and the task tables, the agent discovers schema details by querying Snowflake and proposes which source tables to use. This reference documents the conversation templates and discovery process.
 
 ## How to use this workflow
 
 Walk through each phase **sequentially**. For each phase, use the **exact question template** below -- do not rephrase, reorder, or add extra questions. Wait for the user's answers before proceeding to the next phase. If the user provides information that covers multiple phases, acknowledge it and skip to the next uncovered phase.
 
+**When the user names specific source tables** (in the request or in answer to Phase 1a), use exactly those tables and follow the standard flow. That means no proposed source graph, no hop walk, no leakage table and no building on an existing ontology. Present the tables in the Source Tables & Concepts summary. Otherwise the source graph is always proposed and confirmed, even when a question was skipped (§ Proposing the Source Graph). Tables that only appear in the SQL that built the task labels are not tables the user named. They usually hold only the predicted entity, and its signal often sits in the tables linked to it.
+
 ## Conversation Templates
 
 **Phase 1 is split into three sub-steps. Ask each one separately and wait for the user's response before moving to the next.**
 
-### Phase 1a -- Source Tables
+### Phase 1a -- Source Data
 
-Ask exactly this:
+If an ontology already exists for the source data and the user has not named specific tables, skip this question: the ontology's scope defines the source data (see [existing-ontology.md](existing-ontology.md)). Otherwise, ask exactly this:
 
 ```
-Phase 1a: Source Tables
+Phase 1a: Source Data
 
-What are your **source table** fully qualified names?
-(e.g., `MY_DB.MY_SCHEMA.CUSTOMERS`, `MY_DB.MY_SCHEMA.TRANSACTIONS`)
+Which Snowflake database and schema hold your **source data**?
+(e.g., `MY_DB.MY_SCHEMA`)
+If you want to use specific tables, list them instead and I'll use exactly those.
+Otherwise I'll propose the tables linked to what you're predicting for you to confirm.
 
 If you have a schema diagram or image, feel free to share it and I'll extract the details.
 ```
+
+If the user lists tables, use exactly those and skip § Proposing the Source Graph (see § How to use this workflow).
 
 ### Phase 1b -- Task Tables
 
@@ -47,7 +53,7 @@ What Snowflake database and schema should we use for **experiment tracking**?
 
 ## What to Auto-Discover (and what NOT to ask)
 
-The user-input boundary is the 3 prompts above (source FQNs, task FQNs, experiment db and schema). **Do not ask the user** for column names, PKs, FKs, label/target columns, timestamp columns, task type, or feature types — those are friction the user often can't answer without checking the schema themselves. Use the in-skill helper below first (`get_table_schema(table_name, database, schema)`), then infer:
+The user-input boundary is the 3 prompts above (source schema or tables, task FQNs, experiment db and schema), plus confirming the summary table. **Do not ask the user** for column names, PKs, FKs, label/target columns, timestamp columns, task type, or feature types — those are friction the user often can't answer without checking the schema themselves. Use the in-skill helper below first (`get_table_schema(table_name, database, schema)`), then infer:
 
 1. **Column names and types** for all source and task tables
 2. **Primary keys** -- identify PK columns. Do **not** rely on the `_id` suffix alone -- many real tables have non-`_id` PKs (e.g., `sku`, `email`, `isbn`) or multiple `_id` columns where only one is the PK and the rest are FKs. Detect in this order:
@@ -93,10 +99,10 @@ The user-input boundary is the 3 prompts above (source FQNs, task FQNs, experime
    | `DATE` | `Date` |
    | `TIMESTAMP`, `TIMESTAMP_NTZ`, `TIMESTAMP_LTZ`, `TIMESTAMP_TZ`, `DATETIME` | `DateTime` |
 
-3. **Foreign key relationships** -- detect FK columns by matching column names across tables (e.g., `customer_id` in `TRANSACTIONS` matches `customer_id` PK in `CUSTOMERS`)
+3. **Foreign key relationships** -- detect links by value coverage plus a name match, not by identical column names: real schemas often name the reference `<x>_id` or `<x>_uuid` while the key is plain `id` or `uuid`. The rule and the coverage query are in § Proposing the Source Graph.
 
    **Cycles, before any script (RelFM).** Walk those edges before writing the script. A cycle is any path that returns to a concept already on it: a self-referential foreign key, or a loop across several concepts. RelFM featurizes with depth-first search and has no base case for revisiting a table, so a cycle does not terminate. The constructor rejects a self-referential foreign key. It does **not** reject a cycle built from several joins — do not write that script. Name the edges that close the cycle and ask which one to drop. GNN may keep a cycle; message passing runs a fixed number of hops.
-4. **Graph concepts** -- each source table becomes a concept (use singular form of table name)
+4. **Graph concepts** -- each table in the confirmed source graph becomes a concept (use singular form of table name)
 5. **Edges** -- derived from FK relationships found above. A RelFM graph that contains a cycle is not ready to write.
 6. **Task structure** -- from task table columns, infer:
    - Join key (column matching a source concept PK)
@@ -316,7 +322,7 @@ def get_table_schema(table_name: str, database: str, schema: str) -> list[dict]:
     ]
 ```
 
-For each user-provided fully qualified table name `DB.SCHEMA.TABLE`:
+For each task table and each source table (listed by the user or proposed in the source graph), as a fully qualified name `DB.SCHEMA.TABLE`:
 
 1. Parse into `database=DB`, `schema=SCHEMA`, `table_name=TABLE`.
 2. Call the in-skill helper `get_table_schema(table_name=TABLE, database=DB, schema=SCHEMA)`.
@@ -325,6 +331,40 @@ For each user-provided fully qualified table name `DB.SCHEMA.TABLE`:
 
 Use `DESCRIBE TABLE` / manual SQL only as fallback when the Snowpark helper cannot return schema.
 
+
+## Proposing the Source Graph
+
+Use this section only when the user has not named specific source tables. Propose the source tables from the links around the predicted entity, and let the user confirm them in the summary table. A graph limited to the tables named up front, or to the tables that built the labels, often holds only the entity itself, and the model then has little to learn from. The same procedure applies with an ontology: walk its concepts and links instead of the raw tables (see [existing-ontology.md](existing-ontology.md)).
+
+1. **Find the node.** Check which table's unique key holds the task join key's values, separately for each split.
+   - **One table:** start there.
+   - **The key is unique in no table** (it is only a column carried by several tables): the entity has no table of its own. Start from every table that carries the key, and plan a node concept whose identity is that key, populated from all of them.
+   - **The keys spread over twin tables** (same columns, such as current and archived copies): treat the twins as one node, populated from all of them, and show them as one row.
+
+2. **Find links.** A column `a` in table `C` links to the unique key `b` of table `P` when both hold:
+   - **Name:** `a` refers to `P` or to `b` (`<p>_id`, `<p>_uuid`, `parent_<p>_id`, or the same name). Integer surrogate keys overlap by accident, so value coverage alone is not enough for them.
+   - **Coverage:** almost all distinct non-null values of `a` appear in `b`.
+
+   ```sql
+   SELECT COUNT(DISTINCT c.<a>)                                          AS n_values,
+          COUNT(DISTINCT CASE WHEN p.<b> IS NOT NULL THEN c.<a> END)    AS n_matched
+   FROM <db>.<schema>.<C> c
+   LEFT JOIN (SELECT DISTINCT <b> FROM <db>.<schema>.<P>) p ON c.<a> = p.<b>
+   WHERE c.<a> IS NOT NULL
+   ```
+
+   A column that is entirely NULL has no coverage to measure. When its twin table holds values, test the link on the twin. When the link column is mostly NULL, plan the concept from only the rows where it is set. Exported as-is, a mostly-NULL key column's type cannot be inferred and the column is dropped, which disconnects the table from the graph (see Common Pitfalls in [SKILL.md](../SKILL.md)).
+
+3. **Walk two hops.** Hop 1 is every table linked directly to the node, in either direction. Hop 2 is every table linked to a hop-1 table. Preselect hop 1 (and any tables the user listed), propose hop 2 for the user to add, and stop there.
+
+4. **Attach a leakage note to each row.** Judge each table by when its values were recorded relative to the prediction time:
+
+   | Table kind | Note |
+   |---|---|
+   | Event log with a timestamp per row (transactions, actions) | Usable when cut off at the prediction time with `time_col`. Rows after it can contain the outcome itself. |
+   | The entity table itself | Mixed. Name the columns recorded after the outcome (final state, end or deletion times, lifecycle flags) as leaky. |
+   | Current-state snapshot with no event time (balances, usage counters) | High. Values are rewritten after the prediction time and can encode the label directly. |
+   | Reference data (types, catalogs) | Low, apart from deletion or validity flags. |
 
 ## Summary Table Template
 
@@ -336,10 +376,19 @@ Here's what I discovered from your tables:
 **Connected database:** `<database>`
 **Estimator:** `<RelFM|GNN>`
 
-**Source Tables & Concepts:**
+**Source Tables & Concepts** (when the user named the tables):
 | Table | Concept | PK | PK type | Other Columns |
 |-------|---------|-----|---------|---------------|
 | ... | ... | ... | Integer | ... |
+
+**Proposed source graph** (otherwise; hop 1 selected; say which hop-2 tables to add or which to drop):
+| Hop | Table (+ twins) | Concept | PK | PK type | Rows | Link to graph | Leakage note | Selected |
+|-----|-----------------|---------|-----|---------|------|---------------|--------------|----------|
+| 0 | ... (node) | ... | ... | Integer | ... | - | ... | yes |
+| 1 | ... | ... | ... | ... | ... | `<C>.<a> -> <P>.<b>` | ... | yes |
+| 2 | ... | ... | ... | ... | ... | ... | ... | proposed |
+
+<With an ontology: "Scope: the <module> ontology. Tables it does not map were not considered.">
 
 **Edges (FK relationships):**
 | From | To | Join Condition |
