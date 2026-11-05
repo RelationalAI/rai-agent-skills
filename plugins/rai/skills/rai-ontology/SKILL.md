@@ -494,7 +494,7 @@ Detailed patterns (relationship promotion, cross-product decision concepts, mult
 
 ## What's Next
 
-After the ontology validates and queries correctly: surface what problems it can answer with `rai-discovery` (classifies questions by reasoner family and assesses readiness), enrich for the selected problem via the [Enrichment Workflow](#enrichment-workflow), then hand off to the reasoner skill (`rai-prescriptive-problem`, `rai-graph-analysis`, `rai-predictive-modeling`, or `rai-pyrel`).
+After the ontology validates and queries correctly: surface what problems it can answer with `rai-discovery` (classifies questions by reasoner family and assesses readiness), enrich for the selected problem via the [Enrichment Workflow](#enrichment-workflow), then hand off to the reasoner skill (`rai-prescriptive-problem`, `rai-graph-analysis`, `rai-predictive-modeling`, or `rai-pyrel`). `rai-predictive-modeling` imports this model rather than starting a new one, and proposes the prediction graph from its links.
 
 ---
 

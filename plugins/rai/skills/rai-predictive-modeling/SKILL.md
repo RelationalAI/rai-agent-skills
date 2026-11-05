@@ -17,13 +17,14 @@ description: Build graph neural network (GNN) models — concepts, Snowflake dat
 - Building graph structure (edges, self-references)
 - Configuring task relationships (train/val/test splits)
 - Setting up PropertyTransformer features
+- Building the predictive layer on an existing `rai-ontology` model
 
 **When NOT to use:**
 - Training, predictions, evaluation, model management -- see `rai-predictive-training`
 - Graph algorithms (centrality, community detection) -- see `rai-graph-analysis`
 - Zero-shot / no-training-step prediction with `RelFM` -- the `Graph`/`PropertyTransformer` setup below also feeds `RelFM` directly (see `rai-predictive-training` § RelFM); single-table `RelFMTabular` needs no graph at all, see `rai-predictive-training`'s `references/relfm-flat-mode.md`
 
-**Overview:** 6 steps: imports -> concepts -> populate -> task relationships -> graph -> features
+**Overview:** 6 steps: imports -> concepts -> populate -> task relationships -> graph -> features. When an ontology already exists, steps 1-3 reuse its model and concepts (§ Starting from an Existing Ontology).
 
 ---
 
@@ -145,7 +146,7 @@ Additional type imports as needed: `Date`, `DateTime`, `Float`.
 
 ## Define and Populate Concepts
 
-> **User-input boundary:** the only things you need from the user are the 3 inputs in [`references/auto-discovery.md`](references/auto-discovery.md) -- source table FQNs, task table FQNs, and the experiment tracking database and schema. Auto-derive PKs, FKs, columns, types, edges, task type, and timestamp candidates from Snowflake schema introspection. Use the in-skill `get_table_schema(table_name, database, schema)` helper in `references/auto-discovery.md` as the default schema source before any manual SQL fallback. Don't ask the user for column-level details. The discovery summary names the connected database, the estimator (`RelFM` or `GNN`), and the task type without being asked.
+> **User-input boundary:** the only things you need from the user are the 3 inputs in [`references/auto-discovery.md`](references/auto-discovery.md) -- source table FQNs, task table FQNs, and the experiment tracking database and schema. When an ontology already exists, the source tables come from it and the user confirms a proposed graph instead (§ Starting from an Existing Ontology). Auto-derive PKs, FKs, columns, types, edges, task type, and timestamp candidates from Snowflake schema introspection. Use the in-skill `get_table_schema(table_name, database, schema)` helper in `references/auto-discovery.md` as the default schema source before any manual SQL fallback. Don't ask the user for column-level details. The discovery summary names the connected database, the estimator (`RelFM` or `GNN`), and the task type without being asked.
 
 Two concept categories show up in a GNN pipeline, distinguished by their role in the graph:
 
@@ -156,7 +157,15 @@ Two concept categories show up in a GNN pipeline, distinguished by their role in
 
 `identify_by` is not required by the GNN pipeline. Pass it when you want to declare an explicit primary key for a graph concept (matches a Snowflake column); omit it for task tables and for graph concepts where you don't need an explicit PK.
 
-> If you have an existing ontology from `rai-ontology`, create a new `Model` for the GNN pipeline.
+### Starting from an Existing Ontology
+
+When an ontology built with `rai-ontology` exists for the source data, in this session or as a model module in the project, build on it. Do not create a new `Model`. The ontology already holds the tables, keys, types and links that a fresh model would have to rediscover, and a fresh model usually stops at the one or two tables the task key reaches, which leaves the graph with little signal. Load [references/existing-ontology.md](references/existing-ontology.md) for the full procedure and examples. In short:
+
+1. Import the ontology's `model` and concepts into a separate predictive module, and declare everything else on that same `model`.
+2. Map the task key to one node concept. Add a concept when the key is only an attribute, or when it spans several concepts that represent the same entity.
+3. Propose the graph by walking the ontology's concept-to-concept links one or two hops from the node, and have the user confirm it. This replaces asking for source table names.
+4. Define edges on scalar key properties, adding them where the ontology has only entity-typed links.
+5. Select features as an allow-list: pass every graph concept in `drop=` and list the features to keep.
 
 ### Graph (node) Concepts
 
@@ -346,6 +355,8 @@ For the full feature type reference including drop patterns, see [references/pro
 | Train/Val/Test Relationships have different schemas | Test omits the label but also changes concept or timestamp structure | Train, Val, and Test must share the same concept and timestamp structure — only the label/target is omitted in Test |
 | Link prediction join key or target column is `VARIANT` in task table | Task table stores target IDs as an array instead of one row per pair | Run `DESCRIBE TABLE` on all three split tables before writing task relationships; see `references/task-relationships.md` § Link Prediction — Task Table Format Requirements (VARIANT check) for the joined-vs-non-joined branch and the `LATERAL FLATTEN` recipe |
 | Graph topology is only same-entity temporal-lag edges (no heterogeneous edges across concept types) | The GNN's value is message-passing across different entity kinds; lag-only chains carry no signal beyond what shifted/lag features in a tabular model already capture | Add heterogeneous edges across concept types, or re-scope as time-series/tabular regression outside RAI (optionally loaded as `pre_computed` for downstream reasoners) |
+| New `Model` built while an ontology for the same data exists | Starting from the task key alone reaches only one or two tables, so the graph carries little signal | Import the ontology's `model` and propose the graph from its links; see [references/existing-ontology.md](references/existing-ontology.md) |
+| Leaky or irrelevant properties of an ontology concept become features | `PropertyTransformer` auto-infers every field it is not told about, and ontology concepts carry every mapped column, including post-outcome ones | Pass each graph concept in `drop=` (default for its unmentioned fields) and list only the chosen features |
 | `model.data(df)` raises `KeyError: 0` | Type inference does a label-based lookup `df[col][0]`, which fails when the DataFrame index doesn't include 0 (typical after `df.iloc[N:M]` or `df.sample()` slicing for train/val/test splits) | Call `.reset_index(drop=True)` on every sliced split before `model.data()`: `m.data(val_df.reset_index(drop=True))` |
 
 ---
@@ -367,3 +378,4 @@ For the full feature type reference including drop patterns, see [references/pro
 | Task relationships | Relationship template patterns for all task types with code examples | [references/task-relationships.md](references/task-relationships.md) |
 | PropertyTransformer types | Full feature type reference, drop patterns, and guidelines | [references/property-transformer-types.md](references/property-transformer-types.md) |
 | Auto-discovery | SQL templates for discovering PKs, FKs, edges, and task structure | [references/auto-discovery.md](references/auto-discovery.md) |
+| Existing ontology | Load when a `rai-ontology` model exists for the source data: reuse it, map the task key, propose the graph from its links, scalar-key edges, allow-list features | [references/existing-ontology.md](references/existing-ontology.md) |

@@ -12,7 +12,7 @@ Walk through each phase **sequentially**. For each phase, use the **exact questi
 
 ### Phase 1a -- Source Tables
 
-Ask exactly this:
+If an ontology already exists for the source data, skip this question. Present the graph proposed from the ontology's links instead and ask the user to confirm or trim it (see [existing-ontology.md](existing-ontology.md)). Otherwise, ask exactly this:
 
 ```
 Phase 1a: Source Tables
