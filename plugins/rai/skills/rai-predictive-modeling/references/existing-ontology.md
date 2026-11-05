@@ -9,7 +9,9 @@ Look for it before Phase 1 of [auto-discovery.md](auto-discovery.md):
 - **This session:** `rai-ontology` ran earlier, or a model module was written or imported in this conversation.
 - **The project:** a Python module that builds a `Model(...)` and binds concepts to the source schema with `model.Table(...)`, often named after the domain.
 
-If one exists, say so in the discovery summary and build on it. If the user prefers a standalone model, follow the standard flow instead.
+If one exists, say so in the discovery summary and build on it. There are two exceptions, and both follow the standard flow in [SKILL.md](../SKILL.md) instead:
+- **The user named specific source tables:** use exactly those, with a standalone model over them.
+- **The user prefers a standalone model.**
 
 ## Steps
 

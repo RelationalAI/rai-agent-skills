@@ -4,7 +4,9 @@ After the user names the source data and the task tables, the agent discovers sc
 
 ## How to use this workflow
 
-Walk through each phase **sequentially**. For each phase, use the **exact question template** below -- do not rephrase, reorder, or add extra questions. Wait for the user's answers before proceeding to the next phase. If the user provides information that covers multiple phases, acknowledge it and skip to the next uncovered phase. Skipping a question never skips confirming the source graph: the summary table always shows the proposed source tables and waits for the user (§ Proposing the Source Graph). The tables that were used to build the task labels are not the source set. They usually hold only the predicted entity, and its signal often sits in the tables linked to it.
+Walk through each phase **sequentially**. For each phase, use the **exact question template** below -- do not rephrase, reorder, or add extra questions. Wait for the user's answers before proceeding to the next phase. If the user provides information that covers multiple phases, acknowledge it and skip to the next uncovered phase.
+
+**When the user names specific source tables** (in the request or in answer to Phase 1a), use exactly those tables and follow the standard flow. That means no proposed source graph, no hop walk, no leakage table and no building on an existing ontology. Present the tables in the Source Tables & Concepts summary. Otherwise the source graph is always proposed and confirmed, even when a question was skipped (§ Proposing the Source Graph). Tables that only appear in the SQL that built the task labels are not tables the user named. They usually hold only the predicted entity, and its signal often sits in the tables linked to it.
 
 ## Conversation Templates
 
@@ -12,20 +14,20 @@ Walk through each phase **sequentially**. For each phase, use the **exact questi
 
 ### Phase 1a -- Source Data
 
-If an ontology already exists for the source data, skip this question: the ontology's scope defines the source data (see [existing-ontology.md](existing-ontology.md)). Otherwise, ask exactly this:
+If an ontology already exists for the source data and the user has not named specific tables, skip this question: the ontology's scope defines the source data (see [existing-ontology.md](existing-ontology.md)). Otherwise, ask exactly this:
 
 ```
 Phase 1a: Source Data
 
 Which Snowflake database and schema hold your **source data**?
 (e.g., `MY_DB.MY_SCHEMA`)
-If you already know which tables to use, list them too. Either way, I'll propose
-the tables linked to what you're predicting for you to confirm.
+If you want to use specific tables, list them instead and I'll use exactly those.
+Otherwise I'll propose the tables linked to what you're predicting for you to confirm.
 
 If you have a schema diagram or image, feel free to share it and I'll extract the details.
 ```
 
-Tables the user lists are preselected in the proposed source graph. Linked tables are still proposed alongside them.
+If the user lists tables, use exactly those and skip § Proposing the Source Graph (see § How to use this workflow).
 
 ### Phase 1b -- Task Tables
 
@@ -332,7 +334,7 @@ Use `DESCRIBE TABLE` / manual SQL only as fallback when the Snowpark helper cann
 
 ## Proposing the Source Graph
 
-Propose the source tables from the links around the predicted entity, and let the user confirm them in the summary table. A graph limited to the tables named up front, or to the tables that built the labels, often holds only the entity itself, and the model then has little to learn from. The same procedure applies with an ontology: walk its concepts and links instead of the raw tables (see [existing-ontology.md](existing-ontology.md)).
+Use this section only when the user has not named specific source tables. Propose the source tables from the links around the predicted entity, and let the user confirm them in the summary table. A graph limited to the tables named up front, or to the tables that built the labels, often holds only the entity itself, and the model then has little to learn from. The same procedure applies with an ontology: walk its concepts and links instead of the raw tables (see [existing-ontology.md](existing-ontology.md)).
 
 1. **Find the node.** Check which table's unique key holds the task join key's values, separately for each split.
    - **One table:** start there.
@@ -351,7 +353,7 @@ Propose the source tables from the links around the predicted entity, and let th
    WHERE c.<a> IS NOT NULL
    ```
 
-   A column that is entirely NULL has no coverage to measure. When its twin table holds values, test the link on the twin.
+   A column that is entirely NULL has no coverage to measure. When its twin table holds values, test the link on the twin. When the link column is mostly NULL, plan the concept from only the rows where it is set. Exported as-is, a mostly-NULL key column's type cannot be inferred and the column is dropped, which disconnects the table from the graph (see Common Pitfalls in [SKILL.md](../SKILL.md)).
 
 3. **Walk two hops.** Hop 1 is every table linked directly to the node, in either direction. Hop 2 is every table linked to a hop-1 table. Preselect hop 1 (and any tables the user listed), propose hop 2 for the user to add, and stop there.
 
@@ -374,7 +376,12 @@ Here's what I discovered from your tables:
 **Connected database:** `<database>`
 **Estimator:** `<RelFM|GNN>`
 
-**Proposed source graph** (hop 1 selected; say which hop-2 tables to add or which to drop):
+**Source Tables & Concepts** (when the user named the tables):
+| Table | Concept | PK | PK type | Other Columns |
+|-------|---------|-----|---------|---------------|
+| ... | ... | ... | Integer | ... |
+
+**Proposed source graph** (otherwise; hop 1 selected; say which hop-2 tables to add or which to drop):
 | Hop | Table (+ twins) | Concept | PK | PK type | Rows | Link to graph | Leakage note | Selected |
 |-----|-----------------|---------|-----|---------|------|---------------|--------------|----------|
 | 0 | ... (node) | ... | ... | Integer | ... | - | ... | yes |
