@@ -24,7 +24,9 @@ If one exists, say so in the discovery summary and build on it. If the user pref
 
    Check the coverage of each split separately. Train and test rows can fall in different concepts.
 
-4. **Propose the graph from the ontology's links.** Start at the node concept and walk the ontology's concept-typed `Property` links one or two hops, both toward parents and toward children. List each candidate concept with its row count and the link that reaches it. Present this as the proposed source set in the discovery summary and let the user confirm or trim it. This replaces asking for source table names.
+4. **Propose the graph from the ontology's links.** Follow [auto-discovery.md](auto-discovery.md) § Proposing the Source Graph, walking the ontology's concept-typed `Property` links instead of raw tables. That means hop 1 preselected, hop 2 proposed, a leakage note per row, and archived or twin concepts grouped into one row. Present the result in the same summary table for the user to confirm.
+   - **Merged node:** when the node is a concept you added to merge several concepts (step 3), walk from each concept it merges as well, and treat their links as the node's own. The ontology's detail concepts point at the concepts the node was built from, so the merged concept usually has few links of its own. A walk that starts only from it misses most of the graph.
+   - **Stay inside the ontology:** don't add tables it does not map. State the scope in the summary ("tables outside the ontology were not considered") so the user can widen it.
 
 5. **Define edges on scalar keys.** Ontology links are usually entity-typed (`Order.customer = model.Property(f"{Order} placed by {Customer:customer}")`). The featurizer joins node tables on scalar key columns, and in practice an entity-typed link did not export as a join key. Where the ontology has only the entity-typed link, add a scalar key property bound from the same source column, and write the edge on it:
 
