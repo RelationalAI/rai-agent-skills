@@ -355,7 +355,7 @@ Use this section only when the user has not named specific source tables. Propos
 
    A column that is entirely NULL has no coverage to measure. When its twin table holds values, test the link on the twin. When the link column is mostly NULL, plan the concept from only the rows where it is set. Exported as-is, a mostly-NULL key column's type cannot be inferred and the column is dropped, which disconnects the table from the graph (see Common Pitfalls in [SKILL.md](../SKILL.md)).
 
-3. **Walk two hops.** Hop 1 is every table linked directly to the node, in either direction. Hop 2 is every table linked to a hop-1 table. Preselect hop 1 (and any tables the user listed), propose hop 2 for the user to add, and stop there.
+3. **Walk two hops.** For `link_prediction` and `repeated_link_prediction`, first resolve the task's target key to its target concept/table as well as resolving the source node. Retain both endpoints as required roots, even if they are more than two links apart. For other tasks, the node is the only root. Hop 1 is every table linked directly to a root, in either direction. Hop 2 is every table linked to a hop-1 table that is not already a root or hop-1 table. Preselect the roots and hop 1, propose hop 2 for the user to add, and stop there.
 
 4. **Attach a leakage note to each row.** Judge each table by when its values were recorded relative to the prediction time:
 
