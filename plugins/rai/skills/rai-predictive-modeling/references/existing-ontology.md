@@ -26,7 +26,7 @@ If one exists, say so in the discovery summary and build on it. There are two ex
 
    Check the coverage of each split separately. Train and test rows can fall in different concepts.
 
-4. **Propose the graph from the ontology's links.** Follow [auto-discovery.md](auto-discovery.md) § Proposing the Source Graph, walking the ontology's concept-typed `Property` links instead of raw tables. That means hop 1 preselected, hop 2 proposed, a leakage note per row, and archived or twin concepts grouped into one row. Present the result in the same summary table for the user to confirm.
+4. **Propose the graph from the ontology's links.** Follow [auto-discovery.md](auto-discovery.md) § Proposing the Source Graph, walking the ontology's concept-to-concept `Property` and `Relationship` links in both directions instead of raw tables. That means hop 1 preselected, hop 2 proposed, a leakage note per row, and archived or twin concepts grouped into one row. Present the result in the same summary table for the user to confirm.
    - **Merged node:** when the node is a concept you added to merge several concepts (step 3), walk from each concept it merges as well, and treat their links as the node's own. The ontology's detail concepts point at the concepts the node was built from, so the merged concept usually has few links of its own. A walk that starts only from it misses most of the graph.
    - **Stay inside the ontology:** don't add tables it does not map. State the scope in the summary ("tables outside the ontology were not considered") so the user can widen it.
 
