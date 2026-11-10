@@ -342,7 +342,7 @@ Use this section only when the user has not named specific source tables. Propos
    - **The keys spread over twin tables** (same columns, such as current and archived copies): treat the twins as one node, populated from all of them, and show them as one row.
 
 2. **Find links.** A column `a` in table `C` links to the unique key `b` of table `P` when both hold:
-   - **Name:** `a` refers to `P` or to `b` (`<p>_id`, `<p>_uuid`, `parent_<p>_id`, or the same name). Integer surrogate keys overlap by accident, so value coverage alone is not enough for them.
+   - **Name:** `a` refers to `P` (`<p>_id`, `<p>_uuid`, `parent_<p>_id`) or shares an entity-specific key name with `b` (such as `customer_id`). Matching generic names such as `id`, `uuid`, or `key` is not sufficient: require declared FK metadata or other verified semantic evidence identifying `P` in that case. Integer surrogate keys overlap by accident, so value coverage alone is not enough for them.
    - **Coverage:** almost all distinct non-null values of `a` appear in `b`.
 
    ```sql
