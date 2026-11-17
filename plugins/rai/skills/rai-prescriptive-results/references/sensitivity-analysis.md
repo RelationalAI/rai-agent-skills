@@ -7,7 +7,7 @@
 ```python
 # A continuous variable per Activity, a resource-capacity constraint family keyed per Resource:
 acts = problem.solve_for(Activity.level, name=Activity.name, lower=0)
-cap = problem.satisfy(model.require(usage <= Resource.capacity), keyed_by={"resource": Resource})
+cap = problem.satisfy(model.where(Resource).require((usage | 0) <= Resource.capacity), keyed_by={"resource": Resource})
 problem.maximize(sum(Activity.profit * Activity.level))  # duals need an objective
 problem.solve("highs", sensitivity=True)
 
@@ -17,7 +17,7 @@ model.select(cap.resource.name, cap.resource.capacity, cap.shadow_price).inspect
 
 The **key-join idiom** — `cap.resource` is the constraint's entity back-pointer — pairs each marginal with the entity it grounds, so you never parse the constraint's name string. It depends on the family declaring its grounding key at formulation time (`keyed_by={"resource": Resource}`); see `rai-prescriptive-problem/references/constraint-formulation.md`.
 
-To add duals after a plain solve, re-solve the same `Problem` with `sensitivity=True` (relationalai>=1.26). A later re-solve without the flag empties the marginals (null) unless it raises.
+To add duals after a plain solve, re-solve the same `Problem` with `sensitivity=True`. A later re-solve without the flag empties the marginals (null) unless it raises.
 
 ### Shadow price economics
 

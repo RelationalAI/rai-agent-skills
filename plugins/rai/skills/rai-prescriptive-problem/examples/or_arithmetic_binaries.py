@@ -54,9 +54,9 @@ problem.solve_for(Row.y, type="bin", name=["y", Row.id])
 
 # --- OR-arithmetic equivalence (the focal pattern) ---
 # y = a OR b   ⇔   y >= a   AND   y >= b   AND   y <= a + b
-y_ge_a_ic = model.require(Row.y >= Row.a)
-y_ge_b_ic = model.require(Row.y >= Row.b)
-y_le_sum_ic = model.require(Row.y <= Row.a + Row.b)
+y_ge_a_ic = model.where(Row).require(Row.y >= Row.a)
+y_ge_b_ic = model.where(Row).require(Row.y >= Row.b)
+y_le_sum_ic = model.where(Row).require(Row.y <= Row.a + Row.b)
 problem.satisfy(y_ge_a_ic)
 problem.satisfy(y_ge_b_ic)
 problem.satisfy(y_le_sum_ic)

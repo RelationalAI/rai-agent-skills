@@ -59,7 +59,7 @@ def build_and_solve(min_benefit):
     alloc_var = problem.solve_for(Item.x_allocation, name=["alloc", Item.index], populate=False)
 
     # Constraints and objective
-    problem.satisfy(model.require(Item.x_allocation >= 0))
+    problem.satisfy(model.where(Item).require(Item.x_allocation >= 0))
     problem.satisfy(model.require(sum(Item.x_allocation) <= total_budget))
     problem.satisfy(model.require(sum(Item.value * Item.x_allocation) >= min_benefit))
     quad_cost = sum(c * Item.x_allocation * Item2.x_allocation).where(Item.interaction(Item2, c))

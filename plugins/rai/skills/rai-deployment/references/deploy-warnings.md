@@ -62,7 +62,7 @@ the cause:
 |---|---|---|---|
 | `[Dynamic table fallback]` … no base-table reference | the concept is populated from inline `model.data()` | **Yes** | Bind it to a source table and it becomes incremental. |
 | `[Dynamic table fallback]` … no base-table reference | the concept is a fixed set of constants or an enum | **No — by design** | Nothing to be incremental about; the table is tiny. The fallback is expected. |
-| `[Recursive table fallback]` | an explicit materialization override on an output that is part of a recursive computation | **Yes — in config** | Recursive outputs must be plain tables. Change the override to `table` or remove it. Without an override, PyRel materializes them as tables and does not warn. |
+| `[Recursive table fallback]` | an explicit materialization override on an output that is part of a recursive computation | **Yes — in config** | Recursive outputs must be plain tables. Set `materialized: true` and `incremental: false` on the override, or remove it. Without an override, PyRel materializes them as tables and does not warn. |
 | `[Volatile object materialized]` | the definition reads `datetime.now()` | Only by removing `now()` | Each refresh computes the value once per run, which is usually the intent. Report it; don't rewrite. |
 
 To tell the first two apart, look at the concept's definition in the model: literal
@@ -71,13 +71,11 @@ To tell the first two apart, look at the concept's definition in the model: lite
 ## 4. After a successful deploy, check the model actually holds data
 
 The most expensive silent state is not a warning at all: **a deploy can report success and the
-model can contain no rows.** Install and refresh are separate: without `--wait`, deploy returns once
+model can contain no rows.** Install and refresh are separate: with `--no-wait`, deploy returns once
 the model is installed, so a first refresh that then fails leaves the deploy reading as a success.
-(`--wait` raises `Refresh task … failed` instead.) `[Refresh Tasks Cannot Run]` means the same
-outcome with or without `--wait`: the tables exist but nothing refreshes them (on a redeploy, they
-stay at their old contents) — relay the grant it names and the manual-refresh `CALL` it prints.
-`[Refresh Task Privileges Unverified]` means PyRel could not confirm the grant; if the tables stay
-empty, that grant is the first suspect.
+(The default wait raises `Refresh task … failed` instead.) A role that cannot start the refresh tasks fails
+the deploy with `Could not start the model's refresh tasks`: relay the grant it names, or make every
+schedule manual-only, then deploy again.
 
 After any deploy, before telling the user it worked:
 

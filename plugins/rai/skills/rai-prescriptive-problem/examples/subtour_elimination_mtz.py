@@ -59,7 +59,7 @@ problem.satisfy(model.require(Node.u == 1).where(Node.v(1)))
 # Degree constraints: exactly one in-edge and one out-edge per node
 node_flow = sum(Edge.x).per(Node)
 problem.satisfy(
-    model.require(
+    model.where(Node).require(
         node_flow.where(Edge.j == Node.v) == 1,
         node_flow.where(Edge.i == Node.v) == 1,
     )
@@ -76,6 +76,7 @@ problem.satisfy(
         Edge.j > 1,
         Ni.v(Edge.i),
         Nj.v(Edge.j),
+        node_count,
     ).require(Ni.u - Nj.u + node_count * Edge.x <= node_count - 1)
 )
 

@@ -51,7 +51,7 @@ Every solver but MiniZinc rejects an antecedent other than `x == 0` / `x == 1` o
 problem.satisfy(model.require(implies(x == 1, y == 1)))
 
 # If facility is open, production must be positive
-problem.satisfy(model.require(implies(Facility.x_open == 1, Facility.x_production >= 1)))
+problem.satisfy(model.where(Facility).require(implies(Facility.x_open == 1, Facility.x_production >= 1)))
 ```
 
 ## `special_ordered_set_type_1` — SOS1 at most one non-zero
@@ -62,7 +62,9 @@ At most one variable in the set can be non-zero. Used for selecting exactly one 
 
 ```python
 # At most one facility in a region can be open
-problem.satisfy(model.require(special_ordered_set_type_1(Facility.index, Facility.x_open).per(Region)))
+problem.satisfy(model.where(Region).require(
+    special_ordered_set_type_1(Facility.index, Facility.x_open).where(Facility.region == Region).per(Region)
+))
 ```
 
 Arguments: `(index_expression, variable_expression)` where `index` defines the ordering.

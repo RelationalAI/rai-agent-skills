@@ -53,12 +53,12 @@ problem.solve_for(Route.x_flow, name=["flow", Route.id], lower=0, upper=Route.ca
 Demand.x_unmet = model.Property(f"{Demand} has {Float:unmet}")
 problem.solve_for(Demand.x_unmet, name=["unmet", Demand.id], lower=0)
 
-# Forcing constraint: flow into location/product + slack >= demand
+# Forcing constraint: flow into location/product + slack >= demand.
+# `| 0.0` gives a demand with no route a zero inflow, so its slack still covers it.
 D, R = Demand.ref(), Route.ref()
 problem.satisfy(
-    model.require(sum(R.x_flow).per(D) + D.x_unmet >= D.quantity).where(
-        R.destination == D.location,
-        R.product == D.product,
+    model.where(D).require(
+        (sum(R.x_flow).where(R.destination == D.location, R.product == D.product).per(D) | 0.0) + D.x_unmet >= D.quantity
     ),
     name=["demand_sat", D.id],
 )

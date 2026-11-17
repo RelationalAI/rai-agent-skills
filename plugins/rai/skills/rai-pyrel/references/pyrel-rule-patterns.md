@@ -310,10 +310,6 @@ Python's own negation operators do not work on RAI expressions:
 not model.RecommendationLog.was_clicked
 ```
 
-On `relationalai<1.20.1`, some negations inside `where()` were silently dropped (the query returned
-unfiltered results) — upgrade rather than restructure (see
-[common-pitfalls.md](common-pitfalls.md)).
-
 **Aggregation-based rule — flag groups exceeding threshold:**
 
 ```python

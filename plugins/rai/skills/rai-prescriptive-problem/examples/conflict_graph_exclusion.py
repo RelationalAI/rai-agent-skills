@@ -43,14 +43,16 @@ problem.solve_for(
 )
 
 # Constraint: each machine scheduled exactly once
-problem.satisfy(model.require(sum(ScheduleRef.x_assigned).where(ScheduleRef.machine == Machine).per(Machine) == 1))
+problem.satisfy(
+    model.where(Machine).require(sum(ScheduleRef.x_assigned).where(ScheduleRef.machine == Machine).per(Machine) == 1)
+)
 
 # Constraint: crew hours per slot not exceeded
 problem.satisfy(
-    model.require(
-        sum(ScheduleRef.x_assigned * ScheduleRef.machine.maintenance_hours)
+    model.where(TimeSlot).require(
+        (sum(ScheduleRef.x_assigned * ScheduleRef.machine.maintenance_hours)
         .where(ScheduleRef.slot == TimeSlot)
-        .per(TimeSlot)
+        .per(TimeSlot) | 0)
         <= TimeSlot.crew_hours
     )
 )

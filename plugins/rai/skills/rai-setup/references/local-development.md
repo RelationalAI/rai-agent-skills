@@ -17,7 +17,7 @@ from relationalai.semantics import Model
 config = create_config(
     connections={"local": DuckDBConnection(path=":memory:")},  # or a file path, e.g. "./dev.duckdb"
     default_connection="local",
-    deployment={"schema": "main", "auto_deploy": True},   # routes to the DuckDB executor + materializes before queries
+    deployment={"public_schema": "main", "identity": {"internal_schema": "main_internal"}, "auto_deploy": True},   # routes to the DuckDB executor + materializes before queries
 )
 model = Model("my_model", config=config)
 ```
@@ -31,7 +31,9 @@ connections:
     type: duckdb
     path: ":memory:"        # or a file, e.g. ./dev.duckdb
 deployment:
-  schema: main
+  public_schema: main
+  identity:
+    internal_schema: main_internal
   auto_deploy: true
 ```
 
@@ -58,6 +60,6 @@ From here the model is authored exactly as against Snowflake — see `rai-pyrel`
 |---|---|---|
 | `Expected a fully-qualified table name with 3 parts` | DuckDB tables need `database.schema.table` | Reference as `memory.<schema>.<table>` |
 | Query falls back to the Snowflake path, or reads an empty/missing model relation | `deployment` section / `auto_deploy` not set | Add a `deployment` section with `auto_deploy: true` |
-| `Configuration must specify a non-empty schema name` | No install schema for model relations | Set `deployment.schema` (e.g. `main`) |
-| `Existing object X is of type Table, trying to replace with type View` | DuckDB is case-insensitive — a source table named like a concept collides with the installed view | Put source tables in a schema separate from the model install schema (`deployment.schema`) |
+| `a 'deployment:' section must name where the model deploys` | No install schema for model relations | Set `deployment.public_schema` (e.g. `main`) and `deployment.identity.internal_schema` (e.g. `main_internal`) |
+| `Existing object X is of type Table, trying to replace with type View` | DuckDB is case-insensitive — a source table named like a concept collides with the installed view | Put source tables in a schema separate from the model install schema (`deployment.public_schema`) |
 | Aggregate shows the global value on every group row | Bare `select(key, agg)` doesn't group | Wrap in `distinct(key.alias(...), agg.per(key).alias(...))` |

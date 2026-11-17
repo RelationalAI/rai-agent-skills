@@ -71,6 +71,40 @@ model.require(x_weight <= fast_cap * y_bin_fast).where(
 
 **When to use which:** Style 1 reads naturally when the scope defines entity relationships (pairwise, adjacency). Style 2 reads naturally when the requirement is the primary statement and scope is a filter.
 
+### Name the constraint's rows in its `where`
+
+A constraint holds on every row of its `where`, as PyRel's `require` does. The entity a constraint is stated for, and each `.per()` group, must therefore be named in the `where`. Releases after 2.0.0 refuse a name only the `require` clause uses when the constraint reaches `satisfy` (`This constraint has one instance per ..., but its where clause does not bind ...`, or `... does not name ...` for a `.per()` group); earlier ones accept it.
+
+```python
+# An entity: say which rows (not model.require(intake >= Nutrient.min))
+model.where(Nutrient).require((intake | 0) >= Nutrient.min)
+
+# A group: name it; the filter tying members to it stays inside the aggregate.
+# A cap reaches the group through its members, so a Source with no Lane gets no constraint
+model.where(Lane.from_source(Source)).require(sum(Lane.flow).where(Lane.from_source(Source)).per(Source) <= Source.capacity)
+# A requirement every group must meet names the group itself; `| 0` gives a Customer with no Route a zero total,
+# so its row holds exactly when its demand is 0
+model.where(Customer).require((sum(Route.x_flow).where(Route.customer == Customer).per(Customer) | 0) >= Customer.demand)
+
+# Several entities
+model.where(Position, Assortment).require(
+    implies(Position.x_assort == Assortment.id, Position.x_rev == Assortment.revenue)
+)
+
+# A Relationship value read in the require clause: name it too
+model.where(Ni := Node, Nj := Node.ref(), Ni.v(Edge.i), Nj.v(Edge.j), node_count).require(
+    Ni.u - Nj.u + node_count * Edge.x <= node_count - 1
+)
+```
+
+- A `require` over one value, such as `model.require(sum(X.v) <= c)`, needs no `where`.
+- A `keyed_by` value must come from the `where` as well.
+- A ref the `where` binds also filters the aggregates that read it: `model.where(Lane.active, ...)` narrows `sum(Lane.flow)` to active lanes. Use a separate `.ref()` in the `where` when it should not.
+- A `where` row the check has no value for (an entity with no `cap`, a group with no members, a row outside a scoped variable's `where=[...]`) is dropped by releases through 2.0.0, which leaves the entity unconstrained, and exported by later ones as an always-false constraint, which makes the problem infeasible. Either way, give the row a value (`sum(...) | 0` for an empty sum) or narrow the `where` to the rows the constraint applies to; a constraint on a scoped variable repeats its scope (`model.where(Lane.active)`).
+- Narrow only past rows the constraint does not apply to, like a cap with no members or a flow source with nothing to conserve: narrowing past a requirement silently drops it.
+- Releases through 2.0.0 accept a group total's `| 0` only beside a value that varies over every group key (`<= Group.cap`); beside a constant or only another default they raise `A multi-row match ...`. Leave it off there and check before solving that every group a requirement covers has members, since a row with no value is dropped.
+- On MiniZinc, a solver service before MiniZinc.jl 0.3.20 reports `OTHER_ERROR` for any row with no variables, whether always false or the `0 <= cap` a `| 0` gives.
+
 ### Forcing constraints
 
 #### For minimize objectives
@@ -82,8 +116,8 @@ When the objective is to MINIMIZE with non-negative cost coefficients and no for
 **The zero test (for non-negative cost coefficients):** "If the solver sets everything to 0, would all constraints be satisfied?" If YES, add a forcing constraint.
 
 **How to identify the right one:** What must happen in the real world?
-- Demands/requirements must be satisfied → `sum(Decision.x_quantity).per(Target) >= Target.required`
-- Tasks/orders must be assigned → `sum(Assignment.is_assigned).per(Item) == 1`
+- Demands/requirements must be satisfied → `(sum(Decision.x_quantity).where(Decision.target == Target).per(Target) | 0) >= Target.required`
+- Tasks/orders must be assigned → `sum(Assignment.is_assigned).where(Assignment.item == Item).per(Item) == 1`
 - Resources must flow through the system → flow conservation at nodes
 - Weights/allocations must total a fixed amount → `sum(Decision.x_weight) == 1`
 
@@ -91,9 +125,9 @@ When the objective is to MINIMIZE with non-negative cost coefficients and no for
 
 | Business requirement | Forcing constraint scope | Example |
 |---------------------|------------------------|---------|
-| Each item served **at least once** across the horizon | Aggregate cross-product to base concept | `sum(ItemPeriod.x_active).per(Item) >= 1` |
+| Each item served **at least once** across the horizon | Aggregate cross-product to base concept | `sum(ItemPeriod.x_active).where(ItemPeriod.item == Item).per(Item) >= 1` |
 | Each item served **every period** | Per cross-product entity | `ItemPeriod.x_active >= 1` (or use slack) |
-| At least N items served **per period** | Aggregate cross-product to period | `sum(ItemPeriod.x_active).per(Period) >= N` |
+| At least N items served **per period** | Aggregate cross-product to period | `sum(ItemPeriod.x_active).where(ItemPeriod.period == Period).per(Period) >= N` |
 
 Common mistake: applying a per-cross-product forcing constraint (every item in every period) when the business only requires per-base-concept (each item at least once). This over-constrains the problem, makes capacity constraints non-binding, and produces unrealistic "do everything everywhere" solutions.
 
@@ -109,13 +143,13 @@ When the objective is to MAXIMIZE (profit, revenue, value) with positive coeffic
 
 ```python
 # Each shift must have minimum coverage
-problem.satisfy(model.where(Worker.x_assign(Shift, x)).require(
-    sum(Worker, x).per(Shift) >= min_coverage
+problem.satisfy(model.where(Shift).require(
+    sum(Worker, x).where(Worker.x_assign(Shift, x)).per(Shift) >= min_coverage
 ))
 
 # Degree constraints: exactly one in-edge and one out-edge per node
 node_flow = sum(Edge.x).per(Node)
-problem.satisfy(model.require(
+problem.satisfy(model.where(Node).require(
     node_flow.where(Edge.j == Node.v) == 1,
     node_flow.where(Edge.i == Node.v) == 1
 ))
@@ -184,13 +218,13 @@ Self-defeating constraints force decision variables to zero universally, making 
 **Make zero-forcing conditional with `.where()`:**
 ```python
 # WRONG (self-defeating - blocks ALL production):
-problem.satisfy(model.require(SiteProduction.x_quantity == 0))
+problem.satisfy(model.where(SiteProduction).require(SiteProduction.x_quantity == 0))
 
 # CORRECT (conditional - only zero where no BOM exists):
-problem.satisfy(model.require(SiteProduction.x_quantity == 0).where(~SiteProduction.site.has_bom))
+problem.satisfy(model.where(SiteProduction, model.not_(SiteProduction.site.has_bom())).require(SiteProduction.x_quantity == 0))
 
 # CORRECT (upper bound, not forcing to zero):
-problem.satisfy(model.require(SiteProduction.x_quantity <= SiteProduction.capacity))
+problem.satisfy(model.where(SiteProduction).require(SiteProduction.x_quantity <= SiteProduction.capacity))
 ```
 
 Conditional zero-forcing is also how to rule out combinations the data makes impossible — `qty == 0` where `transit_days > due_day` (delivery can't arrive in time), `assigned == 0` where `worker.skill != task.required_skill`, `flow == 0` where `distance > max_range`. Ask which combinations of decision variables the data rules out: these are feasibility filters, not optimization trade-offs, so always include them.
@@ -235,7 +269,7 @@ problem.solve_for(DecisionConcept.x_assigned, ...)
 problem.satisfy(model.require(sum(BaseConcept.x_assigned) >= 1))
 
 # RIGHT - references x_assigned on defining concept:
-problem.satisfy(model.require(sum(DecisionConcept.x_assigned).per(BaseConcept) >= 1))
+problem.satisfy(model.where(BaseConcept).require(sum(DecisionConcept.x_assigned).where(DecisionConcept.base == BaseConcept).per(BaseConcept) >= 1))
 ```
 
 **To link to base model entities**, navigate via relationships defined on the decision concept (e.g., `DecisionConcept.entity_a`, `DecisionConcept.entity_b`), not by referencing the variable on the base concept.
@@ -251,7 +285,7 @@ Each `keyed_by` entry becomes an **identifying back-pointer Property** on the re
 ```python
 # Declare the family's grounding key so each instance reads back by entity:
 cap = problem.satisfy(
-    model.require(usage <= Resource.capacity),
+    model.where(Resource).require((usage | 0) <= Resource.capacity),
     name=["cap", Resource.name],        # readable display label only
     keyed_by={"resource": Resource},    # identifying key -> cap.resource back-pointer
 )
@@ -262,12 +296,13 @@ cap = problem.satisfy(
 Rules of the declaration:
 
 - **The keys must uniquely determine the constraint instance** (1:1). A key set that doesn't — a family wider than its key, or two conjuncts of a single `require(A, B)` sharing the same keys — forces two constraint expressions onto one identity and **raises at solve** (an `FDError`: the relationship violates functional dependency guarantees). Add the missing key, or split a multi-conjunct `require` into one `satisfy` per conjunct.
+- **Every key must come from the constraint's `where`** (name the entity there, as in `model.where(Resource)` above): a `keyed_by` value the `where` does not bind is refused by releases after 2.0.0, since a `where` row with no such value would get no constraint.
 - **A constraint grounded over several entities takes several keys** — `keyed_by={"worker": Worker, "shift": Shift}` — and exposes one back-pointer per key.
 - **A key need not be an entity.** A value reference such as an identifier — `keyed_by={"i": X.i}` — keys by that scalar (`con.i`), the natural form when the grounding domain is a bare index with no richer entity to join to. A bare primitive type (`Integer`) is rejected — it carries no per-instance value.
 - **Key names** must be valid identifiers and must not clash with the constraint's managed properties, compared case-insensitively: `basis_status`, `display_string`, `id`, `in_conflict`, `name`, `root`, `shadow_price`, `type`. The raised `ValueError` lists the full set, so read that rather than this line if they diverge.
 - **Omit `keyed_by`** for constraints you never read back by key — they are still valid solver constraints.
 
-`name=` plays no part in identifying instances or naming the back-pointer, but it is not cosmetic: it keeps `problem.display()` rows readable (`name=["cap", Entity.id]`), and from `relationalai>=1.29` it is what `aggs.limit` caps a `display_string` read on: an unnamed constraint drops out of a capped read entirely while still appearing in the uncapped one. A `keyed_by` back-pointer stays available as a `where` filter on the same read.
+`name=` plays no part in identifying instances or naming the back-pointer, but it is not cosmetic: it keeps `problem.display()` rows readable (`name=["cap", Entity.id]`), and it is what `aggs.limit` caps a `display_string` read on: an unnamed constraint drops out of a capped read entirely while still appearing in the uncapped one. A `keyed_by` back-pointer stays available as a `where` filter on the same read.
 
 This is the formulation-time bridge for the post-solve readback patterns in `rai-prescriptive-results` (Sensitivity & conflict attributes, plus its sensitivity-analysis.md and conflict-analysis.md references).
 
@@ -298,7 +333,7 @@ problem.satisfy(model.require(x_qty_mode == ResourceGroup.inv_start * y_bin_mode
 A declared `model.Relationship()` without a corresponding `model.define()` rule has NO DATA at solve time. The relationship exists in the schema but has zero bindings.
 
 **Symptoms:**
-- No constraint rows are generated — joins on the unwired relationship match zero entities, and under PyRel relational semantics a body with no tuples produces no row.
+- In a constraint's `where`, the unwired relationship matches nothing, so the constraint has no rows. Read only in the `require` clause (a sum over it), it leaves the `where` rows without a value: releases through 2.0.0 drop them, later ones export them as always false, so the problem is infeasible.
 - `.per(Concept)` aggregations return nothing.
 - The solver returns OPTIMAL with a vacuous objective (typically zero on minimize), masking the absent constraint.
 
@@ -319,9 +354,10 @@ Constrain current decisions to stay within a percentage band of historical value
 
 ```python
 # Current allocation must stay within +/- tolerance of historical
-model.require(
-    sum(Allocation.x_spend).per(Channel) <= (1 + tolerance) * Channel.historical_spend,
-    sum(Allocation.x_spend).per(Channel) >= (1 - tolerance) * Channel.historical_spend,
+total = sum(Allocation.x_spend).where(Allocation.channel == Channel).per(Channel) | 0
+model.where(Channel).require(
+    total <= (1 + tolerance) * Channel.historical_spend,
+    total >= (1 - tolerance) * Channel.historical_spend,
 )
 ```
 
@@ -329,7 +365,8 @@ Both current and historical expressions must join to the same grouping concepts 
 
 ```python
 model.where(
-    Allocation.campaign(Campaign), Allocation.channel(Channel)
+    Allocation.campaign(Campaign), Allocation.channel(Channel),
+    HistoricalSpend.campaign(Campaign), HistoricalSpend.channel(Channel),
 ).require(
     sum(Allocation.x_spend).per(Channel, Campaign) <= (1 + tol) * HistoricalSpend.amount
 )
@@ -355,8 +392,8 @@ This ensures balanced allocation across sub-groups rather than concentrating res
 **DIRECT joins** — concepts linked by a relationship:
 ```python
 # A.rel -> B (direct link): aggregate A's variable per B, compare to B's threshold
-problem.satisfy(model.require(
-    sum(A.x_var).where(A.rel(B)).per(B) >= B.threshold
+problem.satisfy(model.where(B).require(
+    (sum(A.x_var).where(A.rel(B)).per(B) | 0) >= B.threshold
 ))
 ```
 
@@ -366,10 +403,10 @@ Create an aggregation concept keyed by the shared dimension, then aggregate sepa
 # Define junction keyed by shared dimension
 model.define(AggConcept.new(dim_key=B.dim_link))
 
-# Aggregate each side per the shared dimension
-supply = sum(A.x_var).where(A.dim_link(AggConcept.dim_key)).per(AggConcept)
+# Aggregate each side per the shared dimension; `| 0.0` gives a key with no A a zero total
+supply = sum(A.x_var).where(A.dim_link(AggConcept.dim_key)).per(AggConcept) | 0.0
 demand = sum(B.quantity).where(B.dim_link(AggConcept.dim_key)).per(AggConcept)
-problem.satisfy(model.require(supply + AggConcept.x_slack >= demand))
+problem.satisfy(model.where(AggConcept).require(supply + AggConcept.x_slack >= demand))
 ```
 
 **LINKING TWO CROSS-PRODUCT CONCEPTS through shared dimensions:**
@@ -377,7 +414,9 @@ problem.satisfy(model.require(supply + AggConcept.x_slack >= demand))
 When two cross-product concepts share dimensions (e.g., `TechnicianMachinePeriod` and `MachinePeriod` both have machine and period), join them on the shared dimensions inside the aggregate's `.where()` and group with `.per(GroupingConcept)`:
 
 ```python
-sum(TMP.x_assigned).where(TMP.machine == MP.machine, TMP.period == MP.period).per(MP) <= MP.cap
+model.where(TMP.machine == MP.machine, TMP.period == MP.period).require(
+    sum(TMP.x_assigned).where(TMP.machine == MP.machine, TMP.period == MP.period).per(MP) <= MP.cap
+)
 ```
 
 Bare references unify within the require chain — no `.ref()` aliasing is needed for this pattern. For when `.ref()` is and isn't required, see `rai-pyrel` § Free-Variable Scoping.
@@ -399,9 +438,9 @@ model.define(UnmetDemand.new(sku=Demand.sku))  # One per unique demanded SKU
 problem.solve_for(UnmetDemand.x_slack, lower=0, name=["unmet", UnmetDemand.sku.id])
 
 # 2. Constraint: supply + slack >= demand, per shared dimension
-inflow_per_sku = sum(Operation.x_flow).where(Operation.output_sku == UnmetDemand.sku).per(UnmetDemand.sku)
+inflow_per_sku = sum(Operation.x_flow).where(Operation.output_sku == UnmetDemand.sku).per(UnmetDemand.sku) | 0.0
 demand_per_sku = sum(Demand.quantity).where(Demand.sku == UnmetDemand.sku).per(UnmetDemand.sku)
-problem.satisfy(model.require(inflow_per_sku + UnmetDemand.x_slack >= demand_per_sku))
+problem.satisfy(model.where(UnmetDemand, UnmetDemand.sku).require(inflow_per_sku + UnmetDemand.x_slack >= demand_per_sku))
 
 # 3. Objective: minimize cost + penalty for unmet demand
 PENALTY = 1000.0
@@ -464,21 +503,22 @@ When grouping a sum on an extended (cross-product) concept by one of its base co
 # Setup: AB is a cross-product of A x B
 # defined as: model.define(AB.new(a=A, b=B))
 
-# WRONG: .per(A) — solver returns OPTIMAL but constraints are silently mis-scoped.
-# The inner sum does NOT filter to AB rows where AB.a == A; it sums all AB
-# globally and replicates that constraint once per A entity.
+# WRONG: .per(A) — constraints are mis-scoped. The inner sum does NOT filter to AB rows
+# where AB.a == A; it sums all AB globally and replicates that constraint once per A entity.
+# Releases after 2.0.0 refuse this bare form, but naming A is not the fix:
+# model.where(A).require(sum(AB.x_active).per(A) == 1) is accepted, with these same rows.
 model.require(sum(AB.x_active).per(A) == 1)
 # Generates: sum(all_AB) == 1, sum(all_AB) == 1   (one per A — wrong)
 
-# CORRECT: .per(AB.a) — generates one constraint per A with the correctly
-# filtered sum.
-model.require(sum(AB.x_active).per(AB.a) == 1)
+# CORRECT: .per(AB.a), naming AB.a in the where — generates one constraint per A
+# with the correctly filtered sum.
+model.where(AB.a).require(sum(AB.x_active).per(AB.a) == 1)
 # Generates: sum(AB where a==A1) == 1, sum(AB where a==A2) == 1   (right)
 ```
 
-The failure is silent — solver returns OPTIMAL with the wrong feasibility region. Verify with `problem.display()` that per-group constraints have the expected disaggregated sums.
+Once the `where` names the group, the failure is silent — solver returns OPTIMAL with the wrong feasibility region. Verify with `problem.display()` that per-group constraints have the expected disaggregated sums.
 
-Per-group constraints also produce no row for entities whose bound property is unpopulated (a related but distinct mode — the `.per()` scope is correct, the *data* is sparse, so under PyRel relational semantics the body grounds only where the bound has tuples). Check grounding counts before solving: [pre-solve-validation.md](pre-solve-validation.md) > Cardinality checks.
+Per-group constraints also have no value for entities whose bound property is unpopulated (a related but distinct mode — the `.per()` scope is correct, the *data* is sparse): releases through 2.0.0 drop those rows, later ones export an always-false row. Check that every entity has its values before solving: [pre-solve-validation.md](pre-solve-validation.md) > Cardinality checks.
 
 **Rule 6: Access data properties on extended concepts via relationship traversal**
 Extended/cross-product concepts only have their own declared properties (relationships + decision variables). To access data properties from the base concept they reference, traverse the relationship.
@@ -505,7 +545,7 @@ sum(...).where(AB.b.category == ...)
 **Forcing constraint (requires positive activity):**
 Business description: "Ensure every target receives at least its required amount."
 ```
-GOOD: sum(Decision.x_var).where(Decision.target == Target).per(Target) >= Target.requirement
+GOOD: model.where(Target).require((sum(Decision.x_var).where(Decision.target == Target).per(Target) | 0) >= Target.requirement)
 Why:  Aggregates per target entity using .per(), references existing requirement property.
 
 BAD:  Decision.x_var >= Target.requirement
@@ -516,7 +556,7 @@ Why:  Missing aggregation. Compares each individual decision to the full require
 **Capacity constraint (limits shared resources):**
 Business description: "Total usage at each resource must not exceed its available capacity."
 ```
-GOOD: sum(Decision.x_var).where(Decision.resource == Resource).per(Resource) <= Resource.limit
+GOOD: model.where(Decision.resource == Resource).require(sum(Decision.x_var).where(Decision.resource == Resource).per(Resource) <= Resource.limit)
 Why:  Aggregates total usage per resource, then bounds by that resource's limit property.
 
 BAD:  Decision.x_var <= Resource.limit
@@ -549,7 +589,7 @@ Before finalizing selection, verify the selected constraints work together:
    - `minimize(... + M * x_unmet)` (penalty drives slack to zero when possible)
    This is correct — the slack absorbs infeasibility. When slack is present on the LHS, `>= 1` is a coverage-with-fallback pattern, not a hard per-entity minimum.
 
-8. **Hard per-entity minimums**: `sum(Decision.x).per(entity) >= N` WITHOUT a slack variable on the LHS imposes a hard minimum of N per entity. If N * (number of entities) exceeds total capacity, the problem is INFEASIBLE. Flag as WARNING with the arithmetic.
+8. **Hard per-entity minimums**: `sum(Decision.x).where(Decision.entity == Entity).per(Entity) >= N` WITHOUT a slack variable on the LHS imposes a hard minimum of N per entity. If N * (number of entities) exceeds total capacity, the problem is INFEASIBLE. Flag as WARNING with the arithmetic.
 
 ---
 

@@ -6,7 +6,7 @@
 #   - aggregates.sum(Node(p.nodes).weight).per(p) sums a per-node value per route
 #   - per-node filter via p.nodes(idx); native nested-segment filter via .where()
 # The per-node value is a stand-in for an upstream reasoner output (e.g. a
-# centrality score). Requires relationalai>=1.15 (paths is PREVIEW / pre-GA).
+# centrality score). paths is PREVIEW / pre-GA.
 
 from relationalai.semantics import Float, Integer, Model, String
 from relationalai.semantics.std import aggregates as aggs
@@ -63,7 +63,7 @@ model.where(lk.source(a), lk.target(b)).define(a.flows_to(b))
 #     aggregates.sum(Node(p.nodes).weight).per(p) sums the per-node value over
 #     each path's node sequence -- the core paths-only operation. ---
 src, dst = Source.ref(), Sink.ref()
-p = model.path(src, Node.flows_to.repeat(1, 5), dst).all_paths()
+p = model.path(src, Node.flows_to.repeat(1, 5), dst).all().paths()
 totals = model.where(
     p, total := aggs.sum(Node(p.nodes).weight).per(p),
 ).select(p.alias("path"), total.alias("total_weight")).to_df()
@@ -89,7 +89,7 @@ for _, r in ranked.iterrows():
 #     (not interior-only) existential predicate. ---
 idx = Integer.ref()
 through_flagged = model.where(
-    q := model.path(src, Node.flows_to.repeat(1, 5), dst).all_paths(),
+    q := model.path(src, Node.flows_to.repeat(1, 5), dst).all().paths(),
     Node(q.nodes(idx)).flagged == "yes",
 ).select(q.alias("path")).to_df()
 print(f"\n{through_flagged['path'].nunique()} route(s) pass through a flagged node "
@@ -104,7 +104,7 @@ clean = model.where(
         src,
         model.path(Node.flows_to).where(Node.flagged == "no").repeat(1, 5),
         dst,
-    ).where(src.flagged == "no", dst.flagged == "no").all_paths(),
+    ).where(src.flagged == "no", dst.flagged == "no").all().paths(),
 ).select(
     u.alias("path"),
     u.nodes["index"].alias("step"),

@@ -1,7 +1,7 @@
 # Path Enumeration
 <!-- v1-SENSITIVE -->
 
-> **PREVIEW — requires `relationalai>=1.15`** (earlier releases gate multi-edge, repeat-with-dst, point queries, and native filters).
+> **PREVIEW.**
 
 Path enumeration answers questions where **the answer is the route itself** — the actual sequence of nodes and edges along each path — not a node-level metric or an endpoint pair. It operates natively over the ontology (no `Graph()` instance).
 
@@ -15,34 +15,34 @@ Plain enumeration is necessary but not sufficient reason to reach for paths: a r
 | Shortest distance between pairs | `graph.distance()` |
 | Per-entity counts / one-hop group-by | `aggregates.count(distinct(...)).per(...)` |
 | Fixed-length chain endpoints (k-hop) | Native chain: `Person.follows.follows.name` |
-| Variable-length traversal, just the node/edge sequence | `m.path(Concept.rel.repeat(min, max)).all_paths()` |
-| **Score/rank each route by a per-node value aggregated *along the sequence*** (not expressible via `reachable`/`distance`; the value is often a reasoner output) | `path(...).all_paths()` + `aggregates.sum(Node(p.nodes).value).per(p)` |
-| **Routes satisfying a joint per-path predicate** (every node of / no node of a type; total weight ≤ budget) | `path(...).all_paths()` + per-node predicate on `p.nodes(idx)` |
-| **Paths between typed endpoints, node-filtered** | `path(src_typed, edge.repeat(1, N), dst_typed).all_paths()` + in-PyRel per-node predicate |
-| **Route alternating between different relationship types** (e.g. `ships_to` then `supplies`, repeated) | `path(a.rel1, b.rel2).repeat(1, 5).all_paths()` — distinct edges in series (`>=1.15`) |
-| **Maximal (longest non-extendable) paths** | `path(...).all_paths()`, then in pandas drop any node sequence that is a contiguous sub-chain of a longer one |
+| Variable-length traversal, just the node/edge sequence | `m.path(Concept.rel.repeat(min, max)).all().paths()` |
+| **Score/rank each route by a per-node value aggregated *along the sequence*** (not expressible via `reachable`/`distance`; the value is often a reasoner output) | `path(...).all().paths()` + `aggregates.sum(Node(p.nodes).value).per(p)` |
+| **Routes satisfying a joint per-path predicate** (every node of / no node of a type; total weight ≤ budget) | `path(...).all().paths()` + per-node predicate on `p.nodes(idx)` |
+| **Paths between typed endpoints, node-filtered** | `path(src_typed, edge.repeat(1, N), dst_typed).all().paths()` + in-PyRel per-node predicate |
+| **Route alternating between different relationship types** (e.g. `ships_to` then `supplies`, repeated) | `path(a.rel1, b.rel2).repeat(1, 5).all().paths()` — distinct edges in series |
+| **Maximal (longest non-extendable) paths** | `path(...).all().paths()`, then in pandas drop any node sequence that is a contiguous sub-chain of a longer one |
 
 ## Quick API
 
 ```python
-# path() / model.path() builds a PathPattern; .all_paths() enumerates all matching
+# path() / model.path() builds a PathPattern; .all().paths() enumerates all matching
 # paths, returning a unary relationship of PathTraversal. Bind with a walrus in where():
 df = model.where(
-    p := model.path(Concept.edge.repeat(1, 5)).all_paths(),
+    p := model.path(Concept.edge.repeat(1, 5)).all().paths(),
 ).select(p, p.nodes["index"], Concept(p.nodes).id.alias("node")).to_df()
 ```
 
-- **`.repeat(min, max)`** on the edge chain: `repeat(3)` → exactly 3; `repeat(1, 20)` → between 1 and 20; `repeat(0, K)` valid; `repeat(min=1)` raises (a finite `max` is always required). **Pass both bounds explicitly:** since 1.17 a bare `repeat(max=20)` also raises (an explicit `min` is required), so `repeat(1, 20)` is the canonical form.
+- **`.repeat(min, max)`** on the edge chain: `repeat(3)` → exactly 3; `repeat(1, 20)` → between 1 and 20; `repeat(0, K)` valid; `repeat(min=1)` raises (a finite `max` is always required). **Pass both bounds explicitly:** a bare `repeat(max=20)` also raises (an explicit `min` is required), so `repeat(1, 20)` is the canonical form.
 - **`PathTraversal.length`** is a plain property (no parens). A path of hop-length `L` has nodes at indices `0..L`; interior indices are `0 < idx < p.length`.
 - **Node/edge access has two distinct shapes:**
   - *Projection in `select(...)`*: `p.nodes["index"]` (position column); `Concept(p.nodes).property` (cast node to a concept, project a property).
-  - *Constraint in `where(...)`*: `p.nodes(idx)` with `idx = Integer.ref()` unifies the node at a position. A free `idx` ranges over **all** positions (endpoints included); bound it with `idx > 0, idx < p.length` for interior-only. The endpoints are auto-unified at `p.nodes(0)` and `p.nodes(p.length)`, so you can reference them in an enclosing `where()` / `select()` / `define()` — e.g. `where(p := path(src, ..., dst).all_paths(), src.id < dst.id)`.
+  - *Constraint in `where(...)`*: `p.nodes(idx)` with `idx = Integer.ref()` unifies the node at a position. A free `idx` ranges over **all** positions (endpoints included); bound it with `idx > 0, idx < p.length` for interior-only. The endpoints are auto-unified at `p.nodes(0)` and `p.nodes(p.length)`, so you can reference them in an enclosing `where()` / `select()` / `define()` — e.g. `where(p := path(src, ..., dst).all().paths(), src.id < dst.id)`.
   - Same dual shape for `p.relationships(index)` (the edge label at each hop, a `String` — see the format note in the multi-relationship section) and `p.relationship_fields(index, field_index)` (**entity-typed** auxiliary field values of N-arity edges; non-entity fields are not retrievable this way).
-- **Not implemented (raise `NotImplementedError`)** — do not teach: `shortest_paths()` (and `.per()`), `reverse()`, `undirected()`. Walk-semantics `all_paths()` is the only mode.
+- **Not implemented (raise `PathAPINotImplemented`)** — do not teach: `reverse()`, `undirected()`. This reference covers walk-semantics `.all().paths()` only; the shortest-path selectors (`.any_shortest()`, `.all_shortest()`) are not covered here.
 - **Gated (raise on build)** — also do not teach: multi-step chains `A.b.c` (write the hops as separate edges — see multi-relationship sequence below), relationship-field *filtering* (access is fine; read the field and filter in standard PyRel), aggregate expressions inside a path `.where()`, path unions, and unary relationships *as edge arguments*. Adjacent *bare* node arguments compile but yield trivial single-node results — don't use them.
-- **On `relationalai>=1.15`,** `all_paths()` unifies the path src/dst with your endpoints, and multi-edge, repeat-with-dst, point queries, and node/endpoint `.where` filters translate natively (no longer slow post-filters). A single `.where` filter may reference only one node, or the two endpoints of one edge; anything spanning multiple edges stays a residual post-filter. **One hard rule:** an N-arity edge's *first* field is the src and its *last* field is the dst — **both must be entity-typed**; a non-entity last field raises `PathEdgeLabelError` (see escalation below).
-- **Strictness since 1.19:** referencing an *interior* path binder from an enclosing `where()` / `select()` / `define()` (endpoints remain fine — see the node-access bullet above), and reusing a node ref or filter across a `repeat()` boundary, both raise `PathInternalError` ("A .where filter could not be routed..."). Earlier releases silently ignored these constraints; code that appeared to work by no-oping now fails loudly — restructure with `p.nodes(idx)` constraints or post-filters.
-- **Bare `Relationship` objects are accepted as edge arguments since 1.19.4** — `path(ships_to.repeat(1, 5))` works with a standalone `model.Relationship(...)`; earlier releases required a `Concept.attr` chain.
+- `.all().paths()` unifies the path src/dst with your endpoints, and multi-edge, repeat-with-dst, point queries, and node/endpoint `.where` filters translate natively. A single `.where` filter may reference only one node, or the two endpoints of one edge; one spanning multiple edges works only if it references just the two path endpoints (it runs as a post-filter); one that references an interior node raises. **One hard rule:** an N-arity edge's *first* field is the src and its *last* field is the dst — **both must be entity-typed**; a non-entity last field raises `PathEdgeLabelError` (see escalation below).
+- **Strictness:** referencing an *interior* path binder from an enclosing `where()` / `select()` / `define()` (endpoints remain fine — see the node-access bullet above), and reusing a node ref or filter across a `repeat()` boundary, both raise `PathInternalError` (for filters, "A .where filter could not be routed..."). Restructure with `p.nodes(idx)` constraints or post-filters.
+- **Bare `Relationship` objects are accepted as edge arguments** — `path(ships_to).repeat(1, 5)` works with a standalone `model.Relationship(...)`. `.repeat()` lives on the path pattern or a `Concept.attr` chain, not on a bare Relationship.
 
 ## Constructor patterns
 
@@ -53,7 +53,7 @@ df = model.where(
 Node.linked = model.Relationship(f"{Node} linked to {Node}")
 i = Interaction.ref(); a, b = Node.ref(), Node.ref()
 model.where(i.source(a), i.target(b)).define(a.linked(b))
-df = model.where(p := model.path(Node.linked.repeat(1, 6)).all_paths()) \
+df = model.where(p := model.path(Node.linked.repeat(1, 6)).all().paths()) \
           .select(p, p.nodes["index"], Node(p.nodes).id.alias("node")).to_df()
 ```
 
@@ -70,18 +70,18 @@ m.path(seed, Node.reaches.repeat(1, 3), ...)  # `v` via p.relationship_fields(id
 
 Don't reach for the N-arity form by default — the binary derived edge covers the common case.
 
-**(c) Multi-relationship sequence — distinct edges in series** (`relationalai>=1.15`). When a route alternates between different relationships, pass them as separate edge arguments; consecutive edges share the node between them — e.g. `b` is the destination of the first `ships_to` edge and the source of the second `supplies` edge below:
+**(c) Multi-relationship sequence — distinct edges in series**. When a route alternates between different relationships, pass them as separate edge arguments; consecutive edges share the node between them — e.g. `b` is the destination of the first `ships_to` edge and the source of the second `supplies` edge below:
 
 ```python
 # a route that takes a `ships_to` edge then a `supplies` edge
 a, b = Node.ref(), Node.ref()
-p := model.path(a.ships_to, b.supplies).all_paths()          # one of each, in series
-p := model.path(a.ships_to, b.supplies).repeat(1, 5).all_paths()  # the pair, alternating up to 5×
+p := model.path(a.ships_to, b.supplies).all().paths()          # one of each, in series
+p := model.path(a.ships_to, b.supplies).repeat(1, 5).all().paths()  # the pair, alternating up to 5×
 ```
 
 Write multiple hops of the *same* relationship as `repeat` (`Node.r.repeat(1, N)`), never as a multi-step chain `Node.r.r` (gated); write a route over *different* relationships as a multi-relationship sequence like this, and `.repeat(...)` the whole pattern to alternate the pair.
 
-**Edge-label format (`p.relationships`):** since 1.17 the per-hop label is the bare relationship name (e.g. `ships_to`); on 1.15/1.16 it was a decorated string like `-⟨ships_to⟩→` that needed stripping.
+**Edge-label format (`p.relationships`):** the per-hop label is `Owner.rel` (e.g. `Node.ships_to`).
 
 ## Per-path aggregation
 
@@ -89,12 +89,12 @@ Write multiple hops of the *same* relationship as `repeat` (`Node.r.repeat(1, N)
 
 ```python
 from relationalai.semantics.std import aggregates  # import the aggregates once
-p := model.path(SrcType.ref(), Node.linked.repeat(1, N), DstType.ref()).all_paths()
+p := model.path(SrcType.ref(), Node.linked.repeat(1, N), DstType.ref()).all().paths()
 # rank routes by total Node.value summed across the sequence
 aggregates.sum(Node(p.nodes).value).per(p)
 ```
 
-Path-level rollups (`aggregates.count(p).per(...)`, `aggregates.sum(p, p.length).per(...)`) group by the path or its endpoints. Prefer in-PyRel aggregation with `.inspect()`; reserve `.to_df()` + pandas for rollups PyRel can't express (e.g. string-joining node names into a chain label). **Do not** use the design-proposal `global_shortest` / `per_x` forms — they depend on the unimplemented `shortest_paths().per()`.
+Path-level rollups (`aggregates.count(p).per(...)`, `aggregates.sum(p, p.length).per(...)`) group by the path or its endpoints. Prefer in-PyRel aggregation with `.inspect()`; reserve `.to_df()` + pandas for rollups PyRel can't express (e.g. string-joining node names into a chain label). **Do not** use the design-proposal `global_shortest` / `per_x` forms — shortest paths use `.any_shortest()` / `.all_shortest()` with `.per(...)`, which this reference does not cover.
 
 ## Where to express path constraints
 
@@ -104,16 +104,16 @@ Constraints can go in three places. **Prefer the earliest one that fits** — it
 
 ```python
 src, dst = SrcType.ref(), DstType.ref()
-p := model.path(src, Node.linked.repeat(1, N), dst).all_paths()   # start is SrcType, end is DstType
+p := model.path(src, Node.linked.repeat(1, N), dst).all().paths()   # start is SrcType, end is DstType
 ```
 
 **2. In an attached `.where()` — one node, or the two endpoints of one edge.** Filters here translate natively into enumeration:
 
 ```python
 a, b = Node.ref(), Node.ref()
-model.path(a.ships_to, b.supplies).where(SrcType(a)).all_paths()                # node type (prefer form 1)
-model.path(a.ships_to, b.supplies).where(b.location == "Seattle").all_paths()   # single-node property
-model.path(a.ships_to, b.supplies).where(a.id < b.id).all_paths()               # one edge's two endpoints
+model.path(a.ships_to, b.supplies).where(SrcType(a)).all().paths()                # node type (prefer form 1)
+model.path(a.ships_to, b.supplies).where(b.location == "Seattle").all().paths()   # single-node property
+model.path(a.ships_to, b.supplies).where(a.id < b.id).all().paths()               # one edge's two endpoints
 ```
 
 A single attached filter may reference only one node, or one edge's two endpoints; anything wider goes in the enclosing `where()`.
@@ -123,7 +123,7 @@ A single attached filter may reference only one node, or one edge's two endpoint
 ```python
 src, dst = SrcType.ref(), DstType.ref()
 idx = Integer.ref()
-p := model.path(src, Node.linked.repeat(1, N), dst).all_paths()
+p := model.path(src, Node.linked.repeat(1, N), dst).all().paths()
 model.where(p, src.location == "Seattle", dst.location == "London")   # independent src/dst (prefer form 1)
 model.where(p, src.id < dst.id)                                        # joint src/dst
 model.where(p, p.length == 7)                                          # whole-path property
@@ -136,14 +136,14 @@ A free `idx` ranges over **all** positions, endpoints included; add `idx > 0, id
 
 ```python
 p := model.path(src, model.path(Node.linked).where(Node.flag == "no").repeat(1, N), dst) \
-          .where(dst.flag == "no").all_paths()
+          .where(dst.flag == "no").all().paths()
 ```
 
 **Point queries** pin a specific src/dst by id: `where(p, src.id == "X", dst.id == "Y")`. (Relationship-field *filtering* stays gated — read the field with `relationship_fields` and filter in standard PyRel.)
 
 ## Walk vs simple path — a routine decision, not an edge case
 
-`all_paths()` has **walk semantics** and there is no native simple-path mode.
+`.all().paths()` has **walk semantics** and there is no native simple-path mode.
 
 - **On a DAG** (BOM, dependency, supply graphs), walks already equal simple paths — nothing to do, no blowup. If you're unsure the graph is acyclic, test it with `Graph.is_acyclic()`.
 - **On a cyclic graph** (most networks once backup/bidirectional/feedback links exist), it revisits nodes. Cap `repeat` with a finite `max`, and if node-repetition isn't wanted, **filter to simple paths in PyRel** — drop any path with a repeated node via a negated existential over positions:
@@ -160,7 +160,7 @@ Decide this consciously every time. State the intent as a business condition ("a
 
 ```python
 critical_paths = model.Relationship(f"{PathTraversal:p} is a critical path")
-model.where(p := model.path(...).all_paths(), <predicate over p>).define(critical_paths(p))
+model.where(p := model.path(...).all().paths(), <predicate over p>).define(critical_paths(p))
 ```
 
 Also bind a path back onto a concept: `Concept.route = model.Relationship(f"{Concept} has {PathTraversal}")` then `.define(x.route(p))`.

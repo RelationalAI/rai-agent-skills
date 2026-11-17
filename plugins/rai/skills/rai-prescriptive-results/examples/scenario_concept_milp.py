@@ -121,6 +121,7 @@ problem.satisfy(
 problem.satisfy(
     model.where(
         Investment.x_selected(Scenario, x_selected),
+        Investment.site == Site,
     ).require(sum(Investment, x_selected).where(Investment.site == Site).per(Site, Scenario) <= 1)
 )
 

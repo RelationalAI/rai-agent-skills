@@ -1,7 +1,5 @@
 ## Pre-Solve Validation
 
-*The `display_string` reads in this file require `relationalai>=1.29`.*
-
 Run these checks after building the formulation and before calling `problem.solve()`. Catching issues here is dramatically cheaper than debugging infeasible or nonsensical solutions after the fact. The checks are ordered by severity — earlier checks catch more fundamental problems.
 
 ### 1. Entity population — do variables exist?
@@ -23,11 +21,11 @@ Zero constraints is almost as bad as zero variables. `model.require()` produces 
 - `problem.num_constraints() > 0`
 - Constraint count is proportional to the entities they constrain — e.g., one capacity constraint per facility
 - At least one forcing constraint exists for minimize objectives (a constraint that requires positive variable values, e.g., `sum(Decision.x) >= demand`)
-- **Per-constraint cardinality** for any per-entity constraint: capture the `satisfy()` return value and assert it grounded on the expected number of entities. `num_constraints()` is a global check; per-constraint cardinality + a `display_string` select on the ref localize *which* one is short.
+- **Per-constraint completeness** for any per-entity constraint: assert every entity has a value for each term its body reads. A row with no value is dropped (releases through 2.0.0) or exported always false (later ones), and neither raises. `num_constraints()` is a global check; on releases through 2.0.0 the `satisfy()` ref's row count plus a `display_string` select on the ref localize *which* one is short.
 
 ### Cardinality checks
 
-A formulation can register every call and still ground nothing: a join that matched no rows, a variable registered with zero instances, a per-entity constraint that grounded for only some entities. None of these raises. Capture each `solve_for` / `satisfy` return value ([diagnostic-workflow.md](diagnostic-workflow.md) > The capture-ref pattern) and compare its row count with the entity count it should match:
+A formulation can register every call and still ground nothing: a join that matched no rows, a variable registered with zero instances, a per-entity constraint with no value for some entities. None of these raises. Capture each `solve_for` / `satisfy` return value ([diagnostic-workflow.md](diagnostic-workflow.md) > The capture-ref pattern) and compare its row count with the entity count it should match, or check the data where the row count cannot show the gap:
 
 ```python
 from relationalai.semantics.std import aggregates as aggs
@@ -43,16 +41,11 @@ assert rows(Route) > 0, "Route has no entities"
 x_flow = problem.solve_for(Route.x_flow, name=["flow", Route.id], lower=0)
 assert rows(x_flow) == rows(Route), "x_flow is missing instances"
 
-# Grounding: a per-entity body grounds no row for an entity whose bound is
-# empty, so a sparse Route.cap leaves those routes unconstrained.
-cap = problem.satisfy(model.require(Route.x_flow <= Route.cap), name=["cap", Route.id])
-if rows(cap) != rows(Route):
-    # See which grounded. Needs the install AND name= on every variable;
-    # without either, display_string is silently null.
-    problem.install_display_strings()
-    print(model.where(aggs.limit(10, cap.name))
-               .select(cap.name, cap.display_string).to_df())
-    raise AssertionError(f"cap grounded {rows(cap)}/{rows(Route)}: Route.cap missing for some routes")
+# Grounding: a route with no cap gives the row no value, so rows(cap) cannot be relied on. Check the
+# data: a select keeps a row per route, with a null where the value is missing.
+cap = problem.satisfy(model.where(Route).require(Route.x_flow <= Route.cap), name=["cap", Route.id])
+caps = model.select(Route.id, Route.cap).to_df()
+assert caps["cap"].notna().all(), f"Route.cap missing for routes {caps.loc[caps['cap'].isna(), 'id'].tolist()}"
 
 # Coefficient presence: an unpopulated coefficient has no tuple, so its term
 # silently drops out (OPTIMAL on a vacuous objective). Count non-nulls, not
@@ -63,7 +56,7 @@ assert model.select(Route, Route.cost).to_df()["cost"].notna().sum() == rows(Rou
 `problem.num_variables()`, `num_constraints()`, `num_min_objectives()` and `num_max_objectives()` are engine-side Integer Relationships. Read one as a scalar with `model.select(problem.num_constraints()).to_df().iloc[0, 0]`, or assert it as an IC:
 
 ```python
-model.require(problem.num_constraints() == aggs.count(Source) + aggs.count(Sink))  # cap per Source + demand per Sink
+model.require(problem.num_constraints() == aggs.count(Source).where(Lane.from_source(Source)) + aggs.count(Sink))  # cap per Source with a lane + demand per Sink
 ```
 
 The IC form has two limits. It persists for the model's lifetime, so an exact count goes stale as soon as a re-solve adds constraints; in an iterative loop use the scalar or `rows(ref)` reads. And a violated IC reports only when the config sets `compiler: require_mode: report` (default `ignore`), and never on the SQL backend.

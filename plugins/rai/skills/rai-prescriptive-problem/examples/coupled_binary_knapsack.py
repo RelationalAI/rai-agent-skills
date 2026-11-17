@@ -6,7 +6,6 @@
 # Illustrated with a capacity-expansion model (approve projects, select site investments).
 
 from relationalai.semantics import Float, Integer, Model, String, sum
-from relationalai.semantics.std import aggregates as aggs
 from relationalai.semantics.reasoners.prescriptive import Problem
 
 model = Model("coupled_binary_knapsack")
@@ -41,50 +40,41 @@ problem.solve_for(Investment.x_selected, type="bin", name=["inv", Investment.id]
 
 # --- Capacity expansion constraint ---
 # Approved project demand at each site <= existing capacity + investment capacity.
-# Capture the constraint ref + name=[Site.id] so display rows are identifiable
-# and we can check per-site cardinality before solving — any RHS aggregate or
-# property that's empty for a site (Site.current_capacity unpopulated, or no
-# Investment rows at the site) leaves the body empty for that site, and under
-# PyRel relational semantics no constraint row grounds.
+# Capture the constraint ref + name=[Site.id] so display rows are identifiable.
+# A site with no Project or no Investment rows reads 0 for that sum (`| 0`). A site with no
+# current_capacity gets no row on releases through 2.0.0 and an always-false row on later ones, so the
+# gate below checks the data.
 project_demand = (
-    sum(ProjectRef.x_approved * ProjectRef.capacity_needed).where(ProjectRef.site == Site).per(Site)
+    sum(ProjectRef.x_approved * ProjectRef.capacity_needed).where(ProjectRef.site == Site).per(Site) | 0
 )
 investment_cap = (
-    sum(InvestmentRef.x_selected * InvestmentRef.capacity_added).where(InvestmentRef.site == Site).per(Site)
+    sum(InvestmentRef.x_selected * InvestmentRef.capacity_added).where(InvestmentRef.site == Site).per(Site) | 0
 )
 cap_constr = problem.satisfy(
-    model.require(project_demand <= Site.current_capacity + investment_cap),
+    model.where(Site).require(project_demand <= Site.current_capacity + investment_cap),
     name=["cap", Site.id],
 )
 
-# At most one investment per site
+# At most one investment per site, for each site reached through its investments
 investments_per_site = sum(InvestmentRef.x_selected).where(InvestmentRef.site == Site).per(Site)
 one_inv_constr = problem.satisfy(
-    model.require(investments_per_site <= 1),
+    model.where(Investment.site(Site)).require(investments_per_site <= 1),
     name=["one_inv", Site.id],
 )
 
 # Budget knapsack: total investment across both decision sets
-total_invest = sum(Project.x_approved * Project.connection_cost) + sum(Investment.x_selected * Investment.investment_cost)
+total_invest = (sum(Project.x_approved * Project.connection_cost) | 0) + (sum(Investment.x_selected * Investment.investment_cost) | 0)
 budget_constr = problem.satisfy(model.require(total_invest <= budget), name="budget")
 
 # Objective: maximize net revenue from approved projects
 problem.maximize(sum(Project.x_approved * (Project.revenue - Project.connection_cost)))
 
-# Pre-solve validation: per-constraint cardinality first (cheap), then targeted
-# display only when a count is off. n_grounded < n_sites means at least one
-# RHS aggregate or property was empty for that site (Site.current_capacity
-# unpopulated, or no Investment rows at the site so investment_cap is empty)
-# and PyRel relational semantics dropped the constraint body for that site.
+# Pre-solve validation: every site must have the current_capacity the capacity body reads.
 # This file declares the schema only; the gate fires once Site/Project/Investment
-# data is loaded — with the data-less ontology above, n_grounded == n_sites == 0.
-n_grounded = len(model.select(cap_constr).to_df())
+# data is loaded — with the data-less ontology above, both counts are 0.
+n_ready = len(model.select(Site).where(Site.current_capacity).to_df())
 n_sites = len(model.select(Site).to_df())
-if n_grounded != n_sites:
-    # Needs both the install and name= on every variable, or display_string is null.
-    problem.install_display_strings()
-    print(model.where(aggs.limit(10, cap_constr.name))
-               .select(cap_constr.name, cap_constr.display_string).to_df())
-    raise AssertionError(f"cap_constr fired {n_grounded}/{n_sites}")
+if n_ready != n_sites:
+    raise AssertionError(f"cap_constr has a current_capacity for {n_ready}/{n_sites} sites")
 
 problem.solve("highs", time_limit_sec=60)

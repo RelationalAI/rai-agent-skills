@@ -48,7 +48,7 @@ This skill has no copy-paste mode — a live Snowflake connection is a hard prer
 
 (The bare-invocation greeting above already discloses this to the user — both the data-sharing and the execution-risk points — before this step runs. Writes still always ask for a fresh, explicit confirmation before running; this step only automates reads.)
 
-- Resolve/reuse this repo's Python venv per `utils_python_environment.md`, installing `relationalai>=1.20.1` if missing (mechanical, no confirmation needed).
+- Resolve/reuse this repo's Python venv per `utils_python_environment.md`, installing `relationalai` at the minimum in `rai-setup` if missing (mechanical, no confirmation needed).
 - Attempt a Snowpark session per `utils_auto_execution.md`'s setup pattern (load `rai-setup` yourself to establish the connection), then validate it with one trivial query.
 - **If it works**: say so in one plain sentence before continuing — e.g. "I found a Snowflake connection and pulled your schema automatically — here's what I found:" — and use it for all read-only discovery for the rest of the session, following `utils_auto_execution.md`'s read/write permission tiers exactly.
 - **If it doesn't work** (package install failure, no config found, connection fails): follow `utils_auto_execution.md`'s "Environment isn't ready" playbook — install the package if needed, scaffold an empty `raiconfig.yaml` if none exists, then hand it to the user to fill in and **stop**. Tell the user plainly that this skill needs a working Snowflake connection to run, and that you'll continue as soon as it's configured. **Do not fall back to copy-paste.** If the user would rather not set up a connection right now, point them at the `guided` sub-skill instead, which supports copy-paste.

@@ -6,8 +6,6 @@ description: Runs optimization solves and interprets the output — solve execut
 # Prescriptive Results
 <!-- v1-SENSITIVE -->
 
-> **Requires `relationalai>=1.11.0`.** Sensitivity (shadow prices, reduced costs, basis status) and conflict / IIS diagnosis depend on the dual-bearing solver; earlier versions reject `solve("highs", sensitivity=True)` and omit the dual fields on `solve_info()`. See `rai-setup`.
-
 ## Summary
 
 **What:** The solve and everything it produces — execution and parameters, status interpretation, solution extraction, quality assessment, sensitivity analysis, infeasibility diagnosis, and result explanation.
@@ -60,7 +58,7 @@ Solver-independent names, mapped to each backend's own option (solver-specific k
 
 ### Re-solving the same Problem
 
-The same `Problem` can be solved again, and `solve_for` / `satisfy` calls accumulate (there is no removal API). A `solve()` that returns replaces every result family whatever its termination status, so a family it didn't request (`sensitivity=` / `conflict=`) comes back empty; one that raises leaves the previous results, and `solve_info()` still describes the last solve that returned. Plain and diagnostic solves follow one another in any order on relationalai>=1.26 (earlier versions raise `ValueError` on a switch): re-solve an INFEASIBLE plain solve with `conflict=True`, or an OPTIMAL one with `sensitivity=True`, without rebuilding.
+The same `Problem` can be solved again, and `solve_for` / `satisfy` calls accumulate (there is no removal API). A `solve()` that returns replaces every result family whatever its termination status, so a family it didn't request (`sensitivity=` / `conflict=`) comes back empty; one that raises leaves the previous results, and `solve_info()` still describes the last solve that returned. Plain and diagnostic solves follow one another in any order: re-solve an INFEASIBLE plain solve with `conflict=True`, or an OPTIMAL one with `sensitivity=True`, without rebuilding. A deployed Problem cannot switch: each refresh repeats its `configure()` request, and changing it takes a redeploy.
 
 **Parametric sweeps and what-if re-solves.** A different constraint set needs a **fresh Problem per scenario / sweep point**; extract each point's results before moving on (a later failure can't erase earlier rows). Before re-solving a point, check whether the active constraint set actually changed — identical registrations mean a reusable result. Derive per-point inputs once, up front, not inside the loop. Loop and Scenario Concept patterns: `rai-prescriptive-problem/references/scenario-analysis.md`.
 
@@ -90,7 +88,7 @@ The same `Problem` can be solved again, and `solve_for` / `satisfy` calls accumu
 | `si.termination_status` | `str` | `"OPTIMAL"`, `"INFEASIBLE"`, `"DUAL_INFEASIBLE"`, `"TIME_LIMIT"`, `"LOCALLY_SOLVED"`, `"SOLUTION_LIMIT"`, `"OTHER_ERROR"` |
 | `si.objective_value` | float/int | Objective value — `None` when no point was returned, but an infeasible point still carries a value; **check status first** |
 | `si.solve_time_sec` / `si.num_points` / `si.solver_version` | | Wall-clock, result count (an `INFEASIBLE` solve can report 1), solver version |
-| `si.primal_status` | str/None | Result status of the returned point; `"FEASIBLE_POINT"` = a usable solution, `None` or `"NO_SOLUTION"` = no point. Before relationalai 1.26 it is `None` on every plain solve; for a MIP stopped at a limit, test `if si.num_points:` there instead. Treat an LP stopped at a limit as having no plan there: its point can be infeasible, and `num_points` counts it |
+| `si.primal_status` | str/None | Result status of the returned point; `"FEASIBLE_POINT"` = a usable solution, `None` or `"NO_SOLUTION"` = no point. |
 | `si.printed_model` | str | Solver-model text (when `print_format=` was set) |
 | `si.sensitivity` / `si.conflict` | bool | Which diagnostics this solve requested |
 | `si.conflict_status` | str/None | `"CONFLICT_FOUND"` / `"NO_CONFLICT_EXISTS"` / `"NOT_SUPPORTED"` / `"FAILED"`; `None` unless `conflict=True` |
@@ -138,7 +136,7 @@ Read the attributes `sensitivity=True` / `conflict=True` populate **straight off
 
 ```python
 food_vars = problem.solve_for(Food.amount, name=Food.name, lower=0)
-floor = problem.satisfy(model.require(intake >= Nutrient.min), keyed_by={"nutrient": Nutrient})
+floor = problem.satisfy(model.where(Nutrient).require((intake | 0) >= Nutrient.min), keyed_by={"nutrient": Nutrient})
 problem.minimize(sum(Food.cost * Food.amount))       # sensitivity needs an objective
 problem.solve("highs", sensitivity=True)
 model.select(food_vars.food.name, food_vars.reduced_cost, food_vars.basis_status).inspect()
@@ -149,39 +147,38 @@ Reading a marginal or conflict flag **by entity** requires the constraint's grou
 
 ### Deploy-mode results
 
-A Problem registered with `configure()` (`rai-prescriptive-problem` > Deploy Mode) has results only after a refresh, and each refresh re-solves, except a scheduled tick skipped because no source changed. Read them with the same handles as an interactive session (`model.select(...)`, `problem.solve_info()` and the other accessors, the `in_conflict` predicates) from a separate script that imports the model file, which must contain no queries. With `deployment.auto_deploy: true` the first query in a fresh process deploys first, so a read-only session sets `auto_deploy: false`. Request marginals and conflicts at registration: `configure(sensitivity=True)`, `configure(conflict=True)`. Give SQL consumers Concepts defined from the results, the termination status included (`problem.termination_status()` is usable in rules); the solver's own tables are internal.
+A Problem registered with `configure()` (`rai-prescriptive-problem` > Deploy Mode) has results only after a refresh, and each refresh re-solves, except a scheduled tick skipped because no source changed. Read them from a separate script that imports the model file, which must contain no queries: select the properties passed to `solve_for` directly, and anything the Problem declares (the status and other accessors, marginals, the `in_conflict` predicates) through a relationship the model file defines from it before deploying (`rai-prescriptive-problem` > Deploy Mode), never by a direct select or `solve_info()`. `primal_status` and `conflict_status` have no accessor to define one from. With `deployment.auto_deploy: true` the first query in a fresh process deploys first, so a read-only session sets `auto_deploy: false`. Request marginals and conflicts at registration: `configure(sensitivity=True)`, `configure(conflict=True)`. Give SQL consumers Concepts defined from the results, the termination status included (`problem.termination_status()` is usable in rules); the solver's own tables are internal.
 
 **A table alone never says whether its plan is current or optimal** (observed on 1.31.1):
 
 | Last refresh | Plan tables | The only marker |
 |---|---|---|
 | Solver returned INFEASIBLE | Rows kept; every value derived from a decision is null | `termination_status` INFEASIBLE; with `configure(conflict=True)`, `conflict_status` `CONFLICT_FOUND` and the conflict predicates populated, or `NOT_SUPPORTED` / `FAILED` (Infeasible diagnosis) |
-| Solver hit `time_limit_sec` | The point the solver stopped at, shaped exactly like an optimal plan | `termination_status` TIME_LIMIT; the plan is usable only if `primal_status` is FEASIBLE_POINT |
-| Refresh failed before the solver began writing results (e.g. the PAT was removed or expired: `job could not be created (RAIERR:1000)`) | **The previous successful run's results and everything derived from them**, `solve_info()` included | Only the refresh state: `REFRESH_STATUS()` reports `FAILED` with the error |
+| Solver hit `time_limit_sec` | The point the solver stopped at, shaped exactly like an optimal plan | `termination_status` TIME_LIMIT; the plan is usable only if `primal_status` is FEASIBLE_POINT, which has no accessor to define a relationship from, so the script below rejects it |
+| Refresh failed before the solver began writing results (e.g. the PAT was removed or expired: `job could not be created (RAIERR:1000)`) | **The previous successful run's results and everything derived from them**, the status included | Only the refresh state: `REFRESH_STATUS()` reports `FAILED` with the error |
 
-So before trusting a plan, check that `CALL <meta_schema>.REFRESH_STATUS()` reports `SUCCEEDED` and that `termination_status` is one you accept (Status Interpretation: on MiniZinc, an `OPTIMAL` whose `si.solve_time_sec` reached the limit is a cut-off incumbent). Outputs are rewritten table by table, so a read that overlaps a refresh can mix two runs. The script below rejects a read once the status shows a refresh started, but a refresh can record its start after its first writes, so for a read that must be consistent also make sure no refresh can start during it (no schedule due, no manual refresh). A read script next to the user's deploy-mode model file (here the Quick Reference model of `rai-prescriptive-problem`, completed with its imports and sources and registered with `configure()`):
+So before trusting a plan, check that `CALL <internal_schema>.REFRESH_STATUS()` reports `SUCCEEDED` and that `termination_status` is one you accept (Status Interpretation: on MiniZinc, an `OPTIMAL` whose `solve_time_sec()` reached the limit is a cut-off incumbent). Outputs are rewritten table by table, so a read that overlaps a refresh can mix two runs. The script below rejects a read once the status shows a refresh started, but a refresh can record its start after its first writes, so for a read that must be consistent also make sure no refresh can start during it (no schedule due, no manual refresh). A read script next to the user's deploy-mode model file (here the Quick Reference model of `rai-prescriptive-problem`, completed with its imports and sources and registered with `configure()`):
 
 ```python
 import os, sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 os.chdir(HERE); sys.path.insert(0, HERE)   # finds raiconfig.yaml and model.py from any working directory
 from relationalai.config import SnowflakeConnection, create_config
-from model import model, problem, Lane
+from model import model, Lane, RunStatus   # RunStatus: rai-prescriptive-problem > Deploy Mode
 
 session = create_config().get_session(SnowflakeConnection)
 def refresh_state():
     return [(r["SCHEDULE_NAME"], r["STATUS"], r["LAST_RUN_STARTED_AT"], r["ERROR"])
-            for r in session.sql("CALL <meta_schema>.REFRESH_STATUS()").collect()]
+            for r in session.sql("CALL <internal_schema>.REFRESH_STATUS()").collect()]
 before = refresh_state()
 if any(status != "SUCCEEDED" for _, status, _, _ in before):   # the tables may hold an older plan
     sys.exit(f"plan not current: {before}")
-si = problem.solve_info()
-if not (si.termination_status == "OPTIMAL" or (si.termination_status == "TIME_LIMIT" and si.primal_status == "FEASIBLE_POINT")):
-    sys.exit(f"no usable plan: {si.termination_status} {si.primal_status}")
+status = model.select(RunStatus).to_df().iloc[:, 0].tolist()   # [] until a refresh has solved
+if status != ["OPTIMAL"]:
+    sys.exit(f"no optimal plan: {status}")
 df = model.select(Lane.item_id, Lane.src_id, Lane.flow).to_df()
 if refresh_state() != before:                                   # a refresh started during the read
     sys.exit("a refresh ran during the read; read again")
-print(si.termination_status, si.primal_status)   # TIME_LIMIT: feasible, no optimality proof
 print(df)
 ```
 
@@ -200,7 +197,7 @@ print(df)
 | `OPTIMAL` | Best solution within tolerance (~1e-6 LP, 0.01% MIP gap). **MiniZinc** also reports it when `time_limit_sec` cuts the search off after finding a solution: if `si.solve_time_sec` reached the limit, read it as `TIME_LIMIT` ([solver-parameters.md](references/solver-parameters.md) > `solution_limit` semantics) | Quality assessment, then explain |
 | `INFEASIBLE` | No solution satisfies all constraints | Diagnose before presenting — see Infeasible diagnosis |
 | `DUAL_INFEASIBLE` | Unbounded (the status string is not `"UNBOUNDED"`) | See Unbounded diagnosis |
-| `TIME_LIMIT` | Stopped at the limit; it holds a solution only if `si.primal_status == "FEASIBLE_POINT"` (before relationalai 1.26, for a MIP: `if si.num_points:`) | Read the gap from `si.ancillary` with `.get()` (absent when the solver reports none; `si.display()` lists the keys). Gap < 1%: near-optimal; 1-5%: good; > 10%: uncertain — more time, tighter Big-M, symmetry breaking, or simplify |
+| `TIME_LIMIT` | Stopped at the limit; it holds a solution only if `si.primal_status == "FEASIBLE_POINT"` | Read the gap from `si.ancillary` with `.get()` (absent when the solver reports none; `si.display()` lists the keys). Gap < 1%: near-optimal; 1-5%: good; > 10%: uncertain — more time, tighter Big-M, symmetry breaking, or simplify |
 | `OTHER_ERROR` (or another error status) | Solver or service error; an unsupported solver option also ends here without raising | Check `si.error`; expression/property fixes → `rai-prescriptive-problem`. A `solve()` that raised left `solve_info()` on the previous solve: read the exception instead |
 
 A non-optimal status is information, not necessarily failure: INFEASIBLE on a probe constraint set is a valid feasibility-boundary test, and TIME_LIMIT with gap < 5% and sensible values is presentable as near-optimal ("is a 2% improvement worth 10 more minutes?"). **Iterate** on INFEASIBLE-without-clear-conflict, DUAL_INFEASIBLE, gap > 10%, or trivial solutions; **accept** OPTIMAL, gap < 5%, or intentional probes.
@@ -210,7 +207,7 @@ A non-optimal status is information, not necessarily failure: INFEASIBLE on a pr
 **Localize with `solve(conflict=True)` first** — one solve returns the IIS, a *minimal* set of constraints and bounds that cannot all hold, read as bare predicates joined by key:
 
 ```python
-problem.solve("highs", conflict=True)   # upfront, or as a re-solve after an INFEASIBLE plain solve (relationalai>=1.26)
+problem.solve("highs", conflict=True)   # upfront, or as a re-solve after an INFEASIBLE plain solve
 si = problem.solve_info()
 if si.conflict_status == "CONFLICT_FOUND":
     model.select(coverage.shift.name, coverage.shift.min_coverage).where(coverage.in_conflict).inspect()
@@ -300,15 +297,15 @@ Duals *rank* what to perturb; scenarios *quantify* the result. Treat scenarios a
 | Mistake | Cause | Fix |
 |---------|-------|-----|
 | Presented a plan/formulation as the result | Solve still running or backgrounded — no terminal status or values ever read | A finished solve is the precondition: status + objective + values first |
-| Zero objective on minimize | Missing forcing constraints | Add `sum(Decision.x).per(Entity) >= Entity.demand`; joins matching zero rows are the sibling cause |
+| Zero objective on minimize | Missing forcing constraints | Add `(sum(Decision.x).where(Decision.entity == Entity).per(Entity) \| 0) >= Entity.demand`; joins matching zero rows are the sibling cause |
 | Infeasible: demand > capacity | Total demand exceeds supply | Slack/penalty variables or relax demand |
 | Silent: `problem.termination_status == "OPTIMAL"` always False | No parens — bound method compared to a string | Engine-side: `problem.termination_status()` (parens) in `require()`; Python-side: `si.termination_status` (no parens) |
 | `AttributeError` on `solve()` return value | `solve()` returns `None` | `solve_info()` for status; `model.select()` / `Variable.values()` for values |
-| Silent: extraction without a usable solution returns empty df / `None` objective, or an infeasible point's values | Loop extracts without checking status | Guard: skip unless `si.termination_status in ("OPTIMAL", "LOCALLY_SOLVED")`. To report a `TIME_LIMIT` incumbent, also accept `TIME_LIMIT` with `si.primal_status == "FEASIBLE_POINT"` (before relationalai 1.26, for a MIP: `si.num_points`), but not when comparing scenarios, where an incumbent's gap reads as a scenario effect. On MiniZinc, an `OPTIMAL` whose `si.solve_time_sec` reached the limit is such a `TIME_LIMIT` incumbent |
+| Silent: extraction without a usable solution returns empty df / `None` objective, or an infeasible point's values | Loop extracts without checking status | Guard: skip unless `si.termination_status in ("OPTIMAL", "LOCALLY_SOLVED")`. To report a `TIME_LIMIT` incumbent, also accept `TIME_LIMIT` with `si.primal_status == "FEASIBLE_POINT"`, but not when comparing scenarios, where an incumbent's gap reads as a scenario effect. On MiniZinc, an `OPTIMAL` whose `si.solve_time_sec` reached the limit is such a `TIME_LIMIT` incumbent |
 | Multi-solution overclaim | `solution_limit=K` returns up to K **distinct feasible** solutions on MiniZinc — neither ranked nor diversity-maximized — and one point on HiGHS, possibly from a search the limit stopped early | Document the semantics; for top-K re-solve K times with previous-best as constraint. [solver-parameters.md](references/solver-parameters.md) > `solution_limit` semantics |
 | Silent: `verify()` OK on solver-only-IC bodies (`implies` / `all_different`) even when violated | Verify engine can't ground wire-format constraint relations; documented limitation | Mixed constraints → `verify()` + post-solve assertions on solver-only ICs; all-solver-only or `populate=False` → skip `verify()`. `rai-prescriptive-problem/references/csp-formulation.md` § 6 |
 | Audit misread: `num_points() == 0` as "property holds" | Zero points can mean crash/time-limit | Status first; only `INFEASIBLE` proves PASS (see Audit / witness mode) |
-| Marginal reads empty on LP/QP | `sensitivity=True` not requested on that solve | Re-solve the same Problem with `sensitivity=True` (relationalai>=1.26), then read |
+| Marginal reads empty on LP/QP | `sensitivity=True` not requested on that solve | Re-solve the same Problem with `sensitivity=True`, then read |
 | Marginal still empty with `sensitivity=True` | Non-optimal solve (no duals) or MIP (integer models have none; warning fires) | Check status first; if OPTIMAL and empty, it's a MIP — use scenarios / binding-constraint reasoning |
 | Empty `basis_status` | Interior-point (Ipopt) has no simplex basis | Expected; use marginals, or a simplex solver if a basis is needed |
 | `conflict=True` confused with `sensitivity=True` | Conflict populates `in_conflict` predicates, not marginals; sensitivity the reverse | Request the one matching the question; confirm which ran from `si.conflict` / `si.sensitivity` / `si.conflict_status` — an always-False `in_conflict` can equally mean `NO_CONFLICT_EXISTS`, `NOT_SUPPORTED`, or "not in this (non-unique) IIS" |
@@ -319,7 +316,7 @@ Duals *rank* what to perturb; scenarios *quantify* the result. Treat scenarios a
 | Constraint family without a declared key | Back-pointers are declared, not inferred (`name=` is display-only) | `satisfy(..., keyed_by={"nutrient": Nutrient})` at formulation time; read via `con.nutrient` |
 | `FDError` on a `keyed_by` constraint | Declared keys don't uniquely determine the instance (family wider than key, or two conjuncts sharing keys) | Add missing key(s), or split multi-conjunct `require` into one `satisfy` per conjunct |
 | Sweep moves an unnamed boundary with the swept threshold | Structure (band width, offset) inherited from a sibling analysis instead of re-derived | Vary only the named parameter; restate the partition at each value; state the chosen reading (see Sensitivity Analysis) |
-| Silent: missing or null data leaves variables / constraints ungrounded | A null produces no tuple, so the variable or constraint grounds no row for that entity | Completeness checks before solve: `rai-prescriptive-problem/references/pre-solve-validation.md` |
+| Silent: missing or null data leaves variables / constraints ungrounded, or makes the solve INFEASIBLE | A null produces no tuple, so a variable grounds no row for that entity; a constraint row with no value is dropped on releases through 2.0.0 and exported always false on later ones | Completeness checks before solve: `rai-prescriptive-problem/references/pre-solve-validation.md` |
 | Different plan on re-run, same objective | Alternate optima | Add a tie-breaking secondary term or symmetry-breaking constraints if one plan must be reproducible |
 
 ---

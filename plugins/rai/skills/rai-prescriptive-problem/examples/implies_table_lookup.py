@@ -84,7 +84,7 @@ problem.solve_for(
 # Even though MIN_ID..MAX_ID is dense here, this IC defends against silent failure if the reference
 # table changes (rows added/removed) and the bounds aren't updated in lockstep.
 problem.satisfy(
-    model.require(
+    model.where(Position).require(
         count(Assortment, Assortment.id == Position.x_assort).per(Position) == 1
     )
 )
@@ -93,7 +93,7 @@ problem.satisfy(
 # WARNING: verify() does not re-evaluate implies-bodied ICs (see csp-formulation.md § 6). The
 # post-solve assertion below re-checks this cascade against the extracted values.
 problem.satisfy(
-    model.require(
+    model.where(Position, Assortment).require(
         implies(
             Position.x_assort == Assortment.id, Position.x_rev == Assortment.revenue
         )

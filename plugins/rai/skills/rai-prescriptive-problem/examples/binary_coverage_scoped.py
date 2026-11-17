@@ -38,7 +38,7 @@ max_shifts = 1  # shifts per worker
 
 # --- Coverage constraint: each shift must have at least min_coverage workers ---
 # sum(Worker, x).per(Shift) counts workers assigned to each shift
-problem.satisfy(model.where(Worker.x_assign(Shift, x)).require(sum(Worker, x).per(Shift) >= min_coverage))
+problem.satisfy(model.where(Shift).require(sum(Worker, x).where(Worker.x_assign(Shift, x)).per(Shift) >= min_coverage))
 
 # --- Load constraint: each worker assigned to at most max_shifts shifts ---
 # sum(Shift, x).per(Worker) counts shifts per worker

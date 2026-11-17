@@ -119,14 +119,14 @@ When the secondary objective is currently modeled as a constraint with a fixed b
 
 ```python
 # BEFORE (single-objective): return is a fixed constraint
-problem.satisfy(model.require(sum(Stock.returns * x_qty).per(Scenario) >= min_return))
+problem.satisfy(model.where(Stock.x_quantity(Scenario, x_qty)).require(sum(Stock.returns * x_qty).per(Scenario) >= min_return))
 problem.minimize(risk_expr)
 
 # AFTER (bi-objective): return target becomes the loop parameter
 for rate in epsilon_rates:
     problem = Problem(model, Float)
     problem.solve_for(..., populate=False)
-    problem.satisfy(model.require(sum(Stock.returns * x_qty).per(Scenario) >= rate * Scenario.budget))
+    problem.satisfy(model.where(Stock.x_quantity(Scenario, x_qty)).require(sum(Stock.returns * x_qty).per(Scenario) >= rate * Scenario.budget))
     problem.minimize(risk_expr)
     problem.solve(...)
 ```

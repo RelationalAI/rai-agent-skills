@@ -58,7 +58,7 @@ Document your findings and decisions at each step so others can follow the reaso
 - **Run SQL probes through a session from `raiconfig.yaml`** — `create_config().get_session(SnowflakeConnection)`, as in [discovery-queries.md](references/discovery-queries.md) — and put a step's probes in one `UNION ALL` query. Do not read `raiconfig.yaml` or the library source to build a connection of your own.
 - **Write each file once, then run it in the same call.** Write `<domain>.py` whole — model and validation queries together, not appended in pieces — and run it in that call (a heredoc followed by `python <domain>.py 2>&1 | tail -n 80`). Fix failures with targeted edits, not a rewrite.
 - **Wait, don't poll.** Give long commands (the schema scan, the validation run) a timeout long enough to finish in the foreground; if one is backgrounded, wait for it in one blocking call (a loop that sleeps until its output file shows it finished), not a check per turn.
-- **Bound the deploy wait.** `rai models deploy --wait` has no timeout flag and can block for up to an hour on a first refresh that never starts. Give the call a timeout of about 10 minutes; if it expires, read the refresh state directly with `CALL <db>.<schema>_META.REFRESH_STATUS();` (see `rai-deployment`) instead of waiting again: report `error` when it is `FAILED`, `DEPLOY_FAILED`, or `NEVER_RUN` with a `SUSPENDED` task; while it is `RUNNING`, re-read it in one blocking loop (30s or more between reads), not one call per turn.
+- **Bound the deploy wait.** `rai models deploy` waits for the first refresh and can block for up to an hour on one that never starts. Pass `--wait-timeout 600`; if it expires, read the refresh state directly with `CALL <internal_schema>.REFRESH_STATUS();` (see `rai-deployment`) instead of waiting again: report `error` when it is `FAILED`, `DEPLOY_FAILED`, or `NEVER_RUN` with a `SUSPENDED` task; while it is `RUNNING`, re-read it in one blocking loop (30s or more between reads), not one call per turn.
 
 **Interaction mode:** Before starting, ask the user which mode they prefer:
 - **Guided** — present your proposed design at each step and confirm before proceeding. Best when the user has domain context to share along the way; they know their domain better than the data does.
@@ -494,7 +494,7 @@ Detailed patterns (relationship promotion, cross-product decision concepts, mult
 
 ## What's Next
 
-After the ontology validates and queries correctly: surface what problems it can answer with `rai-discovery` (classifies questions by reasoner family and assesses readiness), enrich for the selected problem via the [Enrichment Workflow](#enrichment-workflow), then hand off to the reasoner skill (`rai-prescriptive-problem`, `rai-graph-analysis`, `rai-predictive-modeling`, or `rai-pyrel`).
+After the ontology validates and queries correctly: surface what problems it can answer with `rai-discovery` (classifies questions by reasoner family and assesses readiness), enrich for the selected problem via the [Enrichment Workflow](#enrichment-workflow), then hand off to the reasoner skill (`rai-prescriptive-problem`, `rai-graph-analysis`, `rai-predictive-modeling`, or `rai-pyrel`). `rai-predictive-modeling` imports this model rather than starting a new one, and proposes the prediction graph from its links.
 
 ---
 

@@ -14,7 +14,7 @@ The Step 5 audit (`SKILL.md`) catches static issues before solve. This reference
 
 ## Targeted display
 
-*The `display_string` surface below requires relationalai>=1.29. `problem.display()` takes no positional arguments there: whole-problem output is `display(limit=N)`, and targeted reads go through `display_string`.*
+*`problem.display()` takes no positional arguments: whole-problem output is `display(limit=N)`, and targeted reads go through `display_string`.*
 
 Every constraint and objective carries a `display_string` property holding the text rendered from its expression tree. Selecting it on a captured ref reads just that component's grounded form — substituted sums for a constraint, expanded coefficients for an objective.
 
@@ -35,7 +35,7 @@ Prefer a targeted read when the failure is localized — it cuts noise and makes
 |---|---|---|
 | `where=` excluded too much (or too little) | `model.select(var_ref.name, var_ref.lower, var_ref.upper).to_df()` | Per-instance bounds and entity tuples — does the variable exist for every entity it should? |
 | `.per()` mis-scoped (silent OPTIMAL trap) | `model.select(constr_ref.name, constr_ref.display_string).to_df()` | Each generated row's sum should disaggregate by the intended group; `sum(all_AB) == 1` repeated per row signals wrong scope |
-| Per-entity bound missing for some entities (Step 5 (d)) | `model.select(constr_ref.name, constr_ref.display_string).to_df()` | A grouping whose body has no tuples grounds no row; rows that did ground show the expected name. Use `name=[Entity.id]` at `satisfy()` time so identifiers appear |
+| Per-entity bound missing for some entities (Step 5 (d)) | `model.select(constr_ref.name, constr_ref.display_string).to_df()` | A grouping whose body has no tuples grounds no row on releases through 2.0.0 and renders as an always-false constraint (`1.0 <= 0.0`) on later ones; rows that did ground show the expected name. Use `name=[Entity.id]` at `satisfy()` time so identifiers appear |
 | Objective coefficient property has no tuples for some entities | `model.select(obj_ref.name, obj_ref.display_string).to_df()` | Expanded objective shows the terms that ground; entities missing from the rendered sum have no tuple for the coefficient property (under PyRel relational semantics, no tuple = no row in the join) — typically `model.define(...)` missing |
 | Constraint redundant or contradictory | `model.select(c.name, c.display_string).to_df()` for each suspect `c` | Same constraint twice, or two constraints whose grounded forms are mutually unsatisfiable |
 
@@ -64,9 +64,9 @@ Branch by status:
 
 | Status | What it means | Diagnostic move |
 |---|---|---|
-| `OPTIMAL` / `LOCALLY_SOLVED` | Solver claims a solution | If values look right, run `verify`. If suspicious (all-zero, concentrated, dominated), suspect a missing forcing constraint, an unbound coefficient, or a per-entity constraint that grounded for fewer entities than expected — install the rendering rules and read each constraint and objective ref's `display_string` |
+| `OPTIMAL` / `LOCALLY_SOLVED` | Solver claims a solution | If values look right, run `verify`. If suspicious (all-zero, concentrated, dominated), suspect a missing forcing constraint, an unbound coefficient, or a per-entity constraint missing a row for some entities (dropped on releases through 2.0.0, always false on later ones) — install the rendering rules and read each constraint and objective ref's `display_string` |
 | `INFEASIBLE` | No feasible point | Localize with `solve(conflict=True)` (IIS), then rebuild the Problem omitting or relaxing a flagged member — see INFEASIBLE: localizing the conflict below |
-| `TIME_LIMIT` / `ITERATION_LIMIT` | Stopped at a limit; holds a solution only if `si.primal_status == "FEASIBLE_POINT"` (before relationalai 1.26, for a MIP: `if si.num_points:`) | Distinct from formulation bug — see `rai-prescriptive-results` |
+| `TIME_LIMIT` / `ITERATION_LIMIT` | Stopped at a limit; holds a solution only if `si.primal_status == "FEASIBLE_POINT"` | Distinct from formulation bug — see `rai-prescriptive-results` |
 | Error status (`OTHER_ERROR`, …) or unset; `error` non-empty | Solver or service rejected the request | Read `si.error`: common causes are an unsupported solver option, unsupported expression types, type mismatches, solver-specific syntax limits. If `si.error` is also empty, the formulation failed before the solver received it — check stderr for `ModelWarning` or `RAIException`. |
 
 ---
@@ -76,7 +76,7 @@ Branch by status:
 `verify` re-evaluates one or more `Fragment` (the result of `model.require(...)` or `model.where(...).require(...)`) against the returned solution. Emits a `ModelWarning` (`from v0.relationalai.errors import ModelWarning`) if any fragment is violated, but only when the config sets `compiler: require_mode: report` (default `ignore`: silent; `rai-prescriptive-results` > Post-solve constraint verification); emits `UserWarning` and returns early if `termination_status` isn't in `{"OPTIMAL", "LOCALLY_SOLVED", "SOLUTION_LIMIT"}`.
 
 ```python
-demand_frag = model.require(sum(Lane.flow).per(Sink) >= Sink.demand)
+demand_frag = model.where(Sink).require((sum(Lane.flow).where(Lane.sink == Sink).per(Sink) | 0) >= Sink.demand)
 problem.satisfy(demand_frag)
 problem.solve("highs")
 problem.verify(demand_frag)  # confirms the solution actually meets demand
@@ -94,7 +94,7 @@ When `si.termination_status == "INFEASIBLE"`, the first move is `solve(conflict=
 
 ```python
 # floor = a per-Region satisfy(..., keyed_by={"region": Region}) family
-# Upfront, or as a re-solve after the INFEASIBLE plain solve (relationalai>=1.26)
+# Upfront, or as a re-solve after the INFEASIBLE plain solve
 problem.solve("highs", conflict=True)
 si = problem.solve_info()
 if si.conflict_status == "CONFLICT_FOUND":
@@ -129,7 +129,7 @@ When status is OPTIMAL but values are all-zero or otherwise vacuous, the suspect
 1. `problem.install_display_strings()` first — without it every `display_string` below is null, which reads exactly like an objective that expanded to nothing.
 2. `model.select(obj_ref.name, obj_ref.display_string).inspect()` — confirm the objective expanded with non-zero coefficients on the variables you expect. A term missing for some entities = the coefficient property has no tuple for them (typically a `model.define(...)` is missing).
 3. Read every constraint in one go — `c = problem.Constraint; model.select(c.name, c.display_string).inspect()` — and confirm each forcing constraint (`>= demand`, `>= min_coverage`, etc.) generated rows. If the constraint body's own `.where(...)` filter matches no entities, the constraint grounds zero rows; it exists in the formulation but is vacuous against the data.
-4. For a per-entity constraint, compare its grounded row count with the entity count — a sparse bound property grounds no row for the entities missing data: [pre-solve-validation.md](pre-solve-validation.md) > Cardinality checks.
+4. For a per-entity constraint, check that every entity has a value for each term the body reads — a sparse bound property gives the row no value, which releases through 2.0.0 drop and later ones export as an always-false row: [pre-solve-validation.md](pre-solve-validation.md) > Cardinality checks.
 5. Cross-check with [examples/presolve_feasibility_gate.py](../examples/presolve_feasibility_gate.py) — the same aggregation-query checks that gate solve also localize which forcing requirement is empty.
 
 See [fix-generation-guidelines.md](fix-generation-guidelines.md) > Trivial Solution for fix priority.

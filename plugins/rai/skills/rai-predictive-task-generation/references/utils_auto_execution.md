@@ -32,7 +32,7 @@ This mirrors the read vs. write action guidance elsewhere: local reversible read
 ## Resolving a Python environment — scoped to this repo only
 
 Read `utils_python_environment.md` and follow it now, resolving/installing
-`relationalai>=1.20.1` specifically (lazily — only at this point, once the user has
+`relationalai` at the minimum in `rai-setup` (lazily — only at this point, once the user has
 actually opted into auto-execution; don't install it speculatively). If a venv already
 exists in this repo (e.g. because `utils_validation.md` already set one up for
 `sqlglot`), reuse that same venv — don't create a second one.

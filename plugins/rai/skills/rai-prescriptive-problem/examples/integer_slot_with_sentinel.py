@@ -70,14 +70,14 @@ problem.solve_for(
 # --- Constraint: no book duplicated across slots ---
 # count over decision-dependent filter: the filter is inside count's 2nd arg.
 # An outer where(Slot.x_choice == Book.id) would prune the feasible search rather than count it.
-problem.satisfy(model.require(count(Slot, Slot.x_choice == Book.id).per(Book) <= 1))
+problem.satisfy(model.where(Book).require(count(Slot, Slot.x_choice == Book.id).per(Book) <= 1))
 
 # --- Constraint: implies cascade binds revenue to chosen book ---
 problem.satisfy(
-    model.require(implies(Slot.x_choice == Book.id, Slot.x_value == Book.revenue))
+    model.where(Slot, Book).require(implies(Slot.x_choice == Book.id, Slot.x_value == Book.revenue))
 )
 # Sentinel earns 0 revenue
-problem.satisfy(model.require(implies(Slot.x_choice == SENTINEL, Slot.x_value == 0)))
+problem.satisfy(model.where(Slot).require(implies(Slot.x_choice == SENTINEL, Slot.x_value == 0)))
 
 # --- Constraint: symmetry break — slot positions are ordered (no permutation re-counting) ---
 Si, Sj = Slot, Slot.ref()

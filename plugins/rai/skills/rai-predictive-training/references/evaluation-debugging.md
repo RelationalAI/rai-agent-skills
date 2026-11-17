@@ -15,7 +15,7 @@ gnn.display_dataset_diagram(show_dtypes=True)
 gnn.save_dataset_diagram("dataset_schema.svg", show_dtypes=True)
 ```
 
-(`visualize_dataset()` was renamed in 1.19.4; the old name is gone.)
+(The old name, `visualize_dataset()`, is gone.)
 
 ### Metadata and Data Config
 

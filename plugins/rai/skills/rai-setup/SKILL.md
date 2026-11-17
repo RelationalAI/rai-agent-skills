@@ -32,15 +32,13 @@ Covers the [relationalai Python package](https://pypi.org/project/relationalai) 
 
 ## Prerequisites
 
-Requires Python 3.10–3.13 and `relationalai>=1.25.0`.
-
-Some guidance carries inline *Requires relationalai ...* notes flagging when a capability appeared; anything at or below the baseline above is already covered by a compliant install.
+Requires Python 3.10–3.14 and `relationalai>=2.0.0`.
 
 The RelationalAI Native App for Snowflake must be installed in your account by an administrator — request access [here](https://app.snowflake.com/marketplace/listing/GZTYZOOIX8H/relationalai-relationalai); see the [Native App docs](https://docs.relational.ai/manage/install). (Not required for local DuckDB development — see [Local Development with DuckDB](#local-development-with-duckdb-no-snowflake) below.)
 
 The `rai_developer` role is the standard role for running PyRel programs. Custom Snowflake roles also work if granted the `rai_user` application role — see [User Access](https://docs.relational.ai/manage/user-access).
 
-**Predictive (GNN) workflows need additional schema setup beyond the base install** — a customer-owned database + schema with `USAGE` and `CREATE EXPERIMENT`/`CREATE MODEL` granted to `APPLICATION RELATIONALAI`. Without it the very first `gnn.fit()` fails. See `rai-predictive-modeling` § Prerequisites for the DDL. The predictive submodule (`relationalai.semantics.reasoners.predictive`) also requires a `relationalai` version that ships it — confirm the minimum with the RelationalAI team before pinning.
+**Predictive (GNN) workflows need additional schema setup beyond the base install** — a customer-owned database + schema with `USAGE` and `CREATE EXPERIMENT`/`CREATE MODEL` granted to `APPLICATION RELATIONALAI`. Without it the very first `gnn.fit()` fails. See `rai-predictive-modeling` § Prerequisites for the DDL. The predictive submodule (`relationalai.semantics.reasoners.predictive`) also requires a `relationalai` version that ships it.
 
 Support / docs: support@relational.ai · sales@relational.ai · [docs.relational.ai](https://docs.relational.ai/)
 
@@ -99,9 +97,9 @@ Users are expected to be Snowflake users with existing credentials. Walk the use
 
 ### Step 1. Install the package
 ```bash
-pip install 'relationalai>=1.25.0'
+pip install 'relationalai>=2.0.0'
 # or
-uv add 'relationalai>=1.25.0'
+uv add 'relationalai>=2.0.0'
 ```
 
 ### Step 2. Establish the connection
@@ -122,7 +120,7 @@ Offer a small sample program using inline data. Ask the user for a domain or use
 1. Adapt the sample to real Snowflake tables, or
 2. Enhance the sample with richer semantics and different analyses, or
 3. Point them at the [project templates](https://docs.relational.ai/build/templates), or
-4. When the model is ready to ship, take it to production with `rai-deployment` — deploy it to a Snowflake schema (then branch, collaborate, and merge), or as a Snowflake CoWork (Cortex) agent.
+4. When the model is ready to ship, take it to production with `rai-deployment` — deploy it to a Snowflake schema and iterate through the dev loop.
 
 ---
 
@@ -138,7 +136,7 @@ For development, prototyping, and demos, PyRel runs against a local DuckDB datab
 
 Graph, prescriptive (optimization), and predictive (GNN) reasoners run on a Snowflake connection.
 
-The local path is unlocked by a `duckdb` connection plus a `deployment` section (`schema` + `auto_deploy`):
+The local path is unlocked by a `duckdb` connection plus a `deployment` section (`public_schema`, `identity.internal_schema` and `auto_deploy`):
 
 ```python
 from relationalai.config import create_config, DuckDBConnection
@@ -146,7 +144,7 @@ from relationalai.config import create_config, DuckDBConnection
 config = create_config(
     connections={"local": DuckDBConnection(path=":memory:")},  # or a file path
     default_connection="local",
-    deployment={"schema": "main", "auto_deploy": True},
+    deployment={"public_schema": "main", "identity": {"internal_schema": "main_internal"}, "auto_deploy": True},
 )
 ```
 
@@ -195,7 +193,7 @@ Load the reference when the trigger fires — don't read them all upfront.
 ## Related Skills
 - `rai-pyrel` — PyRel syntax and data loading
 - `rai-ontology` — domain modeling
-- `rai-deployment` — take a built model to production (schema deploy + lifecycle, or Cortex agent)
+- `rai-deployment` — take a built model to production (schema deploy + lifecycle)
 - `rai-discovery` — surface answerable questions and route to the right reasoner
 - `rai-prescriptive-problem` — solver selection (includes Gurobi setup); `rai-prescriptive-results` — solve execution and diagnostics
 - `rai-health` — diagnose engine performance issues

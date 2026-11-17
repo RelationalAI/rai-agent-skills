@@ -24,7 +24,7 @@ Request it on the solve whose result you intend to interpret — it's a solve *o
 problem.solve("highs", conflict=True)
 ```
 
-After an INFEASIBLE plain solve, re-solve the same `Problem` with `conflict=True` (relationalai>=1.26); requesting it up front saves that solve. A later re-solve without the flag empties the conflict results unless it raises.
+After an INFEASIBLE plain solve, re-solve the same `Problem` with `conflict=True`; requesting it up front saves that solve. A later re-solve without the flag empties the conflict results unless it raises.
 
 ### Reading membership
 

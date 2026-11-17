@@ -55,13 +55,17 @@ problem.solve_for(
 
 # --- Semi-continuous linking: spend is 0 or within [min, max] of channel ---
 # Lower bound when active: spend >= min_spend * active  (0 when inactive)
-problem.satisfy(model.require(Allocation.x_spend >= Allocation.performance.channel.min_spend * Allocation.x_active))
+problem.satisfy(
+    model.where(Allocation).require(Allocation.x_spend >= Allocation.performance.channel.min_spend * Allocation.x_active)
+)
 # Upper bound when active: spend <= max_spend * active  (0 when inactive)
-problem.satisfy(model.require(Allocation.x_spend <= Allocation.performance.channel.max_spend * Allocation.x_active))
+problem.satisfy(
+    model.where(Allocation).require(Allocation.x_spend <= Allocation.performance.channel.max_spend * Allocation.x_active)
+)
 
 # Per-project budget
-project_spend = sum(Allocation.x_spend).where(Allocation.performance.project == Project).per(Project)
-problem.satisfy(model.require(project_spend <= Project.budget))
+project_spend = sum(Allocation.x_spend).where(Allocation.performance.project == Project).per(Project) | 0
+problem.satisfy(model.where(Project).require(project_spend <= Project.budget))
 
 # Global budget
 problem.satisfy(model.require(sum(Allocation.x_spend) <= total_budget))

@@ -1,10 +1,10 @@
 # Pattern: variable-length path enumeration over a self-referencing concept.
-# model.path(rel.repeat(min, max)).all_paths() enumerates; a native .where() on a
-# node ref filters DURING enumeration (no pandas). all_paths() has WALK semantics
+# model.path(rel.repeat(min, max)).all().paths() enumerates; a native .where() on a
+# node ref filters DURING enumeration (no pandas). .all().paths() has WALK semantics
 # and there is no native simple-path mode, so drop node-repeating walks with a
 # PyRel post-filter -- a negated existential over positions, still in PyRel (not
 # pandas). pandas is used only to string-join names for display.
-# Requires relationalai>=1.15 (paths is PREVIEW / pre-GA).
+# paths is PREVIEW / pre-GA.
 
 from relationalai.semantics import Integer, Model, String, not_, where
 
@@ -53,7 +53,7 @@ def reassemble(df):
 #     .where() on the source ref is applied during enumeration (no pandas). ---
 start = Component.ref()
 rooted = model.where(
-    p := model.path(start.depends_on.repeat(1, 4)).all_paths(),
+    p := model.path(start.depends_on.repeat(1, 4)).all().paths(),
     start.name == "c1",
 ).select(
     p.alias("path"),
@@ -68,7 +68,7 @@ for r in reassemble(rooted):
 #     post-filter (no native simple-path mode): drop any path that revisits a
 #     node -- a negated existential over positions. The filter runs in PyRel. ---
 i, j = Integer.ref(), Integer.ref()
-q = model.path(Component.depends_on.repeat(1, 4)).all_paths()
+q = model.path(Component.depends_on.repeat(1, 4)).all().paths()
 simple = model.where(
     q,
     not_(where(i < j, q.nodes(i) == q.nodes(j))),

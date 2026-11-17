@@ -96,13 +96,17 @@ for excluded in excluded_suppliers:
         )
 
     # Constraints
+    # `| 0` gives an excluded supplier, which has no orders, a zero total so its row holds,
+    # and a product only it supplies a zero total, infeasible only if the product has demand.
     problem.satisfy(
-        model.require(
-            sum(SupplyOrder.x_quantity).where(SupplyOrder.supplier == Supplier).per(Supplier) <= Supplier.capacity
+        model.where(Supplier).require(
+            (sum(SupplyOrder.x_quantity).where(SupplyOrder.supplier == Supplier).per(Supplier) | 0) <= Supplier.capacity
         )
     )
     problem.satisfy(
-        model.require(sum(SupplyOrder.x_quantity).where(SupplyOrder.product == Product).per(Product) >= Product.demand)
+        model.where(Product).require(
+            (sum(SupplyOrder.x_quantity).where(SupplyOrder.product == Product).per(Product) | 0) >= Product.demand
+        )
     )
 
     # Objective

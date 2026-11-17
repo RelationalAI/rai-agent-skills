@@ -2,8 +2,6 @@
 # Key ideas: graph reasoner writes centrality as a property on the node concept; prescriptive
 # reasoner references that property directly in its objective -- no manual data transfer;
 # the ontology carries enrichment forward across reasoning stages.
-#
-# Requires PyRel SDK >= 1.0.13.
 
 from relationalai.semantics import Float, Integer, Model, String, sum
 from relationalai.semantics.reasoners.graph import Graph
@@ -90,7 +88,7 @@ budget = 500.0
 problem.satisfy(model.require(sum(Site.x_invest) <= budget))
 
 # Per-site cap: investment cannot exceed 10x the operating cost
-problem.satisfy(model.require(Site.x_invest <= 10 * Site.operating_cost))
+problem.satisfy(model.where(Site).require(Site.x_invest <= 10 * Site.operating_cost))
 
 # Objective: maximize centrality-weighted investment
 problem.maximize(sum(Site.x_invest * Site.centrality))

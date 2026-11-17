@@ -18,7 +18,7 @@
 
 `.where()` is valid on:
 - **Aggregation:** `sum(X.prop).where(...)` — filter contributing entities
-- **Constraint:** `model.require(...).where(...)` — filter constraint scope
+- **Constraint:** `model.require(...).where(...)` — filter constraint scope; for a prescriptive constraint, the `where` must name every entity and `.per()` group the constraint holds for (`rai-prescriptive-problem/references/constraint-formulation.md` > Name the constraint's rows in its `where`)
 - **Definition:** `model.define(...).where(...)` — conditional entity creation
 - **Query:** `select(...).where(...)` — filter query results
 
@@ -126,7 +126,7 @@ rights = union(
 select(Person.name, rights).to_df()
 ```
 
-**Not for decision-variable totals.** A union is a set, so equal decision values count once in PyRel while the solver counts every term. Add separate sums instead, `(sum(A.x) | 0.0) + (sum(B.x) | 0.0)`, defaulting each potentially empty one outside its aggregate (relationalai>=1.13.0; `| 0` in an `Integer` problem), because one missing term drops the whole objective. `min`/`max` over a union, and data-only aggregates over one, are fine. Key bare decision refs by their entities (`sum(f, xf).where(f.flow_var(xf))`) and name inner group keys in nested totals. Full rule: `rai-prescriptive-problem/references/known-limitations.md` § Decision-variable aggregate agreement.
+**Not for decision-variable totals.** A union is a set, so equal decision values count once in PyRel while the solver counts every term. Add separate sums instead, `(sum(A.x) | 0.0) + (sum(B.x) | 0.0)`, defaulting each potentially empty one outside its aggregate (`| 0` in an `Integer` problem), because one missing term drops the whole objective. `min`/`max` over a union, and data-only aggregates over one, are fine. Key bare decision refs by their entities (`sum(f, xf).where(f.flow_var(xf))`) and name inner group keys in nested totals. Full rule: `rai-prescriptive-problem/references/known-limitations.md` § Decision-variable aggregate agreement.
 
 **Rule:** All branches in a `union()` must return the same number of values (same "shape"). A bare relation call (e.g., `a.parents(c)`) returns 1 value, while `where(...)` without `select()` returns 0 (a filter). Mixing these causes `[Inconsistent branches] All branches in a Union must have the same number of returned values`. Similarly, two Fragments with different numbers of `select()` columns are incompatible. Fix by making all branches return the same count: either chain relation calls so all branches return values, or wrap all branches in `where(...)` so all return Fragments with matching `select()` columns.
 
@@ -205,14 +205,16 @@ sum(Op1.x_flow).where(Op1.output_site == Op2.source_site).per(Op2)
 Op = Operation.ref()
 UD = UnmetDemand.ref()
 D = Demand.ref()
-inflow_per_sku = sum(Op.x_flow).where(Op.output_sku == UD.sku).per(UD.sku)
+inflow_per_sku = sum(Op.x_flow).where(Op.output_sku == UD.sku).per(UD.sku) | 0.0
 demand_per_sku = sum(D.quantity).where(D.sku == UD.sku).per(UD.sku)
-problem.satisfy(model.require(inflow_per_sku + UD.x_slack >= demand_per_sku).where(UD))
+problem.satisfy(model.require(inflow_per_sku + UD.x_slack >= demand_per_sku).where(UD, UD.sku))
 
-# RIGHT: For flow conservation at a site, aggregate inflows and outflows separately:
+# RIGHT: For flow conservation, aggregate inflows and outflows separately, at the sites that have
+# both: a source (no inflow) or a sink (no outflow) has nothing to conserve, so it gets no row.
+In, Out = Operation.ref(), Operation.ref()  # separate from Op: a ref the where binds also filters the sums
 inflow = sum(Op.x_flow).where(Op.output_site == Site).per(Site)
 outflow = sum(Op.x_flow).where(Op.source_site == Site).per(Site)
-problem.satisfy(model.require(inflow >= outflow).where(Site))
+problem.satisfy(model.where(In.output_site == Site, Out.source_site == Site).require(inflow >= outflow))
 ```
 
 **Key rule:** If you need to relate entities of the SAME concept (e.g., flow conservation between operations), restructure the constraint to aggregate through a shared dimension (Site, SKU, Period) instead of self-joining.
@@ -241,16 +243,7 @@ total_flow = sum(Edge.flow).where(Edge.i(1))
 
 ## V1 Semantics API Rules for Formulation
 
-These rules apply when generating constraint expressions and objective expressions for the code generator.
-
-### Expression Format
-
-- **Constraints:** Provide ONLY the constraint condition — the code generator wraps it with `problem.satisfy(model.require(...))`
-  - CORRECT: `sum(DecisionConcept.x_quantity) <= Entity.limit`
-  - WRONG: `problem.satisfy(model.require(sum(DecisionConcept.x_quantity) <= Entity.limit))`
-- **Objectives:** Provide JUST the expression — the code generator wraps it with `problem.minimize(...)` or `problem.maximize(...)`
-  - CORRECT: `sum(Entity.cost * DecisionConcept.x_quantity)`
-  - WRONG: `problem.minimize(sum(Entity.cost * DecisionConcept.x_quantity))`
+These rules apply when writing constraint and objective expressions.
 
 ### Operator Rules
 
@@ -339,8 +332,8 @@ model.select(Order.id, Order.status.name.alias("status"))
 Three `lookup()` caveats:
 
 - **Forward-only.** `lookup(value)` maps a ground value to a member. It does NOT reverse-bind: `Status.lookup(free_ref)` compiles at construction but fails at query time with `[Unground Variable]`. To recover a member chosen by a solver, derive an enum-typed property with one `define()` per member instead — see `rai-prescriptive-problem/references/csp-formulation.md` § Enum-indexed decision.
-- **Unknown dynamic values miss silently.** A value arriving from a data column that matches no member name maps to a nonexistent entity, and those rows silently drop out of every member-comparison rule — keep member names in sync with the data's vocabulary. Literal strings are validated at construction as of *relationalai>=1.13* (`ValueError` naming the valid members); on 1.12.0 they miss silently too.
-- **Select position misfilters (any `lookup()`, not just enums).** Through *relationalai 1.12.0*, a `lookup()` passed as a top-level `select()` argument does not filter: `select(Order.lookup(id=42).total)` silently returns every row — the matched total plus a NULL per non-match (fixed upstream by PyRel #1782). Bind in `where()` and select off the ref, which is correct on every version: `model.where(o := Order.lookup(id=42)).select(o.total)`. Even post-fix, a lookup arg in a multi-arg `select()` cross-products with bare sibling args (e.g. `Order.id`) rather than row-aligning.
+- **Unknown dynamic values miss silently.** A value arriving from a data column that matches no member name maps to a nonexistent entity, and those rows silently drop out of every member-comparison rule — keep member names in sync with the data's vocabulary. Literal strings are validated at construction (`ValueError` naming the valid members).
+- **Select position cross-products (any `lookup()`, not just enums).** A lookup arg in a multi-arg `select()` cross-products with bare sibling args (e.g. `Order.id`) rather than row-aligning. Bind in `where()` and select off the ref: `model.where(o := Order.lookup(id=42)).select(o.total)`.
 
 **When not to use:** a property consumed as a categorical feature by the predictive (GNN) reasoner's transformers must stay `String` — enum-typed properties are not usable as model features.
 
@@ -414,11 +407,12 @@ relation's tuples; it is not a filter on a specific value.
 n_groups, group_size = ..., ...          # problem constants (group count, players per group)
 w = Integer.ref().alias("w")
 x = Integer.ref().alias("x")
-group_val = std.common.range(n_groups)   # data range over group indices
+group_val = Integer.ref().alias("group_val")
 
 # In an IC, `Player.assign(w, x)` in where() iterates (Player, w, x) tuples of the relation.
 # Each iteration carries one (Player, week, group) binding for the body to constrain.
-model.where(Player.assign(w, x)).require(
+# Binding group_val to the group-index range in the same where() names the .per(w, group_val) groups.
+model.where(Player.assign(w, x), group_val == std.common.range(n_groups)).require(
     count(Player, x == group_val).per(w, group_val) == group_size
 )
 ```

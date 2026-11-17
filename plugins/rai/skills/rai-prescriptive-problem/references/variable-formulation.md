@@ -173,7 +173,7 @@ var = problem.solve_for(
 
 `start=` details: [solver-parameters.md](../../rai-prescriptive-results/references/solver-parameters.md) > Warm Starting.
 
-### Reserved field names (v1.0.14+)
+### Reserved field names
 
 A non-value field name in the relationship that shadows a `ProblemVariable` attribute (`name`, `type`, `lower`, `upper`, `start`, `values`, `alias`, `select`, `where`, ...) raises `ValueError` at `solve_for()`; the message lists the full reserved set. Use domain names instead: `{String:customer_name}`, not `{String:name}`.
 
@@ -288,7 +288,7 @@ sum(OpRef.flow)        # Wrong -- semantic slot name, solver can't resolve
 
 ### Naming conventions
 
-Use a descriptive prefix (`"qty_"`, `"sel_"`, `"x_"`, `"inv_"`) so post-solve DataFrames can be filtered by `name.str.startswith("prefix")`. Naming is not only a readback convenience: from `relationalai>=1.29`, `problem.display()` raises `ValueError` unless every decision variable in the Problem carries a `name=`, checked once at least one has grounded. The name must also discriminate, since a constant name on a per-entity variable makes rows indistinguishable wherever their remaining terms match too. For the scalar-resolution rule on `name=[]` parts, see [Variable naming (`name=[]`)](#variable-naming-name) above.
+Use a descriptive prefix (`"qty_"`, `"sel_"`, `"x_"`, `"inv_"`) so post-solve DataFrames can be filtered by `name.str.startswith("prefix")`. Naming is not only a readback convenience: `problem.display()` raises `ValueError` unless every decision variable in the Problem carries a `name=`, checked once at least one has grounded. The name must also discriminate, since a constant name on a per-entity variable makes rows indistinguishable wherever their remaining terms match too. For the scalar-resolution rule on `name=[]` parts, see [Variable naming (`name=[]`)](#variable-naming-name) above.
 
 ```python
 # Single-index: property name as identifier
@@ -394,9 +394,9 @@ problem.solve_for(PlacementSegment.x_alloc, lower=0, upper=PlacementSegment.seg_
             name=["seg", PlacementSegment.placement.id, PlacementSegment.seg_idx])
 
 # Link: total allocation = sum of segment allocations
-problem.satisfy(model.require(
-    Placement.x_total == sum(PlacementSegment.x_alloc)
-        .where(PlacementSegment.placement(Placement)).per(Placement)
+problem.satisfy(model.where(Placement).require(
+    Placement.x_total == (sum(PlacementSegment.x_alloc)
+        .where(PlacementSegment.placement(Placement)).per(Placement) | 0)
 ))
 
 # Objective: sum of slope * segment_allocation (concave -> LP-solvable)

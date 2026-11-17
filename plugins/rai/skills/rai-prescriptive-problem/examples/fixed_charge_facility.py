@@ -47,19 +47,21 @@ problem.solve_for(
 problem.solve_for(SiteUsage.x_used, type="bin", name=["site_used", SiteUsage.site.name])
 
 # Constraint: Site capacity
-problem.satisfy(model.require(sum(AssignmentRef.x_qty).where(AssignmentRef.shipping.site == Site).per(Site) <= Site.capacity))
+problem.satisfy(
+    model.where(Site).require((sum(AssignmentRef.x_qty).where(AssignmentRef.shipping.site == Site).per(Site) | 0) <= Site.capacity)
+)
 
 # Constraint: linking — quantity only flows through used Sites
 problem.satisfy(
-    model.require(
-        sum(AssignmentRef.x_qty).where(AssignmentRef.shipping.site == SiteUsage.site).per(SiteUsage)
+    model.where(SiteUsage).require(
+        (sum(AssignmentRef.x_qty).where(AssignmentRef.shipping.site == SiteUsage.site).per(SiteUsage) | 0)
         <= SiteUsage.site.capacity * SiteUsage.x_used
     )
 )
 
 # Constraint: each order fully fulfilled (forcing constraint)
 problem.satisfy(
-    model.require(sum(AssignmentRef.x_qty).where(AssignmentRef.shipping.order == Order).per(Order) == Order.quantity)
+    model.where(Order).require((sum(AssignmentRef.x_qty).where(AssignmentRef.shipping.order == Order).per(Order) | 0) == Order.quantity)
 )
 
 # Objective: minimize shipping + fixed facility costs

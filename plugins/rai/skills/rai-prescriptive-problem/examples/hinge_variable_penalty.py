@@ -130,11 +130,11 @@ problem.solve_for(Task.x_served, type="cont", name=["served", Task.name], lower=
 problem.solve_for(Task.x_unmet, type="cont", name=["unmet", Task.name], lower=0)
 
 # Constraint: only assign available workers
-problem.satisfy(model.require(Selection.x_assigned <= Selection.slot.available))
+problem.satisfy(model.where(Selection).require(Selection.x_assigned <= Selection.slot.available))
 
 # Constraint: minimum resources per task
 task_staff = sum(SelectionRef.x_assigned).where(SelectionRef.slot.task == Task).per(Task)
-problem.satisfy(model.require(task_staff >= Task.min_resources))
+problem.satisfy(model.where(Task).require((task_staff | 0) >= Task.min_resources))
 
 # Constraint: qualification-filtered coverage — at least one worker meeting qualification threshold
 qualified_coverage = (
@@ -145,23 +145,23 @@ qualified_coverage = (
     )
     .per(Task)
 )
-problem.satisfy(model.require(qualified_coverage >= 1))
+problem.satisfy(model.where(Task).require(qualified_coverage >= 1))
 
 # Constraint: excess hours = hinge(total_hours - standard_hours)
 total_hours = (
-    sum(SelectionRef.x_assigned * SelectionRef.slot.task.duration).where(SelectionRef.slot.worker == Worker).per(Worker)
+    sum(SelectionRef.x_assigned * SelectionRef.slot.task.duration).where(SelectionRef.slot.worker == Worker).per(Worker) | 0
 )
-problem.satisfy(model.require(Worker.x_excess_hours >= total_hours - Worker.standard_hours))
+problem.satisfy(model.where(Worker).require(Worker.x_excess_hours >= total_hours - Worker.standard_hours))
 
 # Constraint: served hours come from assigned workers (without this link, served is free
 # and unmet demand never binds)
 assigned_hours = (
-    sum(SelectionRef.x_assigned * SelectionRef.slot.task.duration).where(SelectionRef.slot.task == Task).per(Task)
+    sum(SelectionRef.x_assigned * SelectionRef.slot.task.duration).where(SelectionRef.slot.task == Task).per(Task) | 0
 )
-problem.satisfy(model.require(Task.x_served <= assigned_hours))
+problem.satisfy(model.where(Task).require(Task.x_served <= assigned_hours))
 
 # Constraint: unmet demand >= workload - served (soft constraint via penalty)
-problem.satisfy(model.require(Task.x_unmet >= Task.workload - Task.x_served))
+problem.satisfy(model.where(Task).require(Task.x_unmet >= Task.workload - Task.x_served))
 
 # Objective: minimize excess-hours cost + unmet-demand penalty
 excess_cost = sum(Worker.x_excess_hours * Worker.unit_cost * Worker.excess_cost_multiplier)

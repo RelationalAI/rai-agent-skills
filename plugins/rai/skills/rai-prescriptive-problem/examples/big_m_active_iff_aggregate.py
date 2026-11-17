@@ -99,13 +99,14 @@ problem.satisfy(model.require(sum(Account.is_hub) == K))
 #   body + BIG_M * is_hub <= TOL + BIG_M
 #   ⇒ body <= TOL when is_hub == 1   (active: balance enforced)
 #   ⇒ body <= TOL + BIG_M when is_hub == 0  (vacuous: any feasible flow is allowed)
-in_weight = sum(Edge.weight * Edge.in_subset).where(Edge.dst_id == Account.id).per(Account)
-out_weight = sum(Edge.weight * Edge.in_subset).where(Edge.src_id == Account.id).per(Account)
+# `| 0` gives an account with no edges in one direction a zero weight there, so its balance rows have a value.
+in_weight = sum(Edge.weight * Edge.in_subset).where(Edge.dst_id == Account.id).per(Account) | 0
+out_weight = sum(Edge.weight * Edge.in_subset).where(Edge.src_id == Account.id).per(Account) | 0
 
-balance_upper_ic = model.require(
+balance_upper_ic = model.where(Account).require(
     in_weight - out_weight + BIG_M * Account.is_hub <= TOL + BIG_M
 )
-balance_lower_ic = model.require(
+balance_lower_ic = model.where(Account).require(
     out_weight - in_weight + BIG_M * Account.is_hub <= TOL + BIG_M
 )
 problem.satisfy(balance_upper_ic)

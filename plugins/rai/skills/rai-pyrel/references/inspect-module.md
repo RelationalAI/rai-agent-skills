@@ -11,7 +11,7 @@
 
 ---
 
-Three public functions in `relationalai.semantics.inspect` replace ad-hoc access to underscored internals (`_name`, `_relationships`, `_identify_by`). They provide a stable, typed, JSON-safe view of a model at runtime. Available from `relationalai>=1.0.14`.
+Three public functions in `relationalai.semantics.inspect` replace ad-hoc access to underscored internals (`_name`, `_relationships`, `_identify_by`). They provide a stable, typed, JSON-safe view of a model at runtime.
 
 ```python
 from relationalai.semantics import inspect

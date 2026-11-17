@@ -56,7 +56,7 @@ problem.solve_for(Item.x_allocation, name=["alloc", Item.index])
 
 # --- Constraints ---
 # Non-negative allocations
-problem.satisfy(model.require(Item.x_allocation >= 0))
+problem.satisfy(model.where(Item).require(Item.x_allocation >= 0))
 
 total_budget = 1000
 problem.satisfy(model.require(sum(Item.x_allocation) <= total_budget))

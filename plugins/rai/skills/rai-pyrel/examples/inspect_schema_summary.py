@@ -1,7 +1,7 @@
 # Pattern: inspect.schema(model) to report what actually registered
 # Key ideas: ModelSchema is a frozen dataclass; supports dict-style lookup by
 # concept name; .to_dict() for JSON-safe serialization. Real TableSchema types
-# propagate through Concept.new(table.to_schema()) in v1.0.14+ — concrete types
+# propagate through Concept.new(table.to_schema()) — concrete types
 # (Integer, String, Date) appear instead of Any.
 
 import json

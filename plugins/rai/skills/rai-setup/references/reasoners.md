@@ -45,8 +45,8 @@ reasoners:
 > **Reasoner name/size behavior:** If `name` and `size` are both set and the named reasoner doesn't exist, PyRel creates it with the configured size. If the named reasoner already exists, PyRel uses it as-is and does not resize it. If the reasoner is later deleted and re-created automatically, it uses the default size (`HIGHMEM_X64_S`), not the previously configured size.
 
 > **Note:** `auto_suspend_mins` and `await_storage_vacuum` are managed via the CLI only — they are not config fields.
-> - Set auto-suspend after creation: `rai reasoners:alter --type Logic --name <name> --auto-suspend-mins <value>`
-> - Set await-storage-vacuum at creation time: `rai reasoners:create --type Logic --name <name> --size <size> --await-storage-vacuum`
+> - Set auto-suspend after creation: `rai reasoners alter --type Logic --name <name> --auto-suspend-mins <value>`
+> - Set await-storage-vacuum at creation time: `rai reasoners create --type Logic --name <name> --size <size> --await-storage-vacuum`
 
 ### Solver settings (Gurobi)
 
@@ -81,7 +81,7 @@ reasoners:
 ```
 
 If `problem.solve("gurobi")` returns `Solver 'gurobi' is not enabled or not properly configured`, check:
-- The `name` field is set and the engine exists (`rai reasoners:list --type Prescriptive`)
+- The `name` field is set and the engine exists (`rai reasoners list --type Prescriptive`)
 - The secret exists (`SHOW SECRETS IN SCHEMA SOLVERS.SECRETS`)
 - The integration exists and is enabled (`DESCRIBE INTEGRATION gurobi_integration`)
 - The native app has the grants above, especially `READ` on the secret and `USAGE` on the integration (`SHOW GRANTS TO APPLICATION RELATIONALAI`)

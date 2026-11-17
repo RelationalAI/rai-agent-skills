@@ -26,10 +26,10 @@ problem.solve_for(Food.x_amount, name=Food.name, lower=0)
 # --- Nutritional constraint ---
 # qty binds the third field of the ternary property Food.contains(Nutrient, qty)
 qty = Float.ref()
-nutrient_total = sum(qty * Food.x_amount).where(Food.contains(Nutrient, qty)).per(Nutrient)
+nutrient_total = sum(qty * Food.x_amount).where(Food.contains(Nutrient, qty)).per(Nutrient) | 0
 # One require() fragment covers all nutrients simultaneously; no Python loop needed
 problem.satisfy(
-    model.require(
+    model.where(Nutrient).require(
         nutrient_total >= Nutrient.min,
         nutrient_total <= Nutrient.max,
     )

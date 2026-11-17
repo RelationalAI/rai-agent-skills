@@ -18,9 +18,9 @@ Demonstrates:
   invocation in where as binder). The CSP-specific consequence: a TRUE filter on the decision-var
   value (e.g., `where(g == 1)`) would prune the search space at compile time — see
   csp-formulation.md § 3a.
-- Cardinality IC with single-symbolic count: `count(Player, g == group_val).per(r, group_val)
-  == GROUP_SIZE`. The symbolic comparison `g == group_val` lives inside count's second arg, NOT
-  in the outer where.
+- Cardinality IC with single-symbolic count: `count(Player, g == gv).per(r, gv) == GROUP_SIZE`.
+  The where clause binds `r` and `g` and names the group value `gv` from a data range; the
+  symbolic comparison `g == gv` lives inside count's second arg, NOT in the outer where.
 - Pairing IC with DOUBLE-SYMBOLIC count: `count(r, g0 == g1).per(p0, p1) <= 1`. Count's last arg
   compares TWO decision-variable refs (each player's group in round r). The pair iteration uses
   two Player.ref() with `p0.p < p1.p` as a data-only half-pair filter (Player.p is pre-defined
@@ -68,11 +68,12 @@ problem.solve_for(
 )
 
 # --- Constraint A: each (round, group_value) contains exactly GROUP_SIZE players ---
-# Outer where(Player.assign(r, g)) BINDS r and g to the decision relation. Inner count's last arg
-# `g == group_val` compares decision value to a data range value — single-symbolic count idiom.
-group_val = std.common.range(N_GROUPS)
-cardinality_ic = model.where(Player.assign(r, g)).require(
-    count(Player, g == group_val).per(r, group_val) == GROUP_SIZE
+# Outer where(Player.assign(r, g)) BINDS r and g to the decision relation, and names the group value
+# `gv` from a data range, so every (round, group_value) pair gets a constraint. Inner count's
+# condition `g == gv` compares decision value to the group value — single-symbolic count idiom.
+gv = Integer.ref().alias("gv")  # group value (data dimension)
+cardinality_ic = model.where(Player.assign(r, g), gv == std.common.range(N_GROUPS)).require(
+    count(Player, g == gv).per(r, gv) == GROUP_SIZE
 )
 problem.satisfy(cardinality_ic)
 

@@ -9,7 +9,7 @@ Additional known limitations for the prescriptive problem formulation skill. For
 Name constraints with list expressions for readable debug output:
 
 ```python
-problem.satisfy(model.require(
+problem.satisfy(model.where(Edge).require(
     Edge.x_flow <= Edge.capacity
 ), name=["capacity", Edge.i, Edge.j])
 # Produces names like: "capacity_1_3", "capacity_2_5"
@@ -27,10 +27,10 @@ See `rai-prescriptive-results/examples/partitioned_iteration_scenarios.py` for a
 
 These aggregate forms over decision variables can make PyRel's read-back disagree with the solver. Use these spellings instead, writing each default as `0` rather than `0.0` in an `Integer` problem:
 
-- **Union sums:** add separate totals, `(sum(A.x) | 0.0) + (sum(B.x) | 0.0)`; default each potentially empty term (relationalai>=1.13.0) or it drops the whole objective. `min`/`max` over a union is fine; filters and data-only aggregates are unaffected.
+- **Union sums:** add separate totals, `(sum(A.x) | 0.0) + (sum(B.x) | 0.0)`; default each potentially empty term or the objective has no value and `solve()` raises (releases through 2.0.0 drop the objective). `min`/`max` over a union is fine; filters and data-only aggregates are unaffected.
 - **Unkeyed sum/count:** name the decision's identifying entities as leading args or group keys: `sum(f, xf).where(f.flow_var(xf))`, `count(f, xf >= 1).where(f.flow_var(xf))`. Property sums like `sum(Flow.x)` are already keyed.
 - **Nested totals:** an outer total names every inner group key or reads it in its own body: `sum(Item, sum(...).per(Item))`, or `sum(Item.w * sum(...).per(Item))`. A row-wise inner such as `rank` adds its keys too: `count(Y, X.x * rank(Y.w) >= 1)`, not `count(X.x * rank(Y.w) >= 1)`, and so does a grouped inner read in a filter: `sum(Y, X.x).where(count(Y).per(Y) >= 1)`. For one total per property group, bind the value to a ref, `sum(g, sum(Item.x).where(Item.group(g)).per(g))`; keying the outer sum on `Item.group` makes the solver count each group's total once per `Item`. If the outer body also reads the entity (`Item.w * ...`), a bound `g` pairs every `Item.w` with every group's total; total per entity with a fresh ref instead: `J = Item.ref()`, then `sum(Item, Item.w * sum(J.x).where(J.group == Item.group).per(Item))`.
-- **Constant fallback inside an aggregate with X unbound outside:** replace `sum(X.a | 0.0)` with `sum(X.a | model.select(0.0).where(X))` for a per-entity default (relationalai>=1.32.0), or bind X outside (`model.where(X).select(...)` / `.per(X)`). For an empty-total default use `sum(X.a) | 0.0`; the same scope rule applies to `min`/`max` defaults. An aggregate arm is keyed by its `.per()` keys: `min(sum(X.x).per(X)) | 1.0`, not `min(sum(X.x).per(X) | 1.0)`.
+- **Constant fallback inside an aggregate with X unbound outside:** replace `sum(X.a | 0.0)` with `sum(X.a | model.select(0.0).where(X))` for a per-entity default, or bind X outside (`model.where(X).select(...)` / `.per(X)`). For an empty-total default use `sum(X.a) | 0.0`; the same scope rule applies to `min`/`max` defaults. An aggregate arm is keyed by its `.per()` keys: `min(sum(X.x).per(X)) | 1.0`, not `min(sum(X.x).per(X) | 1.0)`.
 
 ## numpy Types as Solver Literals
 

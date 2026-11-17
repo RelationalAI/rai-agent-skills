@@ -35,7 +35,7 @@ Zero test and forcing patterns: [constraint-formulation.md](constraint-formulati
 
 ### Multi-objective handling
 
-Only one `problem.minimize()` or `problem.maximize()` per problem. For multiple goals:
+Only one `problem.minimize()` or `problem.maximize()` per problem (after 2.0.0, a second call raises). For multiple goals:
 
 | Approach | Description | When to Use |
 |----------|-------------|-------------|
@@ -62,12 +62,14 @@ Before finalizing the objective, check for these misalignments:
 
 ### Single-component objectives
 
-```python
-problem.minimize(sum(Food.cost * Food.amount))           # Minimize total cost
-problem.maximize(sum(Edge.flow).where(Edge.i(1)))         # Maximize total flow
-problem.minimize(max(Node.color), name="chromatic_number") # Minimize max (min-max)
+Each of these is a whole objective for its own problem:
 
-# Quadratic objective (portfolio risk)
+- Total cost: `problem.minimize(sum(Food.cost * Food.amount))`
+- Total flow: `problem.maximize(sum(Edge.flow).where(Edge.i(1)))`
+- Min-max: `problem.minimize(max(Node.color), name="chromatic_number")`
+- Quadratic (portfolio risk):
+
+```python
 c = Float.ref()
 risk = sum(c * Stock.quantity * Stock2.quantity).where(Stock.covar(Stock2, c))
 problem.minimize(risk)
@@ -75,7 +77,7 @@ problem.minimize(risk)
 
 ### Multi-component objectives with addition
 
-Aggregate each component separately, then add the totals, not `sum(model.union(...))`: a union counts equal decision values once in PyRel while the solver counts every term. Default each potentially empty total with `| 0.0` (relationalai>=1.13.0; `| 0` in an `Integer` problem); one missing total drops the whole objective.
+Aggregate each component separately, then add the totals, not `sum(model.union(...))`: a union counts equal decision values once in PyRel while the solver counts every term. Default each potentially empty total with `| 0.0` (`| 0` in an `Integer` problem); one missing total leaves the objective with no value, and `solve()` raises (releases through 2.0.0 drop the objective).
 
 ```python
 total_inv_cost = inv_cost * sum(ResourceGroup, t, x_inv).where(
@@ -102,7 +104,7 @@ Order.shortfall = model.Property(f"{Order} has {Float:shortfall}")
 problem.solve_for(Order.shortfall, lower=0, name=["slack", Order.id])
 
 # Link shortfall to demand satisfaction
-problem.satisfy(model.require(Order.fulfilled + Order.shortfall == Order.demand))
+problem.satisfy(model.where(Order).require(Order.fulfilled + Order.shortfall == Order.demand))
 
 # Penalize shortfall in objective
 penalty_weight = 1000  # above the cost of serving one more unit; see Slack penalty weight

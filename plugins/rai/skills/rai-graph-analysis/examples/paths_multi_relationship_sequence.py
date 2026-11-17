@@ -1,10 +1,9 @@
 # Pattern: multi-relationship sequence -- a route that alternates between two
 # DIFFERENT relationships (two distinct edge types between the same node type),
 # passed as separate edge arguments to model.path(). Key idea:
-# path(a.rel_a, b.rel_b).all_paths() -- consecutive edges share the node between
+# path(a.rel_a, b.rel_b).all().paths() -- consecutive edges share the node between
 # them; p.relationships[idx] reads the edge label (which relationship) at each hop.
-# This is the >=1.15 replacement for the old "fold it into one composite edge"
-# workaround. Requires relationalai>=1.15 (paths is PREVIEW / pre-GA).
+# paths is PREVIEW / pre-GA.
 
 from relationalai.semantics import Integer, Model, String
 
@@ -32,7 +31,7 @@ model.define(Node.lookup(id=b_edges.src).rel_b(Node.lookup(id=b_edges.dst)))
 
 # --- Routes: one rel_a hop THEN one rel_b hop (distinct edges in series) ---
 a, b = Node.ref(), Node.ref()
-seq = model.path(a.rel_a, b.rel_b).all_paths()
+seq = model.path(a.rel_a, b.rel_b).all().paths()
 
 # Node sequence per route.
 nodes_df = model.where(seq).select(
@@ -41,7 +40,7 @@ nodes_df = model.where(seq).select(
     Node(seq.nodes).name.alias("node"),
 ).to_df()
 
-# Edge label at each hop: p.relationships gives which relationship (rel_a / rel_b)
+# Edge label at each hop: p.relationships gives which relationship (Node.rel_a / Node.rel_b)
 # was traversed, so each hop of the route can be annotated by its edge type.
 edges_df = model.where(seq).select(
     seq.alias("path"),
@@ -59,7 +58,7 @@ edges_df = edges_df.drop_duplicates(["path", "hop"]).sort_values(["path", "hop"]
 routes = []
 for path_id, g in nodes_df.groupby("path"):
     names = list(g.sort_values("step")["node"])
-    # Since 1.17 the per-hop label is the bare relationship name (e.g. "rel_a").
+    # The per-hop label is `Owner.rel` (e.g. "Node.rel_a").
     types = list(edges_df[edges_df["path"] == path_id].sort_values("hop")["edge_type"])
     label = names[0]
     for name, etype in zip(names[1:], types):

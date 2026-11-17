@@ -92,7 +92,8 @@ problem.solve_for(
 # multiply one project's decision by another's capacity. ---
 x_ref = Integer.ref()
 problem.satisfy(
-    model.require(
+    # A cap reaches its site and scenario through their projects, so a site with no projects gets no row.
+    model.where(ProjectRef.x_approved(Scenario, x_ref), ProjectRef.site == Site).require(
         sum(x_ref * ProjectRef.capacity_needed)
         .where(ProjectRef.x_approved(Scenario, x_ref), ProjectRef.site == Site)
         .per(Site, Scenario)

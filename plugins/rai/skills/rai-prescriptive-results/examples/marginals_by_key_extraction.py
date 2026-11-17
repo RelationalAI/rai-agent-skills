@@ -67,7 +67,7 @@ usage = sum(rate * Activity.level).where(Activity.usage(Resource, rate)).per(Res
 # key, giving each instance the entity back-pointer (cap.resource) for the key-join
 # below; name= is just a readable display label.
 cap = problem.satisfy(
-    model.require(usage <= Resource.capacity),
+    model.where(Resource).require((usage | 0) <= Resource.capacity),
     name=["cap", Resource.name],
     keyed_by={"resource": Resource},
 )

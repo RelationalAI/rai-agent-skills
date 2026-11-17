@@ -42,7 +42,7 @@ acts = problem.solve_for(
 # Floor FAMILY: a >= constraint per Activity. keyed_by declares the grounding key,
 # giving each instance the entity back-pointer (floor.activity) for the key-join below.
 floor = problem.satisfy(
-    model.require(Activity.level >= Activity.min_required),
+    model.where(Activity).require(Activity.level >= Activity.min_required),
     keyed_by={"activity": Activity},
 )
 

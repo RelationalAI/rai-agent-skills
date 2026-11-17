@@ -4,8 +4,6 @@
 # this guarantees critical hubs receive proportional allocation regardless of
 # cost tradeoffs. Contrasts with chained_graph_prescriptive.py which
 # uses centrality in the objective only.
-#
-# Requires PyRel SDK >= 1.0.13.
 
 from relationalai.semantics import Float, Integer, Model, String, sum
 from relationalai.semantics.reasoners.graph import Graph
@@ -94,12 +92,12 @@ problem.solve_for(Site.x_alloc, lower=0, name=["alloc", Site.name])
 problem.satisfy(model.require(sum(Site.x_alloc) <= TOTAL_BUDGET))
 
 # Constraint: meet demand at each site
-problem.satisfy(model.require(Site.x_alloc >= Site.demand))
+problem.satisfy(model.where(Site).require(Site.x_alloc >= Site.demand))
 
 # Constraint (from graph): critical hubs get minimum proportional to centrality.
 # This is the key pattern -- centrality drives a hard lower bound, not a soft
 # objective weight. High-centrality sites MUST carry proportional inventory.
-problem.satisfy(model.require(Site.x_alloc >= Site.centrality * MIN_CENTRALITY_FACTOR))
+problem.satisfy(model.where(Site).require(Site.x_alloc >= Site.centrality * MIN_CENTRALITY_FACTOR))
 
 # Objective: minimize total holding cost
 problem.minimize(sum(Site.x_alloc * Site.holding_cost))

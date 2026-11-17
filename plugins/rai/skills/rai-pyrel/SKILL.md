@@ -113,7 +113,7 @@ PositiveInt = model.Concept("PositiveInt", extends=[Integer])    # extending a p
 - **Always include `identify_by` whenever possible** — entities with the same key values are the same instance. Without it, ALL `.new()` parameters hash into identity, so adding/removing a parameter silently changes identity.
 - **`identify_by` auto-creates the identity properties** — do not also declare `model.Property()` for them (duplicate).
 - `model.Concept(name, extends=[Parent])` takes a plain name — a reading f-string here creates an *unrelated* concept and `define(Sub(Entity))` raises `[TypeMismatch]`. Reading f-strings belong to Property/Relationship only.
-- **Introspection:** `inspect.schema(model)` (v1.0.14+) returns concepts, inherited properties, types, and data sources; `inspect.to_concept(obj)` accepts any DSL handle. See [inspect-module.md](references/inspect-module.md); older-version fallback in [model-introspection.md](references/model-introspection.md).
+- **Introspection:** `inspect.schema(model)` returns concepts, inherited properties, types, and data sources; `inspect.to_concept(obj)` accepts any DSL handle. See [inspect-module.md](references/inspect-module.md); lower-level access and field attributes in [model-introspection.md](references/model-introspection.md).
 
 ### Enums
 
@@ -207,14 +207,14 @@ Braces invoke `__format__()` on concept/type objects to resolve IDs. Escaped bra
 A head variable the body leaves free cross-products over the whole concept → `FDError` or `Unground Variable`.
 
 ```python
-# WRONG — Item.bin (anon var) and Bin (var over all bins) are independent: cartesian.
+# WRONG — Item.bin (anon var) and Bin (var over all bins) are independent: cartesian (`Problem.satisfy` on releases after 2.0.0 refuses it, since the where does not name the .per() group).
 model.require(sum(Item.x_assigned).per(Item.bin) <= Bin.cap)
 # RIGHT — outer where binds the FK to the Concept; bare references unify.
 model.where(Item.bin == Bin).require(sum(Item.x_assigned).per(Bin) <= Bin.cap)
 
 # Relationship-linked aggregation: inner .where ties rows to the SAME bare variable.
 model.where(IL.demand > 0).require(
-    sum(SM.alloc).per(IL).where(SM.dest_il(IL)) + IL.unmet == IL.demand)
+    (sum(SM.alloc).per(IL).where(SM.dest_il(IL)) | 0.0) + IL.unmet == IL.demand)
 
 # define(): bind the entity by keys with lookup under a walrus; reuse that ONE variable.
 model.where(p := Period.lookup(region=src.REGION, month=src.MONTH)).define(
@@ -432,7 +432,7 @@ Lower-frequency pitfalls (Snowflake export casing, Python builtins on RAI expres
 | Aggregation advanced | Ranking (`top`/`bottom`/`rank`), `count(X, cond)`, conditional aggregates, `product`/`stddev_samp` | [aggregation-advanced.md](references/aggregation-advanced.md) |
 | Filtering advanced | Extended `not_()`, `union()` OR-filters, HAVING extras | [filtering-advanced.md](references/filtering-advanced.md) |
 | Inspect module | `inspect.schema` / `fields` / `to_concept` API | [inspect-module.md](references/inspect-module.md) |
-| Model introspection (fallback) | `model.concepts/relationships` for pre-1.0.14 versions | [model-introspection.md](references/model-introspection.md) |
+| Model introspection (lower-level) | `model.concepts/relationships` and field attributes | [model-introspection.md](references/model-introspection.md) |
 | Rule design | NL-to-PyRel translation tables, the nine design principles, boolean-flag projection | [rule-design.md](references/rule-design.md) |
 | Rule patterns | Full code patterns for all five rule types | [pyrel-rule-patterns.md](references/pyrel-rule-patterns.md) |
 | Rule validation & testing | Known-data/boundary/coverage testing, exhaustiveness checks | [rule-validation-and-testing.md](references/rule-validation-and-testing.md) |

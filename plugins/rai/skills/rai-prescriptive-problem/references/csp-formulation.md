@@ -33,7 +33,7 @@ Per-solver operator support, including the operators every solver rejects on dec
 
 CSP-style problems share a small set of recurring decision-variable shapes. Pick the one that matches the data, then verify membership.
 
-From `relationalai>=1.29`, `problem.display()` raises `ValueError` unless **every** decision variable in the Problem carries a `name=`, not just the ones you read, and it checks once at least one variable has grounded. Pass a discriminating `name=["x", Entity.id]` on each `solve_for`. The skeletons below omit it where it would obscure the pattern.
+`problem.display()` raises `ValueError` unless **every** decision variable in the Problem carries a `name=`, not just the ones you read, and it checks once at least one variable has grounded. Pass a discriminating `name=["x", Entity.id]` on each `solve_for`. The skeletons below omit it where it would obscure the pattern.
 
 ### 2a. Integer slot in `{1..K+1}` with `K+1` = unpicked sentinel
 
@@ -74,7 +74,7 @@ Two safe forms:
 ```python
 # Form A: explicit membership IC — exactly one Reference row matches each Decision
 problem.solve_for(Decision.id, type="int", lower=min_id, upper=max_id)
-problem.satisfy(model.require(
+problem.satisfy(model.where(Decision).require(
     count(Reference, Reference.id == Decision.id).per(Decision) == 1
 ))
 
@@ -103,7 +103,7 @@ problem.solve_for(
 
 ### 2e. Enum-indexed decision: one binary per (entity, member)
 
-*Requires relationalai>=1.12.* Not CSP-specific — the same shape works in MIP-style.
+Not CSP-specific — the same shape works in MIP-style.
 
 When the decision is "which member of a closed vocabulary does each entity take," declare a `model.Enum`, type the decision property by it, and `solve_for` once — the solver creates one binary variable per (entity, member) pair. This replaces K parallel per-member binary properties.
 
@@ -118,14 +118,15 @@ Event.has_type = model.Property(f"{Event} is {EventType:event_type} if {Integer:
 problem.solve_for(Event.has_type, type="bin", name=["is_type", Event.id])
 
 # Exactly one member per entity (one-hot)
-problem.satisfy(model.require(sum(Event.has_type).per(Event) == 1))
+problem.satisfy(model.where(Event).require(sum(Event.has_type).per(Event) == 1))
 
 # Member-sliced constraint: bind one member's indicator column via the ternary
-# form, then aggregate it per parent entity (Event.order = parent relationship)
+# form, then aggregate it per parent entity (Event.order links to the parent Order)
 place_ind = Integer.ref()
 problem.satisfy(
-    model.where(Event.has_type(EventType.PLACE, place_ind))
-    .require(sum(Event, place_ind).per(Event.order) == 1)
+    model.where(Order).require(
+        sum(Event, place_ind).where(Event.has_type(EventType.PLACE, place_ind), Event.order(Order)).per(Order) == 1
+    )
 )
 ```
 
@@ -151,13 +152,13 @@ The CSP-style-distinctive point on top of the base `count(X, cond)` syntax (docu
 
 ```python
 # CORRECT — decision-dependent filter inside count
-problem.satisfy(model.require(
-    count(Slot, Slot.choice == c).per(c) <= max_per_choice
+problem.satisfy(model.where(Book).require(
+    count(Slot, Slot.choice == Book.id).per(Book) <= max_per_choice
 ))
 
 # WRONG — outer where prunes the search instead of counting
-problem.satisfy(model.where(Slot.choice == c).require(
-    count(Slot).per(c) <= max_per_choice
+problem.satisfy(model.where(Slot.choice == Book.id).require(
+    count(Slot).per(Book) <= max_per_choice
 ))
 ```
 
@@ -216,7 +217,7 @@ problem.solve_for(Position.x_assort, type="int", lower=min_id, upper=max_id)
 # Auxiliary: revenue at this position (Integer — MiniZinc requires Problem(model, Integer))
 problem.solve_for(Position.x_revenue, type="int", lower=0)
 # Cascade: revenue is the looked-up value for the chosen assortment
-problem.satisfy(model.require(
+problem.satisfy(model.where(Position, Assortment).require(
     implies(Position.x_assort == Assortment.id, Position.x_revenue == Assortment.revenue)
 ))
 problem.maximize(sum(Position.x_revenue))
@@ -333,10 +334,10 @@ The big-M form `body + M*active <= TOL + M` has no auxiliary — it is a single 
 
 ```python
 # AVOID in multi-solution mode when body is an aggregate over DVs:
-implies(active == 1, sum(Flow.x_flow).per(Path) <= 0)
+implies(active == 1, sum(Flow.x_flow).where(Flow.path == Path).per(Path) <= 0)
 
 # PREFER in multi-solution mode:
-sum(Flow.x_flow).per(Path) + BIG_M * active <= TOL + BIG_M
+sum(Flow.x_flow).where(Flow.path == Path).per(Path) + BIG_M * active <= TOL + BIG_M
 ```
 
 For decision-indexed **table lookup** (body references a single Ref row's value, not an aggregate), `implies` is still the right shape — see § 3d above. The pitfall is specific to aggregate-body active-iff in enumeration mode.

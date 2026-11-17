@@ -53,7 +53,6 @@ compiler:
   soft_type_errors: false
 
 model:
-  schema: analytics                    # install schema for SQL views/tables
   implicit_properties: true            # allow undeclared properties on first access
   keep: true
   isolated: true
@@ -72,7 +71,9 @@ debug:
   show_full_traces: false
 
 deployment:                            # include ONLY when deploying — the section's presence turns deploy mode ON
-  schema: MY_DB.MY_MODEL               # field semantics + minimal deploy config: see rai-deployment
+  public_schema: MY_DB.MY_MODEL        # field semantics + minimal deploy config: see rai-deployment
+  identity:
+    internal_schema: MY_DB.MY_MODEL_INTERNAL   # required
   # a configure()d prescriptive Problem also needs pat_secret, pat_eai, pat_user, pat_warehouse:
   # see prescriptive-deploy-setup.md
 oplog:
@@ -81,13 +82,17 @@ oplog:
 profile:
   dev:
     deployment:
-      schema: MY_DB.MY_MODEL_DEV       # dev schema — the deploy-mode dev loop targets this
+      public_schema: MY_DB.MY_MODEL_DEV   # dev schema — the deploy-mode dev loop targets this
+      identity:
+        internal_schema: MY_DB.MY_MODEL_DEV_INTERNAL
     connections:
       sf:
         warehouse: dev_warehouse
   prod:
     deployment:
-      schema: MY_DB.MY_MODEL           # prod schema — gate behind a higher-privileged role
+      public_schema: MY_DB.MY_MODEL    # prod schema — gate behind a higher-privileged role
+      identity:
+        internal_schema: MY_DB.MY_MODEL_INTERNAL
     connections:
       sf:
         warehouse: prod_warehouse
@@ -97,7 +102,7 @@ profile:
 Use `{{ env_var('VAR_NAME') }}` in any string value, or `{{ env_var('VAR_NAME', 'default') }}` to supply a fallback when the variable is unset. `${VAR_NAME}` is not substituted — it is passed through as a literal string, which silently breaks fields like `password`.
 
 ### Profile overlays
-Profile selection priority (highest wins): `create_config(active_profile=...)` > `RAI_PROFILE` env var > `active_profile` in YAML. The selected profile's values deep-merge on top of the base config (profile wins per key), and any top-level section can be overlaid — not just `connections`. This is how one config serves dev and prod: keep shared settings at top level, put per-environment differences (target `deployment.schema`, source connection, warehouse, role) in the profiles, and switch environments by switching the profile. A `deployment:` section supplied only via the active profile also turns deploy mode on. To confirm which state a resolution is in, check `create_config().deployment_enabled`: `rai config explain` always renders the block. The dev/prod deployment workflow built on this: `rai-deployment`.
+Profile selection priority (highest wins): `create_config(active_profile=...)` > `RAI_PROFILE` env var > `active_profile` in YAML. The selected profile's values deep-merge on top of the base config (profile wins per key), and any top-level section can be overlaid — not just `connections`. This is how one config serves dev and prod: keep shared settings at top level, put per-environment differences (target `deployment.public_schema` and `deployment.identity.internal_schema`, source connection, warehouse, role) in the profiles, and switch environments by switching the profile. A `deployment:` section supplied only via the active profile also turns deploy mode on. To confirm which state a resolution is in, check `create_config().deployment_enabled`: `rai config explain` always renders the block. The dev/prod deployment workflow built on this: `rai-deployment`.
 
 ### Model-level config fields
 
@@ -105,7 +110,6 @@ Set under `model:` in YAML, or pass via `create_config(model={...})`:
 
 | Field | Default | Purpose |
 |---|---|---|
-| `schema` | `None` | Install schema for SQL views/tables |
 | `implicit_properties` | `true` | Allow undeclared properties on first access |
 | `keep` | `true` | Keep model after execution |
 | `isolated` | `true` | Run model in isolated mode |

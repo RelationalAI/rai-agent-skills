@@ -16,7 +16,7 @@
 
 Each pattern shows the minimal skeleton. Key heuristic in bold.
 
-From `relationalai>=1.29`, `problem.display()` raises `ValueError` unless **every** decision variable in the Problem carries a `name=`, not just the ones you read, and it checks once at least one variable has grounded. Pass a discriminating `name=["x", Entity.id]` on each `solve_for`. The skeletons below omit it where it would obscure the pattern.
+`problem.display()` raises `ValueError` unless **every** decision variable in the Problem carries a `name=`, not just the ones you read, and it checks once at least one variable has grounded. Pass a discriminating `name=["x", Entity.id]` on each `solve_for`. The skeletons below omit it where it would obscure the pattern.
 
 ### Assignment / scheduling
 
@@ -25,8 +25,8 @@ From `relationalai>=1.29`, `problem.display()` raises `ValueError` unless **ever
 ```python
 problem.solve_for(Worker.x_assign(Shift, x), type="bin",
             where=[Worker.available_for(Shift)])
-problem.satisfy(model.require(sum(Worker, x).per(Shift) >= min_coverage))   # forcing
-problem.satisfy(model.require(sum(Shift, x).per(Worker) <= max_shifts))     # capacity
+problem.satisfy(model.where(Shift).require(sum(Worker, x).where(Worker.x_assign(Shift, x)).per(Shift) >= min_coverage))   # forcing
+problem.satisfy(model.where(Worker.x_assign(Shift, x)).require(sum(Shift, x).per(Worker) <= max_shifts))     # capacity
 ```
 
 ### Network flow
@@ -72,8 +72,8 @@ problem.solve_for(Operation.flow_quantity, type='cont', lower=0, upper=Operation
 ```python
 problem.solve_for(Food.amount, lower=0)
 qty = Float.ref()
-total = sum(qty * Food.amount).where(Food.contains(Nutrient, qty)).per(Nutrient)
-problem.satisfy(model.require(total >= Nutrient.min, total <= Nutrient.max))
+total = sum(qty * Food.amount).where(Food.contains(Nutrient, qty)).per(Nutrient) | 0
+problem.satisfy(model.where(Nutrient).require(total >= Nutrient.min, total <= Nutrient.max))
 ```
 
 ### Facility location
@@ -83,8 +83,10 @@ problem.satisfy(model.require(total >= Nutrient.min, total <= Nutrient.max))
 ```python
 problem.solve_for(Facility.x_open, type="bin")
 problem.solve_for(Route.x_flow, lower=0)
-problem.satisfy(model.require(sum(Route.x_flow).per(Facility) <= Facility.capacity * Facility.x_open))
-problem.satisfy(model.require(sum(Route.x_flow).per(Customer) >= Customer.demand))  # forcing
+problem.satisfy(model.where(Route.facility(Facility)).require(
+    sum(Route.x_flow).where(Route.facility == Facility).per(Facility) <= Facility.capacity * Facility.x_open))
+problem.satisfy(model.where(Customer).require(
+    (sum(Route.x_flow).where(Route.customer == Customer).per(Customer) | 0) >= Customer.demand))  # forcing
 problem.minimize((sum(Facility.fixed_cost * Facility.x_open) | 0.0)
                  + (sum(Route.transport_cost * Route.x_flow) | 0.0))
 ```
@@ -157,9 +159,12 @@ Time-scoped constraints restrict optimization to a specific time window by apply
 
 ```python
 from datetime import date
-problem.satisfy(model.require(
-    sum(Demand.x_fulfilled).per(Product) >= sum(Demand.quantity).per(Product)
-).where(Demand.due_date >= date(2025, 11, 1), Demand.due_date <= date(2025, 11, 30)))
+problem.satisfy(model.where(
+    Demand.product(Product), Demand.due_date >= date(2025, 11, 1), Demand.due_date <= date(2025, 11, 30)
+).require(
+    sum(Demand.x_fulfilled).where(Demand.product == Product).per(Product)
+    >= sum(Demand.quantity).where(Demand.product == Product).per(Product)
+))
 ```
 
 Compare a `Date` property with a `datetime.date`: a string literal fails at compile with `TypeMismatch: Expected 'Date', got 'String'`.
@@ -167,12 +172,14 @@ Compare a `Date` property with a `datetime.date`: a string literal fails at comp
 ### Epoch timestamp filtering
 
 ```python
-problem.satisfy(model.require(
-    sum(PullRequest.x_selected).per(Repo) <= max_reviews
-).where(PullRequest.created_at >= 1759302000, PullRequest.created_at <= 1761894000))
+problem.satisfy(model.where(
+    PullRequest.repo(Repo), PullRequest.created_at >= 1759302000, PullRequest.created_at <= 1761894000
+).require(
+    sum(PullRequest.x_selected).where(PullRequest.repo == Repo).per(Repo) <= max_reviews
+))
 ```
 
-Apply temporal filters on the **aggregation concept** (the one being summed/counted), not the grouping concept. Prefer filtering at the constraint level rather than creating separate filtered concepts.
+Apply temporal filters on the **aggregation concept** (the one being summed/counted), not the grouping concept, and reach the group through it (`PullRequest.repo(Repo)`), so only groups with a row in the window get a constraint. A bare `Repo` in the `where` also gives a row to every repo with no pull request in the window, and that row's constraint is the always-false `1 <= 0`. Prefer filtering at the constraint level rather than creating separate filtered concepts.
 
 ---
 

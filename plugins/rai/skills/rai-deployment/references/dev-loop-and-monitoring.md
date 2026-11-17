@@ -6,15 +6,15 @@ How to develop against a deployed model — the redeploy loop, the two validatio
 
 ## The mental model
 
-A deployed model is a stateful Snowflake object you manage the way a team manages a database: deploy it, inspect it, redeploy it. Development happens against a **dev schema** — the same motion as dbt: point `deployment.schema` at a schema you own, redeploy through the loop, and read state back through SQL. Every redeploy recompiles the model client-side and installs the difference — unchanged objects are skipped via stored fingerprints — so redeploying is the iteration step, not a heavyweight release event.
+A deployed model is a stateful Snowflake object you manage the way a team manages a database: deploy it, inspect it, redeploy it. Development happens against a **dev schema** — the same motion as dbt: point `deployment.public_schema` and `deployment.identity.internal_schema` at schemas you own, redeploy through the loop, and read state back through SQL. Every redeploy recompiles the model client-side and installs the difference — unchanged objects are skipped via stored fingerprints — so redeploying is the iteration step, not a heavyweight release event.
 
-Reasoning runs asynchronously behind the model's refresh tasks — there is no live engine connection to watch. Everything about how the model is executing (deploy state, refresh runs, block execution, failure detail) surfaces through SQL in the model's meta schema, so the loop is: deploy, query state, fix, deploy again.
+Reasoning runs asynchronously behind the model's refresh tasks — there is no live engine connection to watch. Everything about how the model is executing (deploy state, refresh runs, block execution, failure detail) surfaces through SQL in the model's internal schema, so the loop is: deploy, query state, fix, deploy again.
 
 ## The dev loop
 
-1. **Point at a dev schema.** Set `deployment.schema` to a schema you own (e.g. `MY_DB.MY_MODEL_DEV`), or select a dev profile that sets it — profile mechanics in `rai-setup`.
-2. **Deploy.** `rai models deploy` (add `--wait` when the next step depends on refreshed outputs — it blocks until the first refresh completes).
-3. **Read state back.** `CALL <db>.<schema>_META.REFRESH_STATUS();` — one row per schedule (contract below).
+1. **Point at a dev schema.** Set `deployment.public_schema` and `deployment.identity.internal_schema` to schemas you own (e.g. `MY_DB.MY_MODEL_DEV` and `MY_DB.MY_MODEL_DEV_INTERNAL`), or select a dev profile that sets them — profile mechanics in `rai-setup`.
+2. **Deploy.** `rai models deploy` (it blocks until the first refresh completes; `--no-wait` returns once installed).
+3. **Read state back.** `CALL <internal_schema>.REFRESH_STATUS();` — one row per schedule (contract below).
 4. **On failure, diagnose and redeploy.** Classify the failure by tier (next section), fix the model, and deploy into the same schema — redeploying overwrites the deployed version; there is no separate "undo" step in development.
 
 Interactive iteration carries over from engine-backed work: interleave Snowflake reads (information schema, example values, refresh state) with model edits and redeploys — the feedback simply arrives via SQL instead of a live engine connection. Keep narrating refresh progress to the user from `REFRESH_STATUS` while a run is in flight; they should never have to think about the indirection. Poll with backoff — every status call spins the warehouse, and a refresh that takes minutes doesn't change second to second: start around 30s between reads and lengthen toward a few minutes for long refreshes.
@@ -34,7 +34,7 @@ When a data-dependent constraint fails repeatedly, probe the offending condition
 
 ### REFRESH_STATUS — the stable contract
 
-`CALL <meta schema>.REFRESH_STATUS();` is the public, stable surface for refresh state — start every diagnosis here. One row per schedule:
+`CALL <internal_schema>.REFRESH_STATUS();` is the public, stable surface for refresh state — start every diagnosis here. One row per schedule:
 
 | Column | Meaning |
 |---|---|
@@ -50,16 +50,16 @@ Deployed outputs are **eventually consistent** with their sources. Within one sc
 
 ### The refresh log — block-level detail
 
-When `REFRESH_STATUS` says `FAILED` and you need to know *which block* failed, read the meta schema's refresh log, `<meta schema>._INTERNAL_REFRESH_LOG`. It is internal (the `_INTERNAL_` prefix means columns may change between releases — `REFRESH_STATUS` is the contract), but it is the one place with per-block execution rows. Each run writes `RUN_STARTED`, `BLOCK` rows as each block starts and finishes (a `RUNNING` row, then a `SUCCESS` or `FAILURE` row), then `RUN_COMPLETE`; useful columns: `entry_type`, `state`, `target_table_names`, `block_index`, `started_at` / `ended_at`, `error_message`.
+When `REFRESH_STATUS` says `FAILED` and you need to know *which block* failed, read the internal schema's refresh log, `<internal_schema>._INTERNAL_REFRESH_LOG`. It is internal (the `_INTERNAL_` prefix means columns may change between releases — `REFRESH_STATUS` is the contract), but it is the one place with per-block execution rows. Each run writes `RUN_STARTED`, `BLOCK` rows as each block starts and finishes (a `RUNNING` row, then a `SUCCESS` or `FAILURE` row), then `RUN_COMPLETE`; useful columns: `entry_type`, `state`, `target_table_names`, `block_index`, `started_at` / `ended_at`, `error_message`.
 
 ```sql
 -- Block-level trace of the latest run of one schedule
 SELECT entry_type, target_table_names, block_index, state, error_message
-FROM MY_DB.MY_MODEL_META._INTERNAL_REFRESH_LOG
+FROM MY_DB.MY_MODEL_INTERNAL._INTERNAL_REFRESH_LOG
 WHERE schedule_name = 'standard'
   AND run_start_time = (
     SELECT MAX(run_start_time)
-    FROM MY_DB.MY_MODEL_META._INTERNAL_REFRESH_LOG
+    FROM MY_DB.MY_MODEL_INTERNAL._INTERNAL_REFRESH_LOG
     WHERE schedule_name = 'standard'
   )
 ORDER BY log_id;
@@ -67,7 +67,7 @@ ORDER BY log_id;
 
 A wedge to know about: if the deploy/refresh driver dies mid-run (killed session, crashed process), blocks can remain `RUNNING` with no terminal row and no `RUN_COMPLETE` — the log simply stops. A `RUNNING` row with an old `started_at` and no progress is a dead run, not a live one; cross-check `REFRESH_STATUS` and the task state before waiting on it.
 
-The companion `<meta schema>._INTERNAL_PLAN` table records what was deployed — one row per plan entry with the generated SQL, its reasoner, schedule, and dependencies. Read it when you need to connect a failing block back to the model logic that produced it.
+The companion `<internal_schema>._INTERNAL_PLAN` table records what was deployed — one row per plan entry with the generated SQL, its reasoner, schedule, and dependencies. Read it when you need to connect a failing block back to the model logic that produced it.
 
 ### rai doctor report — full state in one artifact
 
